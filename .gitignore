@@ -1,0 +1,5 @@
+config.log
+.scons*
+python/pfs/qa/version.py
+.idea
+**/.DS_Store
