@@ -1,6 +1,6 @@
-description: Terrific QA task
+description: DetectorMap QA task
 tasks:
   qa:
-    class: pfs.qa.yabaiQa.YabaiQaTask
+    class: pfs.qa.detectorMapQa.DetectorMapQaTask
     config:
       nanikanoParam: 3.14

@@ -1,10 +1,12 @@
-# 長い行をどこで改行するとか、スペースをどこにいくつ開けるとか、
-# いろんな決まりはあるのですが、ひとまずのびのびと書いてください。
-# その後 black というコマンドを呼ぶと、それが自動で整形してくれます。
-# 逆に言うと、コメントや文字列以外で凝ったアスキーアートを作ったとしても
-# black に潰されてしまいますのでご注意ください。
+import pickle
 from collections import defaultdict
+from typing import Iterable
+
 import lsstDebug
+import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import numpy as np
+from lsst.pex.config import Field, ConfigurableField, Config
 from lsst.pipe.base import (
     ArgumentParser,
     CmdLineTask,
@@ -16,36 +18,20 @@ from lsst.pipe.base import (
     TaskRunner,
 )
 from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
-from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from lsst.pipe.base.connectionTypes import Input as InputConnection
-from lsst.pipe.base.connectionTypes import Output as OutputConnection
-from lsst.pipe.base.connectionTypes import PrerequisiteInput as PrerequisiteConnection
-from lsst.daf.persistence import ButlerDataRef
-from lsst.pex.config import Field, ConfigurableField, Config
-
+from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
-
-from typing import Iterable
-
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
-from matplotlib.backends.backend_pdf import PdfPages
 from scipy.stats import iqr
-import pickle
 
 
 class PlotResidualConfig(Config):
     """Configuration for DetectorMapQaTask"""
 
-    # このタスクの config パラメーターをここに列挙してください。
-    # list や dict 型が欲しいときはご相談ください
-    # またこのタスクがサブタスクを呼ぶ場合、そのサブタスクもここに列挙します。
-    # それもご入用ならご相談ください
     numKnots = Field(dtype=int, default=30, doc="Number of spline knots")
 
+
 class PlotResidualTask(Task):
-    """Task for QA of detectorMap"""
+    """Task for QA of detectorMap."""
 
     ConfigClass = PlotResidualConfig
     _DefaultName = "plotResidual"
@@ -54,11 +40,6 @@ class PlotResidualTask(Task):
         super().__init__(*args, **kwargs)
         self.debugInfo = lsstDebug.Info(__name__)
 
-    # 実際に仕事を行う関数です。
-    # 引数の名前を *Connections クラスのものと一致させてください。
-    # (そうであれば runQuantum() がこの関数を呼び出すときに楽できます)
-    # このタスクを他のタスクのサブタスクとして用いる場合、
-    # そのタスクからはこの関数を呼ぶのが普通です
     def run(self, detectorMap: DetectorMap, arcLines: Iterable[ArcLineSet], pfsArm: PfsArm) -> Struct:
         """QA of adjustDetectorMap.
 
@@ -134,7 +115,7 @@ class PlotResidualTask(Task):
 
         dmUsedMeasured = dmapUsed[measured]
         dmReservedMeasured = dmapResearved[measured]
-        if showAllRange:#self.config.showAllRange:
+        if showAllRange:  # self.config.showAllRange:
             residualXMax = max(np.amax(residualX[dmUsedMeasured]), np.amax(residualX[dmReservedMeasured]))
             residualXMin = min(np.amin(residualX[dmUsedMeasured]), np.amin(residualX[dmReservedMeasured]))
             residualWMax = max(np.amax(residualW[dmUsedMeasured]), np.amax(residualW[dmReservedMeasured]))
@@ -161,11 +142,13 @@ class PlotResidualTask(Task):
         statistics["MedianXusedAll"] = np.median(residualX[dmUsedMeasured])
         statistics["MedianXreservedAll"] = np.median(residualX[dmReservedMeasured])
         statistics["MedianWusedAll"] = np.median(residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")])
-        statistics["MedianWreservedAll"] = np.median(residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")])
+        statistics["MedianWreservedAll"] = np.median(
+            residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")])
         statistics["SigmaXusedAll"] = iqr(residualX[dmUsedMeasured]) / 1.349
         statistics["SigmaXreservedAll"] = iqr(residualX[dmReservedMeasured]) / 1.349
         statistics["SigmaWusedAll"] = iqr(residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")]) / 1.349
-        statistics["SigmaWreservedAll"] = iqr(residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")]) / 1.349
+        statistics["SigmaWreservedAll"] = iqr(
+            residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")]) / 1.349
         for k in dictkeys:
             statistics[k] = np.array([])
         for f in flist:
@@ -187,29 +170,33 @@ class PlotResidualTask(Task):
         ax1[0].scatter(arcLinesMeasured.wavelength[dmUsedMeasured], residualX[dmUsedMeasured], s=ps, c="b",
                        label="DETECTORMAP_USED\n(median:{:.2e}, sigma:{:.2e})".format(
                            np.median(residualX[dmUsedMeasured]), iqr(residualX[dmUsedMeasured]) / 1.349))
-        if not showAllRange:#self.config.showAllRange:
+        if not showAllRange:  # self.config.showAllRange:
             if np.sum(largeX) + np.sum(smallX) > 0:
                 ax1[0].quiver(arcLinesMeasured.wavelength[dmUsedMeasured & largeX],
-                              np.zeros(np.sum(dmUsedMeasured & largeX)) + yxmax -xrange * quivLeng, 0, xrange * quivLeng,
+                              np.zeros(np.sum(dmUsedMeasured & largeX)) + yxmax - xrange * quivLeng, 0,
+                              xrange * quivLeng,
                               label="Greater than {:.2f} in absolute value ({:.1e}%)".format(yxmax, np.sum(
                                   dmUsedMeasured & largeX) / np.sum(dmUsedMeasured) * 100), color="b", angles='xy',
                               scale_units='xy', scale=2)
                 ax1[0].quiver(arcLinesMeasured.wavelength[dmUsedMeasured & smallX],
-                              np.zeros(np.sum(dmUsedMeasured & smallX)) + yxmin + xrange * quivLeng, 0, -xrange * quivLeng,
+                              np.zeros(np.sum(dmUsedMeasured & smallX)) + yxmin + xrange * quivLeng, 0,
+                              -xrange * quivLeng,
                               color="b", angles='xy', scale_units='xy', scale=2)
         ax1[0].scatter(arcLinesMeasured.wavelength[dmReservedMeasured], residualX[dmReservedMeasured], s=ps, c="r",
                        label="DETECTORMAP_RESERVED\n(median:{:.2e}, sigma:{:.2e})".format(
                            np.median(residualX[dmReservedMeasured]), iqr(residualX[dmReservedMeasured]) / 1.349))
-        if not showAllRange:#self.config.showAllRange:
+        if not showAllRange:  # self.config.showAllRange:
             if np.sum(largeX) + np.sum(smallX) > 0:
                 ax1[0].quiver(arcLinesMeasured.wavelength[dmReservedMeasured & largeX],
-                              np.zeros(np.sum(dmReservedMeasured & largeX)) + yxmax -xrange * quivLeng, 0, xrange * quivLeng,
+                              np.zeros(np.sum(dmReservedMeasured & largeX)) + yxmax - xrange * quivLeng, 0,
+                              xrange * quivLeng,
                               label="Greater than {:.2f} in absolute value ({:.1e}%)".format(yxmax, (
                                       np.sum(dmReservedMeasured & largeX) + np.sum(
                                   dmReservedMeasured & smallX)) / np.sum(dmReservedMeasured) * 100), color="r",
                               angles='xy', scale_units='xy', scale=2)
                 ax1[0].quiver(arcLinesMeasured.wavelength[dmReservedMeasured & smallX],
-                              np.zeros(np.sum(dmReservedMeasured & smallX)) + yxmin + xrange * quivLeng, 0, -xrange * quivLeng,
+                              np.zeros(np.sum(dmReservedMeasured & smallX)) + yxmin + xrange * quivLeng, 0,
+                              -xrange * quivLeng,
                               color="r", angles='xy',
                               scale_units='xy', scale=2)
         ax1[1].hist(residualX[dmUsedMeasured], color="b", range=(-xrange * 3, xrange * 3), bins=35,
@@ -221,32 +208,36 @@ class PlotResidualTask(Task):
                        label="DETECTORMAP_USED\n(median:{:.2e}, sigma:{:.2e})".format(
                            np.median(residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")]),
                            iqr(residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")]) / 1.349))
-        if not showAllRange:#self.config.showAllRange:
+        if not showAllRange:  # self.config.showAllRange:
             if np.sum(largeW) + np.sum(smallW) > 0:
                 ax1[2].quiver(arcLinesMeasured.wavelength[dmUsedMeasured & largeW],
-                              np.zeros(np.sum(dmUsedMeasured & largeW)) + ywmax - wrange * quivLeng, 0, wrange * quivLeng,
+                              np.zeros(np.sum(dmUsedMeasured & largeW)) + ywmax - wrange * quivLeng, 0,
+                              wrange * quivLeng,
                               label="Greater than {:.2f} in absolute value ({:.1e}%)".format(ywmax, (np.sum(
                                   dmUsedMeasured & largeW) + np.sum(
                                   dmUsedMeasured & smallW)) / np.sum(dmUsedMeasured) * 100), color="b", angles='xy',
                               scale_units='xy', scale=2)
                 ax1[2].quiver(arcLinesMeasured.wavelength[dmUsedMeasured & smallW],
-                              np.zeros(np.sum(dmUsedMeasured & smallW)) + ywmin + wrange * quivLeng, 0, wrange * quivLeng,
+                              np.zeros(np.sum(dmUsedMeasured & smallW)) + ywmin + wrange * quivLeng, 0,
+                              wrange * quivLeng,
                               color="b", angles='xy', scale_units='xy', scale=2)
         ax1[2].scatter(arcLinesMeasured.wavelength[dmReservedMeasured & (arcLinesMeasured.description != "Trace")],
                        residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")], s=ps, c="r",
                        label="DETECTORMAP_RESERVED\n(median:{:.2e}, sigma:{:.2e})".format(
                            np.median(residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")]),
                            iqr(residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")]) / 1.349))
-        if not showAllRange:#self.config.showAllRange:
+        if not showAllRange:  # self.config.showAllRange:
             if np.sum(largeW) + np.sum(smallW) > 0:
                 ax1[2].quiver(arcLinesMeasured.wavelength[dmReservedMeasured & largeW],
-                              np.zeros(np.sum(dmReservedMeasured & largeW)) + ywmax - wrange * quivLeng, 0, wrange * quivLeng,
+                              np.zeros(np.sum(dmReservedMeasured & largeW)) + ywmax - wrange * quivLeng, 0,
+                              wrange * quivLeng,
                               label="Greater than {:.2f} in absolute value ({:.1e}%)".format(ywmax, (
                                       np.sum(dmReservedMeasured & largeW) + np.sum(
                                   dmReservedMeasured & smallW)) / np.sum(dmReservedMeasured) * 100), color="r",
                               angles='xy', scale_units='xy', scale=2)
                 ax1[2].quiver(arcLinesMeasured.wavelength[dmReservedMeasured & smallW],
-                              np.zeros(np.sum(dmReservedMeasured & smallW)) + ywmin + wrange * quivLeng, 0, -wrange * quivLeng,
+                              np.zeros(np.sum(dmReservedMeasured & smallW)) + ywmin + wrange * quivLeng, 0,
+                              -wrange * quivLeng,
                               color="r", angles='xy', scale_units='xy', scale=2)
         ax1[3].hist(residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")], color="b",
                     range=(-wrange * 3, wrange * 3), bins=35, orientation="horizontal")
@@ -285,7 +276,8 @@ class PlotResidualTask(Task):
                               cmap=cm.coolwarm)
         img2 = ax2[1].scatter(arcLinesMeasured.x[dmUsedMeasured & (arcLinesMeasured.description != "Trace")],
                               arcLinesMeasured.y[dmUsedMeasured & (arcLinesMeasured.description != "Trace")], s=ps,
-                              c=residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")], vmin=-wrange, vmax=wrange,
+                              c=residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")], vmin=-wrange,
+                              vmax=wrange,
                               cmap=cm.coolwarm)
         img3 = ax3[0].scatter(arcLinesMeasured.x[dmReservedMeasured], arcLinesMeasured.y[dmReservedMeasured], s=ps,
                               c=residualX[dmReservedMeasured], vmin=-xrange, vmax=xrange, cmap=cm.coolwarm)
@@ -324,10 +316,8 @@ class PlotResidualTask(Task):
         fig3.savefig("dmapQAPlot2Dreserved-{:06}-{}{}.png".format(visit, arm, spectrograph), format="png")
         fig3.clf()
 
-        return Struct(
-            # この雛型には出力がありませんので例示できませんが
-            # 出力はこの中に書いてください
-        )
+        # There is no output in this template, so I can't give an example write the output here
+        return Struct()
 
     @classmethod
     def _makeArgumentParser(cls) -> ArgumentParser:
@@ -341,11 +331,8 @@ class PlotResidualTask(Task):
 class OverlapRegionLinesConfig(Config):
     """Configuration for DetectorMapQaTask"""
 
-    # このタスクの config パラメーターをここに列挙してください。
-    # list や dict 型が欲しいときはご相談ください
-    # またこのタスクがサブタスクを呼ぶ場合、そのサブタスクもここに列挙します。
-    # それもご入用ならご相談ください
     numKnots = Field(dtype=int, default=30, doc="Number of spline knots")
+
 
 class OverlapRegionLinesTask(Task):
     """Task for QA of detectorMap"""
@@ -357,12 +344,8 @@ class OverlapRegionLinesTask(Task):
         super().__init__(*args, **kwargs)
         self.debugInfo = lsstDebug.Info(__name__)
 
-    # 実際に仕事を行う関数です。
-    # 引数の名前を *Connections クラスのものと一致させてください。
-    # (そうであれば runQuantum() がこの関数を呼び出すときに楽できます)
-    # このタスクを他のタスクのサブタスクとして用いる場合、
-    # そのタスクからはこの関数を呼ぶのが普通です
-    def run(self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet], pfsArm: Iterable[PfsArm]) -> Struct:
+    def run(self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet],
+            pfsArm: Iterable[PfsArm]) -> Struct:
         """QA of adjustDetectorMap.
 
         This script produces the plots and pickle files storing the fitting residual data of the adjustDetectorMap.
@@ -418,8 +401,8 @@ class OverlapRegionLinesTask(Task):
         OIlines = ['630.20', '636.55']
         # pp = PdfPages("pfsArms-{:06}-{}{}{}.pdf".format(visit, arm[0], arm[1], spectrograph))
         for f in fcommon:
-            b0 = (arcLines[0].fiberId == f) & measured[0]# & (dmapUsed[0] | dmapResearved[0])
-            b1 = (arcLines[1].fiberId == f) & measured[1]# & (dmapUsed[1] | dmapResearved[1])
+            b0 = (arcLines[0].fiberId == f) & measured[0]  # & (dmapUsed[0] | dmapResearved[0])
+            b1 = (arcLines[1].fiberId == f) & measured[1]  # & (dmapUsed[1] | dmapResearved[1])
             wav0 = set(arcLines[0][b0].wavelength)
             wav1 = set(arcLines[1][b1].wavelength)
             wav = list(wav0 & wav1)
@@ -437,8 +420,10 @@ class OverlapRegionLinesTask(Task):
                             difference[w] = []
                         y = [aa[(aa.fiberId == f) & (aa.wavelength == w)].y[0] for aa in arcLines]
                         fibers[w].append(f)
-                        difference[w].append(detectorMap[0].findWavelength(fiberId=f, row=y[0]) - detectorMap[1].findWavelength(fiberId=f, row=y[1]))
-                        plt.plot([w,w], [0, 5000], 'k')
+                        difference[w].append(
+                            detectorMap[0].findWavelength(fiberId=f, row=y[0]) - detectorMap[1].findWavelength(
+                                fiberId=f, row=y[1]))
+                        plt.plot([w, w], [0, 5000], 'k')
                         # b0w = b0 & (arcLines[0].wavelength == w)
                         # b1w = b1 & (arcLines[1].wavelength == w)
                         # print(f, w, '{:.1f} ({:.1e}) {}/{} {:.2f}({:.2f})/{:.2f}({:.2f})'.format(
@@ -460,8 +445,14 @@ class OverlapRegionLinesTask(Task):
         plt.figure()
         wcommon.sort()
         for w in wcommon:
-            print('{}: {} nm ({} fibers, median={:.1e} nm, 1sigma={:.3f} nm)'.format(f, w, len(fibers[w]), np.median(difference[w]), iqr(difference[w]) / 1.349))
-            plt.scatter(fibers[w], difference[w], s=3, label='{} nm ({} fibers, median={:.1e} nm, 1sigma={:.3f} nm)'.format(w, len(fibers[w]), np.median(difference[w]), iqr(difference[w]) / 1.349))
+            print('{}: {} nm ({} fibers, median={:.1e} nm, 1sigma={:.3f} nm)'.format(f, w, len(fibers[w]),
+                                                                                     np.median(difference[w]),
+                                                                                     iqr(difference[w]) / 1.349))
+            plt.scatter(fibers[w], difference[w], s=3,
+                        label='{} nm ({} fibers, median={:.1e} nm, 1sigma={:.3f} nm)'.format(w, len(fibers[w]),
+                                                                                             np.median(difference[w]),
+                                                                                             iqr(difference[
+                                                                                                     w]) / 1.349))
         plt.legend(fontsize=7)
         plt.xlabel('fiberId')
         plt.ylabel('Wavelength difference (b-r) [nm]')
@@ -476,10 +467,8 @@ class OverlapRegionLinesTask(Task):
         return parser
 
 
+# (Gen3) If this task is ("instrument", "exposure", "detector") declare to be executed for each combination.
 class DetectorMapQaConnections(
-    # (Gen3)
-    # このタスクが ("instrument", "exposure", "detector") の
-    # 各組み合わせ毎に実行されることを宣言します
     PipelineTaskConnections,
     dimensions=("instrument", "exposure"),
 ):
@@ -504,9 +493,9 @@ class DetectorMapQaConnections(
         multiple=True,
     )
 
-    # 他に input と output を列挙してください
-    # drp_stella/python/pfs/drp/stella/pipelines/ の中の
-    # スクリプトたちからコピペすれば OK です
+    # Please list other inputs and outputs
+    # in drp_stella/python/pfs/drp/stella/pipelines/
+    # It's OK if you copy and paste from scripts
 
 
 class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
@@ -514,18 +503,16 @@ class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaC
     plotResidual = ConfigurableField(target=PlotResidualTask, doc="Plot the detector map residual.")
     overlapRegionLines = ConfigurableField(target=OverlapRegionLinesTask, doc="Plot the detector map residual.")
 
-    # このタスクの config パラメーターをここに列挙してください。
-    # list や dict 型が欲しいときはご相談ください
-    # またこのタスクがサブタスクを呼ぶ場合、そのサブタスクもここに列挙します。
-    # それもご入用ならご相談ください
     nanikanoParam = Field(
         dtype=float,
         default=1.0,
-        doc="Parameter for a certain use",#"Expand y range to show all data points.",
+        doc="Parameter for a certain use",  # "Expand y range to show all data points.",
     )
+
 
 class DetectorMapQaRunner(TaskRunner):
     """Runner for DetectorMapQaTask"""
+
     @staticmethod
     def getTargetList(parsedCmd, **kwargs):
         """Produce list of targets for MergeArmsTask
@@ -554,8 +541,8 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         self.debugInfo = lsstDebug.Info(__name__)
 
     # (Gen3)
-    # pipetask コマンドでパイプラインを実行するとこれが呼ばれます
-    # インターフェース以外の仕事を全部 run() に任せるのが普通です
+    # this is called when you run a pipeline with the pipetask command
+    # It's normal to let run() do all the non-interface work
     def runQuantum(
             self,
             butler: ButlerQuantumContext,
@@ -580,8 +567,8 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         butler.put(outputs, outputRefs)
 
     # (Gen2)
-    # Gen2 ではこれがインターフェースになります。
-    # インターフェース以外の仕事を全て run() に任せてください。
+    # On Gen2 this will be the interface.
+    # Let run() do all the non-interface work.
     def runDataRef(self, expSpecRefList) -> Struct:
         """Calls ``self.run()``
 
@@ -599,7 +586,8 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         # detectorMap = dataRef.get("detectorMap_used")
         # arcLines = dataRef.get("arcLines")
         # pfsArm = dataRef.get("pfsArm")
-        detectorMapList = [[dataRef.get("detectorMap_used") for dataRef in specRefList] for specRefList in expSpecRefList]
+        detectorMapList = [[dataRef.get("detectorMap_used") for dataRef in specRefList] for specRefList in
+                           expSpecRefList]
         arcLinesList = [[dataRef.get("arcLines") for dataRef in specRefList] for specRefList in expSpecRefList]
         pfsArmList = [[dataRef.get("pfsArm") for dataRef in specRefList] for specRefList in expSpecRefList]
         return self.run(detectorMapList, arcLinesList, pfsArmList)
