@@ -271,20 +271,31 @@ class PlotResidualTask(Task):
         ax1[5].set_ylim(ywmin, ywmax)
         ax1[5].set_title("Wavelength residual of each fiber\n(point=median, errbar=1sigma scatter, unit=nm)")
 
-        img1 = ax2[0].scatter(arcLinesMeasured.x[dmUsedMeasured], arcLinesMeasured.y[dmUsedMeasured], s=ps,
-                              c=residualX[dmUsedMeasured], vmin=-xrange, vmax=xrange,
+        img1 = ax2[0].scatter(arcLinesMeasured.x[dmUsedMeasured],
+                              arcLinesMeasured.y[dmUsedMeasured],
+                              s=ps,
+                              c=residualX[dmUsedMeasured],
+                              vmin=-xrange, vmax=xrange,
                               cmap=cm.coolwarm)
         img2 = ax2[1].scatter(arcLinesMeasured.x[dmUsedMeasured & (arcLinesMeasured.description != "Trace")],
-                              arcLinesMeasured.y[dmUsedMeasured & (arcLinesMeasured.description != "Trace")], s=ps,
-                              c=residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")], vmin=-wrange,
+                              arcLinesMeasured.y[dmUsedMeasured & (arcLinesMeasured.description != "Trace")],
+                              s=ps,
+                              c=residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")],
+                              vmin=-wrange,
                               vmax=wrange,
                               cmap=cm.coolwarm)
-        img3 = ax3[0].scatter(arcLinesMeasured.x[dmReservedMeasured], arcLinesMeasured.y[dmReservedMeasured], s=ps,
-                              c=residualX[dmReservedMeasured], vmin=-xrange, vmax=xrange, cmap=cm.coolwarm)
+        img3 = ax3[0].scatter(arcLinesMeasured.x[dmReservedMeasured],
+                              arcLinesMeasured.y[dmReservedMeasured],
+                              s=ps,
+                              c=residualX[dmReservedMeasured],
+                              vmin=-xrange, vmax=xrange,
+                              cmap=cm.coolwarm)
         img4 = ax3[1].scatter(arcLinesMeasured.x[dmReservedMeasured & (arcLinesMeasured.description != "Trace")],
-                              arcLinesMeasured.y[dmReservedMeasured & (arcLinesMeasured.description != "Trace")], s=ps,
-                              c=residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")], vmin=-wrange,
-                              vmax=wrange, cmap=cm.coolwarm)
+                              arcLinesMeasured.y[dmReservedMeasured & (arcLinesMeasured.description != "Trace")],
+                              s=ps,
+                              c=residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")],
+                              vmin=-wrange, vmax=wrange,
+                              cmap=cm.coolwarm)
 
         cbar1 = fig2.colorbar(img1, ax=ax2[0], aspect=50, pad=0.08, shrink=1, orientation='vertical')
         cbar2 = fig2.colorbar(img2, ax=ax2[1], aspect=50, pad=0.08, shrink=1, orientation='vertical')
@@ -309,11 +320,11 @@ class PlotResidualTask(Task):
         fig3.suptitle(
             "DECTORMAP_RESERVED residual (visit={}, arm={}, spectrograph={})".format(visit, arm, spectrograph))
 
-        fig1.savefig("dmapQAPlot-{:06}-{}{}.png".format(visit, arm, spectrograph), format="png")
+        fig1.savefig(f'dmapQAPlot-{visit:06}-{arm}{spectrograph}.png', format="png")
         fig1.clf()
-        fig2.savefig("dmapQAPlot2Dused-{:06}-{}{}.png".format(visit, arm, spectrograph), format="png")
+        fig2.savefig(f'dmapQAPlot2Dused-{visit:06}-{arm}{spectrograph}.png', format="png")
         fig2.clf()
-        fig3.savefig("dmapQAPlot2Dreserved-{:06}-{}{}.png".format(visit, arm, spectrograph), format="png")
+        fig3.savefig(f'dmapQAPlot2Dreserved-{visit:06}-{arm}{spectrograph}.png', format="png")
         fig3.clf()
 
         # There is no output in this template, so I can't give an example write the output here
