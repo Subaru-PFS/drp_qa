@@ -1,5 +1,5 @@
-from collections import defaultdict
 import pickle
+from collections import defaultdict
 from typing import Iterable
 
 import lsstDebug
@@ -19,14 +19,7 @@ from lsst.pipe.base import (
 )
 from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
 from lsst.pipe.base.connectionTypes import Input as InputConnection
-
-from lsst.pex.config import Field, ConfigurableField, Config
-
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
-from typing import Iterable
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 from scipy.stats import iqr
 
 
