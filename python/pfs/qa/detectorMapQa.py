@@ -399,11 +399,11 @@ class PlotResidualTask(Task):
 
         used_data = arc_data.query(f'status == {ReferenceLineStatus.DETECTORMAP_USED}')
         self.log.info(f'Plotting residuals for {len(used_data)} used lines')
-        fig2 = stability.plotArcResiduals2D(used_data, detectorMap)
+        fig2 = stability.plotArcResiduals2D(used_data, detectorMap, hexBin=True)
 
         reserved_data = arc_data.query(f'status == {ReferenceLineStatus.DETECTORMAP_RESERVED}')
         self.log.info(f'Plotting residuals for {len(reserved_data)} reserved lines')
-        fig3 = stability.plotArcResiduals2D(reserved_data, detectorMap)
+        fig3 = stability.plotArcResiduals2D(reserved_data, detectorMap, hexBin=True)
 
         return fig2, fig3
 
