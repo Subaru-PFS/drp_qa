@@ -82,15 +82,15 @@ class PlotResidualTask(Task):
         self.log.info(f"Number of fibers: {len(arc_data.fiberId.unique())}")
         self.log.info(f"Number of Measured lines: {len(arc_data)}")
 
-        # Get our statistics and write them to a pickle file.
-        statistics = self.getStatistics(arc_data, pfsArm)
-        with open(f"dmapQAStats-{visit:06}-{arm}{spectrograph}.pickle", "wb") as f:
-            pickle.dump(statistics, f)
-
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
         arc_data = stability.getArclineData(arcLines)
         arc_data = stability.addTraceLambdaToArclines(arc_data, detectorMap)
         arc_data = stability.addResidualsToArclines(arc_data)
+
+        # Get our statistics and write them to a pickle file.
+        statistics = self.getStatistics(arc_data, pfsArm)
+        with open(f"dmapQAStats-{visit:06}-{arm}{spectrograph}.pickle", "wb") as f:
+            pickle.dump(statistics, f)
 
         fig1 = self.plotResiduals1D(arcLines, detectorMap, statistics)
         fig2, fig3 = self.plotResiduals2D(arc_data)
