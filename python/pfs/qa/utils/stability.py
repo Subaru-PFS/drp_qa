@@ -394,7 +394,7 @@ def plotResidualsQuiver(arc_data: pd.DataFrame, detectorMap: DetectorMap,
 def plotArcResiduals2D(arc_data, detectorMap, title="",
                        maxCentroidErr=0.1, maxDetectorMapErr=1,
                        limitMax=False, showY=True,
-                       percentiles=[25, 75],
+                       percentiles=None,
                        hexBin=False, gridsize=100,
                        cmap='coolwarm') -> Figure:
     """ Plot residuals as a 2D histogram.
@@ -428,6 +428,9 @@ def plotArcResiduals2D(arc_data, detectorMap, title="",
     -------
     fig: `matplotlib.figure.Figure`
     """
+    if percentiles is None:
+        percentiles = [25, 75]
+
     if limitMax:
         limited_arc_data = arc_data.query(f'centroidErr < {maxCentroidErr} and detectorMapErr < {maxDetectorMapErr}')
         len_diff = len(arc_data) - len(limited_arc_data)
@@ -467,10 +470,10 @@ def plotArcResiduals2D(arc_data, detectorMap, title="",
         ax.set_xlim(bbox.getMinX(), bbox.getMaxX())
         ax.set_ylim(bbox.getMinY(), bbox.getMaxY())
 
-    _make_subplot(axes[0], arc_data.dxResidualMean, title='dx mean [pixel]')
+    _make_subplot(axes[0], arc_data.dxResidualMedian, title='dx mean [pixel]')
 
     if showY:
-        _make_subplot(axes[1], arc_data.dyResidualMean, title='dy mean [nm]')
+        _make_subplot(axes[1], arc_data.dyResidualMedian, title='dy mean [nm]')
 
     plt.suptitle(f"Residual {title}")
 
