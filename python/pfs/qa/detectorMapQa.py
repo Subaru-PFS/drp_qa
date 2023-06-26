@@ -406,10 +406,10 @@ class PlotResidualTask(Task):
 
         statistics = {
             "fiberId": arc_data.fiberId.unique(),
-            "MedianXusedAll": dmapUsed.dx.median(),
-            "MedianXreservedAll": dmapReserved.dx.median(),
-            "MedianWusedAll": dmapUsed.query('Trace == False').dy.median(),
-            "MedianWreservedAll": dmapReserved.query('Trace == False').dy.median(),
+            "MedianXusedAll": np.nanmedian(dmapUsed.dx),
+            "MedianXreservedAll": np.nanmedian(dmapReserved.dx),
+            "MedianWusedAll": np.nanmedian(dmapUsed.query('Trace == False').dy),
+            "MedianWreservedAll": np.nanmedian(dmapReserved.query('Trace == False').dy),
             "SigmaXusedAll": iqr(dmapUsed.dx) / 1.349,
             "SigmaXreservedAll": iqr(dmapReserved.dx) / 1.349,
             "SigmaWusedAll": iqr(dmapUsed.query('Trace == False').dy) / 1.349,
@@ -447,11 +447,11 @@ class PlotResidualTask(Task):
                 iqr(dmapReservedFiber.dx) / 1.349,
                 iqr(dmapUsedFiberNoTrace.dy) / 1.349,
                 iqr(dmapReservedFiberNoTrace.dy) / 1.349,
-                np.median(dmapUsedFiber.dx),
-                np.median(dmapReservedFiber.dx),
-                np.median(dmapUsedFiberNoTrace.dy),
-                np.median(dmapReservedFiberNoTrace.dy),
-                np.median(pfsArm.flux[pfsArm.fiberId == f]),
+                np.nanmedian(dmapUsedFiber.dx),
+                np.nanmedian(dmapReservedFiber.dx),
+                np.nanmedian(dmapUsedFiberNoTrace.dy),
+                np.nanmedian(dmapReservedFiberNoTrace.dy),
+                np.nanmedian(pfsArm.flux[pfsArm.fiberId == f]),
             ]
             for k, v in zip(dictkeys, dictvalues):
                 statistics[k] = np.append(statistics[k], v)
