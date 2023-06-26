@@ -18,7 +18,7 @@ def getArclineData(als: ArcLineSet,
                    dropNa: bool = True,
                    removeFlagged: bool = True,
                    oneHotStatus: bool = False,
-                   includeTrace: bool = False,
+                   includeTrace: bool = True,
                    statusTypes: Iterable[ReferenceLineStatus] = [ReferenceLineStatus.DETECTORMAP_RESERVED,
                                                                  ReferenceLineStatus.DETECTORMAP_USED]
                    ) -> pd.DataFrame:
