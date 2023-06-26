@@ -1,6 +1,6 @@
 import pickle
 from collections import defaultdict
-from typing import Iterable, Any
+from typing import Iterable, Any, Dict
 
 import lsstDebug
 import matplotlib.cm as cm
@@ -109,7 +109,7 @@ class PlotResidualTask(Task):
         # There is no output in this template, so I can't give an example write the output here
         return Struct()
 
-    def plotResiduals1D(self, arcLines: ArcLineSet, detectorMap: DetectorMap, statistics: dict[str, Any]) -> plt.Figure:
+    def plotResiduals1D(self, arcLines: ArcLineSet, detectorMap: DetectorMap, statistics: Dict[str, Any]) -> plt.Figure:
         """Plot the residuals as a function of wavelength and fiberId.
 
         Parameters:
