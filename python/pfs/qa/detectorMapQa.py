@@ -5,7 +5,6 @@ from typing import Iterable, Any, Dict
 import lsstDebug
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
-from matplotlib.figure import Figure
 import numpy as np
 import pandas as pd
 from lsst.pex.config import Field, ConfigurableField, Config
@@ -170,8 +169,7 @@ class PlotResidualTask(Task):
             largeW = residualW > ywmax
             smallW = residualW < ywmin
 
-        fig1 = Figure()
-        fig1.set_size_inches(12, 10)
+        fig1 = plt.figure(figsize=(12, 8))
 
         ax1 = [
             plt.axes([0.08, 0.08, 0.37, 0.36]),
