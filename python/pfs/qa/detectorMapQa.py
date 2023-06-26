@@ -445,6 +445,12 @@ class PlotResidualTask(Task):
             dmapReservedFiber = dmapReserved.query(f'fiberId == {f}')
             dmapReservedFiberNoTrace = dmapReservedFiber.query('Trace == False')
 
+            pfsArmFlux = pfsArm.flux[pfsArm.fiberId == f]
+            if not all(np.isnan(pfsArmFlux)):
+                pfsArmFlux = np.nanmedian(pfsArmFlux)
+            else:
+                pfsArmFlux = np.nan
+
             dictvalues = [
                 len(dmapUsedFiber),
                 len(dmapReservedFiber),
@@ -458,7 +464,7 @@ class PlotResidualTask(Task):
                 np.nanmedian(dmapReservedFiber.dx),
                 np.nanmedian(dmapUsedFiberNoTrace.dy),
                 np.nanmedian(dmapReservedFiberNoTrace.dy),
-                np.nanmedian(pfsArm.flux[pfsArm.fiberId == f]),
+                pfsArmFlux,
             ]
             for k, v in zip(dictkeys, dictvalues):
                 statistics[k] = np.append(statistics[k], v)
