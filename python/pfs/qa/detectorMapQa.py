@@ -85,6 +85,7 @@ class PlotResidualTask(Task):
         arc_data = stability.getArclineData(arcLines)
         arc_data = stability.addTraceLambdaToArclines(arc_data, detectorMap)
         arc_data = stability.addResidualsToArclines(arc_data)
+        self.log.info(f"Number of Measured lines after scrubbing: {len(arc_data)}")
 
         # Get our statistics and write them to a pickle file.
         statistics = self.getStatistics(arc_data, pfsArm)
@@ -96,6 +97,7 @@ class PlotResidualTask(Task):
         fig1.savefig(f'dmapQAPlot-{visit:06}-{arm}{spectrograph}.png', format="png")
         plt.close(fig1)
 
+        self.log.info(f"Plotting 2D residuals for {len(arc_data)} lines")
         fig2, fig3 = self.plotResiduals2D(arc_data, detectorMap)
 
         fig2.suptitle(f"DETECTORMAP_USED residual ({visit=}, {arm=}, {spectrograph=})")
