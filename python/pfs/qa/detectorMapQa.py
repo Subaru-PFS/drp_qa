@@ -454,10 +454,10 @@ class PlotResidualTask(Task):
                 iqr(dmapReservedFiber.dx) / 1.349,
                 iqr(dmapUsedFiberNoTrace.dy) / 1.349,
                 iqr(dmapReservedFiberNoTrace.dy) / 1.349,
-                np.nanmedian(dmapUsedFiber.dx),
-                np.nanmedian(dmapReservedFiber.dx),
-                np.nanmedian(dmapUsedFiberNoTrace.dy),
-                np.nanmedian(dmapReservedFiberNoTrace.dy),
+                dmapUsedFiber.dx.median(),
+                dmapReservedFiber.dx.median(),
+                dmapUsedFiberNoTrace.dy.median(),
+                dmapReservedFiberNoTrace.dy.median(),
                 pd.DataFrame(pfsArm.flux[pfsArm.fiberId == f].T).median().values[0],
             ]
             for k, v in zip(dictkeys, dictvalues):
