@@ -92,7 +92,7 @@ class PlotResidualTask(Task):
             pickle.dump(statistics, f)
 
         fig1 = self.plotResiduals1D(arcLines, detectorMap, statistics)
-        fig2, fig3 = self.plotResiduals2D(arc_data)
+        fig2, fig3 = self.plotResiduals2D(arc_data, detectorMap)
 
         fig1.suptitle(f"Detector map residual ({visit=}, {arm=}, {spectrograph=})")
         fig2.suptitle(f"DETECTORMAP_USED residual ({visit=}, {arm=}, {spectrograph=})")
@@ -390,41 +390,13 @@ class PlotResidualTask(Task):
 
         return fig1
 
-    def plotResiduals2D(self, arc_data):
-        fig2, ax2 = plt.subplots(1, 2, figsize=(12, 5))
-        fig3, ax3 = plt.subplots(1, 2, figsize=(12, 5))
+    def plotResiduals2D(self, arc_data: pd.DataFrame, detectorMap: DetectorMap):
 
         used_data = arc_data.query(f'status == "{ReferenceLineStatus.DETECTORMAP_USED}"')
+        fig2 = stability.plotArcResiduals2D(used_data, detectorMap)
+
         reserved_data = arc_data.query(f'status == "{ReferenceLineStatus.DETECTORMAP_RESERVED}"')
-
-        for ax, plot_data in zip([ax2, ax3], [used_data, reserved_data]):
-            img1 = ax[0].scatter(plot_data.x,
-                                 plot_data.y,
-                                 s=self.config.pointSize,
-                                 c=plot_data.dx,
-                                 vmin=-self.config.xrange,
-                                 vmax=self.config.xrange,
-                                 cmap=cm.coolwarm, )
-
-            img2 = ax[1].scatter(plot_data.query(f'Trace == False').x,
-                                 plot_data.query(f'Trace == False').y,
-                                 s=self.config.pointSize,
-                                 c=plot_data.query(f'Trace == False').dy,
-                                 vmin=-self.config.wrange,
-                                 vmax=self.config.wrange,
-                                 cmap=cm.coolwarm,
-                                 )
-            fig2.colorbar(img1, ax=ax[0], aspect=50, pad=0.08, shrink=1, orientation="vertical")
-            fig2.colorbar(img2, ax=ax[1], aspect=50, pad=0.08, shrink=1, orientation="vertical")
-            ax[0].set_xlim(0, 4096)
-            ax[1].set_xlim(0, 4096)
-            ax[0].set_ylim(0, 4176)
-            ax[1].set_ylim(0, 4176)
-
-        ax2[0].set_title("X center, unit=pix")
-        ax2[1].set_title("Wavelength, unit=nm")
-        ax3[0].set_title("Detector map residual (X center, unit=pix)")
-        ax3[1].set_title("Detector map residual (wavelength, unit=nm)")
+        fig3 = stability.plotArcResiduals2D(reserved_data, detectorMap)
 
         return fig2, fig3
 
