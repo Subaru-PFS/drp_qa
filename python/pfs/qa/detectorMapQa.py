@@ -19,6 +19,7 @@ from lsst.pipe.base import (
     Task,
     TaskRunner,
 )
+from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
 from lsst.pipe.base.connectionTypes import Input as InputConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
