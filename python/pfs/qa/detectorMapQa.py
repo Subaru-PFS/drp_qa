@@ -5,6 +5,7 @@ from typing import Iterable, Any
 import lsstDebug
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 import numpy as np
 import pandas as pd
 from lsst.pex.config import Field, ConfigurableField, Config
@@ -77,14 +78,15 @@ class PlotResidualTask(Task):
         spectrograph = pfsArm.identity.spectrograph
 
         arc_data = stability.getArclineData(arcLines)
-        self.log.info(f"Fiber numbers: {len(arc_data.fiberId.unique())}")
-        self.log.info(f"Measured lines: {len(arc_data)}")
+        self.log.info(f"Number of fibers: {len(arc_data.fiberId.unique())}")
+        self.log.info(f"Number of Measured lines: {len(arc_data)}")
 
         # Get our statistics and write them to a pickle file.
         statistics = self.getStatistics(arc_data, pfsArm)
         with open(f"dmapQAStats-{visit:06}-{arm}{spectrograph}.pickle", "wb") as f:
             pickle.dump(statistics, f)
 
+        # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
         arc_data = stability.getArclineData(arcLines)
         arc_data = stability.addTraceLambdaToArclines(arc_data, detectorMap)
         arc_data = stability.addResidualsToArclines(arc_data)
@@ -106,44 +108,6 @@ class PlotResidualTask(Task):
 
         # There is no output in this template, so I can't give an example write the output here
         return Struct()
-
-    def plotResiduals2D(self, arc_data):
-        fig2, ax2 = plt.subplots(1, 2, figsize=(12, 5))
-        fig3, ax3 = plt.subplots(1, 2, figsize=(12, 5))
-
-        used_data = arc_data.query(f'status == "{ReferenceLineStatus.DETECTORMAP_USED}"')
-        reserved_data = arc_data.query(f'status == "{ReferenceLineStatus.DETECTORMAP_RESERVED}"')
-
-        for ax, plot_data in zip([ax2, ax3], [used_data, reserved_data]):
-            img1 = ax[0].scatter(plot_data.x,
-                                 plot_data.y,
-                                 s=self.config.pointSize,
-                                 c=plot_data.dx,
-                                 vmin=-self.config.xrange,
-                                 vmax=self.config.xrange,
-                                 cmap=cm.coolwarm, )
-
-            img2 = ax[1].scatter(plot_data.query(f'Trace == False').x,
-                                 plot_data.query(f'Trace == False').y,
-                                 s=self.config.pointSize,
-                                 c=plot_data.query(f'Trace == False').dy,
-                                 vmin=-self.config.wrange,
-                                 vmax=self.config.wrange,
-                                 cmap=cm.coolwarm,
-                                 )
-            fig2.colorbar(img1, ax=ax[0], aspect=50, pad=0.08, shrink=1, orientation="vertical")
-            fig2.colorbar(img2, ax=ax[1], aspect=50, pad=0.08, shrink=1, orientation="vertical")
-            ax[0].set_xlim(0, 4096)
-            ax[1].set_xlim(0, 4096)
-            ax[0].set_ylim(0, 4176)
-            ax[1].set_ylim(0, 4176)
-
-        ax2[0].set_title("X center, unit=pix")
-        ax2[1].set_title("Wavelength, unit=nm")
-        ax3[0].set_title("Detector map residual (X center, unit=pix)")
-        ax3[1].set_title("Detector map residual (wavelength, unit=nm)")
-
-        return fig2, fig3
 
     def plotResiduals1D(self, arcLines: ArcLineSet, detectorMap: DetectorMap, statistics: dict[str, Any]) -> plt.Figure:
         """Plot the residuals as a function of wavelength and fiberId.
@@ -205,7 +169,8 @@ class PlotResidualTask(Task):
             largeW = residualW > ywmax
             smallW = residualW < ywmin
 
-        fig1 = plt.figure(figsize=(12, 10))
+        fig1 = Figure()
+        fig1.set_size_inches(12, 10)
 
         ax1 = [
             plt.axes([0.08, 0.08, 0.37, 0.36]),
@@ -425,6 +390,48 @@ class PlotResidualTask(Task):
         ax1[5].set_title("Wavelength residual of each fiber\n(point=median, errbar=1sigma scatter, unit=nm)")
 
         return fig1
+
+    def plotResiduals2D(self, arc_data):
+        fig2 = Figure()
+        fig3 = Figure()
+        fig2.set_size_inches(12, 5)
+        fig3.set_size_inches(12, 5)
+        ax2 = fig2.add_subplot(121)
+        ax3 = fig3.add_subplot(122)
+
+        used_data = arc_data.query(f'status == "{ReferenceLineStatus.DETECTORMAP_USED}"')
+        reserved_data = arc_data.query(f'status == "{ReferenceLineStatus.DETECTORMAP_RESERVED}"')
+
+        for ax, plot_data in zip([ax2, ax3], [used_data, reserved_data]):
+            img1 = ax[0].scatter(plot_data.x,
+                                 plot_data.y,
+                                 s=self.config.pointSize,
+                                 c=plot_data.dx,
+                                 vmin=-self.config.xrange,
+                                 vmax=self.config.xrange,
+                                 cmap=cm.coolwarm, )
+
+            img2 = ax[1].scatter(plot_data.query(f'Trace == False').x,
+                                 plot_data.query(f'Trace == False').y,
+                                 s=self.config.pointSize,
+                                 c=plot_data.query(f'Trace == False').dy,
+                                 vmin=-self.config.wrange,
+                                 vmax=self.config.wrange,
+                                 cmap=cm.coolwarm,
+                                 )
+            fig2.colorbar(img1, ax=ax[0], aspect=50, pad=0.08, shrink=1, orientation="vertical")
+            fig2.colorbar(img2, ax=ax[1], aspect=50, pad=0.08, shrink=1, orientation="vertical")
+            ax[0].set_xlim(0, 4096)
+            ax[1].set_xlim(0, 4096)
+            ax[0].set_ylim(0, 4176)
+            ax[1].set_ylim(0, 4176)
+
+        ax2[0].set_title("X center, unit=pix")
+        ax2[1].set_title("Wavelength, unit=nm")
+        ax3[0].set_title("Detector map residual (X center, unit=pix)")
+        ax3[1].set_title("Detector map residual (wavelength, unit=nm)")
+
+        return fig2, fig3
 
     def getStatistics(self, arc_data: pd.DataFrame, pfsArm: PfsArm) -> dict[str, Any]:
         dmapUsed = arc_data.query(f'status == {ReferenceLineStatus.DETECTORMAP_USED}')
