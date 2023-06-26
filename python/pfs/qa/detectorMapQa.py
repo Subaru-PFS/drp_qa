@@ -393,12 +393,8 @@ class PlotResidualTask(Task):
         return fig1
 
     def plotResiduals2D(self, arc_data):
-        fig2 = Figure()
-        fig3 = Figure()
-        fig2.set_size_inches(12, 5)
-        fig3.set_size_inches(12, 5)
-        ax2 = fig2.add_subplot(121)
-        ax3 = fig3.add_subplot(122)
+        fig2, ax2 = plt.subplots(1, 2, figsize=(12, 5))
+        fig3, ax3 = plt.subplots(1, 2, figsize=(12, 5))
 
         used_data = arc_data.query(f'status == "{ReferenceLineStatus.DETECTORMAP_USED}"')
         reserved_data = arc_data.query(f'status == "{ReferenceLineStatus.DETECTORMAP_RESERVED}"')
