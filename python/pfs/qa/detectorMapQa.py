@@ -485,7 +485,7 @@ class PlotResidualTask(Task):
                 np.median(dmapReservedFiber.dx),
                 np.median(dmapUsedFiberNoTrace.dy),
                 np.median(dmapReservedFiberNoTrace.dy),
-                pfsArm.flux[pfsArm.fiberId == f].median(),
+                np.median(pfsArm.flux[pfsArm.fiberId == f]),
             ]
             for k, v in zip(dictkeys, dictvalues):
                 statistics[k] = np.append(statistics[k], v)
