@@ -433,7 +433,7 @@ class PlotResidualTask(Task):
 
         return fig2, fig3
 
-    def getStatistics(self, arc_data: pd.DataFrame, pfsArm: PfsArm) -> dict[str, Any]:
+    def getStatistics(self, arc_data: pd.DataFrame, pfsArm: PfsArm) -> Dict[str, Any]:
         dmapUsed = arc_data.query(f'status == {ReferenceLineStatus.DETECTORMAP_USED}')
         dmapReserved = arc_data.query(f'status == {ReferenceLineStatus.DETECTORMAP_RESERVED}')
 
