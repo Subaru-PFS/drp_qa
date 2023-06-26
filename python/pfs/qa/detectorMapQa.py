@@ -393,9 +393,11 @@ class PlotResidualTask(Task):
     def plotResiduals2D(self, arc_data: pd.DataFrame, detectorMap: DetectorMap):
 
         used_data = arc_data.query(f'status == "{ReferenceLineStatus.DETECTORMAP_USED}"')
+        self.log.info(f'Plotting residuals for {len(used_data)} used lines')
         fig2 = stability.plotArcResiduals2D(used_data, detectorMap)
 
         reserved_data = arc_data.query(f'status == "{ReferenceLineStatus.DETECTORMAP_RESERVED}"')
+        self.log.info(f'Plotting residuals for {len(reserved_data)} reserved lines')
         fig3 = stability.plotArcResiduals2D(reserved_data, detectorMap)
 
         return fig2, fig3
