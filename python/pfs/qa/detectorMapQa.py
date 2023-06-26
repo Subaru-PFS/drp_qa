@@ -93,12 +93,15 @@ class PlotResidualTask(Task):
             pickle.dump(statistics, f)
 
         fig1 = self.plotResiduals1D(arcLines, detectorMap, statistics)
+        fig1.set_size_inches(12, 10)
         fig1.suptitle(f"Detector map residual ({visit=}, {arm=}, {spectrograph=})")
         fig1.savefig(f'dmapQAPlot-{visit:06}-{arm}{spectrograph}.png', format="png")
         plt.close(fig1)
 
         self.log.info(f"Plotting 2D residuals for {len(arc_data)} lines")
         fig2, fig3 = self.plotResiduals2D(arc_data, detectorMap)
+        fig2.set_size_inches(12, 5)
+        fig3.set_size_inches(12, 5)
 
         fig2.suptitle(f"DETECTORMAP_USED residual ({visit=}, {arm=}, {spectrograph=})")
         fig3.suptitle(f"DETECTORMAP_RESERVED residual ({visit=}, {arm=}, {spectrograph=})")
@@ -171,7 +174,7 @@ class PlotResidualTask(Task):
             largeW = residualW > ywmax
             smallW = residualW < ywmin
 
-        fig1 = plt.figure(figsize=(12, 8))
+        fig1 = plt.figure()
 
         ax1 = [
             plt.axes([0.08, 0.08, 0.37, 0.36]),
