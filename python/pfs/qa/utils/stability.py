@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Iterable, Dict, Any
 
 import matplotlib.colors
 import numpy as np
@@ -9,7 +9,7 @@ from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from pfs.drp.stella import ReferenceLineStatus, ArcLineSet, DetectorMap
+from pfs.drp.stella import ReferenceLineStatus, ArcLineSet, DetectorMap, PfsArm
 from pfs.drp.stella.utils import addPfsCursor
 from scipy.stats import iqr
 
@@ -478,3 +478,62 @@ def plotArcResiduals2D(arc_data, detectorMap, title="",
     plt.suptitle(f"Residual {title}")
 
     return fig
+
+
+def getStatistics(arc_data: pd.DataFrame, pfsArm: PfsArm) -> Dict[str, Any]:
+    dmapUsed = arc_data.query(f'status == {ReferenceLineStatus.DETECTORMAP_USED}')
+    dmapReserved = arc_data.query(f'status == {ReferenceLineStatus.DETECTORMAP_RESERVED}')
+
+    statistics = {
+        "fiberId": arc_data.fiberId.unique(),
+        "MedianXusedAll": np.nanmedian(dmapUsed.dx),
+        "MedianXreservedAll": np.nanmedian(dmapReserved.dx),
+        "MedianWusedAll": np.nanmedian(dmapUsed.query('Trace == False').dy),
+        "MedianWreservedAll": np.nanmedian(dmapReserved.query('Trace == False').dy),
+        "SigmaXusedAll": iqr(dmapUsed.dx) / 1.349,
+        "SigmaXreservedAll": iqr(dmapReserved.dx) / 1.349,
+        "SigmaWusedAll": iqr(dmapUsed.query('Trace == False').dy) / 1.349,
+        "SigmaWreservedAll": iqr(dmapReserved.query('Trace == False').dy) / 1.349
+    }
+    dictkeys = [
+        "N_Xused",
+        "N_Xreserved",
+        "N_Wused",
+        "N_Wreserved",
+        "Sigma_Xused",
+        "Sigma_Xreserved",
+        "Sigma_Wused",
+        "Sigma_Wreserved",
+        "Median_Xused",
+        "Median_Xreserved",
+        "Median_Wused",
+        "Median_Wreserved",
+        "pfsArmFluxMedian",
+    ]
+    for k in dictkeys:
+        statistics[k] = np.array([])
+    for f in arc_data.fiberId.unique():
+        dmapUsedFiber = dmapUsed.query(f'fiberId == {f}')
+        dmapUsedFiberNoTrace = dmapUsedFiber.query('Trace == False')
+        dmapReservedFiber = dmapReserved.query(f'fiberId == {f}')
+        dmapReservedFiberNoTrace = dmapReservedFiber.query('Trace == False')
+
+        dictvalues = [
+            len(dmapUsedFiber),
+            len(dmapReservedFiber),
+            len(dmapUsedFiberNoTrace),
+            len(dmapReservedFiberNoTrace),
+            iqr(dmapUsedFiber.dx) / 1.349,
+            iqr(dmapReservedFiber.dx) / 1.349,
+            iqr(dmapUsedFiberNoTrace.dy) / 1.349,
+            iqr(dmapReservedFiberNoTrace.dy) / 1.349,
+            dmapUsedFiber.dx.median(),
+            dmapReservedFiber.dx.median(),
+            dmapUsedFiberNoTrace.dy.median(),
+            dmapReservedFiberNoTrace.dy.median(),
+            pd.DataFrame(pfsArm.flux[pfsArm.fiberId == f].T).median().values[0],
+        ]
+        for k, v in zip(dictkeys, dictvalues):
+            statistics[k] = np.append(statistics[k], v)
+
+    return statistics

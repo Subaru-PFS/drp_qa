@@ -77,37 +77,35 @@ class PlotResidualTask(Task):
         arm = pfsArm.identity.arm
         spectrograph = pfsArm.identity.spectrograph
 
-        arc_data = stability.getArclineData(arcLines)
-        self.log.info(f"Number of fibers: {len(arc_data.fiberId.unique())}")
-        self.log.info(f"Number of Measured lines: {len(arc_data)}")
-
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
         arc_data = stability.getArclineData(arcLines)
         arc_data = stability.addTraceLambdaToArclines(arc_data, detectorMap)
         arc_data = stability.addResidualsToArclines(arc_data)
-        self.log.info(f"Number of Measured lines after scrubbing: {len(arc_data)}")
+        self.log.info(f"Number of fibers: {len(arc_data.fiberId.unique())}")
+        self.log.info(f"Number of Measured lines: {len(arc_data)}")
 
         # Get our statistics and write them to a pickle file.
-        statistics = self.getStatistics(arc_data, pfsArm)
+        statistics = stability.getStatistics(arc_data, pfsArm)
         with open(f"dmapQAStats-{visit:06}-{arm}{spectrograph}.pickle", "wb") as f:
             pickle.dump(statistics, f)
 
+        # Plot the 1D residuals.
+        self.log.info(f"Plotting 1D residuals for {len(arcLines)} lines")
         fig1 = self.plotResiduals1D(arcLines, detectorMap, statistics)
         fig1.set_size_inches(12, 10)
         fig1.suptitle(f"Detector map residual ({visit=}, {arm=}, {spectrograph=})")
         fig1.savefig(f'dmapQAPlot-{visit:06}-{arm}{spectrograph}.png', format="png")
         plt.close(fig1)
 
+        # Plot the 2D residuals.
         self.log.info(f"Plotting 2D residuals for {len(arc_data)} lines")
         fig2, fig3 = self.plotResiduals2D(arc_data, detectorMap)
         fig2.set_size_inches(12, 5)
         fig3.set_size_inches(12, 5)
-
         fig2.suptitle(f"DETECTORMAP_USED residual ({visit=}, {arm=}, {spectrograph=})")
         fig3.suptitle(f"DETECTORMAP_RESERVED residual ({visit=}, {arm=}, {spectrograph=})")
         fig2.savefig(f'dmapQAPlot2Dused-{visit:06}-{arm}{spectrograph}.png', format="png")
         fig3.savefig(f'dmapQAPlot2Dreserved-{visit:06}-{arm}{spectrograph}.png', format="png")
-
         plt.close(fig2)
         plt.close(fig3)
 
@@ -406,64 +404,6 @@ class PlotResidualTask(Task):
         fig3 = stability.plotArcResiduals2D(reserved_data, detectorMap, hexBin=True)
 
         return fig2, fig3
-
-    def getStatistics(self, arc_data: pd.DataFrame, pfsArm: PfsArm) -> Dict[str, Any]:
-        dmapUsed = arc_data.query(f'status == {ReferenceLineStatus.DETECTORMAP_USED}')
-        dmapReserved = arc_data.query(f'status == {ReferenceLineStatus.DETECTORMAP_RESERVED}')
-
-        statistics = {
-            "fiberId": arc_data.fiberId.unique(),
-            "MedianXusedAll": np.nanmedian(dmapUsed.dx),
-            "MedianXreservedAll": np.nanmedian(dmapReserved.dx),
-            "MedianWusedAll": np.nanmedian(dmapUsed.query('Trace == False').dy),
-            "MedianWreservedAll": np.nanmedian(dmapReserved.query('Trace == False').dy),
-            "SigmaXusedAll": iqr(dmapUsed.dx) / 1.349,
-            "SigmaXreservedAll": iqr(dmapReserved.dx) / 1.349,
-            "SigmaWusedAll": iqr(dmapUsed.query('Trace == False').dy) / 1.349,
-            "SigmaWreservedAll": iqr(dmapReserved.query('Trace == False').dy) / 1.349
-        }
-        dictkeys = [
-            "N_Xused",
-            "N_Xreserved",
-            "N_Wused",
-            "N_Wreserved",
-            "Sigma_Xused",
-            "Sigma_Xreserved",
-            "Sigma_Wused",
-            "Sigma_Wreserved",
-            "Median_Xused",
-            "Median_Xreserved",
-            "Median_Wused",
-            "Median_Wreserved",
-            "pfsArmFluxMedian",
-        ]
-        for k in dictkeys:
-            statistics[k] = np.array([])
-        for f in arc_data.fiberId.unique():
-            dmapUsedFiber = dmapUsed.query(f'fiberId == {f}')
-            dmapUsedFiberNoTrace = dmapUsedFiber.query('Trace == False')
-            dmapReservedFiber = dmapReserved.query(f'fiberId == {f}')
-            dmapReservedFiberNoTrace = dmapReservedFiber.query('Trace == False')
-
-            dictvalues = [
-                len(dmapUsedFiber),
-                len(dmapReservedFiber),
-                len(dmapUsedFiberNoTrace),
-                len(dmapReservedFiberNoTrace),
-                iqr(dmapUsedFiber.dx) / 1.349,
-                iqr(dmapReservedFiber.dx) / 1.349,
-                iqr(dmapUsedFiberNoTrace.dy) / 1.349,
-                iqr(dmapReservedFiberNoTrace.dy) / 1.349,
-                dmapUsedFiber.dx.median(),
-                dmapReservedFiber.dx.median(),
-                dmapUsedFiberNoTrace.dy.median(),
-                dmapReservedFiberNoTrace.dy.median(),
-                pd.DataFrame(pfsArm.flux[pfsArm.fiberId == f].T).median().values[0],
-            ]
-            for k, v in zip(dictkeys, dictvalues):
-                statistics[k] = np.append(statistics[k], v)
-
-        return statistics
 
     @classmethod
     def _makeArgumentParser(cls) -> ArgumentParser:
