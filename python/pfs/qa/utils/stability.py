@@ -1,4 +1,4 @@
-from typing import Iterable, Dict, Any
+from typing import Dict, Any
 
 import matplotlib.colors
 import numpy as np
@@ -19,8 +19,7 @@ def getArclineData(als: ArcLineSet,
                    removeFlagged: bool = True,
                    oneHotStatus: bool = False,
                    includeTrace: bool = True,
-                   statusTypes: Iterable[ReferenceLineStatus] = [ReferenceLineStatus.DETECTORMAP_RESERVED,
-                                                                 ReferenceLineStatus.DETECTORMAP_USED]
+                   statusTypes=None
                    ) -> pd.DataFrame:
     """Gets a copy of the arcline data, with some columns added.
 
@@ -43,6 +42,9 @@ def getArclineData(als: ArcLineSet,
     -------
     arc_data : `pandas.DataFrame`
     """
+    if statusTypes is None:
+        statusTypes = [ReferenceLineStatus.DETECTORMAP_RESERVED,
+                       ReferenceLineStatus.DETECTORMAP_USED]
     arc_data = als.data.copy()
 
     if dropNa:
@@ -238,7 +240,9 @@ def plotArcResiduals(arc_data: pd.DataFrame,
 
         # Wavelength
         wavelength_data = plot_data.query(f'Trace == False')
-        label = f"{group}\n{fitType}={wavelength_data.dy_nm.median():.02e} σ={iqr(wavelength_data.dy_nm) / 1.349:.3e} pix"
+        label = f"{group}\n" \
+                f"{fitType}={wavelength_data.dy_nm.median():.02e} " \
+                f"σ={iqr(wavelength_data.dy_nm) / 1.349:.3e} pix"
         sb.scatterplot(data=wavelength_data, x='wavelength', y=wavelength_col, marker='.', ax=ax0, label=label)
         ax0.axhline(0, color='k', zorder=-1)
         ax0.set_xlabel('wavelength (nm)')
@@ -295,8 +299,12 @@ def plotArcResiduals1D(plot_data: pd.DataFrame, col: str = 'dx', title: str = ''
     used.status_name = used.status_name.cat.remove_unused_categories()
     reserved.status_name = reserved.status_name.cat.remove_unused_categories()
 
-    used_label = f"{'used': >15s} {fitType}={used[residual_col].median():+.02e} σ={iqr(used[residual_col]) / 1.349:+.3e}"
-    reserved_label = f"{'reserved': >15s} {fitType}={reserved[residual_col].median():+.02e} σ={iqr(reserved[residual_col]) / 1.349:+.3e}"
+    used_label = f"{'used': >15s} " \
+                 f"{fitType}={used[residual_col].median():+.02e} " \
+                 f"σ={iqr(used[residual_col]) / 1.349:+.3e}"
+    reserved_label = f"{'reserved': >15s} " \
+                     f"{fitType}={reserved[residual_col].median():+.02e} " \
+                     f"σ={iqr(reserved[residual_col]) / 1.349:+.3e}"
 
     ax0 = fig.add_subplot(gs[0])
     ax1 = fig.add_subplot(gs[1])
@@ -443,7 +451,7 @@ def plotArcResiduals2D(arc_data, detectorMap, title="",
 
     fig, axes = plt.subplots(1, ncols, sharex=True, sharey=True, constrained_layout=True)
 
-    def _make_subplot(ax, data, title=''):
+    def _make_subplot(ax, data, subtitle=''):
         vmin, vmax = np.percentile(data, percentiles)
         # vmax = data.std()
         # vmin = -vmax
@@ -461,7 +469,7 @@ def plotArcResiduals2D(arc_data, detectorMap, title="",
 
         ax.format_coord = addPfsCursor(None, detectorMap)
         ax.set_aspect('equal')
-        ax.set_title(f"{title}")
+        ax.set_title(f"{subtitle}")
 
         divider = make_axes_locatable(ax)
         cax = divider.append_axes('right', size='3%', pad=0.02)
@@ -470,10 +478,10 @@ def plotArcResiduals2D(arc_data, detectorMap, title="",
         ax.set_xlim(bbox.getMinX(), bbox.getMaxX())
         ax.set_ylim(bbox.getMinY(), bbox.getMaxY())
 
-    _make_subplot(axes[0], arc_data.dxResidualMedian, title='dx mean [pixel]')
+    _make_subplot(axes[0], arc_data.dxResidualMedian, subtitle='dx mean [pixel]')
 
     if showY:
-        _make_subplot(axes[1], arc_data.dyResidualMedian, title='dy mean [nm]')
+        _make_subplot(axes[1], arc_data.dyResidualMedian, subtitle='dy mean [nm]')
 
     plt.suptitle(f"Residual {title}")
 

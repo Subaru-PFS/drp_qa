@@ -3,7 +3,6 @@ from collections import defaultdict
 from typing import Iterable, Any, Dict
 
 import lsstDebug
-import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -18,11 +17,12 @@ from lsst.pipe.base import (
     Task,
     TaskRunner,
 )
-from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
 from lsst.pipe.base.connectionTypes import Input as InputConnection
+from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
 from scipy.stats import iqr
+
 from .utils import stability
 
 
@@ -675,11 +675,11 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
 
         Parameters
         ----------
-        detectorMap : iterable of `DetectorMap`
+        detectorMapList : iterable of `DetectorMap`
             Mapping from fiberId,wavelength to x,y.
-        arcLines : iterable of `ArcLineSet`
+        arcLinesList : iterable of `ArcLineSet`
             Emission line measurements by adjustDetectorMap.
-        pfsArm : iterable of `PfsArm`
+        pfsArmList : iterable of `PfsArm`
             Extracted spectra from arm.
 
         Returns
