@@ -82,7 +82,7 @@ class PlotResidualTask(Task):
         try:
             arc_data = stability.addTraceLambdaToArclines(arc_data, detectorMap)
         except TypeError:
-            self.log.warn("No traceLambda in detectorMap"
+            self.log.warn("No traceLambda in detectorMap")
 
         arc_data = stability.addResidualsToArclines(arc_data)
         self.log.info(f"Number of fibers: {len(arc_data.fiberId.unique())}")
