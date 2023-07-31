@@ -79,7 +79,11 @@ class PlotResidualTask(Task):
 
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
         arc_data = stability.getArclineData(arcLines)
-        arc_data = stability.addTraceLambdaToArclines(arc_data, detectorMap)
+        try:
+            arc_data = stability.addTraceLambdaToArclines(arc_data, detectorMap)
+        except TypeError:
+            self.log.warn("No traceLambda in detectorMap"
+
         arc_data = stability.addResidualsToArclines(arc_data)
         self.log.info(f"Number of fibers: {len(arc_data.fiberId.unique())}")
         self.log.info(f"Number of Measured lines: {len(arc_data)}")
