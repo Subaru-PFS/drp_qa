@@ -67,7 +67,11 @@ def getArclineData(als: ArcLineSet,
         arc_data = arc_data.merge(pd.get_dummies(arc_data.status_name), left_index=True, right_index=True)
 
     # Make a one-hot for the Trace.
-    arc_data['Trace'] = arc_data.description.str.get_dummies()['Trace']
+    try:
+        arc_data['Trace'] = arc_data.description.str.get_dummies()['Trace']
+    except KeyError:
+        arc_data['Trace'] = False
+
     if includeTrace is False:
         arc_data = arc_data.query(f'Trace == False').copy()
 
