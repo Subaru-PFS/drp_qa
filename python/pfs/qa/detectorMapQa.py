@@ -78,11 +78,8 @@ class PlotResidualTask(Task):
         spectrograph = pfsArm.identity.spectrograph
 
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
-        arc_data = stability.getArclineData(arcLines)
-        try:
-            arc_data = stability.addTraceLambdaToArclines(arc_data, detectorMap)
-        except TypeError:
-            self.log.warn("No traceLambda in detectorMap")
+        arc_data = stability.getArclineData(arcLines, statusTypes=list(), dropNa=True, dropColumns=['xx', 'yy', 'xy'])
+        arc_data = stability.addTraceLambdaToArclines(arc_data, detectorMap)
 
         arc_data = stability.addResidualsToArclines(arc_data)
         self.log.info(f"Number of fibers: {len(arc_data.fiberId.unique())}")
@@ -129,7 +126,7 @@ class PlotResidualTask(Task):
         """
         fmin, fmax = np.amin(arcLines.fiberId), np.amax(arcLines.fiberId)
         dmapUsed = (arcLines.status & ReferenceLineStatus.DETECTORMAP_USED) != 0
-        dmapResearved = (arcLines.status & ReferenceLineStatus.DETECTORMAP_RESERVED) != 0
+        dmapReserved = (arcLines.status & ReferenceLineStatus.DETECTORMAP_RESERVED) != 0
 
         measured = (
                 np.logical_not(np.isnan(arcLines.flux))
@@ -147,16 +144,16 @@ class PlotResidualTask(Task):
                 flist.append(f)
 
         arcLinesMeasured = arcLines[measured]
-        residualX = arcLinesMeasured.x - detectorMap.getXCenter(arcLinesMeasured.fiberId, arcLinesMeasured.y)
+        residualX = arcLinesMeasured.x - detectorMap.getXCenter(arcLinesMeasured.fiberId, arcLinesMeasured.y.astype(np.float64))
         residualW = arcLinesMeasured.wavelength - detectorMap.findWavelength(
-            fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y
+            fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y.astype(np.float64)
         )
-        minw = np.amin(detectorMap.findWavelength(fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y))
-        maxw = np.amax(detectorMap.findWavelength(fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y))
+        minw = np.amin(detectorMap.findWavelength(fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y.astype(np.float64)))
+        maxw = np.amax(detectorMap.findWavelength(fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y.astype(np.float64)))
         bufw = (maxw - minw) * 0.02
 
         dmUsedMeasured = dmapUsed[measured]
-        dmReservedMeasured = dmapResearved[measured]
+        dmReservedMeasured = dmapReserved[measured]
         if self.config.showAllRange:
             residualXMax = max(np.amax(residualX[dmUsedMeasured]), np.amax(residualX[dmReservedMeasured]))
             residualXMin = min(np.amin(residualX[dmUsedMeasured]), np.amin(residualX[dmReservedMeasured]))
@@ -363,6 +360,7 @@ class PlotResidualTask(Task):
             statistics["Median_Xused"],
             yerr=statistics["Sigma_Xused"],
             fmt="bo",
+            mfc='cyan',
             markersize=2,
         )
         ax1[5].errorbar(
@@ -370,6 +368,7 @@ class PlotResidualTask(Task):
             statistics["Median_Wused"],
             yerr=statistics["Sigma_Wused"],
             fmt="bo",
+            mfc='cyan',
             markersize=2,
         )
         ax1[0].legend(fontsize=8)
@@ -392,7 +391,7 @@ class PlotResidualTask(Task):
         ax1[4].set_ylim(yxmin, yxmax)
         ax1[4].set_title("X center residual of each fiber\n(point=median, errbar=1sigma scatter, unit=pix)")
         ax1[5].set_xlabel("fiberId")
-        ax1[5].set_ylim(ywmin, ywmax)
+        # ax1[5].set_ylim(ywmin, ywmax)
         ax1[5].set_title("Wavelength residual of each fiber\n(point=median, errbar=1sigma scatter, unit=nm)")
 
         return fig1

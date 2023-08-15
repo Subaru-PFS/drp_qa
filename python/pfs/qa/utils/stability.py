@@ -1,6 +1,5 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
-import matplotlib.colors
 import numpy as np
 import pandas as pd
 import seaborn as sb
@@ -15,10 +14,11 @@ from scipy.stats import iqr
 
 
 def getArclineData(als: ArcLineSet,
-                   dropNa: bool = True,
-                   removeFlagged: bool = True,
+                   dropNa: bool = False,
+                   dropColumns: Optional[list] = None,
+                   removeFlagged: bool = False,
                    oneHotStatus: bool = False,
-                   includeTrace: bool = True,
+                   removeTrace: bool = False,
                    statusTypes=None
                    ) -> pd.DataFrame:
     """Gets a copy of the arcline data, with some columns added.
@@ -33,8 +33,8 @@ def getArclineData(als: ArcLineSet,
         Remove rows with ``flag=True``? Default is True.
     oneHotStatus : `bool`, optional
         Add one-hot columns for the status? Default is False.
-    includeTrace : `bool`, optional
-        Include rows with ``Trace=True``? Default is False.
+    removeTrace : `bool`, optional
+        Remove rows with ``Trace==True``? Default is False.
     statusTypes : `list` of `pfs.drp.stella.ReferenceLineStatus`, optional
         Status types to include. Default is ``[DETECTORMAP_RESERVED, DETECTORMAP_USED]``.
 
@@ -47,6 +47,9 @@ def getArclineData(als: ArcLineSet,
                        ReferenceLineStatus.DETECTORMAP_USED]
     arc_data = als.data.copy()
 
+    if dropColumns is not None:
+        arc_data = arc_data.drop(columns=dropColumns)
+
     if dropNa:
         arc_data = arc_data.dropna()
 
@@ -57,6 +60,9 @@ def getArclineData(als: ArcLineSet,
         arc_data = arc_data.query(' or '.join(f'status == {s}' for s in statusTypes))
 
     arc_data = arc_data.copy()
+
+    # Change some of the dtypes explicitly.
+    arc_data.y = arc_data.y.astype(np.float64)
 
     # Get status names.
     arc_data['status_name'] = arc_data.status.map({v: k for k, v in ReferenceLineStatus.__members__.items()})
@@ -72,7 +78,7 @@ def getArclineData(als: ArcLineSet,
     except KeyError:
         arc_data['Trace'] = False
 
-    if includeTrace is False:
+    if removeTrace is True:
         arc_data = arc_data.query(f'Trace == False').copy()
 
     return arc_data
@@ -93,12 +99,12 @@ def addTraceLambdaToArclines(arc_data: pd.DataFrame,
     -------
     arc_data : `pandas.DataFrame`
     """
-    dispersion = detectorMap.getDispersion(arc_data.fiberId.values, arc_data.wavelength.values)
+    dispersion = detectorMap.getDispersion(arc_data.fiberId.to_numpy(), arc_data.wavelength.to_numpy())
 
-    arc_data['lam'] = detectorMap.findWavelength(arc_data.fiberId.values, arc_data.y.values)
+    arc_data['lam'] = detectorMap.findWavelength(arc_data.fiberId.to_numpy(), arc_data.y.to_numpy())
     arc_data['lamErr'] = (arc_data.yErr / arc_data.y) * (arc_data.lam / dispersion)
     arc_data['lamErr_nm'] = arc_data.lamErr * dispersion
-    points = detectorMap.findPoint(arc_data.fiberId.values, arc_data.wavelength.values)
+    points = detectorMap.findPoint(arc_data.fiberId.to_numpy(), arc_data.wavelength.to_numpy())
     arc_data['tracePosX'] = points[:, 0]
     arc_data['tracePosY'] = points[:, 1]
 
@@ -456,11 +462,11 @@ def plotArcResiduals2D(arc_data, detectorMap, title="",
     fig, axes = plt.subplots(1, ncols, sharex=True, sharey=True, constrained_layout=True)
 
     def _make_subplot(ax, data, subtitle=''):
-        vmin, vmax = np.percentile(data, percentiles)
+        # vmin, vmax = np.percentile(data, percentiles)
         # vmax = data.std()
         # vmin = -vmax
-        # vmin = data.min()
-        # vmax = data.max()
+        vmin = data.min()
+        vmax = data.max()
         norm = colors.Normalize(vmin, vmax)
 
         if hexBin:
