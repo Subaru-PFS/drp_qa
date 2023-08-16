@@ -50,14 +50,14 @@ def getArclineData(als: ArcLineSet,
     if dropColumns is not None:
         arc_data = arc_data.drop(columns=dropColumns)
 
-    if dropNa:
-        arc_data = arc_data.dropna()
-
     if removeFlagged:
         arc_data = arc_data.query('flag == False')
 
     if len(statusTypes):
         arc_data = arc_data.query(' or '.join(f'status == {s}' for s in statusTypes))
+
+    if dropNa:
+        arc_data = arc_data.dropna()
 
     arc_data = arc_data.copy()
 
@@ -65,7 +65,7 @@ def getArclineData(als: ArcLineSet,
     arc_data.y = arc_data.y.astype(np.float64)
 
     # Get status names.
-    arc_data['status_name'] = arc_data.status.map({v: k for k, v in ReferenceLineStatus.__members__.items()})
+    arc_data['status_name'] = arc_data.status.map(lambda x: str(ReferenceLineStatus(x)).split('.')[-1])
     arc_data['status_name'] = arc_data['status_name'].astype('category')
 
     # Get one hot for status.
@@ -212,6 +212,7 @@ def calculateResiduals(arc_data: pd.DataFrame, targetCol: str, fitXTo: str = 'fi
 def plotArcResiduals(arc_data: pd.DataFrame,
                      title: str = "",
                      fitType: str = "mean",
+                     plotPixels: bool = True,
                      lamErrMax: float = 0) -> Figure:
     """
     Plot arc line residuals.
@@ -231,43 +232,51 @@ def plotArcResiduals(arc_data: pd.DataFrame,
     -------
     fig: `matplotlib.figure.Figure`
     """
+    if plotPixels is True:
+        use_col = 'dy'
+        y_units = 'pix'
+    else:
+        use_col = 'dy_nm'
+        y_units = 'nm'
+
     totalFibers = len(arc_data.fiberId.unique())
 
-    groups = ['DETECTORMAP_USED', 'DETECTORMAP_RESERVED']
+    groups = arc_data.status_name.unique()
 
     fig, (ax0, ax1) = plt.subplots(2, 1, sharex=False, gridspec_kw=dict(hspace=0.3))
 
     for group in groups:
-
-        plot_data = arc_data.query(f'status == {ReferenceLineStatus[group]}').copy()
+        plot_data = arc_data.query(f'status == {ReferenceLineStatus.fromNames(group.split("|")).value}').copy()
         plot_data.status_name = plot_data.status_name.cat.remove_unused_categories()
 
         if lamErrMax > 0:
             plot_data = plot_data.query(f'lamErr < {lamErrMax}').copy()
 
         position_col = f'dxResidual{fitType.title()}'
-        wavelength_col = f'dy_nmResidual{fitType.title()}'
+        wavelength_col = f'{use_col}Residual{fitType.title()}'
 
         # Wavelength
-        wavelength_data = plot_data.query(f'Trace == False')
+        wavelength_data = plot_data  #.query(f'Trace == False')
         label = f"{group}\n" \
-                f"{fitType}={wavelength_data.dy_nm.median():.02e} " \
-                f"σ={iqr(wavelength_data.dy_nm) / 1.349:.3e} pix"
-        sb.scatterplot(data=wavelength_data, x='wavelength', y=wavelength_col, marker='.', ax=ax0, label=label)
-        ax0.axhline(0, color='k', zorder=-1)
-        ax0.set_xlabel('wavelength (nm)')
-        ax0.set_ylabel('Wavelength residual (nm)')
+                f"{fitType}={wavelength_data[use_col].median():.02e} " \
+                f"σ={iqr(wavelength_data[use_col]) / 1.349:.3e} pix"
+        sb.scatterplot(data=wavelength_data, x='wavelength', y=wavelength_col, style='Trace', ax=ax0, label=label)
+        ax0.axhline(0, color='k', ls='--', alpha=0.5, zorder=-1)
+        ax0.set_xlabel(f'wavelength ({y_units})')
+        ax0.set_ylabel(f'Wavelength residual ({y_units})')
         ax0.set_title(f"Wavelength residual")
+        ax0.legend(loc='upper left', bbox_to_anchor=(0, 1), borderaxespad=0, fontsize='8')
         # ax0.set_ylim(-.1, .1)
 
         # X-center
         label = f"{group}\n{fitType}={plot_data.dx.median():.02e} σ={iqr(plot_data.dx) / 1.349:.3e} pix "
-        sb.scatterplot(data=plot_data, x='wavelength', y=position_col, marker='.', ax=ax1, label=label)
-        ax1.axhline(0, color='k', zorder=-1)
+        sb.scatterplot(data=plot_data, x='wavelength', y=position_col, style='Trace', ax=ax1, label=label)
+        ax1.axhline(0, color='k', ls='--', alpha=0.5, zorder=-1)
         ax1.set_xlabel('row (pixel)')
         ax1.set_ylabel('Position residual (pix)')
         ax1.set_title('Position residual')
-        # ax1.set_ylim(-.8, .8)
+        ax1.legend(loc='upper left', bbox_to_anchor=(0., 1), borderaxespad=0, fontsize='8')
+        ax1.set_ylim(-.8, .8)
 
         fig.suptitle(f"{title}\n "
                      f"$\sigma_\lambda$ < {lamErrMax} = {len(plot_data.fiberId.unique()):.0f} / {totalFibers} lines")
