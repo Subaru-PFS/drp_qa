@@ -26,7 +26,7 @@ mpl.rcParams.update({
 
 # Make a dataclass for the stability statistics.
 @dataclass
-class StabilityStatistics:
+class DetectorMapStatistics:
     visit: int
     spectrograph: int
     arm: str
@@ -121,54 +121,6 @@ class StabilityStatistics:
             # wavelength_stats.to_hdf(hd5_fn, key='wavelength', format='table', append=True, index=False)
         else:
             return ccd_stats, fiber_stats  # , wavelength_stats
-
-    def plotResidualsFacetGrid(self, xColumn: str = 'wavelength', usePixels: bool = True, setLimits=True):
-        """Plots residuals as a FacetGrid.
-
-        Parameters
-        ----------
-        xColumn : `str`, optional
-            Column to plot on the x-axis. Default is ``wavelength``, could also be ``fiberId``.
-        usePixels : `bool`, optional
-            If wavelength should be plotted in pixels, default True.
-        setLimits : `bool`, optional
-            If limits should be set on the x-axis. Default True.
-
-        Returns
-        -------
-        fg : `seaborn.FacetGrid`
-        """
-        plot_cols = ['dx', 'dy' if usePixels else 'dy_nm']
-
-        # Put the data in long format.
-        id_cols = ['fiberId', 'wavelength', 'status_name', 'Trace']
-        plot_cols.extend(id_cols)
-        plot_data = self.arcData[plot_cols].melt(id_vars=id_cols, value_name='residual')
-
-        fg = sb.FacetGrid(plot_data, row='variable', sharex=True, sharey=False, margin_titles=True)
-        fg.figure.set_size_inches(12, 5)
-
-        # TODO make the palette more consistent.
-        categories = plot_data.status_name.dtype.categories
-        palette = {n: c for n, c in zip(categories, sb.color_palette(palette='Set1', n_colors=len(categories)))}
-
-        # Plot the data.
-        fg.map_dataframe(sb.scatterplot, x=xColumn, y='residual',
-                         hue='status_name', palette=palette,
-                         style='Trace', markers={0: 'o', 1: '.'},
-                         alpha=0.5
-                         )
-
-        fg.axes[0][0].axhline(0, ls='--', alpha=0.25, color='g')
-        fg.axes[1][0].axhline(0, ls='--', alpha=0.25, color='g')
-        if setLimits is True:
-            fg.axes[0][0].set_ylim(-1.5, 1.5)
-
-        fg.add_legend(shadow=True, fontsize='small')
-        fg.figure.suptitle(f'Residuals by {xColumn}\n{self.dataId}\n{self.rerunName}', y=0.97, fontsize='small',
-                           bbox=dict(facecolor='grey', edgecolor='k', alpha=0.45, pad=5.0))
-
-        return fg
 
     def getArclineData(self,
                        dropNa: bool = False,
@@ -374,8 +326,56 @@ class StabilityStatistics:
 
         return arc_data
 
-    def plotResidualsQuiver(self, title: str = '', arrowScale: float = 0.01, usePixels=True,
-                            width: int = None, height: int = None) -> Figure:
+    def plotResiduals1D(self, by: str = 'wavelength', usePixels: bool = True, setLimits=True):
+        """Plots residuals as a FacetGrid.
+
+        Parameters
+        ----------
+        by : `str`, optional
+            Column to plot on the x-axis. Default is ``wavelength``, could also be ``fiberId``.
+        usePixels : `bool`, optional
+            If wavelength should be plotted in pixels, default True.
+        setLimits : `bool`, optional
+            If limits should be set on the x-axis. Default True.
+
+        Returns
+        -------
+        fg : `seaborn.FacetGrid`
+        """
+        plot_cols = ['dx', 'dy' if usePixels else 'dy_nm']
+
+        # Put the data in long format.
+        id_cols = ['fiberId', 'wavelength', 'status_name', 'Trace']
+        plot_cols.extend(id_cols)
+        plot_data = self.arcData[plot_cols].melt(id_vars=id_cols, value_name='residual')
+
+        fg = sb.FacetGrid(plot_data, row='variable', sharex=True, sharey=False, margin_titles=True)
+        fg.figure.set_size_inches(12, 5)
+
+        # TODO make the palette more consistent.
+        categories = plot_data.status_name.dtype.categories
+        palette = {n: c for n, c in zip(categories, sb.color_palette(palette='Set1', n_colors=len(categories)))}
+
+        # Plot the data.
+        fg.map_dataframe(sb.scatterplot, x=by, y='residual',
+                         hue='status_name', palette=palette,
+                         style='Trace', markers={0: 'o', 1: '.'},
+                         alpha=0.5
+                         )
+
+        fg.axes[0][0].axhline(0, ls='--', alpha=0.25, color='g')
+        fg.axes[1][0].axhline(0, ls='--', alpha=0.25, color='g')
+        if setLimits is True:
+            fg.axes[0][0].set_ylim(-1.5, 1.5)
+
+        fg.add_legend(shadow=True, fontsize='small')
+        fg.figure.suptitle(f'Residuals by {by}\n{self.dataId}\n{self.rerunName}', y=0.97, fontsize='small',
+                           bbox=dict(facecolor='grey', edgecolor='k', alpha=0.45, pad=5.0))
+
+        return fg
+
+    def plotResiduals2DQuiver(self, title: str = '', arrowScale: float = 0.01, usePixels=True,
+                              width: int = None, height: int = None) -> Figure:
         """
         Plot residuals as a quiver plot.
 
@@ -422,11 +422,11 @@ class StabilityStatistics:
 
         return fig
 
-    def plotArcResiduals2D(self,
-                           positionCol='dx', wavelengthCol='dy',
-                           showWavelength=True,
-                           hexBin=False, gridsize=100,
-                           width: int = None, height: int = None) -> Figure:
+    def plotResiduals2D(self,
+                        positionCol='dx', wavelengthCol='dy',
+                        showWavelength=True,
+                        hexBin=False, gridsize=100,
+                        width: int = None, height: int = None) -> Figure:
         """ Plot residuals as a 2D histogram.
 
         Parameters
