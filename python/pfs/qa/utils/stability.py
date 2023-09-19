@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -18,9 +19,15 @@ from scipy.stats import iqr
 afwDisplay.setDefaultBackend("matplotlib")
 
 sb.set_style('whitegrid')
+
+palette = plt.cm.RdBu_r.copy()
+palette.set_over('magenta', alpha=0.5)
+palette.set_under('cyan', alpha=0.5)
+palette.set_bad('lime', alpha=0.5)
+
 mpl.rcParams.update({
     'grid.alpha': 0.1,
-    'image.cmap': 'coolwarm',
+    'image.cmap': palette,
 })
 
 
@@ -94,33 +101,42 @@ class DetectorMapStatistics:
 
         # Get aggregate stats.
         if agg_stats is None:
-            agg_stats = ['count', 'mean', 'median', 'std', iqr_sigma]
+            agg_stats = ['mean', 'median', 'std', 'sem', iqr_sigma]
+
+        agg_columns = {
+            'status_name': 'count',
+            'dx': agg_stats,
+            'dy': agg_stats,
+            'centroidErr': agg_stats,
+            'detectorMapErr': agg_stats
+        }
 
         # For entire detector.
-        ccd_stats = self.arcData.groupby(['status_name']).agg({'dx': agg_stats, 'dy': agg_stats})
-        ccd_stats = ccd_stats.reset_index().melt(id_vars=['status_name'], var_name=['col', 'metric'])
+        ccd_stats = self.arcData.groupby(['status_name']).agg(agg_columns)
+        ccd_stats.reset_index(inplace=True)
         ccd_stats.insert(0, 'visit', self.visit)
         ccd_stats.insert(1, 'ccd', self.ccd)
 
         # Per fiber.
-        fiber_stats = self.arcData.groupby(['fiberId', 'status_name']).agg({'dx': agg_stats, 'dy': agg_stats})
-        fiber_stats = fiber_stats.reset_index().melt(id_vars=['fiberId', 'status_name'], var_name=['col', 'metric'])
+        fiber_stats = self.arcData.groupby(['fiberId', 'status_name']).agg(agg_columns)
+        fiber_stats.reset_index(inplace=True)
         fiber_stats.insert(0, 'visit', self.visit)
         fiber_stats.insert(1, 'ccd', self.ccd)
 
-        # # By wavelength (?).
-        # wavelength_stats = self.arcData.groupby(['wavelength', 'status_name']).agg({'dx': agg_stats, 'dy': agg_stats})
-        # wavelength_stats = wavelength_stats.query('')
-        # wavelength_stats = wavelength_stats.reset_index().melt(id_vars=['wavelength', 'status_name'], var_name=['col', 'metric'])
-        # wavelength_stats.insert(0, 'visit', self.visit)
-        # wavelength_stats.insert(1, 'ccd', self.ccd)
+        # Make single level column names.
+        ccd_stats.columns = [f'{c[0]}_{c[1]}' if c[1] > '' else c[0] for c in ccd_stats.columns]
+        fiber_stats.columns = [f'{c[0]}_{c[1]}' if c[1] > '' else c[0] for c in fiber_stats.columns]
 
         if hd5_fn is not None:
-            ccd_stats.to_hdf(hd5_fn, key='ccd', format='table', append=True, index=False)
-            fiber_stats.to_hdf(hd5_fn, key='fiber', format='table', append=True, index=False)
-            # wavelength_stats.to_hdf(hd5_fn, key='wavelength', format='table', append=True, index=False)
-        else:
-            return ccd_stats, fiber_stats  # , wavelength_stats
+            ccd_stats.status_name = ccd_stats.status_name.astype(str)
+            ccd_stats.to_hdf(hd5_fn, key=f'ccd', format='table', append=True, index=False,
+                             min_itemsize=dict(status_name=50))
+
+            fiber_stats.status_name = fiber_stats.status_name.astype(str)
+            fiber_stats.to_hdf(hd5_fn, key=f'fibers', format='table', append=True, index=False,
+                               min_itemsize=dict(status_name=50))
+
+        return ccd_stats, fiber_stats  # , wavelength_stats
 
     def getArclineData(self,
                        dropNa: bool = False,
@@ -190,7 +206,7 @@ class DetectorMapStatistics:
         for ignore in ignore_lines:
             arc_data = arc_data[~arc_data.status_name.str.contains(ignore)]
 
-        arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
+        # arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
 
         # Get one hot for status.
         if oneHotStatus:
@@ -374,8 +390,8 @@ class DetectorMapStatistics:
 
         return fg
 
-    def plotResiduals2DQuiver(self, title: str = '', arrowScale: float = 0.01, usePixels=True,
-                              width: int = None, height: int = None) -> Figure:
+    def plotResiduals2DQuiver(self, arrowScale: float = 0.01, usePixels: bool = True,
+                              plotKws: dict = None) -> Figure:
         """
         Plot residuals as a quiver plot.
 
@@ -383,21 +399,20 @@ class DetectorMapStatistics:
         ----------
         arc_data: `pandas.DataFrame`
             Arc line data.
-        title: `str`
-            Title for plot.
         arrowScale: `float`
             Scale for quiver arrows.
         usePixels: `bool`
             If wavelength should be plotted in pixels, default True.
-        width: `int`
-            Width of the detectormap.
-        height: `int`
-            Height of the detectormap.
+        plotKws: `dict`
+            Arguments passed to plotting function.
 
         Returns
         -------
         fig: `matplotlib.figure.Figure`
         """
+        plotKws = plotKws or dict()
+        plotKws.setdefault('cmap', 'magma_r')
+
         arc_data = self.arcData
 
         fig, ax0 = plt.subplots(1, 1)
@@ -406,27 +421,29 @@ class DetectorMapStatistics:
 
         C = np.hypot(arc_data.dx, wavelength_col)
         im = ax0.quiver(arc_data.tracePosX, arc_data.tracePosY, arc_data.dx, wavelength_col, C,
-                        norm=colors.Normalize(vmin=0, vmax=1),
-                        angles='xy', scale_units='xy', scale=arrowScale, units='width',
-                        cmap='coolwarm')
-        ax0.quiverkey(im, 0.1, 1., arrowScale, label=f'{arrowScale=}')
+                        norm=colors.Normalize(),
+                        angles='xy', scale_units='xy', scale=arrowScale, units='xy',
+                        **plotKws
+                        )
+        if arrowScale is not None:
+            ax0.quiverkey(im, 0.1, 1., arrowScale, label=f'{arrowScale=}')
 
         divider = make_axes_locatable(ax0)
-        cax = divider.append_axes('right', size='3%', pad=0.02)
+        cax = divider.append_axes('right', size='3%', pad=0.03)
         fig.colorbar(im, ax=ax0, cax=cax, orientation='vertical', shrink=0.6)
         ax0.set_aspect('equal')
-        fig.suptitle(f"Residual quiver\n{title}")
 
-        ax0.set_xlim(0, width)
-        ax0.set_ylim(0, height)
+        ax0.set_xlim(0, self.detectorMap.bbox.width)
+        ax0.set_ylim(0, self.detectorMap.bbox.height)
+
+        fig.suptitle(f'Residuals quiver {self.dataId}\n{self.rerunName}')
 
         return fig
 
     def plotResiduals2D(self,
                         positionCol='dx', wavelengthCol='dy',
                         showWavelength=True,
-                        hexBin=False, gridsize=100,
-                        width: int = None, height: int = None) -> Figure:
+                        hexBin=True, gridsize=250, plotKws: dict = None) -> Figure:
         """ Plot residuals as a 2D histogram.
 
         Parameters
@@ -438,47 +455,52 @@ class DetectorMapStatistics:
         showWavelength: `bool`
             Show the y-axis. Default is ``True``.
         hexBin: `bool`
-            Use hexbin plot. Default is ``False``.
+            Use hexbin plot. Default is ``True``.
         gridsize: `int`
-            Grid size for hexbin plot. Default is 100.
-        width: `int`
-            Width of the detectormap.
-        height: `int`
-            Height of the detectormap.
+            Grid size for hexbin plot. Default is 250.
+        plotKws: `dict`
+            Arguments passed to plotting function.
 
         Returns
         -------
         fig: `matplotlib.figure.Figure`
         """
+        plotKws = plotKws or dict()
+
         arc_data = self.arcData
 
-        ncols = 2 if showWavelength else 1
+        width = self.detectorMap.getBBox().width
+        height = self.detectorMap.getBBox().height
+
+        # ncols = 2 if showWavelength else 1
+        ncols = 1
 
         fig, axes = plt.subplots(1, ncols, sharex=True, sharey=True)
 
-        def _make_subplot(ax, data, subtitle=''):
-            vmin, vmax = -1., 1
-            norm = colors.Normalize(vmin, vmax)
+        def _make_subplot(ax, data, subtitle='', normalize=colors.SymLogNorm):
+            norm = normalize(linthresh=0.01, vmin=plotKws.pop('vmin', None), vmax=plotKws.pop('vmax', None))
 
             if hexBin:
-                im = ax.hexbin(arc_data.x, arc_data.y, data, norm=norm, gridsize=gridsize)
+                im = ax.hexbin(arc_data.tracePosX, arc_data.tracePosY, data, norm=norm, gridsize=gridsize, **plotKws)
             else:
-                im = ax.scatter(arc_data.x, arc_data.y, c=data, s=3, norm=norm)
+                im = ax.scatter(arc_data.tracePosX, arc_data.tracePosY, c=data, s=3, norm=norm, **plotKws)
 
             ax.set_aspect('equal')
             ax.set_title(f"{subtitle}")
 
             divider = make_axes_locatable(ax)
-            cax = divider.append_axes('right', size='3%', pad=0.02)
-            fig.colorbar(im, ax=ax, cax=cax, orientation='vertical', shrink=0.6)
+            cax = divider.append_axes('right', size='2%', pad=0.05)
+            fig.colorbar(im, ax=ax, cax=cax, orientation='vertical', shrink=0.6, extend='both')
 
             ax.set_xlim(0, width)
             ax.set_ylim(0, height)
 
         if showWavelength:
-            _make_subplot(axes[0], arc_data[positionCol], subtitle=f'{positionCol} [pixel]')
-            _make_subplot(axes[1], arc_data[wavelengthCol], subtitle=f'{wavelengthCol} [pixel]')
+            # _make_subplot(axes[0], arc_data[positionCol], subtitle=f'{positionCol} [pixel]')
+            _make_subplot(axes, arc_data[wavelengthCol], subtitle=f'{wavelengthCol} [pixel]')
         else:
             _make_subplot(axes, arc_data[positionCol], subtitle='dx [pixel]')
+
+        fig.suptitle(f'2D residuals {self.dataId}\n{self.rerunName}')
 
         return fig
