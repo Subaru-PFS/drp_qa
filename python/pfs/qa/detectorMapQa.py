@@ -1,4 +1,5 @@
 import pickle
+import warnings
 from collections import defaultdict
 from typing import Iterable, Any, Dict
 
@@ -21,9 +22,12 @@ from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
 from lsst.pipe.base.connectionTypes import Input as InputConnection
 from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
+from pfs.drp.stella.utils import stability
+
 from scipy.stats import iqr
 
-from .utils import stability
+warnings.filterwarnings('ignore', message='Gen2 Butler')
+warnings.filterwarnings('ignore', message='addPfsCursor')
 
 
 class PlotResidualConfig(Config):
@@ -72,17 +76,13 @@ class PlotResidualTask(Task):
             The fiberId, number of lines (detectormap_used, detectormap_reserved), medians and sigmas of the
             fitting residuals are stored in the dict format.
         """
-
         visit = pfsArm.identity.visit
         arm = pfsArm.identity.arm
         spectrograph = pfsArm.identity.spectrograph
 
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
-        arc_data = stability.getArclineData(arcLines)
-        try:
-            arc_data = stability.addTraceLambdaToArclines(arc_data, detectorMap)
-        except TypeError:
-            self.log.warn("No traceLambda in detectorMap")
+        arc_data = stability.getArclineData(arcLines, statusTypes=list(), dropNa=True, dropColumns=['xx', 'yy', 'xy'])
+        arc_data = stability.addTraceLambdaToArclines(arc_data, detectorMap)
 
         arc_data = stability.addResidualsToArclines(arc_data)
         self.log.info(f"Number of fibers: {len(arc_data.fiberId.unique())}")
@@ -129,7 +129,7 @@ class PlotResidualTask(Task):
         """
         fmin, fmax = np.amin(arcLines.fiberId), np.amax(arcLines.fiberId)
         dmapUsed = (arcLines.status & ReferenceLineStatus.DETECTORMAP_USED) != 0
-        dmapResearved = (arcLines.status & ReferenceLineStatus.DETECTORMAP_RESERVED) != 0
+        dmapReserved = (arcLines.status & ReferenceLineStatus.DETECTORMAP_RESERVED) != 0
 
         measured = (
                 np.logical_not(np.isnan(arcLines.flux))
@@ -147,16 +147,19 @@ class PlotResidualTask(Task):
                 flist.append(f)
 
         arcLinesMeasured = arcLines[measured]
-        residualX = arcLinesMeasured.x - detectorMap.getXCenter(arcLinesMeasured.fiberId, arcLinesMeasured.y)
+        residualX = arcLinesMeasured.x - detectorMap.getXCenter(arcLinesMeasured.fiberId,
+                                                                arcLinesMeasured.y.astype(np.float64))
         residualW = arcLinesMeasured.wavelength - detectorMap.findWavelength(
-            fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y
+            fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y.astype(np.float64)
         )
-        minw = np.amin(detectorMap.findWavelength(fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y))
-        maxw = np.amax(detectorMap.findWavelength(fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y))
+        minw = np.amin(
+            detectorMap.findWavelength(fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y.astype(np.float64)))
+        maxw = np.amax(
+            detectorMap.findWavelength(fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y.astype(np.float64)))
         bufw = (maxw - minw) * 0.02
 
         dmUsedMeasured = dmapUsed[measured]
-        dmReservedMeasured = dmapResearved[measured]
+        dmReservedMeasured = dmapReserved[measured]
         if self.config.showAllRange:
             residualXMax = max(np.amax(residualX[dmUsedMeasured]), np.amax(residualX[dmReservedMeasured]))
             residualXMin = min(np.amin(residualX[dmUsedMeasured]), np.amin(residualX[dmReservedMeasured]))
@@ -176,8 +179,8 @@ class PlotResidualTask(Task):
             largeW = residualW > ywmax
             smallW = residualW < ywmin
 
+        # Set up the figure and the axes
         fig1 = plt.figure()
-
         ax1 = [
             plt.axes([0.08, 0.08, 0.37, 0.36]),
             plt.axes([0.46, 0.08, 0.07, 0.36]),
@@ -186,8 +189,15 @@ class PlotResidualTask(Task):
             plt.axes([0.58, 0.08, 0.37, 0.36]),
             plt.axes([0.58, 0.54, 0.37, 0.36]),
         ]
+        bl_ax = ax1[0]
+        bl_hist_ax = ax1[1]
+        tl_ax = ax1[2]
+        tl_hist_ax = ax1[3]
+        br_ax = ax1[4]
+        tr_ax = ax1[5]
 
-        ax1[0].scatter(
+        # X center residual of 'used' data.
+        bl_ax.scatter(
             arcLinesMeasured.wavelength[dmUsedMeasured],
             residualX[dmUsedMeasured],
             s=self.config.pointSize,
@@ -196,21 +206,22 @@ class PlotResidualTask(Task):
                 np.median(residualX[dmUsedMeasured]), iqr(residualX[dmUsedMeasured]) / 1.349
             ),
         )
+        # Show full range on X center plot if requested.
         if not self.config.showAllRange:
             if np.sum(largeX) + np.sum(smallX) > 0:
-                ax1[0].quiver(arcLinesMeasured.wavelength[dmUsedMeasured & largeX],
-                              np.zeros(np.sum(
-                                  dmUsedMeasured & largeX)) + yxmax - self.config.xrange * self.config.quivLength, 0,
-                              self.config.xrange * self.config.quivLength,
-                              label="Greater than {:.2f} in absolute value ({:.1e}%)".format(
-                                  yxmax, np.sum(dmUsedMeasured & largeX) / np.sum(dmUsedMeasured) * 100
-                              ),
-                              color="b",
-                              angles="xy",
-                              scale_units="xy",
-                              scale=2,
-                              )
-                ax1[0].quiver(
+                bl_ax.quiver(arcLinesMeasured.wavelength[dmUsedMeasured & largeX],
+                             np.zeros(np.sum(
+                                 dmUsedMeasured & largeX)) + yxmax - self.config.xrange * self.config.quivLength, 0,
+                             self.config.xrange * self.config.quivLength,
+                             label="Greater than {:.2f} in absolute value ({:.1e}%)".format(
+                                 yxmax, np.sum(dmUsedMeasured & largeX) / np.sum(dmUsedMeasured) * 100
+                             ),
+                             color="b",
+                             angles="xy",
+                             scale_units="xy",
+                             scale=2,
+                             )
+                bl_ax.quiver(
                     arcLinesMeasured.wavelength[dmUsedMeasured & smallX],
                     np.zeros(np.sum(dmUsedMeasured & smallX)) + yxmin + self.config.xrange * self.config.quivLength, 0,
                     -self.config.xrange * self.config.quivLength,
@@ -218,8 +229,10 @@ class PlotResidualTask(Task):
                     angles="xy",
                     scale_units="xy",
                     scale=2,
-                )
-        ax1[0].scatter(
+                    )
+
+        # X center residual of 'reserved' data.
+        bl_ax.scatter(
             arcLinesMeasured.wavelength[dmReservedMeasured],
             residualX[dmReservedMeasured],
             s=self.config.pointSize,
@@ -228,25 +241,26 @@ class PlotResidualTask(Task):
                 np.median(residualX[dmReservedMeasured]), iqr(residualX[dmReservedMeasured]) / 1.349
             ),
         )
+        # Show full range on X center plot if requested.
         if not self.config.showAllRange:
             if np.sum(largeX) + np.sum(smallX) > 0:
-                ax1[0].quiver(arcLinesMeasured.wavelength[dmReservedMeasured & largeX],
-                              np.zeros(np.sum(
-                                  dmReservedMeasured & largeX)) + yxmax - self.config.xrange * self.config.quivLength,
-                              0,
-                              self.config.xrange * self.config.quivLength,
-                              label="Greater than {:.2f} in absolute value ({:.1e}%)".format(
-                                  yxmax,
-                                  (np.sum(dmReservedMeasured & largeX) + np.sum(dmReservedMeasured & smallX))
-                                  / np.sum(dmReservedMeasured)
-                                  * 100,
-                              ),
-                              color="r",
-                              angles="xy",
-                              scale_units="xy",
-                              scale=2,
-                              )
-                ax1[0].quiver(
+                bl_ax.quiver(arcLinesMeasured.wavelength[dmReservedMeasured & largeX],
+                             np.zeros(np.sum(
+                                 dmReservedMeasured & largeX)) + yxmax - self.config.xrange * self.config.quivLength,
+                             0,
+                             self.config.xrange * self.config.quivLength,
+                             label="Greater than {:.2f} in absolute value ({:.1e}%)".format(
+                                 yxmax,
+                                 (np.sum(dmReservedMeasured & largeX) + np.sum(dmReservedMeasured & smallX))
+                                 / np.sum(dmReservedMeasured)
+                                 * 100,
+                                 ),
+                             color="r",
+                             angles="xy",
+                             scale_units="xy",
+                             scale=2,
+                             )
+                bl_ax.quiver(
                     arcLinesMeasured.wavelength[dmReservedMeasured & smallX],
                     np.zeros(np.sum(dmReservedMeasured & smallX)) + yxmin + self.config.xrange * self.config.quivLength,
                     0,
@@ -255,22 +269,27 @@ class PlotResidualTask(Task):
                     angles="xy",
                     scale_units="xy",
                     scale=2,
-                )
-        ax1[1].hist(
+                    )
+
+        # X center residual histogram of 'used'.
+        bl_hist_ax.hist(
             residualX[dmUsedMeasured],
             color="b",
             range=(-self.config.xrange * 3, self.config.xrange * 3),
             bins=35,
             orientation="horizontal",
         )
-        ax1[1].hist(
+        # X center residual histogram 'reserved'.
+        bl_hist_ax.hist(
             residualX[dmReservedMeasured],
             color="r",
             range=(-self.config.xrange * 3, self.config.xrange * 3),
             bins=35,
             orientation="horizontal",
         )
-        ax1[2].scatter(
+
+        # Wavelength residual of 'used' data.
+        tl_ax.scatter(
             arcLinesMeasured.wavelength[dmUsedMeasured & (arcLinesMeasured.description != "Trace")],
             residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")],
             s=self.config.pointSize,
@@ -278,11 +297,11 @@ class PlotResidualTask(Task):
             label="DETECTORMAP_USED\n(median:{:.2e}, sigma:{:.2e})".format(
                 np.median(residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")]),
                 iqr(residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")]) / 1.349,
-            ),
+                ),
         )
         if not self.config.showAllRange:
             if np.sum(largeW) + np.sum(smallW) > 0:
-                ax1[2].quiver(
+                tl_ax.quiver(
                     arcLinesMeasured.wavelength[dmUsedMeasured & largeW],
                     np.zeros(np.sum(dmUsedMeasured & largeW)) + ywmax - self.config.wrange * self.config.quivLength, 0,
                     self.config.wrange * self.config.quivLength,
@@ -291,13 +310,13 @@ class PlotResidualTask(Task):
                         (np.sum(dmUsedMeasured & largeW) + np.sum(dmUsedMeasured & smallW))
                         / np.sum(dmUsedMeasured)
                         * 100,
-                    ),
+                        ),
                     color="b",
                     angles="xy",
                     scale_units="xy",
                     scale=2,
-                )
-                ax1[2].quiver(
+                    )
+                tl_ax.quiver(
                     arcLinesMeasured.wavelength[dmUsedMeasured & smallW],
                     np.zeros(np.sum(dmUsedMeasured & smallW)) + ywmin + self.config.wrange * self.config.quivLength, 0,
                     self.config.wrange * self.config.quivLength,
@@ -305,8 +324,10 @@ class PlotResidualTask(Task):
                     angles="xy",
                     scale_units="xy",
                     scale=2,
-                )
-        ax1[2].scatter(
+                    )
+
+        # Wavelength residual of 'reserved' data.
+        tl_ax.scatter(
             arcLinesMeasured.wavelength[dmReservedMeasured & (arcLinesMeasured.description != "Trace")],
             residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")],
             s=self.config.pointSize,
@@ -314,11 +335,11 @@ class PlotResidualTask(Task):
             label="DETECTORMAP_RESERVED\n(median:{:.2e}, sigma:{:.2e})".format(
                 np.median(residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")]),
                 iqr(residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")]) / 1.349,
-            ),
+                ),
         )
         if not self.config.showAllRange:
             if np.sum(largeW) + np.sum(smallW) > 0:
-                ax1[2].quiver(
+                tl_ax.quiver(
                     arcLinesMeasured.wavelength[dmReservedMeasured & largeW],
                     np.zeros(np.sum(dmReservedMeasured & largeW)) + ywmax - self.config.wrange * self.config.quivLength,
                     0,
@@ -328,13 +349,13 @@ class PlotResidualTask(Task):
                         (np.sum(dmReservedMeasured & largeW) + np.sum(dmReservedMeasured & smallW))
                         / np.sum(dmReservedMeasured)
                         * 100,
-                    ),
+                        ),
                     color="r",
                     angles="xy",
                     scale_units="xy",
                     scale=2,
-                )
-                ax1[2].quiver(
+                    )
+                tl_ax.quiver(
                     arcLinesMeasured.wavelength[dmReservedMeasured & smallW],
                     np.zeros(np.sum(dmReservedMeasured & smallW)) + ywmin + self.config.wrange * self.config.quivLength,
                     0,
@@ -343,57 +364,71 @@ class PlotResidualTask(Task):
                     angles="xy",
                     scale_units="xy",
                     scale=2,
-                )
-        ax1[3].hist(
+                    )
+
+        # Wavelength residual histogram of 'used'.
+        tl_hist_ax.hist(
             residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")],
             color="b",
             range=(-self.config.wrange * 3, self.config.wrange * 3),
             bins=35,
             orientation="horizontal",
         )
-        ax1[3].hist(
+        # Wavelength residual histogram of 'reserved'.
+        tl_hist_ax.hist(
             residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")],
             color="r",
             range=(-self.config.wrange * 3, self.config.wrange * 3),
             bins=35,
             orientation="horizontal",
         )
-        ax1[4].errorbar(
+
+        # X center residual fiber errors for 'used'.
+        br_ax.errorbar(
             statistics["fiberId"],
             statistics["Median_Xused"],
             yerr=statistics["Sigma_Xused"],
             fmt="bo",
+            mfc='cyan',
             markersize=2,
         )
-        ax1[5].errorbar(
+
+        # Wavelength residual fiber errors for 'used'.
+        tr_ax.errorbar(
             statistics["fiberId"],
             statistics["Median_Wused"],
             yerr=statistics["Sigma_Wused"],
             fmt="bo",
+            mfc='cyan',
             markersize=2,
         )
-        ax1[0].legend(fontsize=8)
-        ax1[0].set_ylabel("X residual (pix)")
-        ax1[0].set_xlabel("Wavelength (nm)")
-        ax1[0].set_xlim(minw - bufw, maxw + bufw)
-        ax1[0].set_ylim(yxmin, yxmax)
-        ax1[0].set_title("X center residual (unit=pix)")
-        ax1[1].set_ylim(yxmin, yxmax)
-        ax1[1].set_yticklabels([])
-        ax1[2].legend(fontsize=8)
-        ax1[2].set_ylabel("Wavelength residual (nm)")
-        ax1[2].set_xlabel("Wavelength (nm)")
-        ax1[2].set_xlim(minw - bufw, maxw + bufw)
-        ax1[2].set_ylim(ywmin, ywmax)
-        ax1[2].set_title("Wavelength residual (unit=nm)")
-        ax1[3].set_ylim(ywmin, ywmax)
-        ax1[3].set_yticklabels([])
-        ax1[4].set_xlabel("fiberId")
-        ax1[4].set_ylim(yxmin, yxmax)
-        ax1[4].set_title("X center residual of each fiber\n(point=median, errbar=1sigma scatter, unit=pix)")
-        ax1[5].set_xlabel("fiberId")
-        ax1[5].set_ylim(ywmin, ywmax)
-        ax1[5].set_title("Wavelength residual of each fiber\n(point=median, errbar=1sigma scatter, unit=nm)")
+
+        bl_ax.legend(fontsize=8)
+        bl_ax.set_ylabel("X residual (pix)")
+        bl_ax.set_xlabel("Wavelength (nm)")
+        bl_ax.set_xlim(minw - bufw, maxw + bufw)
+        bl_ax.set_ylim(yxmin, yxmax)
+        bl_ax.set_title("X center residual (unit=pix)")
+
+        bl_hist_ax.set_ylim(yxmin, yxmax)
+        bl_hist_ax.set_yticklabels([])
+
+        tl_ax.legend(fontsize=8)
+        tl_ax.set_ylabel("Wavelength residual (nm)")
+        tl_ax.set_xlabel("Wavelength (nm)")
+        tl_ax.set_xlim(minw - bufw, maxw + bufw)
+        tl_ax.set_ylim(ywmin, ywmax)
+        tl_ax.set_title("Wavelength residual (unit=nm)")
+
+        tl_hist_ax.set_ylim(ywmin, ywmax)
+        tl_hist_ax.set_yticklabels([])
+
+        br_ax.set_xlabel("fiberId")
+        br_ax.set_ylim(yxmin, yxmax)
+        br_ax.set_title("X center residual of each fiber\n(point=median, errbar=1sigma scatter, unit=pix)")
+        tr_ax.set_xlabel("fiberId")
+        # tr_ax.set_ylim(ywmin, ywmax)
+        tr_ax.set_title("Wavelength residual of each fiber\n(point=median, errbar=1sigma scatter, unit=nm)")
 
         return fig1
 
