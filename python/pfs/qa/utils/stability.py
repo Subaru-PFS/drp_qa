@@ -39,6 +39,8 @@ class DetectorMapStatistics:
     loadData: InitVar[bool] = True
     statusTypes: InitVar[list, None] = None
 
+    category_palette: dict = None
+
     def __post_init__(self, loadData, statusTypes):
         self.rerun = self.repoDir / 'rerun' / self.rerunName
         self.butler = dafPersist.Butler(self.rerun.as_posix(), calibRoot=self.calibDir.as_posix())
@@ -76,6 +78,11 @@ class DetectorMapStatistics:
         self.arcData = self.getArclineData(statusTypes=statusTypes, dropNaColumns=dropNaColumns)
         self.arcData = self.addTraceLambdaToArclines()
         self.arcData = self.addResidualsToArclines()
+
+        status_categories = self.arcData.status_name.dtype.categories
+        self.category_palette = {n: c for n, c in
+                                 zip(status_categories,
+                                     sb.color_palette(palette='Set1', n_colors=len(status_categories)))}
 
         return self.arcData
 
@@ -367,13 +374,9 @@ class DetectorMapStatistics:
         fg = sb.FacetGrid(plot_data, row='variable', sharex=True, sharey=False, margin_titles=True)
         fg.figure.set_size_inches(12, 5)
 
-        # TODO make the palette more consistent.
-        categories = plot_data.status_name.dtype.categories
-        palette = {n: c for n, c in zip(categories, sb.color_palette(palette='Set1', n_colors=len(categories)))}
-
         # Plot the data.
         fg.map_dataframe(sb.scatterplot, x=by, y='residual',
-                         hue='status_name', palette=palette,
+                         hue='status_name', palette=self.category_palette,
                          style='Trace', markers={0: 'o', 1: '.'},
                          alpha=0.5
                          )
@@ -412,18 +415,20 @@ class DetectorMapStatistics:
         plotKws = plotKws or dict()
         plotKws.setdefault('cmap', 'magma_r')
 
-        arc_data = self.arcData
-
         fig, ax0 = plt.subplots(1, 1)
 
+        arc_data = self.arcData
         wavelength_col = arc_data.dy if usePixels is True else arc_data.dy_nm
 
         C = np.hypot(arc_data.dx, wavelength_col)
+        Cnorm = (C - C.min()) / (C.max() - C.min())
         im = ax0.quiver(arc_data.tracePosX, arc_data.tracePosY, arc_data.dx, wavelength_col, C,
                         norm=colors.Normalize(),
                         angles='xy', scale_units='xy', scale=arrowScale, units='xy',
+                        alpha=Cnorm,
                         **plotKws
                         )
+
         if arrowScale is not None:
             ax0.quiverkey(im, 0.1, 1., arrowScale, label=f'{arrowScale=}')
 
