@@ -29,7 +29,6 @@ class DetectorMapStatistics:
     repoDir: Path = Path('/work/drp')
     calibDir: Path = Path('/work/drp/CALIB')
 
-    pfsArm: PfsArm = field(init=False)
     arcLines: ArcLineSet = field(init=False)
     detectorMap: DetectorMap = field(init=False)
     arcData: pd.DataFrame = field(init=False)
@@ -45,7 +44,6 @@ class DetectorMapStatistics:
         self.rerun = self.repoDir / 'rerun' / self.rerunName
         self.butler = dafPersist.Butler(self.rerun.as_posix(), calibRoot=self.calibDir.as_posix())
 
-        self.pfsArm = self.butler.get('pfsArm', self.dataId)
         self.arcLines = self.butler.get('arcLines', self.dataId)
         self.detectorMap = self.butler.get('detectorMap_used', self.dataId)
 
@@ -59,6 +57,10 @@ class DetectorMapStatistics:
     @property
     def ccd(self):
         return self.arm + str(self.spectrograph)
+
+    @property
+    def uid(self):
+        return f'v{self.visit}-{self.ccd}-{self.label}'
 
     def getData(self, statusTypes: Optional[list] = None, dropNaColumns: bool = True):
         """Looks up the data in butler and returns a dataframe with the arcline data.
@@ -79,6 +81,7 @@ class DetectorMapStatistics:
         self.arcData = self.addTraceLambdaToArclines()
         self.arcData = self.addResidualsToArclines()
 
+        # TODO make the palette more consistent.
         status_categories = self.arcData.status_name.dtype.categories
         self.category_palette = {n: c for n, c in
                                  zip(status_categories,
@@ -425,7 +428,7 @@ class DetectorMapStatistics:
         im = ax0.quiver(arc_data.tracePosX, arc_data.tracePosY, arc_data.dx, wavelength_col, C,
                         norm=colors.Normalize(),
                         angles='xy', scale_units='xy', scale=arrowScale, units='xy',
-                        alpha=Cnorm,
+                        # alpha=Cnorm,
                         **plotKws
                         )
 
