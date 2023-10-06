@@ -14,8 +14,6 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
 from scipy.stats import iqr
 
-logging.getLogger('lsst.CameraMapper').setLevel(logging.WARNING)
-
 
 # Make a dataclass for the stability statistics.
 @dataclass
@@ -33,7 +31,7 @@ class DetectorMapStatistics:
     detectorMap: DetectorMap = field(init=False)
     arcData: pd.DataFrame = field(init=False)
 
-    butler: dafPersist.Butler = field(init=False)
+    butler: dafPersist.Butler = None
 
     loadData: InitVar[bool] = True
     statusTypes: InitVar[list, None] = None
@@ -42,7 +40,10 @@ class DetectorMapStatistics:
 
     def __post_init__(self, loadData, statusTypes):
         self.rerun = self.repoDir / 'rerun' / self.rerunName
-        self.butler = dafPersist.Butler(self.rerun.as_posix(), calibRoot=self.calibDir.as_posix())
+
+        if self.butler is None:
+            logging.info('Creating a new butler')
+            self.butler = dafPersist.Butler(self.rerun.as_posix(), calibRoot=self.calibDir.as_posix())
 
         self.arcLines = self.butler.get('arcLines', self.dataId)
         self.detectorMap = self.butler.get('detectorMap_used', self.dataId)
