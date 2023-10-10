@@ -11,8 +11,11 @@ from dataclasses import dataclass, field, InitVar
 from matplotlib import colors
 from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
+from matplotlib.patches import Patch
 from scipy.stats import iqr
+
+from pfs.datamodel import TargetType
+from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
 
 
 # Make a dataclass for the stability statistics.
@@ -47,6 +50,7 @@ class DetectorMapStatistics:
 
         self.arcLines = self.butler.get('arcLines', self.dataId)
         self.detectorMap = self.butler.get('detectorMap_used', self.dataId)
+        self.pfsConfig = self.butler.get('pfsConfig', self.dataId)
 
         if loadData is True:
             self.arcData = self.getData(statusTypes=statusTypes)
@@ -231,6 +235,10 @@ class DetectorMapStatistics:
         if removeTrace is True:
             arc_data = arc_data.query(f'Trace == False').copy()
 
+        # Add TargetType for each fiber.
+        arc_data = arc_data.merge(pd.DataFrame({'fiberId': self.pfsConfig.fiberId, 'targetType': [TargetType(x).name for x in self.pfsConfig.targetType]}), left_on='fiberId', right_on='fiberId')
+        arc_data['targetType'] = arc_data.targetType.astype('category')
+
         return arc_data
 
     def addTraceLambdaToArclines(self) -> pd.DataFrame:
@@ -352,7 +360,7 @@ class DetectorMapStatistics:
 
         return arc_data
 
-    def plotResiduals1D(self, by: str = 'wavelength', usePixels: bool = True, setLimits=True):
+    def plotResiduals1D(self, by: str = 'wavelength', usePixels: bool = True, setLimits: bool = True, showTargetType: bool = False):
         """Plots residuals as a FacetGrid.
 
         Parameters
@@ -363,6 +371,8 @@ class DetectorMapStatistics:
             If wavelength should be plotted in pixels, default True.
         setLimits : `bool`, optional
             If limits should be set on the x-axis. Default True.
+        showTargetType: `bool`, optional
+            If the background of each line should be color-coded by target type, default False.
 
         Returns
         -------
@@ -371,17 +381,16 @@ class DetectorMapStatistics:
         plot_cols = ['dx', 'dy' if usePixels else 'dy_nm']
 
         # Put the data in long format.
-        id_cols = ['fiberId', 'wavelength', 'status_name', 'Trace']
+        id_cols = ['fiberId', 'wavelength', 'status_name', 'targetType']
         plot_cols.extend(id_cols)
         plot_data = self.arcData[plot_cols].melt(id_vars=id_cols, value_name='residual')
 
-        fg = sb.FacetGrid(plot_data, row='variable', sharex=True, sharey=False, margin_titles=True)
+        fg = sb.FacetGrid(plot_data.sort_values(by=['targetType']), row='variable', sharex=True, sharey=False, margin_titles=True)
         fg.figure.set_size_inches(12, 5)
 
         # Plot the data.
         fg.map_dataframe(sb.scatterplot, x=by, y='residual',
-                         hue='status_name', palette=self.category_palette,
-                         style='Trace', markers={0: 'o', 1: '.'},
+                         hue='targetType', style='status_name', s=5,
                          alpha=0.5
                          )
 
@@ -389,6 +398,18 @@ class DetectorMapStatistics:
         fg.axes[1][0].axhline(0, ls='--', alpha=0.25, color='g')
         if setLimits is True:
             fg.axes[0][0].set_ylim(-1.5, 1.5)
+
+        # Show the target type if showing fibers
+        if by == 'fiberId' and showTargetType is True:
+            targetPal = sb.color_palette(palette='tab10', n_colors=len(self.arcData.targetType.unique()), as_cmap=True)
+            legendPatches = dict()
+            for ax in fg.axes.flat:
+                for idx, row in self.arcData[['fiberId', 'targetType']].drop_duplicates().iterrows():
+                    c = targetPal.colors[TargetType[row.targetType]]
+                    legendPatches[row.targetType] = Patch(color=c, label=row.targetType, alpha=0.4)
+                    ax.axvline(row.fiberId, color=c, alpha=0.4, zorder=-10)
+
+            fg.figure.legend(handles=list(legendPatches.values()), title='TargetType')
 
         fg.add_legend(shadow=True, fontsize='small')
         fg.figure.suptitle(f'Residuals by {by}\n{self.dataId}\n{self.rerunName}', y=0.97, fontsize='small',
