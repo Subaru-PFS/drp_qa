@@ -37,11 +37,10 @@ class DetectorMapStatistics:
     butler: dafPersist.Butler = None
 
     loadData: InitVar[bool] = True
-    statusTypes: InitVar[list, None] = None
 
     category_palette: dict = None
 
-    def __post_init__(self, loadData, statusTypes):
+    def __post_init__(self, loadData):
         self.rerun = self.repoDir / 'rerun' / self.rerunName
 
         if self.butler is None:
@@ -53,7 +52,7 @@ class DetectorMapStatistics:
         self.pfsConfig = self.butler.get('pfsConfig', self.dataId)
 
         if loadData is True:
-            self.arcData = self.getData(statusTypes=statusTypes)
+            self.arcData = self.getData()
 
     @property
     def dataId(self):
@@ -67,7 +66,7 @@ class DetectorMapStatistics:
     def uid(self):
         return f'v{self.visit}-{self.ccd}-{self.label}'
 
-    def getData(self, statusTypes: Optional[list] = None, dropNaColumns: bool = True):
+    def getData(self, dropNaColumns: bool = True):
         """Looks up the data in butler and returns a dataframe with the arcline data.
 
         The arcline data includes basic statistics, such as the median and sigma of the residuals.
@@ -82,7 +81,7 @@ class DetectorMapStatistics:
         """
 
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
-        self.arcData = self.getArclineData(statusTypes=statusTypes, dropNaColumns=dropNaColumns)
+        self.arcData = self.getArclineData(dropNaColumns=dropNaColumns)
         self.arcData = self.addTraceLambdaToArclines()
         self.arcData = self.addResidualsToArclines()
 
@@ -152,13 +151,7 @@ class DetectorMapStatistics:
 
         return ccd_stats, fiber_stats
 
-    def getArclineData(self,
-                       dropNaColumns: bool = False,
-                       removeFlagged: bool = False,
-                       oneHotStatus: bool = False,
-                       removeTrace: bool = False,
-                       statusTypes=None
-                       ) -> pd.DataFrame:
+    def getArclineData(self, dropNaColumns: bool = False, removeFlagged: bool = True) -> pd.DataFrame:
         """Gets a copy of the arcline data, with some columns added.
 
         Parameters
@@ -166,13 +159,7 @@ class DetectorMapStatistics:
         dropNaColumns : `bool`, optional
             Drop columns where all values are NaN. Default is True.
         removeFlagged : `bool`, optional
-            Remove rows with ``flag=True``? Default is True.
-        oneHotStatus : `bool`, optional
-            Add one-hot columns for the status? Default is False.
-        removeTrace : `bool`, optional
-            Remove rows with ``Trace==True``? Default is False.
-        statusTypes : `list` of `pfs.drp.stella.ReferenceLineStatus`, optional
-            Status types to include. Default is ``[DETECTORMAP_RESERVED, DETECTORMAP_USED]``.
+            Remove rows with ``flag=True``? Default is False.
 
         Returns
         -------
@@ -181,15 +168,8 @@ class DetectorMapStatistics:
         # Get the data from the ArcLineSet.
         arc_data = self.arcLines.data.copy()
 
-        if statusTypes is None:
-            statusTypes = [ReferenceLineStatus.DETECTORMAP_RESERVED,
-                           ReferenceLineStatus.DETECTORMAP_USED]
-
         if removeFlagged:
             arc_data = arc_data.query('flag == False')
-
-        if len(statusTypes):
-            arc_data = arc_data.query(' or '.join(f'status == {s}' for s in statusTypes))
 
         if dropNaColumns:
             arc_data = arc_data.dropna(axis=1, how='all')
@@ -211,29 +191,29 @@ class DetectorMapStatistics:
 
         # Clean up categories.
         ignore_lines = [
-            # 'MERGED',
-            # 'NOT_VISIBLE',
-            # 'REJECTED',
+             'NOT_VISIBLE',
+             'REJECTED',
         ]
 
         # Ignore bad line categories.
         for ignore in ignore_lines:
             arc_data = arc_data[~arc_data.status_name.str.contains(ignore)]
 
-        arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
-
-        # Get one hot for status.
-        if oneHotStatus:
-            arc_data = arc_data.merge(pd.get_dummies(arc_data.status_name), left_index=True, right_index=True)
 
         # Make a one-hot for the Trace.
         try:
-            arc_data['Trace'] = arc_data.description.str.get_dummies()['Trace']
+            arc_data['isTrace'] = arc_data.description.str.get_dummies()['Trace'].astype(bool)
         except KeyError:
-            arc_data['Trace'] = False
+            arc_data['isTrace'] = False
 
-        if removeTrace is True:
-            arc_data = arc_data.query(f'Trace == False').copy()
+        # Make one-hot columns for status_names
+        status_dummies = arc_data.status_name.str.get_dummies()
+        arc_data['isUsed'] = status_dummies['DETECTORMAP_USED'].astype(bool)
+        arc_data['isReserved'] = status_dummies['DETECTORMAP_RESERVED'].astype(bool)
+
+        arc_data = arc_data.query('isUsed == True or isReserved == True').copy()
+
+        arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
 
         # Add TargetType for each fiber.
         arc_data = arc_data.merge(pd.DataFrame({'fiberId': self.pfsConfig.fiberId, 'targetType': [TargetType(x).name for x in self.pfsConfig.targetType]}), left_on='fiberId', right_on='fiberId')
@@ -256,9 +236,9 @@ class DetectorMapStatistics:
 
         # Convert nm to pixels.
         dispersion = self.detectorMap.getDispersion(arc_data.fiberId.to_numpy(), arc_data.wavelength.to_numpy())
+        arc_data['dispersion'] = dispersion
         arc_data['lam_pix'] = arc_data.lam / dispersion
         arc_data['lamErr_pix'] = arc_data.lamErr / dispersion
-        arc_data['wavelengthDispersion'] = arc_data.wavelength / dispersion
 
         # Get the trace positions according to the detectormap.
         points = self.detectorMap.findPoint(arc_data.fiberId.to_numpy(), arc_data.wavelength.to_numpy())
@@ -303,8 +283,11 @@ class DetectorMapStatistics:
 
         # Get `observed - expected` for position and wavelength.
         arc_data['dx'] = arc_data.tracePosX - arc_data.x
-        arc_data['dy'] = arc_data.lam_pix - arc_data.wavelengthDispersion
         arc_data['dy_nm'] = arc_data.lam - arc_data.wavelength
+        arc_data['dy'] = arc_data.dy_nm / arc_data.dispersion
+
+        # Set the dy columns to NA (instead of 0) for Trace.
+        arc_data.dy = arc_data.apply(lambda row: row.dy if row.isTrace == False else np.NaN, axis=1)
 
         self.calculateResiduals('dx', fitYTo=fitYTo)
         self.calculateResiduals('dy', fitYTo=fitYTo)
@@ -348,19 +331,20 @@ class DetectorMapStatistics:
         X = np.vstack([np.ones_like(a), a, b]).T
         Y = arc_data[targetCol]
 
-        c0, c1, c2 = np.linalg.lstsq(X, Y, rcond=None)[0]
+        #c0, c1, c2 = np.linalg.lstsq(X, Y, rcond=None)[0]
 
-        fit = c0 + (c1 * a) + (c2 * b)
-        arc_data[f'{targetCol}Fit'] = fit
-        arc_data[f'{targetCol}ResidualLinear'] = Y - fit
+        #fit = c0 + (c1 * a) + (c2 * b)
+        #arc_data[f'{targetCol}Fit'] = fit
+        #arc_data[f'{targetCol}ResidualLinear'] = Y - fit
 
-        # Mean and median fits
-        arc_data[f'{targetCol}ResidualMean'] = Y - Y.mean()
-        arc_data[f'{targetCol}ResidualMedian'] = Y - Y.median()
+        # Mean and median fits.
+        fiberGroup = arc_data.groupby('fiberId')
+        arc_data[f'{targetCol}ResidualMean'] = Y - fiberGroup[targetCol].transform('mean')
+        arc_data[f'{targetCol}ResidualMedian'] = Y - fiberGroup[targetCol].transform('median')
 
         return arc_data
 
-    def plotResiduals1D(self, by: str = 'wavelength', usePixels: bool = True, setLimits: bool = True):
+    def plotResiduals1D(self, by: str = 'wavelength', usePixels: bool = True, setLimits: bool = True, subtractMedian: bool = False):
         """Plots residuals as a FacetGrid.
 
         Parameters
@@ -377,6 +361,10 @@ class DetectorMapStatistics:
         fg : `seaborn.FacetGrid`
         """
         plot_cols = ['dx', 'dy' if usePixels else 'dy_nm']
+        if subtractMedian == True:
+            plot_cols = ['dxResidualMedian', 'dyResidualMedian']
+        else:
+            plot_cols = ['dx', 'dy' if usePixels else 'dy_nm']
 
         # Put the data in long format.
         id_cols = ['fiberId', 'wavelength', 'status_name', 'targetType']
@@ -388,14 +376,15 @@ class DetectorMapStatistics:
 
         # Plot the data.
         fg.map_dataframe(sb.scatterplot, x=by, y='residual',
-                         hue='targetType', style='status_name', s=5,
-                         alpha=0.5
+                         hue='targetType', style='status_name', s=10,
+                         alpha=0.5, rasterized=True
                          )
 
         fg.axes[0][0].axhline(0, ls='--', alpha=0.25, color='g')
         fg.axes[1][0].axhline(0, ls='--', alpha=0.25, color='g')
         if setLimits is True:
             fg.axes[0][0].set_ylim(-1.5, 1.5)
+            fg.axes[1][0].set_ylim(-1.5, 1.5)
 
         fg.add_legend(shadow=True, fontsize='small')
         fg.figure.suptitle(f'Residuals by {by}\n{self.dataId}\n{self.rerunName}', y=0.97, fontsize='small',
@@ -429,11 +418,11 @@ class DetectorMapStatistics:
         fig, ax0 = plt.subplots(1, 1)
 
         arc_data = self.arcData
-        wavelength_col = arc_data.dy if usePixels is True else arc_data.dy_nm
+        wavelength_col = arc_data.dyResidualMedian if usePixels is True else arc_data.dy_nm
 
-        C = np.hypot(arc_data.dx, wavelength_col)
+        C = np.hypot(arc_data.dxResidualMedian, wavelength_col)
         Cnorm = (C - C.min()) / (C.max() - C.min())
-        im = ax0.quiver(arc_data.tracePosX, arc_data.tracePosY, arc_data.dx, wavelength_col, C,
+        im = ax0.quiver(arc_data.tracePosX, arc_data.tracePosY, arc_data.dxResidualMedian, wavelength_col, C,
                         norm=colors.Normalize(),
                         angles='xy', scale_units='xy', scale=arrowScale, units='xy',
                         # alpha=Cnorm,
@@ -514,7 +503,7 @@ class DetectorMapStatistics:
             # _make_subplot(axes[0], arc_data[positionCol], subtitle=f'{positionCol} [pixel]')
             _make_subplot(axes, arc_data[wavelengthCol], subtitle=f'{wavelengthCol} [pixel]')
         else:
-            _make_subplot(axes, arc_data[positionCol], subtitle='dx [pixel]')
+            _make_subplot(axes, arc_data[positionCol], subtitle=f'{positionCol} [pixel]')
 
         fig.suptitle(f'2D residuals {self.dataId}\n{self.rerunName}')
 
