@@ -193,12 +193,16 @@ class DetectorMapStatistics:
         ignore_lines = [
              'NOT_VISIBLE',
              'REJECTED',
+             'PROTECTED',
+             'MERGED',
+             'LAM_FOCUS',
+             'BLEND',
+             'BROAD',
         ]
 
         # Ignore bad line categories.
         for ignore in ignore_lines:
             arc_data = arc_data[~arc_data.status_name.str.contains(ignore)]
-
 
         # Make a one-hot for the Trace.
         try:
@@ -208,10 +212,10 @@ class DetectorMapStatistics:
 
         # Make one-hot columns for status_names
         status_dummies = arc_data.status_name.str.get_dummies()
-        arc_data['isUsed'] = status_dummies['DETECTORMAP_USED'].astype(bool)
-        arc_data['isReserved'] = status_dummies['DETECTORMAP_RESERVED'].astype(bool)
+        arc_data['isUsed'] = bool(status_dummies.get('DETECTORMAP_USED', False))
+        arc_data['isReserved'] = bool(status_dummies.get('DETECTORMAP_RESERVED', False))
 
-        arc_data = arc_data.query('isUsed == True or isReserved == True').copy()
+        #arc_data = arc_data.query('isUsed == True or isReserved == True').copy()
 
         arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
 
@@ -344,7 +348,7 @@ class DetectorMapStatistics:
 
         return arc_data
 
-    def plotResiduals1D(self, by: str = 'wavelength', usePixels: bool = True, setLimits: bool = True, subtractMedian: bool = False):
+    def plotResiduals1D(self, by: str = 'wavelength', usePixels: bool = True, setLimits: bool = True, subtractMedian: bool = False, hue='status_name', style='targetType'):
         """Plots residuals as a FacetGrid.
 
         Parameters
@@ -376,7 +380,7 @@ class DetectorMapStatistics:
 
         # Plot the data.
         fg.map_dataframe(sb.scatterplot, x=by, y='residual',
-                         hue='targetType', style='status_name', s=10,
+                         style=style, hue=hue, s=10,
                          alpha=0.5, rasterized=True
                          )
 
@@ -481,13 +485,13 @@ class DetectorMapStatistics:
 
         fig, axes = plt.subplots(1, ncols, sharex=True, sharey=True)
 
-        def _make_subplot(ax, data, subtitle='', normalize=colors.SymLogNorm):
-            norm = normalize(linthresh=0.01, vmin=plotKws.pop('vmin', None), vmax=plotKws.pop('vmax', None))
+        def _make_subplot(ax, data, subtitle='', normalize=colors.Normalize):
+            norm = normalize(vmin=plotKws.pop('vmin', None), vmax=plotKws.pop('vmax', None))
 
             if hexBin:
                 im = ax.hexbin(arc_data.tracePosX, arc_data.tracePosY, data, norm=norm, gridsize=gridsize, **plotKws)
             else:
-                im = ax.scatter(arc_data.tracePosX, arc_data.tracePosY, c=data, s=3, norm=norm, **plotKws)
+                im = ax.scatter(arc_data.x, arc_data.y, c=data, s=3, norm=norm, **plotKws)
 
             ax.set_aspect('equal')
             ax.set_title(f"{subtitle}")
