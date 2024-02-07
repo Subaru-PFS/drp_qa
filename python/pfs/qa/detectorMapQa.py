@@ -7,6 +7,8 @@ import lsstDebug
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from scipy.stats import iqr
+
 from lsst.pex.config import Field, ConfigurableField, Config
 from lsst.pipe.base import (
     ArgumentParser,
@@ -18,13 +20,12 @@ from lsst.pipe.base import (
     Task,
     TaskRunner,
 )
+
 from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
 from lsst.pipe.base.connectionTypes import Input as InputConnection
 from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
-from pfs.drp.stella.utils import stability
-
-from scipy.stats import iqr
+from pfs.qa.utils import helpers
 
 warnings.filterwarnings('ignore', message='Gen2 Butler')
 warnings.filterwarnings('ignore', message='addPfsCursor')
@@ -81,15 +82,15 @@ class PlotResidualTask(Task):
         spectrograph = pfsArm.identity.spectrograph
 
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
-        arc_data = stability.getArclineData(arcLines, statusTypes=list(), dropNa=True, dropColumns=['xx', 'yy', 'xy'])
-        arc_data = stability.addTraceLambdaToArclines(arc_data, detectorMap)
+        arc_data = helpers.getArclineData(arcLines, statusTypes=list(), dropNa=True, dropColumns=['xx', 'yy', 'xy'])
+        arc_data = helpers.addTraceLambdaToArclines(arc_data, detectorMap)
 
-        arc_data = stability.addResidualsToArclines(arc_data)
+        arc_data = helpers.addResidualsToArclines(arc_data)
         self.log.info(f"Number of fibers: {len(arc_data.fiberId.unique())}")
         self.log.info(f"Number of Measured lines: {len(arc_data)}")
 
         # Get our statistics and write them to a pickle file.
-        statistics = stability.getStatistics(arc_data, pfsArm)
+        statistics = helpers.getStatistics(arc_data, pfsArm)
         with open(f"dmapQAStats-{visit:06}-{arm}{spectrograph}.pickle", "wb") as f:
             pickle.dump(statistics, f)
 
@@ -229,7 +230,7 @@ class PlotResidualTask(Task):
                     angles="xy",
                     scale_units="xy",
                     scale=2,
-                    )
+                )
 
         # X center residual of 'reserved' data.
         bl_ax.scatter(
@@ -254,7 +255,7 @@ class PlotResidualTask(Task):
                                  (np.sum(dmReservedMeasured & largeX) + np.sum(dmReservedMeasured & smallX))
                                  / np.sum(dmReservedMeasured)
                                  * 100,
-                                 ),
+                             ),
                              color="r",
                              angles="xy",
                              scale_units="xy",
@@ -269,7 +270,7 @@ class PlotResidualTask(Task):
                     angles="xy",
                     scale_units="xy",
                     scale=2,
-                    )
+                )
 
         # X center residual histogram of 'used'.
         bl_hist_ax.hist(
@@ -297,7 +298,7 @@ class PlotResidualTask(Task):
             label="DETECTORMAP_USED\n(median:{:.2e}, sigma:{:.2e})".format(
                 np.median(residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")]),
                 iqr(residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")]) / 1.349,
-                ),
+            ),
         )
         if not self.config.showAllRange:
             if np.sum(largeW) + np.sum(smallW) > 0:
@@ -310,12 +311,12 @@ class PlotResidualTask(Task):
                         (np.sum(dmUsedMeasured & largeW) + np.sum(dmUsedMeasured & smallW))
                         / np.sum(dmUsedMeasured)
                         * 100,
-                        ),
+                    ),
                     color="b",
                     angles="xy",
                     scale_units="xy",
                     scale=2,
-                    )
+                )
                 tl_ax.quiver(
                     arcLinesMeasured.wavelength[dmUsedMeasured & smallW],
                     np.zeros(np.sum(dmUsedMeasured & smallW)) + ywmin + self.config.wrange * self.config.quivLength, 0,
@@ -324,7 +325,7 @@ class PlotResidualTask(Task):
                     angles="xy",
                     scale_units="xy",
                     scale=2,
-                    )
+                )
 
         # Wavelength residual of 'reserved' data.
         tl_ax.scatter(
@@ -335,7 +336,7 @@ class PlotResidualTask(Task):
             label="DETECTORMAP_RESERVED\n(median:{:.2e}, sigma:{:.2e})".format(
                 np.median(residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")]),
                 iqr(residualW[dmReservedMeasured & (arcLinesMeasured.description != "Trace")]) / 1.349,
-                ),
+            ),
         )
         if not self.config.showAllRange:
             if np.sum(largeW) + np.sum(smallW) > 0:
@@ -349,12 +350,12 @@ class PlotResidualTask(Task):
                         (np.sum(dmReservedMeasured & largeW) + np.sum(dmReservedMeasured & smallW))
                         / np.sum(dmReservedMeasured)
                         * 100,
-                        ),
+                    ),
                     color="r",
                     angles="xy",
                     scale_units="xy",
                     scale=2,
-                    )
+                )
                 tl_ax.quiver(
                     arcLinesMeasured.wavelength[dmReservedMeasured & smallW],
                     np.zeros(np.sum(dmReservedMeasured & smallW)) + ywmin + self.config.wrange * self.config.quivLength,
@@ -364,7 +365,7 @@ class PlotResidualTask(Task):
                     angles="xy",
                     scale_units="xy",
                     scale=2,
-                    )
+                )
 
         # Wavelength residual histogram of 'used'.
         tl_hist_ax.hist(
@@ -436,11 +437,11 @@ class PlotResidualTask(Task):
 
         used_data = arc_data.query(f'status == {ReferenceLineStatus.DETECTORMAP_USED}')
         self.log.info(f'Plotting residuals for {len(used_data)} used lines')
-        fig2 = stability.plotArcResiduals2D(used_data, detectorMap, hexBin=True)
+        fig2 = helpers.plotArcResiduals2D(used_data, detectorMap, hexBin=True)
 
         reserved_data = arc_data.query(f'status == {ReferenceLineStatus.DETECTORMAP_RESERVED}')
         self.log.info(f'Plotting residuals for {len(reserved_data)} reserved lines')
-        fig3 = stability.plotArcResiduals2D(reserved_data, detectorMap, hexBin=True)
+        fig3 = helpers.plotArcResiduals2D(reserved_data, detectorMap, hexBin=True)
 
         return fig2, fig3
 
