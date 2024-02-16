@@ -1,3 +1,5 @@
+import warnings
+from contextlib import suppress
 import pandas as pd
 import numpy as np
 
@@ -19,6 +21,14 @@ from scipy.stats import iqr
 from pfs.datamodel import TargetType
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
 
+warnings.filterwarnings('ignore', message='Input data contains invalid values')
+warnings.filterwarnings('ignore', message='Gen2 Butler')
+warnings.filterwarnings('ignore', message='addPfsCursor')
+warnings.filterwarnings('ignore', message='All-NaN slice')
+warnings.filterwarnings('ignore', message='Mean of empty slice')
+# warnings.filterwarnings('ignore', message='Degrees of freedom')
+warnings.filterwarnings('ignore', message='This figure')
+
 
 div_palette = plt.cm.RdBu_r.with_extremes(over='magenta', under='cyan', bad='lime')
 
@@ -35,7 +45,9 @@ def getObjects(dataId: Path, rerun: Path, calibDir='/work/drp/CALIB'):
     return arcLines, detectorMap
 
 
-def getArclineData(arcLines: ArcLineSet, dropNaColumns: bool = False, removeFlagged: bool = True, addTargetType: bool = False) -> pd.DataFrame:
+def getArclineData(arcLines: ArcLineSet, 
+                   dropNaColumns: bool = False, 
+                   removeFlagged: bool = True) -> pd.DataFrame:
     """Gets a copy of the arcline data, with some columns added.
 
     Parameters
@@ -68,8 +80,8 @@ def getArclineData(arcLines: ArcLineSet, dropNaColumns: bool = False, removeFlag
     arc_data = arc_data.replace([np.inf, -np.inf], np.nan)
 
     # Only use DETECTORMAP_USED (32) and DETECTORMAP_RESERVED (64)
-    arc_data = arc_data.query('status in [32, 64]')
-    arc_data = arc_data.copy()
+    valid_status = [ReferenceLineStatus.DETECTORMAP_USED.value, ReferenceLineStatus.DETECTORMAP_RESERVED.value]
+    arc_data = arc_data.query('status in @valid_status').copy()
 
     # Get status names.
     arc_data['status_name'] = arc_data.status.map(lambda x: ReferenceLineStatus(x).name)
@@ -79,6 +91,125 @@ def getArclineData(arcLines: ArcLineSet, dropNaColumns: bool = False, removeFlag
     arc_data['isTrace'] = False
     with suppress():
         arc_data.loc[arc_data.query('description == "Trace"').index, 'isTrace'] = True            
+
+    return arc_data
+
+
+def addTraceLambdaToArclines(arc_data: pd.DataFrame, detectorMap: DetectorMap) -> pd.DataFrame:
+    """Adds detector map trace position and wavelength to arcline data.
+
+    Returns
+    -------
+    arc_data : `pandas.DataFrame`
+    """
+    # Get the wavelength according to the detectormap for fiberId.
+    fiberList = arc_data.fiberId.to_numpy()
+    yList = arc_data.y.to_numpy()
+
+    arc_data['lam'] = detectorMap.findWavelength(fiberList, yList)
+    arc_data['lamErr'] = arc_data.yErr * arc_data.lam / arc_data.y
+
+    # Convert nm to pixels.
+    # dispersion = detectorMap.getDispersion(arc_data.fiberId.to_numpy(), arc_data.wavelength.to_numpy())
+    dispersion = detectorMap.getDispersionAtCenter()
+    arc_data['dispersion'] = dispersion
+
+    # Get the trace positions according to the detectormap.
+    arc_data['tracePos'] = detectorMap.getXCenter(fiberList, yList)
+
+    return arc_data
+
+
+def addResidualsToArclines(arc_data: pd.DataFrame, fitYTo: str = 'y') -> pd.DataFrame:
+    """Adds residuals to arcline data.
+
+    This will calculate residuals for the X-center position and wavelength.
+
+    Adds the following columns to the arcline data:
+
+    - ``dx``: X-center position minus trace position (from DetectorMap `getXCenter`).
+    - ``dy``: Y-center wavelegnth minus trace wavelength (from DetectorMap `findWavelength`).
+    - ``dy_nm``: Wavelength minus trace wavelength in nm.
+    - ``centroidErr``: Hypotenuse of ``xErr`` and ``yErr``.
+    - ``detectorMapErr``: Hypotenuse of ``dx`` and ``dy``.
+
+
+    Parameters
+    ----------
+    fitYTo : `str`, optional
+        Column to fit Y to. Default is ``y``, could also be ``wavelength``.
+
+    Returns
+    -------
+    arc_data : `pandas.DataFrame`
+    """
+    # Get `observed - expected` for position and wavelength.
+    arc_data['dx'] = arc_data.tracePos - arc_data.x
+    arc_data['dy_nm'] = arc_data.lam - arc_data.wavelength
+
+    # Set the dy columns to NA (instead of 0) for Trace.
+    arc_data.dy_nm = arc_data.apply(lambda row: row.dy_nm if row.isTrace == False else np.NaN, axis=1)
+
+    # Do the dispersion correction to get pixels.
+    arc_data['dy'] = arc_data.dy_nm / arc_data.dispersion
+
+    # Fit a mean and remove.
+    # arc_data = calculateResiduals(arc_data, 'dx', fitYTo=fitYTo)
+    # arc_data = calculateResiduals(arc_data, 'dy', fitYTo=fitYTo)
+
+    arc_data['centroidErr'] = np.hypot(arc_data.xErr, arc_data.yErr)
+    arc_data['detectorMapErr'] = np.hypot(arc_data.dx, arc_data.dy)
+
+    return arc_data
+
+
+def calculateResiduals(arc_data: pd.DataFrame, 
+                       targetCol: str, 
+                       fitXTo: str = 'fiberId', 
+                       fitYTo: str = 'y') -> pd.DataFrame:
+    """Calculates residuals.
+
+    This will calculate residuals for the X-center position and wavelength.
+
+    Adds the following columns to the arcline data:
+
+    - ``dx``: X-center position minus trace position (from DetectorMap `findPoint`).
+    - ``dxResidualLinear``: Linear fit to ``dx``.
+    - ``dxResidualMean``: Mean fit to ``dx``.
+    - ``dxResidualMedian``: Median fit to ``dx``.
+
+    Parameters
+    ----------
+    targetCol : `str`
+        Column to calculate residuals for.
+    fitXTo : `str`, optional
+        Column to fit X to. Default is ``fiberId``, could also be ``x``.
+    fitYTo : `str`, optional
+        Column to fit Y to. Default is ``wavelength``, could also be ``y``.
+
+    Returns
+    -------
+    arc_data : `pandas.DataFrame`
+    """
+    arc_data = self.arcData
+
+    # Linear fit
+    a = arc_data[fitXTo]
+    b = arc_data[fitYTo]
+
+    X = np.vstack([np.ones_like(a), a, b]).T
+    Y = arc_data[targetCol]
+
+    #c0, c1, c2 = np.linalg.lstsq(X, Y, rcond=None)[0]
+
+    #fit = c0 + (c1 * a) + (c2 * b)
+    #arc_data[f'{targetCol}Fit'] = fit
+    #arc_data[f'{targetCol}ResidualLinear'] = Y - fit
+
+    # Mean and median fits.
+    fiberGroup = arc_data.groupby('fiberId')
+    arc_data[f'{targetCol}ResidualMean'] = Y - fiberGroup[targetCol].transform('mean')
+    arc_data[f'{targetCol}ResidualMedian'] = Y - fiberGroup[targetCol].transform('median')
 
     return arc_data
 
