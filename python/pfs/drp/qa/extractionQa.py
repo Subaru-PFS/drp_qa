@@ -452,7 +452,8 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                                     idarray.append(fiberId)
                                 else:
                                     failNum += 1
-                        except:
+                        except (ValueError, RuntimeError):
+                            # Probably this error was thrown curve_fit.
                             failNum += 1
                     dxarray += centerdif
                     dwarray += widthdif
@@ -603,7 +604,8 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                                         else:
                                             pfsArmCenter, pfsArmWidth = math.nan, PSFFWHM
                                             calExpCenter, calExpWidth = math.nan, PSFFWHM
-                                except:
+                                except (ValueError, RuntimeError) as e:
+                                    # Probably this error was thrown curve_fit.
                                     pfsArmCenter, pfsArmWidth = math.nan, math.nan
                                     calExpCenter, calExpWidth = math.nan, math.nan
 
