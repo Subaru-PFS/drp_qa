@@ -36,9 +36,10 @@ from scipy.stats import iqr
 from scipy.optimize import curve_fit
 
 import dataclasses
+import itertools
 import math
 
-from typing import Union
+from typing import Dict, Union
 
 
 __all__ = [
@@ -328,25 +329,6 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         pfsArmAve = []
         chiAveSpec = []
 
-        colors = [
-            "r",
-            "b",
-            "g",
-            "y",
-            "gray",
-            "orange",
-            "cyan",
-            "k",
-            "r",
-            "b",
-            "g",
-            "y",
-            "gray",
-            "orange",
-            "cyan",
-            "k",
-        ]
-        ct = {t: colors[i] for i, t in enumerate(targetMask.keys())}
         numPanels = 3
         PSFFWHM = 1.5
 
@@ -722,6 +704,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         largeStd = chiStd > stdRange
 
         qaImagePdf = MultipagePdfFigure()
+        ct = self.getTargetColors()
 
         fig, ax = plt.subplots(1, 2, figsize=(16, 7))
         for t in targetMask.keys():
@@ -1065,6 +1048,27 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
             extQaImage=qaImagePdf,
             extQaImage_pickle=statsToPickle,
         )
+
+    @staticmethod
+    def getTargetColors() -> Dict[TargetType, str]:
+        """Get a map from `TargetType` to color name in matplotlib
+
+        Returns
+        -------
+        targetColors : `dict[TargetType, str]`
+            Color name for each `TargetType`.
+        """
+        colors = [
+            "r",
+            "b",
+            "g",
+            "y",
+            "gray",
+            "orange",
+            "cyan",
+            "k",
+        ]
+        return dict(zip(TargetType, itertools.cycle(colors)))
 
     @classmethod
     def _makeArgumentParser(cls) -> ArgumentParser:
