@@ -90,6 +90,10 @@ class DetectorMapStatistics:
         self.arcData = self.getArclineData(dropNaColumns=dropNaColumns)
         self.arcData = self.addTraceLambdaToArclines()
         self.arcData = self.addResidualsToArclines()
+        
+        # Add dataId info to dataframe.
+        for col in ['arm', 'spectrograph', 'visit', 'rerun', 'label']:
+            self.arcData[col] = getattr(self, col)
 
         # TODO make the palette more consistent.
         status_categories = self.arcData.status_name.dtype.categories
@@ -97,65 +101,9 @@ class DetectorMapStatistics:
                                  zip(status_categories,
                                      sb.color_palette(palette='Set1', n_colors=len(status_categories)))}
 
+        self.arcData.reset_index(drop=True, inplace=True)
         return self.arcData
 
-    def getStatistics(self, hd5_fn=None, agg_stats=None):
-        """Gets statistics for the residuals.
-
-        Parameters
-        ----------
-        hd5_fn : `str`, optional
-            Filename to write the statistics to. Default is None.
-        agg_stats : `list` of `str`, optional
-            List of statistics to calculate. Default is ``['count', 'mean', 'median', 'std', iqr_std]``
-            where ``iqr_std`` is the interquartile range divided by 1.349.
-
-        """
-
-        def iqr_std(x):
-            return iqr(x) / 1.349
-
-        # Get aggregate stats.
-        if agg_stats is None:
-            agg_stats = ['mean', 'median', 'std', 'sem', iqr_std]
-
-        agg_columns = {
-            'status_name': 'count',
-            'dx': agg_stats,
-            'dy': agg_stats,
-            'centroidErr': agg_stats,
-            'detectorMapErr': agg_stats
-        }
-
-        # For grouped stats for entire detector and per fiber.
-        ccd_stats = self.arcData.groupby(['status_name']).agg(agg_columns)
-        agg_columns.pop('status_name')
-        fiber_stats = self.arcData.groupby(['fiberId', 'status_name']).agg(agg_columns)
-
-        # Add metadata.
-        for df in [ccd_stats, fiber_stats]:
-            df.reset_index(inplace=True)
-            df.insert(0, 'visit', self.visit)
-            df.insert(1, 'ccd', self.ccd)
-            df.insert(2, 'label', self.label)
-            df.insert(3, 'rerun', self.rerunName)
-
-            # Make single level column names.
-            df.columns = [f'{c[0]}_{c[1]}' if c[1] > '' else c[0] for c in df.columns]
-
-            # Make some adjustments for the string storage.
-            df.status_name = df.status_name.astype(str)
-
-        if hd5_fn is not None:
-            itemsize_dict = dict(status_name=75, label=75, rerun=75)
-
-            ccd_stats.to_hdf(hd5_fn, key=f'ccd', format='table', append=True, index=False,
-                             min_itemsize=itemsize_dict)
-
-            fiber_stats.to_hdf(hd5_fn, key=f'fibers', format='table', append=True, index=False,
-                               min_itemsize=itemsize_dict)
-
-        return ccd_stats, fiber_stats
 
     def getArclineData(self, dropNaColumns: bool = False, removeFlagged: bool = True, addTargetType: bool = False) -> pd.DataFrame:
         """Gets a copy of the arcline data, with some columns added.
@@ -334,49 +282,6 @@ class DetectorMapStatistics:
 
         return arc_data
 
-    def plotResiduals1D(self, by: str = 'wavelength', usePixels: bool = True, setLimits: bool = True, hue='status_name', style='targetType'):
-        """Plots residuals as a FacetGrid.
-
-        Parameters
-        ----------
-        by : `str`, optional
-            Column to plot on the x-axis. Default is ``wavelength``, could also be ``fiberId``.
-        usePixels : `bool`, optional
-            If wavelength should be plotted in pixels, default True.
-        setLimits : `bool`, optional
-            If limits should be set on the x-axis. Default True.
-
-        Returns
-        -------
-        fg : `seaborn.FacetGrid`
-        """
-        plot_cols = ['dx', 'dy' if usePixels else 'dy_nm']
-
-        # Put the data in long format.
-        id_cols = ['fiberId', 'wavelength', 'status_name', style]
-        plot_cols.extend(id_cols)
-        plot_data = self.arcData[plot_cols].melt(id_vars=id_cols, value_name='residual')
-
-        fg = sb.FacetGrid(plot_data, row='variable', sharex=True, sharey=False, margin_titles=True)
-        fg.figure.set_size_inches(12, 5)
-
-        # Plot the data.
-        fg.map_dataframe(sb.scatterplot, x=by, y='residual',
-                         style=style, hue=hue, s=10,
-                         alpha=0.5, rasterized=True
-                         )
-
-        fg.axes[0][0].axhline(0, ls='--', alpha=0.25, color='g')
-        fg.axes[1][0].axhline(0, ls='--', alpha=0.25, color='g')
-        if setLimits is True:
-            fg.axes[0][0].set_ylim(-1.5, 1.5)
-            fg.axes[1][0].set_ylim(-1.5, 1.5)
-
-        fg.add_legend(shadow=True, fontsize='small')
-        fg.figure.suptitle(f'Residuals by {by}\n{self.dataId}\n{self.rerunName}', y=0.97, fontsize='small',
-                           bbox=dict(facecolor='grey', edgecolor='k', alpha=0.45, pad=5.0))
-
-        return fg
 
     def plotResiduals2DQuiver(self, arrowScale: float = 0.01, usePixels: bool = True,
                               plotKws: dict = None) -> Figure:
@@ -430,6 +335,7 @@ class DetectorMapStatistics:
 
         return fig
 
+    
     def plotResiduals2D(self,
                         positionCol='dx', wavelengthCol='dy',
                         showWavelength=False,

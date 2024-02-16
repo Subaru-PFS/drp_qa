@@ -20,18 +20,23 @@ from pfs.datamodel import TargetType
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
 
 
+div_palette = plt.cm.RdBu_r.with_extremes(over='magenta', under='cyan', bad='lime')
+
+
 def iqr_sigma(x):
     return iqr(x) / 1.349
 
 
-def getObjects():
-    butler = dafPersist.Butler(self.rerun.as_posix(), calibRoot=self.calibDir.as_posix())
-    arcLines = self.butler.get('arcLines', self.dataId)
-    detectorMap = self.butler.get('detectorMap_used', self.dataId)
+def getObjects(dataId: Path, rerun: Path, calibDir='/work/drp/CALIB'):
+    butler = dafPersist.Butler(rerun.as_posix(), calibRoot=calibDir.as_posix())
+    arcLines = butler.get('arcLines', dataId)
+    detectorMap = butler.get('detectorMap_used', dataId)
+    
+    return arcLines, detectorMap
 
 
-def getArclineData(als, dropNaColumns: bool = False, removeFlagged: bool = True) -> pd.DataFrame:
-    """Gets a copy of the arcLineSet data, with some columns added.
+def getArclineData(arcLines: ArcLineSet, dropNaColumns: bool = False, removeFlagged: bool = True, addTargetType: bool = False) -> pd.DataFrame:
+    """Gets a copy of the arcline data, with some columns added.
 
     Parameters
     ----------
@@ -45,7 +50,7 @@ def getArclineData(als, dropNaColumns: bool = False, removeFlagged: bool = True)
     arc_data : `pandas.DataFrame`
     """
     # Get the data from the ArcLineSet.
-    arc_data = als.data.copy()
+    arc_data = arcLines.data.copy()
 
     if removeFlagged:
         arc_data = arc_data.query('flag == False')
@@ -56,48 +61,24 @@ def getArclineData(als, dropNaColumns: bool = False, removeFlagged: bool = True)
     # Drop rows without enough info.
     arc_data = arc_data.dropna(subset=['x', 'y'])
 
-    arc_data = arc_data.copy()
-
     # Change some of the dtypes explicitly.
     arc_data.y = arc_data.y.astype(np.float64)
 
     # Replace inf with nans.
     arc_data = arc_data.replace([np.inf, -np.inf], np.nan)
 
+    # Only use DETECTORMAP_USED (32) and DETECTORMAP_RESERVED (64)
+    arc_data = arc_data.query('status in [32, 64]')
+    arc_data = arc_data.copy()
+
     # Get status names.
-    arc_data['status_name'] = arc_data.status.map(lambda x: str(ReferenceLineStatus(x)).split('.')[-1])
+    arc_data['status_name'] = arc_data.status.map(lambda x: ReferenceLineStatus(x).name)
     arc_data['status_name'] = arc_data['status_name'].astype('category')
 
-    # Clean up categories.
-    ignore_lines = [
-         'NOT_VISIBLE',
-         'REJECTED',
-         'PROTECTED',
-         'MERGED',
-         'LAM_FOCUS',
-         'BLEND',
-         'BROAD',
-    ]
-
-    # Ignore bad line categories.
-    for ignore in ignore_lines:
-        arc_data = arc_data[~arc_data.status_name.str.contains(ignore)]
-
     # Make a one-hot for the Trace.
-    try:
-        arc_data['isTrace'] = arc_data.description.str.get_dummies()['Trace'].astype(bool)
-    except KeyError:
-        arc_data['isTrace'] = False
-        
-    # Make one-hot columns for status_names
-    status_dummies = arc_data.status_name.str.get_dummies()
-    arc_data['isUsed'] = status_dummies.get('DETECTORMAP_USED', np.zeros(len(status_dummies))).astype(bool)
-    arc_data['isReserved'] = status_dummies.get('DETECTORMAP_RESERVED', np.zeros(len(status_dummies))).astype(bool)
-        
-    # Only show reserved/used?
-    #arc_data = arc_data.query('isUsed == True or isReserved == True').copy()
-
-    arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
+    arc_data['isTrace'] = False
+    with suppress():
+        arc_data.loc[arc_data.query('description == "Trace"').index, 'isTrace'] = True            
 
     return arc_data
 
@@ -459,3 +440,92 @@ def plotResiduals1D(arcLines: ArcLineSet,
     tr_ax.set_title("Wavelength residual of each fiber\n(point=median, errbar=1sigma scatter, unit=nm)")
 
     return fig1
+
+
+
+def plotResiduals2D(arcData: pd.DataFrame,
+                    detectorMap: DetectorMap = None,
+                    reservedOnly: bool = True,
+                    positionCol='dx', wavelengthCol='dy',
+                    showWavelength=False,
+                    hexBin=False, gridsize=250, 
+                    plotKws: dict = None,
+                    title: str = None,
+                    addCursor: bool = False
+                   ) -> Figure:
+    """ Plot residuals as a 2D histogram.
+
+    Parameters
+    ----------
+    positionCol: `str`
+        The column to plot for the position residuals. Default is 'dx'.
+    wavelengthCol: `str`
+        The column to plot for the wavelength residuals. Default is 'dy'.
+    showWavelength: `bool`
+        Show the y-axis. Default is ``True``.
+    hexBin: `bool`
+        Use hexbin plot. Default is ``True``.
+    gridsize: `int`
+        Grid size for hexbin plot. Default is 250.
+    plotKws: `dict`
+        Arguments passed to plotting function.
+
+    Returns
+    -------
+    fig: `matplotlib.figure.Figure`
+    """
+    plotKws = plotKws or dict()
+    plotKws.setdefault('cmap', div_palette)
+
+    arc_data = arcData
+    
+    if reservedOnly is True:
+        arc_data = arc_data.query('status_name.str.contains("RESERVED")')
+
+    # Don't use trace for wavelength.
+    if showWavelength:
+        arc_data = arc_data.query('isTrace == False')
+
+    width = None if detectorMap is None else detectorMap.getBBox().width
+    height = None if detectorMap is None else detectorMap.getBBox().height
+
+    # ncols = 2 if showWavelength else 1
+    ncols = 1
+
+    fig = Figure()
+    ax = fig.add_subplot()
+    # fig, ax = plt.subplots(1, ncols, sharex=True, sharey=True)
+
+    if showWavelength:
+        suptitle = f'{wavelengthCol} {"(pixel)" if wavelengthCol == "dy" else ""}'
+        plot_col = arc_data[wavelengthCol]
+    else:
+        suptitle = f'{positionCol} (pixel)'
+        plot_col = arc_data[positionCol]
+    
+
+    norm = colors.Normalize(vmin=plotKws.pop('vmin', None), vmax=plotKws.pop('vmax', None))
+
+    if hexBin:
+        im = ax.hexbin(arc_data.tracePos, arc_data.y, plot_col, norm=norm, gridsize=gridsize, **plotKws)
+    else:
+        im = ax.scatter(arc_data.tracePos, arc_data.y, c=plot_col, s=1, norm=norm, **plotKws)
+
+    stats_string = f'median={plot_col.median():.03e} sigma={iqr_sigma(plot_col):.03e}'
+
+    # Add colorbar.
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes('right', size='2%', pad=0.05)
+    fig.colorbar(im, ax=ax, cax=cax, orientation='vertical', shrink=0.6, extend='both', label=suptitle)
+    
+    ax.set_title(f"{stats_string} \n 2D residuals {suptitle}")
+    ax.set_xlim(0, width)
+    ax.set_ylim(0, height)
+    ax.set_aspect('equal')
+    
+    fig.suptitle(title, y=0.975)
+    
+    if addCursor is True and detectorMap is not None:
+        ax.format_coord = addPfsCursor(None, detectorMap)        
+    
+    return fig
