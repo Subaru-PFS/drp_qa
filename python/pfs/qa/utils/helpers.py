@@ -1,25 +1,21 @@
 import warnings
 from contextlib import suppress
-import pandas as pd
-import numpy as np
 
 from pathlib import Path
-from typing import Iterable, Any, Dict, Optional
 
 import lsst.daf.persistence as dafPersist
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sb
-from dataclasses import dataclass, field, InitVar
 from matplotlib import colors
 from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.patches import Patch
 from scipy.stats import iqr
 
+from pfs.drp.stella.utils import addPfsCursor
 from pfs.datamodel import TargetType
-from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
+from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
 
 warnings.filterwarnings('ignore', message='Input data contains invalid values')
 warnings.filterwarnings('ignore', message='Gen2 Butler')
@@ -28,7 +24,6 @@ warnings.filterwarnings('ignore', message='All-NaN slice')
 warnings.filterwarnings('ignore', message='Mean of empty slice')
 # warnings.filterwarnings('ignore', message='Degrees of freedom')
 warnings.filterwarnings('ignore', message='This figure')
-
 
 div_palette = plt.cm.RdBu_r.with_extremes(over='magenta', under='cyan', bad='lime')
 
@@ -41,12 +36,12 @@ def getObjects(dataId: Path, rerun: Path, calibDir='/work/drp/CALIB'):
     butler = dafPersist.Butler(rerun.as_posix(), calibRoot=calibDir.as_posix())
     arcLines = butler.get('arcLines', dataId)
     detectorMap = butler.get('detectorMap_used', dataId)
-    
+
     return arcLines, detectorMap
 
 
-def getArclineData(arcLines: ArcLineSet, 
-                   dropNaColumns: bool = False, 
+def getArclineData(arcLines: ArcLineSet,
+                   dropNaColumns: bool = False,
                    removeFlagged: bool = True) -> pd.DataFrame:
     """Gets a copy of the arcline data, with some columns added.
 
@@ -90,7 +85,7 @@ def getArclineData(arcLines: ArcLineSet,
     # Make a one-hot for the Trace.
     arc_data['isTrace'] = False
     with suppress():
-        arc_data.loc[arc_data.query('description == "Trace"').index, 'isTrace'] = True            
+        arc_data.loc[arc_data.query('description == "Trace"').index, 'isTrace'] = True
 
     return arc_data
 
@@ -153,63 +148,8 @@ def addResidualsToArclines(arc_data: pd.DataFrame, fitYTo: str = 'y') -> pd.Data
     # Do the dispersion correction to get pixels.
     arc_data['dy'] = arc_data.dy_nm / arc_data.dispersion
 
-    # Fit a mean and remove.
-    # arc_data = calculateResiduals(arc_data, 'dx', fitYTo=fitYTo)
-    # arc_data = calculateResiduals(arc_data, 'dy', fitYTo=fitYTo)
-
     arc_data['centroidErr'] = np.hypot(arc_data.xErr, arc_data.yErr)
     arc_data['detectorMapErr'] = np.hypot(arc_data.dx, arc_data.dy)
-
-    return arc_data
-
-
-def calculateResiduals(arc_data: pd.DataFrame, 
-                       targetCol: str, 
-                       fitXTo: str = 'fiberId', 
-                       fitYTo: str = 'y') -> pd.DataFrame:
-    """Calculates residuals.
-
-    This will calculate residuals for the X-center position and wavelength.
-
-    Adds the following columns to the arcline data:
-
-    - ``dx``: X-center position minus trace position (from DetectorMap `findPoint`).
-    - ``dxResidualLinear``: Linear fit to ``dx``.
-    - ``dxResidualMean``: Mean fit to ``dx``.
-    - ``dxResidualMedian``: Median fit to ``dx``.
-
-    Parameters
-    ----------
-    targetCol : `str`
-        Column to calculate residuals for.
-    fitXTo : `str`, optional
-        Column to fit X to. Default is ``fiberId``, could also be ``x``.
-    fitYTo : `str`, optional
-        Column to fit Y to. Default is ``wavelength``, could also be ``y``.
-
-    Returns
-    -------
-    arc_data : `pandas.DataFrame`
-    """
-    arc_data = self.arcData
-
-    # Linear fit
-    a = arc_data[fitXTo]
-    b = arc_data[fitYTo]
-
-    X = np.vstack([np.ones_like(a), a, b]).T
-    Y = arc_data[targetCol]
-
-    #c0, c1, c2 = np.linalg.lstsq(X, Y, rcond=None)[0]
-
-    #fit = c0 + (c1 * a) + (c2 * b)
-    #arc_data[f'{targetCol}Fit'] = fit
-    #arc_data[f'{targetCol}ResidualLinear'] = Y - fit
-
-    # Mean and median fits.
-    fiberGroup = arc_data.groupby('fiberId')
-    arc_data[f'{targetCol}ResidualMean'] = Y - fiberGroup[targetCol].transform('mean')
-    arc_data[f'{targetCol}ResidualMedian'] = Y - fiberGroup[targetCol].transform('median')
 
     return arc_data
 
@@ -217,7 +157,7 @@ def calculateResiduals(arc_data: pd.DataFrame,
 def getTargetType(arc_data, pfsConfig):
     # Add TargetType for each fiber.
     arc_data = arc_data.merge(pd.DataFrame({
-        'fiberId': pfsConfig.fiberId, 
+        'fiberId': pfsConfig.fiberId,
         'targetType': [TargetType(x).name for x in pfsConfig.targetType]
     }), left_on='fiberId', right_on='fiberId')
     arc_data['targetType'] = arc_data.targetType.astype('category')
@@ -225,22 +165,20 @@ def getTargetType(arc_data, pfsConfig):
     return arc_data
 
 
-def plotResiduals1D(arcLines: ArcLineSet, 
-                    detectorMap: DetectorMap, 
+def plotResiduals1D(arcLines: ArcLineSet,
+                    detectorMap: DetectorMap,
                     arcData: pd.DataFrame,
-                    # statistics: Dict[str, Any], 
                     showAllRange: bool = False,
                     xrange: float = 0.2,
                     wrange: float = 0.03,
                     pointSize: float = 0.2,
                     quivLength: float = 0.2
-                   ) -> plt.Figure:
+                    ) -> plt.Figure:
     """Plot the residuals as a function of wavelength and fiberId.
 
     Parameters:
         arcLines: The arc lines.
         detectorMap: The detector map.
-        statistics: The statistics.
 
     Returns:
         The figure.
@@ -503,7 +441,7 @@ def plotResiduals1D(arcLines: ArcLineSet,
 
     # X center residual fiber errors.    
     plot_data = arcData.query('status_name.str.contains("RESERVED")')[['fiberId', 'dx', 'status_name']]
-    plot_data = plot_data.groupby('fiberId').dx.agg(['median', iqr_sigma]).reset_index()    
+    plot_data = plot_data.groupby('fiberId').dx.agg(['median', iqr_sigma]).reset_index()
     label = f'USED\n'
     label += f'median={plot_data["median"].median():>13.03e}\n'
     label += f'sigma  ={plot_data["iqr_sigma"].median():>13.03e}'
@@ -516,10 +454,11 @@ def plotResiduals1D(arcLines: ArcLineSet,
         mec='k',
         label=label
     )
-    
+
     # Wavelength residual fiber errors.
-    plot_data = arcData.query('isTrace == False and status_name.str.contains("RESERVED")')[['fiberId', 'dy_nm', 'status_name']]
-    plot_data = plot_data.groupby('fiberId').dy_nm.agg(['median', iqr_sigma]).reset_index()    
+    plot_data = arcData.query('isTrace == False and status_name.str.contains("RESERVED")')[
+        ['fiberId', 'dy_nm', 'status_name']]
+    plot_data = plot_data.groupby('fiberId').dy_nm.agg(['median', iqr_sigma]).reset_index()
     label = f'USED\n'
     label += f'median={plot_data["median"].median():>13.03e}\n'
     label += f'sigma  ={plot_data["iqr_sigma"].median():>13.03e}'
@@ -532,7 +471,7 @@ def plotResiduals1D(arcLines: ArcLineSet,
         mec='k',
         label=label
     )
-    
+
     bl_ax.legend(fontsize='small', shadow=True)
     bl_ax.set_ylabel("X residual (pix)")
     bl_ax.set_xlabel("Wavelength (nm)")
@@ -563,18 +502,17 @@ def plotResiduals1D(arcLines: ArcLineSet,
     return fig1
 
 
-
 def plotResiduals2D(arcData: pd.DataFrame,
                     detectorMap: DetectorMap = None,
                     reservedOnly: bool = True,
                     positionCol='dx', wavelengthCol='dy',
                     showWavelength=False,
-                    hexBin=False, gridsize=250, 
+                    hexBin=False, gridsize=250,
                     plotKws: dict = None,
                     title: str = None,
                     addCursor: bool = False,
                     showLabels: bool = True
-                   ) -> Figure:
+                    ) -> Figure:
     """ Plot residuals as a 2D histogram.
 
     Parameters
@@ -600,7 +538,7 @@ def plotResiduals2D(arcData: pd.DataFrame,
     plotKws.setdefault('cmap', div_palette)
 
     arc_data = arcData
-    
+
     if reservedOnly is True:
         arc_data = arc_data.query('status_name.str.contains("RESERVED")')
 
@@ -623,7 +561,6 @@ def plotResiduals2D(arcData: pd.DataFrame,
     else:
         suptitle = f'{positionCol} (pixel)'
         plot_col = arc_data[positionCol]
-    
 
     norm = colors.Normalize(vmin=plotKws.pop('vmin', None), vmax=plotKws.pop('vmax', None))
 
@@ -638,19 +575,19 @@ def plotResiduals2D(arcData: pd.DataFrame,
     divider = make_axes_locatable(ax)
     cax = divider.append_axes('right', size='2%', pad=0.05)
     fig.colorbar(im, ax=ax, cax=cax, orientation='vertical', shrink=0.6, extend='both', label=suptitle)
-    
+
     ax.set_title(f"{stats_string} \n 2D residuals {suptitle}")
     ax.set_xlim(0, width)
     ax.set_ylim(0, height)
     ax.set_aspect('equal')
-    
+
     fig.suptitle(title, y=0.975)
-    
+
     if showLabels is False:
         ax.tick_params('x', bottom=False, labelbottom=False)
         ax.tick_params('y', left=False, labelleft=False)
-    
+
     if addCursor is True and detectorMap is not None:
-        ax.format_coord = addPfsCursor(None, detectorMap)        
-    
+        ax.format_coord = addPfsCursor(None, detectorMap)
+
     return fig

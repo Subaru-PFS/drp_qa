@@ -1,29 +1,10 @@
-import logging
 from pathlib import Path
-from typing import Optional
-from contextlib import suppress
 
 import lsst.daf.persistence as dafPersist
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-import seaborn as sb
 from dataclasses import dataclass, field, InitVar
-from matplotlib import colors
-from matplotlib.figure import Figure
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-from matplotlib.patches import Patch
-from scipy.stats import iqr
-
-from pfs.drp.stella.utils import addPfsCursor
-
-from pfs.datamodel import TargetType
-from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
+from pfs.drp.stella import ArcLineSet, DetectorMap
 from pfs.qa.utils import helpers
-
-
-def iqr_std(x):
-    return iqr(x) / 1.349
 
 
 # Make a dataclass for the stability statistics.
@@ -89,11 +70,10 @@ class DetectorMapStatistics:
         self.arcData = helpers.getArclineData(self.arcLines, dropNaColumns=dropNaColumns)
         self.arcData = helpers.addTraceLambdaToArclines(self.arcData, self.detectorMap)
         self.arcData = helpers.addResidualsToArclines(self.arcData)
-        
+
         # Add dataId info to dataframe.
         for col in ['arm', 'spectrograph', 'visit', 'rerun', 'label']:
             self.arcData[col] = getattr(self, col)
 
         self.arcData.reset_index(drop=True, inplace=True)
         return self.arcData
-        
