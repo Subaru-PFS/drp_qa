@@ -34,7 +34,7 @@ div_palette = plt.cm.RdBu_r.with_extremes(over='magenta', under='cyan', bad='lim
 
 
 def iqr_sigma(x):
-    return iqr(x) / 1.349
+    return iqr(x, nan_policy='omit') / 1.349
 
 
 def getObjects(dataId: Path, rerun: Path, calibDir='/work/drp/CALIB'):
@@ -500,13 +500,6 @@ def plotResiduals1D(arcLines: ArcLineSet,
         bins=35,
         orientation="horizontal",
     )
-    
-    colors = {
-        'DETECTORMAP_USED': (0, 0, 1, 1),
-        'DETECTORMAP_USED_ERROR': (0, 0, 1, 0.25),
-        'DETECTORMAP_RESERVED': (1, 0, 0, 1),  
-        'DETECTORMAP_RESERVED_ERROR': (1, 0, 0, 0.25),  
-    }
 
     # X center residual fiber errors.    
     plot_data = arcData.query('status_name.str.contains("RESERVED")')[['fiberId', 'dx', 'status_name']]
@@ -523,8 +516,6 @@ def plotResiduals1D(arcLines: ArcLineSet,
         mec='k',
         label=label
     )
-    # br_ax.legend(bbox_to_anchor=(1.3, 1), fontsize='small', shadow=True)
-    
     
     # Wavelength residual fiber errors.
     plot_data = arcData.query('isTrace == False and status_name.str.contains("RESERVED")')[['fiberId', 'dy_nm', 'status_name']]
@@ -541,7 +532,6 @@ def plotResiduals1D(arcLines: ArcLineSet,
         mec='k',
         label=label
     )
-    # tr_ax.legend(bbox_to_anchor=(1.3, 1), fontsize='small', shadow=True)    
     
     bl_ax.legend(fontsize='small', shadow=True)
     bl_ax.set_ylabel("X residual (pix)")
@@ -567,7 +557,7 @@ def plotResiduals1D(arcLines: ArcLineSet,
     br_ax.set_ylim(yxmin, yxmax)
     br_ax.set_title("X center residual of each fiber\n(point=median, errbar=1sigma scatter, unit=pix)")
     tr_ax.set_xlabel("fiberId")
-    # tr_ax.set_ylim(ywmin, ywmax)
+    tr_ax.set_ylim(ywmin, ywmax)
     tr_ax.set_title("Wavelength residual of each fiber\n(point=median, errbar=1sigma scatter, unit=nm)")
 
     return fig1
@@ -582,7 +572,8 @@ def plotResiduals2D(arcData: pd.DataFrame,
                     hexBin=False, gridsize=250, 
                     plotKws: dict = None,
                     title: str = None,
-                    addCursor: bool = False
+                    addCursor: bool = False,
+                    showLabels: bool = True
                    ) -> Figure:
     """ Plot residuals as a 2D histogram.
 
@@ -625,7 +616,6 @@ def plotResiduals2D(arcData: pd.DataFrame,
 
     fig = Figure()
     ax = fig.add_subplot()
-    # fig, ax = plt.subplots(1, ncols, sharex=True, sharey=True)
 
     if showWavelength:
         suptitle = f'{wavelengthCol} {"(pixel)" if wavelengthCol == "dy" else ""}'
@@ -655,6 +645,10 @@ def plotResiduals2D(arcData: pd.DataFrame,
     ax.set_aspect('equal')
     
     fig.suptitle(title, y=0.975)
+    
+    if showLabels is False:
+        ax.tick_params('x', bottom=False, labelbottom=False)
+        ax.tick_params('y', left=False, labelleft=False)
     
     if addCursor is True and detectorMap is not None:
         ax.format_coord = addPfsCursor(None, detectorMap)        
