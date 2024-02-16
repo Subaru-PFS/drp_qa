@@ -676,7 +676,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         chiPeak = np.array(chiPeak)
         xa = np.array(xa)
 
-        statsToPickle = QaDict(
+        qaStats = QaDict(
             {
                 "fiberIds": fiberIds,
                 "xa": xa,
@@ -694,6 +694,50 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                 "fiberIDarray": idarray,
             }
         )
+
+        qaImagePdf = self.makeImagePdf(qaStats, dataId, detectorMap, chiimage)
+
+        return Struct(
+            extQaStats=qaStatsPdf,
+            extQaImage=qaImagePdf,
+            extQaImage_pickle=qaStats,
+        )
+
+    def makeImagePdf(
+        self, qaStats: QaDict, dataId: dict, detectorMap: DetectorMap, chiimage: ExposureF
+    ) -> MultipagePdfFigure:
+        """Make ``extQaImage``
+
+        Parameters
+        ----------
+        qaStats : `QaDict`
+            XXXXX
+        dataId : `dict`
+            Data ID. Required keys are: "visit", "arm", "spectrograph".
+        detectorMap : `DetectorMap`
+            Mapping from fiberId,wavelength to x,y
+        chiimage : `ExposureF`
+            XXXXX
+
+        Returns
+        -------
+        extQaImage : `MultipagePdfFigure`
+            XXXXX
+        """
+        fiberIds = qaStats["fiberIds"]
+        xa = qaStats["xa"]
+        pfsArmAve = qaStats["pfsArmAve"]
+        targetMask = qaStats["targetMask"]
+        chiSquare = qaStats["chiSquare"]
+        chiAve = qaStats["chiAve"]
+        chiMedian = qaStats["chiMedian"]
+        chiStd = qaStats["chiStd"]
+        chiPeak = qaStats["chiPeak"]
+        xarray = qaStats["Xarray"]
+        yarray = qaStats["Yarray"]
+        dxarray = qaStats["dx"]
+        dwarray = qaStats["dsigma"]
+        idarray = qaStats["fiberIDarray"]
 
         aveRange = 5.0
         medRange = 5.0
@@ -1027,8 +1071,8 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         plt.title("dX (pix)")
         plt.xlabel("X (pix)")
         plt.ylabel("Y (pix)")
-        plt.xlim(0, data.getDimensions()[0])
-        plt.ylim(0, data.getDimensions()[1])
+        plt.xlim(0, chiimage.getDimensions()[0])
+        plt.ylim(0, chiimage.getDimensions()[1])
         fig.colorbar(mappable, ax=ax)
         qaImagePdf.append(fig, bbox_inches="tight")
         plt.close(fig)
@@ -1039,17 +1083,13 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         plt.title("d$\sigma$/$\sigma$")
         plt.xlabel("X (pix)")
         plt.ylabel("Y (pix)")
-        plt.xlim(0, data.getDimensions()[0])
-        plt.ylim(0, data.getDimensions()[1])
+        plt.xlim(0, chiimage.getDimensions()[0])
+        plt.ylim(0, chiimage.getDimensions()[1])
         fig.colorbar(mappable, ax=ax)
         qaImagePdf.append(fig, bbox_inches="tight")
         plt.close(fig)
 
-        return Struct(
-            extQaStats=qaStatsPdf,
-            extQaImage=qaImagePdf,
-            extQaImage_pickle=statsToPickle,
-        )
+        return qaImagePdf
 
     @staticmethod
     def getTargetColors() -> Dict[TargetType, str]:
