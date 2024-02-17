@@ -16,7 +16,7 @@ from lsst.daf.persistence import ButlerDataRef
 from lsst.pex.config import Field
 
 import lsst.afw.display as afwDisplay
-from lsst.afw.image import ExposureF, MaskedImageF
+from lsst.afw.image import ExposureF, MaskedImageF, ImageF
 
 from pfs.drp.stella import (
     DetectorMap,
@@ -150,6 +150,11 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
 
     ConfigClass = ExtractionQaConfig
     _DefaultName = "extractionQa"
+
+    PSFFWHM = 1.5
+    """Fixed value of PSF's FWHM
+    (May be promoted a configurable parameter in future).
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -329,8 +334,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         pfsArmAve = []
         chiAveSpec = []
 
-        numPanels = 3
-        PSFFWHM = 1.5
+        PSFFWHM = self.PSFFWHM
 
         for fiberId in fiberIds:
             stats = self.getStatsPerFiber(data, detectorMap, fiberId, xwin=self.config.fiberWidth)
@@ -355,7 +359,6 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         plotNum = min(fiberIds.size, self.config.plotFiberNum)
         thresPlot = max(self.config.thresChi, sorted(chiStd)[-plotNum])
         ys = np.arange(ymin, ymax, (ymax - ymin) / self.config.rowNum).astype("int32")
-        ysplot = np.arange(ymin, ymax, (ymax - ymin) / (numPanels * numPanels + 1)).astype("int32")
         xarray = []
         yarray = []
         idarray = []
@@ -455,218 +458,27 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                         except (ValueError, RuntimeError):
                             # Probably this error was thrown curve_fit.
                             failNum += 1
-                    dxarray += centerdif
-                    dwarray += widthdif
 
                     if chiStd[i] >= thresPlot:
-                        fig, ax = plt.subplots(1, 6, figsize=(12, 7))
-                        plt.subplots_adjust(wspace=0.5)
-                        plt.sca(ax[0])
-                        disp = afwDisplay.Display(fig)
-                        disp.scale("asinh", "zscale", Q=1)
-                        disp.setMaskPlaneColor("REFLINE", afwDisplay.IGNORE)
-                        disp.mtv(calexp[int(xa[i]) - 10 : int(xa[i]) + 11, :])
-                        ax[0].plot(xo, yo, "r", alpha=0.8)
-                        ax[0].set_xlim(xa[i] - 10, xa[i] + 10)
-                        ax[0].set_aspect("auto")
-                        ax[0].set_ylabel("Y (pix)")
-                        ax[0].set_title("calexp")
-
-                        plt.sca(ax[1])
-                        disp = afwDisplay.Display(fig)
-                        disp.setMaskPlaneColor("REFLINE", afwDisplay.BLACK)
-                        disp.setImageColormap("coolwarm")
-                        disp.scale("asinh", "zscale", Q=1)
-                        disp.mtv(subtracted[int(xa[i]) - 10 : int(xa[i]) + 11, :])
-                        ax[1].plot(xo, yo, "k", alpha=0.8)
-                        ax[1].set_xlim(xa[i] - 10, xa[i] + 10)
-                        ax[1].set_aspect("auto")
-                        ax[1].tick_params(labelbottom=True, labelleft=False, labelright=False, labeltop=False)
-                        ax[1].set_xlabel("X (pix)")
-                        ax[1].set_title("Residual")
-
-                        plt.sca(ax[2])
-                        disp = afwDisplay.Display(fig)
-                        disp.scale("linear", -5, 5, Q=1)
-                        disp.setMaskPlaneColor("REFLINE", afwDisplay.BLACK)
-                        disp.setImageColormap("coolwarm")
-                        disp.mtv(chiimage[int(xa[i]) - 10 : int(xa[i]) + 11, :])
-                        ax[2].plot(xo, yo, "k", alpha=0.8)
-                        ax[2].set_xlim(xa[i] - 10, xa[i] + 10)
-                        ax[2].set_aspect("auto")
-                        ax[2].tick_params(labelbottom=True, labelleft=False, labelright=False, labeltop=False)
-                        ax[2].set_title("Chi")
-
-                        ax[3].scatter(chiAveSpec[i], yo, s=3)
-                        ax[3].set_ylim(ymin, ymax)
-                        ax[3].plot([0, 0], [ymin, ymax], "0.8")
-                        ax[3].set_xlabel("Chi at each row")
-                        ax[3].tick_params(labelbottom=True, labelleft=False, labelright=False, labeltop=False)
-                        ax[3].set_title("Chi")
-
-                        ax[4].scatter(centerdif, ydif, s=3)
-                        ax[4].set_ylim(ymin, ymax)
-                        ax[4].plot([0, 0], [ymin, ymax], "0.8")
-                        ax[4].set_xlabel("dx")
-                        ax[4].tick_params(labelbottom=True, labelleft=False, labelright=False, labeltop=False)
-                        ax[4].set_title("Peak center diff.")
-
-                        ax[5].scatter(widthdif, ydif, s=3)
-                        ax[5].set_ylim(ymin, ymax)
-                        ax[5].plot([0, 0], [ymin, ymax], "0.8")
-                        ax[5].set_xlabel("d$\sigma$/$\sigma$")
-                        ax[5].tick_params(labelbottom=True, labelleft=False, labelright=True, labeltop=False)
-                        ax[5].set_title("Width diff.")
-
-                        fig.suptitle(
-                            "visit={:d} arm={:s} spectrograph={:d}\nf={:d}, X={:.1f}".format(
-                                dataId["visit"], dataId["arm"], dataId["spectrograph"], fiberId, xa[i]
-                            ),
-                            fontsize=12,
+                        self.drawStats(
+                            qaStatsPdf,
+                            dataId,
+                            image,
+                            calexp,
+                            subtracted,
+                            chiimage,
+                            fiberId,
+                            xo,
+                            yo,
+                            xa[i],
+                            chiAveSpec[i],
+                            centerdif,
+                            widthdif,
+                            ydif,
                         )
 
-                        qaStatsPdf.append(fig)
-                        plt.close(fig)
-
-                        fig, ax = plt.subplots(numPanels, numPanels, figsize=(12, 7))
-                        for j in range(numPanels):
-                            for k in range(numPanels):
-                                yssub = ysplot[k + j * numPanels + 1]
-                                xssub = xint[yssub]
-                                xcoord = np.arange(
-                                    max(xssub - self.config.plotWidth, 0),
-                                    min(xssub + self.config.plotWidth + 1, data.getDimensions()[0]),
-                                )
-                                pfsArmCut = image.array[
-                                    yssub, xssub - self.config.plotWidth : xssub + self.config.plotWidth + 1
-                                ]
-                                calExpCut = calexp.image.array[
-                                    yssub, xssub - self.config.plotWidth : xssub + self.config.plotWidth + 1
-                                ]
-                                xcoordNarrow = np.arange(
-                                    max(xssub - self.config.fitWidth, 0),
-                                    min(xssub + self.config.fitWidth + 1, data.getDimensions()[0]),
-                                )
-                                pfsArmCutNarrow = image.array[
-                                    yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
-                                ]
-                                calExpCutNarrow = calexp.image.array[
-                                    yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
-                                ]
-                                try:
-                                    if self.config.fixWidth == False:
-                                        poptPfsArm, pcovPfsArm = curve_fit(
-                                            gaussian_func,
-                                            xcoordNarrow,
-                                            pfsArmCutNarrow,
-                                            p0=np.array([np.max(pfsArmCutNarrow), xo[yssub], 1.0]),
-                                        )
-                                        poptCalExp, pcovCalExp = curve_fit(
-                                            gaussian_func,
-                                            xcoordNarrow,
-                                            calExpCutNarrow,
-                                            p0=np.array([np.max(calExpCutNarrow), xo[yssub], 1.0]),
-                                        )
-                                        stdErrPfsArm = np.sqrt(np.diag(pcovPfsArm))
-                                        stdErrCalExp = np.sqrt(np.diag(pcovCalExp))
-                                        if (
-                                            stdErrPfsArm[1] / poptPfsArm[1] < self.config.thresError
-                                            and stdErrPfsArm[2] / poptPfsArm[2] < self.config.thresError
-                                            and stdErrCalExp[1] / poptCalExp[1] < self.config.thresError
-                                            and stdErrCalExp[2] / poptCalExp[2] < self.config.thresError
-                                        ):
-                                            pfsArmCenter, pfsArmWidth = poptPfsArm[1], poptPfsArm[2]
-                                            calExpCenter, calExpWidth = poptCalExp[1], poptCalExp[2]
-                                        else:
-                                            pfsArmCenter, pfsArmWidth = math.nan, math.nan
-                                            calExpCenter, calExpWidth = math.nan, math.nan
-                                    else:
-                                        poptPfsArm, pcovPfsArm = curve_fit(
-                                            gaussianFixedWidth,
-                                            xcoordNarrow,
-                                            pfsArmCutNarrow,
-                                            p0=np.array([np.max(pfsArmCutNarrow), xo[yssub]]),
-                                        )
-                                        poptCalExp, pcovCalExp = curve_fit(
-                                            gaussianFixedWidth,
-                                            xcoordNarrow,
-                                            calExpCutNarrow,
-                                            p0=np.array([np.max(calExpCutNarrow), xo[yssub]]),
-                                        )
-                                        stdErrPfsArm = np.sqrt(np.diag(pcovPfsArm))
-                                        stdErrCalExp = np.sqrt(np.diag(pcovCalExp))
-                                        if (
-                                            stdErrPfsArm[1] / poptPfsArm[1] < self.config.thresError
-                                            and stdErrCalExp[1] / poptCalExp[1] < self.config.thresError
-                                        ):
-                                            pfsArmCenter, pfsArmWidth = poptPfsArm[1], PSFFWHM
-                                            calExpCenter, calExpWidth = poptCalExp[1], PSFFWHM
-                                        else:
-                                            pfsArmCenter, pfsArmWidth = math.nan, PSFFWHM
-                                            calExpCenter, calExpWidth = math.nan, PSFFWHM
-                                except (ValueError, RuntimeError) as e:
-                                    # Probably this error was thrown curve_fit.
-                                    pfsArmCenter, pfsArmWidth = math.nan, math.nan
-                                    calExpCenter, calExpWidth = math.nan, math.nan
-
-                                ax[j][k].plot(xcoord, np.zeros(xcoord.shape), "k--")
-                                ax[j][k].step(
-                                    xcoord,
-                                    pfsArmCut,
-                                    label="pfsArm\n(x={:.2f}, $\sigma$={:.2f})".format(
-                                        pfsArmCenter, pfsArmWidth
-                                    ),
-                                    color="b",
-                                )
-                                ax[j][k].step(
-                                    xcoord,
-                                    calExpCut,
-                                    label="calExp\n(x={:.2f}, $\sigma$={:.2f})".format(
-                                        calExpCenter, calExpWidth
-                                    ),
-                                    color="k",
-                                )
-                                ax[j][k].step(
-                                    xcoord,
-                                    subtracted.image.array[
-                                        yssub,
-                                        xssub - self.config.plotWidth : xssub + self.config.plotWidth + 1,
-                                    ]
-                                    * 5,
-                                    label="Residual*5",
-                                    color="r",
-                                )
-                                ypeak = np.amax(
-                                    image.array[
-                                        yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
-                                    ]
-                                )
-                                ax[j][k].plot(
-                                    [xo[yssub], xo[yssub]],
-                                    [-ypeak / 10 * 3, ypeak * 1.5],
-                                    "b--",
-                                    label="Trace",
-                                )
-                                ax[j][k].set_ylim(-ypeak / 10 * 3, ypeak * 1.5)
-                                ax[j][k].set_title(
-                                    "Y={} (dx={:.1e}, d$\sigma$={:.1e})".format(
-                                        yssub, calExpCenter - pfsArmCenter, calExpWidth - pfsArmWidth
-                                    ),
-                                    fontsize=8,
-                                )
-                                ax[j][k].legend(fontsize=4)
-                                labelbottom = False if j != 3 else True
-                                ax[j][k].tick_params(
-                                    labelbottom=labelbottom, labelleft=False, labelright=False, labeltop=False
-                                )
-                        fig.suptitle(
-                            "visit={:d} arm={:s} spectrograph={:d}\nf={:d}, X={:.1f}".format(
-                                dataId["visit"], dataId["arm"], dataId["spectrograph"], fiberId, xa[i]
-                            ),
-                            fontsize=12,
-                        )
-                        qaStatsPdf.append(fig)
-                        plt.close(fig)
+                    dxarray += centerdif
+                    dwarray += widthdif
 
         pfsArmAve = np.array(pfsArmAve)
         chiSquare = np.array(chiSquare)
@@ -702,6 +514,268 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
             extQaImage=qaImagePdf,
             extQaImage_pickle=qaStats,
         )
+
+    def drawStats(
+        self,
+        qaStatsPdf: MultipagePdfFigure,
+        dataId: dict,
+        image: ImageF,
+        calexp: ExposureF,
+        subtracted: ExposureF,
+        chiimage: ExposureF,
+        fiberId: int,
+        xo: np.ndarray,
+        yo: np.ndarray,
+        xa: float,
+        chiAveSpec: np.ndarray,
+        centerdif: np.ndarray,
+        widthdif: np.ndarray,
+        ydif: np.ndarray,
+    ) -> None:
+        """Draw figures on new pages of ``qaStatsPdf``.
+
+        Parameters
+        ----------
+        qaStatsPdf : `MultipagePdfFigure`
+            PDF to which to append new pages.
+        dataId : `dict`
+            Data ID. Required keys are: "visit", "arm", "spectrograph".
+        image : `ImageF`
+            XXXXX
+        calexp : `ExposureF`
+            XXXXX
+        subtracted : `ExposureF`
+            XXXXX
+        chiimage : `ExposureF`
+            XXXXX
+        fiberId : `int`
+            XXXXX
+        xo : `np.ndarray`
+            XXXXX
+        yo : `np.ndarray`
+            XXXXX
+        xa : `float`
+            XXXXX
+        chiAveSpec : `np.ndarray`
+            XXXXX
+        centerdif : `np.ndarray`
+            XXXXX
+        widthdif : `np.ndarray`
+            XXXXX
+        ydif : `np.ndarray`
+            XXXXX
+        """
+        ymin = 0
+        ymax = chiimage.getDimensions()[1]
+
+        fig, ax = plt.subplots(1, 6, figsize=(12, 7))
+        plt.subplots_adjust(wspace=0.5)
+        plt.sca(ax[0])
+        disp = afwDisplay.Display(fig)
+        disp.scale("asinh", "zscale", Q=1)
+        disp.setMaskPlaneColor("REFLINE", afwDisplay.IGNORE)
+        disp.mtv(calexp[int(xa) - 10 : int(xa) + 11, :])
+        ax[0].plot(xo, yo, "r", alpha=0.8)
+        ax[0].set_xlim(xa - 10, xa + 10)
+        ax[0].set_aspect("auto")
+        ax[0].set_ylabel("Y (pix)")
+        ax[0].set_title("calexp")
+
+        plt.sca(ax[1])
+        disp = afwDisplay.Display(fig)
+        disp.setMaskPlaneColor("REFLINE", afwDisplay.BLACK)
+        disp.setImageColormap("coolwarm")
+        disp.scale("asinh", "zscale", Q=1)
+        disp.mtv(subtracted[int(xa) - 10 : int(xa) + 11, :])
+        ax[1].plot(xo, yo, "k", alpha=0.8)
+        ax[1].set_xlim(xa - 10, xa + 10)
+        ax[1].set_aspect("auto")
+        ax[1].tick_params(labelbottom=True, labelleft=False, labelright=False, labeltop=False)
+        ax[1].set_xlabel("X (pix)")
+        ax[1].set_title("Residual")
+
+        plt.sca(ax[2])
+        disp = afwDisplay.Display(fig)
+        disp.scale("linear", -5, 5, Q=1)
+        disp.setMaskPlaneColor("REFLINE", afwDisplay.BLACK)
+        disp.setImageColormap("coolwarm")
+        disp.mtv(chiimage[int(xa) - 10 : int(xa) + 11, :])
+        ax[2].plot(xo, yo, "k", alpha=0.8)
+        ax[2].set_xlim(xa - 10, xa + 10)
+        ax[2].set_aspect("auto")
+        ax[2].tick_params(labelbottom=True, labelleft=False, labelright=False, labeltop=False)
+        ax[2].set_title("Chi")
+
+        ax[3].scatter(chiAveSpec, yo, s=3)
+        ax[3].set_ylim(ymin, ymax)
+        ax[3].plot([0, 0], [ymin, ymax], "0.8")
+        ax[3].set_xlabel("Chi at each row")
+        ax[3].tick_params(labelbottom=True, labelleft=False, labelright=False, labeltop=False)
+        ax[3].set_title("Chi")
+
+        ax[4].scatter(centerdif, ydif, s=3)
+        ax[4].set_ylim(ymin, ymax)
+        ax[4].plot([0, 0], [ymin, ymax], "0.8")
+        ax[4].set_xlabel("dx")
+        ax[4].tick_params(labelbottom=True, labelleft=False, labelright=False, labeltop=False)
+        ax[4].set_title("Peak center diff.")
+
+        ax[5].scatter(widthdif, ydif, s=3)
+        ax[5].set_ylim(ymin, ymax)
+        ax[5].plot([0, 0], [ymin, ymax], "0.8")
+        ax[5].set_xlabel("d$\sigma$/$\sigma$")
+        ax[5].tick_params(labelbottom=True, labelleft=False, labelright=True, labeltop=False)
+        ax[5].set_title("Width diff.")
+
+        fig.suptitle(
+            "visit={:d} arm={:s} spectrograph={:d}\nf={:d}, X={:.1f}".format(
+                dataId["visit"], dataId["arm"], dataId["spectrograph"], fiberId, xa
+            ),
+            fontsize=12,
+        )
+
+        qaStatsPdf.append(fig)
+        plt.close(fig)
+
+        PSFFWHM = self.PSFFWHM
+
+        numPanels = 3
+        ysplot = np.arange(ymin, ymax, (ymax - ymin) / (numPanels * numPanels + 1)).astype("int32")
+        xint = xo.astype("int32")
+
+        fig, ax = plt.subplots(numPanels, numPanels, figsize=(12, 7))
+        for j in range(numPanels):
+            for k in range(numPanels):
+                yssub = ysplot[k + j * numPanels + 1]
+                xssub = xint[yssub]
+                xcoord = np.arange(
+                    max(xssub - self.config.plotWidth, 0),
+                    min(xssub + self.config.plotWidth + 1, chiimage.getDimensions()[0]),
+                )
+                pfsArmCut = image.array[
+                    yssub, xssub - self.config.plotWidth : xssub + self.config.plotWidth + 1
+                ]
+                calExpCut = calexp.image.array[
+                    yssub, xssub - self.config.plotWidth : xssub + self.config.plotWidth + 1
+                ]
+                xcoordNarrow = np.arange(
+                    max(xssub - self.config.fitWidth, 0),
+                    min(xssub + self.config.fitWidth + 1, chiimage.getDimensions()[0]),
+                )
+                pfsArmCutNarrow = image.array[
+                    yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
+                ]
+                calExpCutNarrow = calexp.image.array[
+                    yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
+                ]
+                try:
+                    if self.config.fixWidth == False:
+                        poptPfsArm, pcovPfsArm = curve_fit(
+                            gaussian_func,
+                            xcoordNarrow,
+                            pfsArmCutNarrow,
+                            p0=np.array([np.max(pfsArmCutNarrow), xo[yssub], 1.0]),
+                        )
+                        poptCalExp, pcovCalExp = curve_fit(
+                            gaussian_func,
+                            xcoordNarrow,
+                            calExpCutNarrow,
+                            p0=np.array([np.max(calExpCutNarrow), xo[yssub], 1.0]),
+                        )
+                        stdErrPfsArm = np.sqrt(np.diag(pcovPfsArm))
+                        stdErrCalExp = np.sqrt(np.diag(pcovCalExp))
+                        if (
+                            stdErrPfsArm[1] / poptPfsArm[1] < self.config.thresError
+                            and stdErrPfsArm[2] / poptPfsArm[2] < self.config.thresError
+                            and stdErrCalExp[1] / poptCalExp[1] < self.config.thresError
+                            and stdErrCalExp[2] / poptCalExp[2] < self.config.thresError
+                        ):
+                            pfsArmCenter, pfsArmWidth = poptPfsArm[1], poptPfsArm[2]
+                            calExpCenter, calExpWidth = poptCalExp[1], poptCalExp[2]
+                        else:
+                            pfsArmCenter, pfsArmWidth = math.nan, math.nan
+                            calExpCenter, calExpWidth = math.nan, math.nan
+                    else:
+                        poptPfsArm, pcovPfsArm = curve_fit(
+                            gaussianFixedWidth,
+                            xcoordNarrow,
+                            pfsArmCutNarrow,
+                            p0=np.array([np.max(pfsArmCutNarrow), xo[yssub]]),
+                        )
+                        poptCalExp, pcovCalExp = curve_fit(
+                            gaussianFixedWidth,
+                            xcoordNarrow,
+                            calExpCutNarrow,
+                            p0=np.array([np.max(calExpCutNarrow), xo[yssub]]),
+                        )
+                        stdErrPfsArm = np.sqrt(np.diag(pcovPfsArm))
+                        stdErrCalExp = np.sqrt(np.diag(pcovCalExp))
+                        if (
+                            stdErrPfsArm[1] / poptPfsArm[1] < self.config.thresError
+                            and stdErrCalExp[1] / poptCalExp[1] < self.config.thresError
+                        ):
+                            pfsArmCenter, pfsArmWidth = poptPfsArm[1], PSFFWHM
+                            calExpCenter, calExpWidth = poptCalExp[1], PSFFWHM
+                        else:
+                            pfsArmCenter, pfsArmWidth = math.nan, PSFFWHM
+                            calExpCenter, calExpWidth = math.nan, PSFFWHM
+                except (ValueError, RuntimeError) as e:
+                    # Probably this error was thrown curve_fit.
+                    pfsArmCenter, pfsArmWidth = math.nan, math.nan
+                    calExpCenter, calExpWidth = math.nan, math.nan
+
+                ax[j][k].plot(xcoord, np.zeros(xcoord.shape), "k--")
+                ax[j][k].step(
+                    xcoord,
+                    pfsArmCut,
+                    label="pfsArm\n(x={:.2f}, $\sigma$={:.2f})".format(pfsArmCenter, pfsArmWidth),
+                    color="b",
+                )
+                ax[j][k].step(
+                    xcoord,
+                    calExpCut,
+                    label="calExp\n(x={:.2f}, $\sigma$={:.2f})".format(calExpCenter, calExpWidth),
+                    color="k",
+                )
+                ax[j][k].step(
+                    xcoord,
+                    subtracted.image.array[
+                        yssub,
+                        xssub - self.config.plotWidth : xssub + self.config.plotWidth + 1,
+                    ]
+                    * 5,
+                    label="Residual*5",
+                    color="r",
+                )
+                ypeak = np.amax(
+                    image.array[yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1]
+                )
+                ax[j][k].plot(
+                    [xo[yssub], xo[yssub]],
+                    [-ypeak / 10 * 3, ypeak * 1.5],
+                    "b--",
+                    label="Trace",
+                )
+                ax[j][k].set_ylim(-ypeak / 10 * 3, ypeak * 1.5)
+                ax[j][k].set_title(
+                    "Y={} (dx={:.1e}, d$\sigma$={:.1e})".format(
+                        yssub, calExpCenter - pfsArmCenter, calExpWidth - pfsArmWidth
+                    ),
+                    fontsize=8,
+                )
+                ax[j][k].legend(fontsize=4)
+                labelbottom = False if j != 3 else True
+                ax[j][k].tick_params(
+                    labelbottom=labelbottom, labelleft=False, labelright=False, labeltop=False
+                )
+        fig.suptitle(
+            "visit={:d} arm={:s} spectrograph={:d}\nf={:d}, X={:.1f}".format(
+                dataId["visit"], dataId["arm"], dataId["spectrograph"], fiberId, xa
+            ),
+            fontsize=12,
+        )
+        qaStatsPdf.append(fig)
+        plt.close(fig)
 
     def makeImagePdf(
         self, qaStats: QaDict, dataId: dict, detectorMap: DetectorMap, chiimage: ExposureF
