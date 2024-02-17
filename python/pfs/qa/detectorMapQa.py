@@ -24,6 +24,7 @@ from lsst.pipe.base.connectionTypes import Input as InputConnection
 from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm, ReferenceLineStatus
 from pfs.qa.utils import helpers
+from pfs.qa.utils import plotting
 
 warnings.filterwarnings('ignore', message='Gen2 Butler')
 warnings.filterwarnings('ignore', message='addPfsCursor')
@@ -110,7 +111,7 @@ class PlotResidualTask(Task):
         # Plot the 1D residuals.
         self.log.info(f"Plotting 1D residuals for {title_str}")
         try:
-            fig = helpers.plotResiduals1D(arcLines, detectorMap, arc_data)
+            fig = plotting.plotResiduals1D(arcLines, detectorMap, arc_data)
             fig.set_size_inches(10, 8)
             fig.suptitle(f"Detector map residual {title_str}")
             fn = f'dmapQAPlot-1D-{title_str}.png'
@@ -122,25 +123,25 @@ class PlotResidualTask(Task):
         # Plot the 2D residuals.
         self.log.info(f"Plotting 2D residuals for {title_str}")
         try:
-            fig1 = helpers.plotResiduals2D(arc_data,
-                                           detectorMap=detectorMap,
-                                           showLabels=False,
-                                           title=f'{title_str}',
-                                           plotKws=dict(vmin=-0.1, vmax=0.1)
-                                           )
+            fig1 = plotting.plotResiduals2D(arc_data,
+                                            detectorMap=detectorMap,
+                                            showLabels=False,
+                                            title=f'{title_str}',
+                                            plotKws=dict(vmin=-0.1, vmax=0.1)
+                                            )
             fig1.set_size_inches(10, 8)
             fig1.set_tight_layout('inches')
             fn = f'dmapQAPlot-2D-dx-{title_str}.png'
             fig1.savefig(fn, format="png")
             self.log.info(f'2D dx plot saved to {fn}')
 
-            fig1 = helpers.plotResiduals2D(arc_data,
-                                           detectorMap=detectorMap,
-                                           showWavelength=True,
-                                           showLabels=False,
-                                           title=f'{title_str}',
-                                           plotKws=dict(vmin=-0.1, vmax=0.1)
-                                           )
+            fig1 = plotting.plotResiduals2D(arc_data,
+                                            detectorMap=detectorMap,
+                                            showWavelength=True,
+                                            showLabels=False,
+                                            title=f'{title_str}',
+                                            plotKws=dict(vmin=-0.1, vmax=0.1)
+                                            )
             fig1.set_size_inches(10, 8)
             fig1.set_tight_layout('inches')
             fn = f'dmapQAPlot-2D-dy-{title_str}.png'
