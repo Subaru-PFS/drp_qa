@@ -197,64 +197,6 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
             if data is not None:
                 dataRef.put(data, datasetType=datasetType)
 
-    @staticmethod
-    def getStatsPerFiber(
-        data: MaskedImageF, detectorMap: DetectorMap, fiberId: int, xwin: int = 3
-    ) -> StatsPerFiber:
-        """Get statistics for a fiber.
-
-        Parameters
-        ----------
-        data : `MaskedImageF`
-            XXXXX
-        detectorMap : `DetectorMap`
-            XXXXX
-        fiberId : `int`
-            XXXXX
-        xwin : `int`
-            XXXXX
-
-        Returns
-        -------
-        stats : `StatsPerFiber`
-            Statistics.
-        """
-        ymin = 0
-        ymax = data.getDimensions()[1]
-        xmax = data.getDimensions()[0]
-        yo = np.arange(ymin, ymax).astype(np.float64)
-        xo = detectorMap.getXCenter(fiberId, yo)
-        xs = np.round(xo).astype(int)
-        ys = np.round(yo).astype(int)
-        image = data.image.array
-        mask = data.mask.array
-        imageFiber = []
-        maskFiber = []
-        for x, y in zip(xs, ys):
-            image_cut = image[y, x - xwin : x + xwin + 1].copy()
-            mask_cut = mask[y, x - xwin : x + xwin + 1].copy()
-            if x + xwin + 1 > xmax:
-                image_cut = np.concatenate([np.zeros(xwin * 2 + 1 - len(image_cut)), image_cut])
-                mask_cut = np.concatenate([np.zeros(xwin * 2 + 1 - len(mask_cut)), mask_cut])
-            elif x - xwin < 0:
-                image_cut = np.concatenate([image_cut, np.zeros(xwin * 2 + 1 - len(image_cut))])
-                mask_cut = np.concatenate([mask_cut, np.zeros(xwin * 2 + 1 - len(mask_cut))])
-            imageFiber.append(image_cut)
-            maskFiber.append(mask_cut)
-        imageFiber = np.array(imageFiber)
-        maskFiber = np.array(maskFiber)
-
-        chi2 = np.average(imageFiber[maskFiber == 0] ** 2)
-        im_ave = np.average(imageFiber[maskFiber == 0])
-
-        return StatsPerFiber(
-            chi2=chi2,
-            im_ave=im_ave,
-            x_ave=np.average(xo),
-            chi_f=imageFiber,
-            mask_f=maskFiber,
-        )
-
     def run(
         self,
         calexp: ExposureF,
@@ -1165,6 +1107,64 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
             pfsArmWidth=pfsArmWidth,
             calExpCenter=calExpCenter,
             calExpWidth=calExpWidth,
+        )
+
+    @staticmethod
+    def getStatsPerFiber(
+        data: MaskedImageF, detectorMap: DetectorMap, fiberId: int, xwin: int = 3
+    ) -> StatsPerFiber:
+        """Get statistics for a fiber.
+
+        Parameters
+        ----------
+        data : `MaskedImageF`
+            XXXXX
+        detectorMap : `DetectorMap`
+            XXXXX
+        fiberId : `int`
+            XXXXX
+        xwin : `int`
+            XXXXX
+
+        Returns
+        -------
+        stats : `StatsPerFiber`
+            Statistics.
+        """
+        ymin = 0
+        ymax = data.getDimensions()[1]
+        xmax = data.getDimensions()[0]
+        yo = np.arange(ymin, ymax).astype(np.float64)
+        xo = detectorMap.getXCenter(fiberId, yo)
+        xs = np.round(xo).astype(int)
+        ys = np.round(yo).astype(int)
+        image = data.image.array
+        mask = data.mask.array
+        imageFiber = []
+        maskFiber = []
+        for x, y in zip(xs, ys):
+            image_cut = image[y, x - xwin : x + xwin + 1].copy()
+            mask_cut = mask[y, x - xwin : x + xwin + 1].copy()
+            if x + xwin + 1 > xmax:
+                image_cut = np.concatenate([np.zeros(xwin * 2 + 1 - len(image_cut)), image_cut])
+                mask_cut = np.concatenate([np.zeros(xwin * 2 + 1 - len(mask_cut)), mask_cut])
+            elif x - xwin < 0:
+                image_cut = np.concatenate([image_cut, np.zeros(xwin * 2 + 1 - len(image_cut))])
+                mask_cut = np.concatenate([mask_cut, np.zeros(xwin * 2 + 1 - len(mask_cut))])
+            imageFiber.append(image_cut)
+            maskFiber.append(mask_cut)
+        imageFiber = np.array(imageFiber)
+        maskFiber = np.array(maskFiber)
+
+        chi2 = np.average(imageFiber[maskFiber == 0] ** 2)
+        im_ave = np.average(imageFiber[maskFiber == 0])
+
+        return StatsPerFiber(
+            chi2=chi2,
+            im_ave=im_ave,
+            x_ave=np.average(xo),
+            chi_f=imageFiber,
+            mask_f=maskFiber,
         )
 
     @staticmethod
