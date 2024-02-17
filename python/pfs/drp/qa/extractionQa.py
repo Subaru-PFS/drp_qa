@@ -151,11 +151,6 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
     ConfigClass = ExtractionQaConfig
     _DefaultName = "extractionQa"
 
-    PSFFWHM = 1.5
-    """Fixed value of PSF's FWHM
-    (May be promoted a configurable parameter in future).
-    """
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.debugInfo = lsstDebug.Info(__name__)
@@ -334,8 +329,6 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         pfsArmAve = []
         chiAveSpec = []
 
-        PSFFWHM = self.PSFFWHM
-
         for fiberId in fiberIds:
             stats = self.getStatsPerFiber(data, detectorMap, fiberId, xwin=self.config.fiberWidth)
             stats.chi_f[stats.mask_f != 0] = float("nan")
@@ -390,73 +383,24 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                         calExpCutNarrow = calexp.image.array[
                             yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
                         ]
-                        try:
-                            if self.config.fixWidth == False:
-                                poptPfsArm, pcovPfsArm = curve_fit(
-                                    gaussian_func,
-                                    xcoordNarrow,
-                                    pfsArmCutNarrow,
-                                    p0=np.array([np.max(pfsArmCutNarrow), xo[yssub], 1.0]),
-                                )
-                                poptCalExp, pcovCalExp = curve_fit(
-                                    gaussian_func,
-                                    xcoordNarrow,
-                                    calExpCutNarrow,
-                                    p0=np.array([np.max(calExpCutNarrow), xo[yssub], 1.0]),
-                                )
-                                stdErrPfsArm = np.sqrt(np.diag(pcovPfsArm))
-                                stdErrCalExp = np.sqrt(np.diag(pcovCalExp))
-                                if (
-                                    stdErrPfsArm[1] / poptPfsArm[1] < self.config.thresError
-                                    and stdErrPfsArm[2] / poptPfsArm[2] < self.config.thresError
-                                    and stdErrCalExp[1] / poptCalExp[1] < self.config.thresError
-                                    and stdErrCalExp[2] / poptCalExp[2] < self.config.thresError
-                                ):
-                                    pfsArmCenter, pfsArmWidth = poptPfsArm[1], poptPfsArm[2]
-                                    calExpCenter, calExpWidth = poptCalExp[1], poptCalExp[2]
-                                    centerdif.append(pfsArmCenter - calExpCenter)
-                                    ydif.append(yssub)
-                                    widthdif.append(
-                                        2 * (pfsArmWidth - calExpWidth) / (pfsArmWidth + calExpWidth)
-                                    )
-                                    xarray.append(xssub)
-                                    yarray.append(yssub)
-                                    idarray.append(fiberId)
-                                else:
-                                    failNum += 1
-                            else:
-                                poptPfsArm, pcovPfsArm = curve_fit(
-                                    gaussianFixedWidth,
-                                    xcoordNarrow,
-                                    pfsArmCutNarrow,
-                                    p0=np.array([np.max(pfsArmCutNarrow), xo[yssub]]),
-                                )
-                                poptCalExp, pcovCalExp = curve_fit(
-                                    gaussianFixedWidth,
-                                    xcoordNarrow,
-                                    calExpCutNarrow,
-                                    p0=np.array([np.max(calExpCutNarrow), xo[yssub]]),
-                                )
-                                stdErrPfsArm = np.sqrt(np.diag(pcovPfsArm))
-                                stdErrCalExp = np.sqrt(np.diag(pcovCalExp))
-                                if (
-                                    stdErrPfsArm[1] / poptPfsArm[1] < self.config.thresError
-                                    and stdErrCalExp[1] / poptCalExp[1] < self.config.thresError
-                                ):
-                                    pfsArmCenter, pfsArmWidth = poptPfsArm[1], PSFFWHM
-                                    calExpCenter, calExpWidth = poptCalExp[1], PSFFWHM
-                                    centerdif.append(pfsArmCenter - calExpCenter)
-                                    ydif.append(yssub)
-                                    widthdif.append(
-                                        2 * (pfsArmWidth - calExpWidth) / (pfsArmWidth + calExpWidth)
-                                    )
-                                    xarray.append(xssub)
-                                    yarray.append(yssub)
-                                    idarray.append(fiberId)
-                                else:
-                                    failNum += 1
-                        except (ValueError, RuntimeError):
-                            # Probably this error was thrown curve_fit.
+                        fitresult = self.fitGaussiansToPfsArmCutAndCalExpCut(
+                            xcoordNarrow,
+                            pfsArmCutNarrow,
+                            calExpCutNarrow,
+                            xo[yssub],
+                        )
+                        if fitresult.ok:
+                            pfsArmCenter = fitresult.pfsArmCenter
+                            pfsArmWidth = fitresult.pfsArmWidth
+                            calExpCenter = fitresult.calExpCenter
+                            calExpWidth = fitresult.calExpWidth
+                            centerdif.append(pfsArmCenter - calExpCenter)
+                            ydif.append(yssub)
+                            widthdif.append(2 * (pfsArmWidth - calExpWidth) / (pfsArmWidth + calExpWidth))
+                            xarray.append(xssub)
+                            yarray.append(yssub)
+                            idarray.append(fiberId)
+                        else:
                             failNum += 1
 
                     if chiStd[i] >= thresPlot:
@@ -637,8 +581,6 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         qaStatsPdf.append(fig)
         plt.close(fig)
 
-        PSFFWHM = self.PSFFWHM
-
         numPanels = 3
         ysplot = np.arange(ymin, ymax, (ymax - ymin) / (numPanels * numPanels + 1)).astype("int32")
         xint = xo.astype("int32")
@@ -668,61 +610,17 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                 calExpCutNarrow = calexp.image.array[
                     yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
                 ]
-                try:
-                    if self.config.fixWidth == False:
-                        poptPfsArm, pcovPfsArm = curve_fit(
-                            gaussian_func,
-                            xcoordNarrow,
-                            pfsArmCutNarrow,
-                            p0=np.array([np.max(pfsArmCutNarrow), xo[yssub], 1.0]),
-                        )
-                        poptCalExp, pcovCalExp = curve_fit(
-                            gaussian_func,
-                            xcoordNarrow,
-                            calExpCutNarrow,
-                            p0=np.array([np.max(calExpCutNarrow), xo[yssub], 1.0]),
-                        )
-                        stdErrPfsArm = np.sqrt(np.diag(pcovPfsArm))
-                        stdErrCalExp = np.sqrt(np.diag(pcovCalExp))
-                        if (
-                            stdErrPfsArm[1] / poptPfsArm[1] < self.config.thresError
-                            and stdErrPfsArm[2] / poptPfsArm[2] < self.config.thresError
-                            and stdErrCalExp[1] / poptCalExp[1] < self.config.thresError
-                            and stdErrCalExp[2] / poptCalExp[2] < self.config.thresError
-                        ):
-                            pfsArmCenter, pfsArmWidth = poptPfsArm[1], poptPfsArm[2]
-                            calExpCenter, calExpWidth = poptCalExp[1], poptCalExp[2]
-                        else:
-                            pfsArmCenter, pfsArmWidth = math.nan, math.nan
-                            calExpCenter, calExpWidth = math.nan, math.nan
-                    else:
-                        poptPfsArm, pcovPfsArm = curve_fit(
-                            gaussianFixedWidth,
-                            xcoordNarrow,
-                            pfsArmCutNarrow,
-                            p0=np.array([np.max(pfsArmCutNarrow), xo[yssub]]),
-                        )
-                        poptCalExp, pcovCalExp = curve_fit(
-                            gaussianFixedWidth,
-                            xcoordNarrow,
-                            calExpCutNarrow,
-                            p0=np.array([np.max(calExpCutNarrow), xo[yssub]]),
-                        )
-                        stdErrPfsArm = np.sqrt(np.diag(pcovPfsArm))
-                        stdErrCalExp = np.sqrt(np.diag(pcovCalExp))
-                        if (
-                            stdErrPfsArm[1] / poptPfsArm[1] < self.config.thresError
-                            and stdErrCalExp[1] / poptCalExp[1] < self.config.thresError
-                        ):
-                            pfsArmCenter, pfsArmWidth = poptPfsArm[1], PSFFWHM
-                            calExpCenter, calExpWidth = poptCalExp[1], PSFFWHM
-                        else:
-                            pfsArmCenter, pfsArmWidth = math.nan, PSFFWHM
-                            calExpCenter, calExpWidth = math.nan, PSFFWHM
-                except (ValueError, RuntimeError) as e:
-                    # Probably this error was thrown curve_fit.
-                    pfsArmCenter, pfsArmWidth = math.nan, math.nan
-                    calExpCenter, calExpWidth = math.nan, math.nan
+
+                fitresult = self.fitGaussiansToPfsArmCutAndCalExpCut(
+                    xcoordNarrow,
+                    pfsArmCutNarrow,
+                    calExpCutNarrow,
+                    xo[yssub],
+                )
+                pfsArmCenter = fitresult.pfsArmCenter
+                pfsArmWidth = fitresult.pfsArmWidth
+                calExpCenter = fitresult.calExpCenter
+                calExpWidth = fitresult.calExpWidth
 
                 ax[j][k].plot(xcoord, np.zeros(xcoord.shape), "k--")
                 ax[j][k].step(
@@ -1164,6 +1062,110 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         plt.close(fig)
 
         return qaImagePdf
+
+    def fitGaussiansToPfsArmCutAndCalExpCut(
+        self,
+        xcoordNarrow: np.ndarray,
+        pfsArmCutNarrow: np.ndarray,
+        calExpCutNarrow: np.ndarray,
+        center0: float,
+    ):
+        """Fit Gaussians to ``pfsArmCutNarrow`` and ``calExpCutNarrow``.
+
+        Parameters
+        ----------
+        xcoordNarrow : np.ndarray
+            Samples of ``x``.
+        pfsArmCutNarrow : np.ndarray
+            XXXXX
+        calExpCutNarrow : np.ndarray
+            XXXXX
+        center0: float
+            Initial guess of the center of Gaussians.
+            (Common to ``pfsArmCutNarrow`` and ``calExpCutNarrow``)
+
+        Returns
+        -------
+        ok : `bool`
+            Did fitting succeed?
+        pfsArmCenter : `float`
+            mu of Gaussian(mu, sigma) fitted to ``pfsArmCutNarrow``
+        pfsArmWidth : `float`
+            sigma of Gaussian(mu, sigma) fitted to ``pfsArmCutNarrow``
+        calExpCenter : `float`
+            mu of Gaussian(mu, sigma) fitted to ``calExpCenter``
+        calExpWidth : `float`
+            sigma of Gaussian(mu, sigma) fitted to ``calExpCenter``
+        """
+        PSFFWHM = 1.5
+
+        ok = False
+        pfsArmCenter, pfsArmWidth = math.nan, math.nan
+        calExpCenter, calExpWidth = math.nan, math.nan
+
+        try:
+            if self.config.fixWidth == False:
+                poptPfsArm, pcovPfsArm = curve_fit(
+                    gaussian_func,
+                    xcoordNarrow,
+                    pfsArmCutNarrow,
+                    p0=np.array([np.max(pfsArmCutNarrow), center0, 1.0]),
+                )
+                poptCalExp, pcovCalExp = curve_fit(
+                    gaussian_func,
+                    xcoordNarrow,
+                    calExpCutNarrow,
+                    p0=np.array([np.max(calExpCutNarrow), center0, 1.0]),
+                )
+                stdErrPfsArm = np.sqrt(np.diag(pcovPfsArm))
+                stdErrCalExp = np.sqrt(np.diag(pcovCalExp))
+                if (
+                    stdErrPfsArm[1] / poptPfsArm[1] < self.config.thresError
+                    and stdErrPfsArm[2] / poptPfsArm[2] < self.config.thresError
+                    and stdErrCalExp[1] / poptCalExp[1] < self.config.thresError
+                    and stdErrCalExp[2] / poptCalExp[2] < self.config.thresError
+                ):
+                    ok = True
+                    pfsArmCenter, pfsArmWidth = poptPfsArm[1], poptPfsArm[2]
+                    calExpCenter, calExpWidth = poptCalExp[1], poptCalExp[2]
+            else:
+                poptPfsArm, pcovPfsArm = curve_fit(
+                    gaussianFixedWidth,
+                    xcoordNarrow,
+                    pfsArmCutNarrow,
+                    p0=np.array([np.max(pfsArmCutNarrow), center0]),
+                )
+                poptCalExp, pcovCalExp = curve_fit(
+                    gaussianFixedWidth,
+                    xcoordNarrow,
+                    calExpCutNarrow,
+                    p0=np.array([np.max(calExpCutNarrow), center0]),
+                )
+                stdErrPfsArm = np.sqrt(np.diag(pcovPfsArm))
+                stdErrCalExp = np.sqrt(np.diag(pcovCalExp))
+                if (
+                    stdErrPfsArm[1] / poptPfsArm[1] < self.config.thresError
+                    and stdErrCalExp[1] / poptCalExp[1] < self.config.thresError
+                ):
+                    ok = True
+                    pfsArmCenter, pfsArmWidth = poptPfsArm[1], PSFFWHM
+                    calExpCenter, calExpWidth = poptCalExp[1], PSFFWHM
+                else:
+                    # I don't know the reason of the following two lines,
+                    # but I obey the original code
+                    pfsArmWidth = PSFFWHM
+                    calExpWidth = PSFFWHM
+
+        except (ValueError, RuntimeError):
+            pass
+
+        return Struct(
+            ok=ok,
+            pfsArmCenter=pfsArmCenter,
+            pfsArmWidth=pfsArmWidth,
+            calExpCenter=calExpCenter,
+            calExpWidth=calExpWidth,
+        )
 
     @staticmethod
     def getTargetColors() -> Dict[TargetType, str]:
