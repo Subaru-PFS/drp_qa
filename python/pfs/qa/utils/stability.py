@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 import lsst.daf.persistence as dafPersist
@@ -38,7 +39,7 @@ class DetectorMapStatistics:
         self.detectorMap = self.butler.get('detectorMap_used', self.dataId)
 
         if loadData is True:
-            self.arcData = self.getData()
+            self.arcData = self.loadData()
 
     @property
     def dataId(self):
@@ -52,7 +53,7 @@ class DetectorMapStatistics:
     def uid(self):
         return f'v{self.visit}-{self.ccd}-{self.label}'
 
-    def getData(self, dropNaColumns: bool = True):
+    def loadData(self, dropNaColumns: bool = True) -> pd.DataFrame:
         """Looks up the data in butler and returns a dataframe with the arcline data.
 
         The arcline data includes basic statistics, such as the median and sigma of the residuals.
@@ -76,4 +77,5 @@ class DetectorMapStatistics:
             self.arcData[col] = getattr(self, col)
 
         self.arcData.reset_index(drop=True, inplace=True)
+
         return self.arcData
