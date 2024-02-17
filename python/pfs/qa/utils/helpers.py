@@ -10,7 +10,6 @@ import pandas as pd
 from matplotlib import colors
 from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-from matplotlib.patches import Patch
 from scipy.stats import iqr
 
 from pfs.drp.stella.utils import addPfsCursor
@@ -32,12 +31,35 @@ def iqr_sigma(x):
     return iqr(x, nan_policy='omit') / 1.349
 
 
-def getObjects(dataId: Path, rerun: Path, calibDir='/work/drp/CALIB'):
+def getObjects(dataId: Path, rerun: Path, calibDir: Path = '/work/drp/CALIB'):
     butler = dafPersist.Butler(rerun.as_posix(), calibRoot=calibDir.as_posix())
     arcLines = butler.get('arcLines', dataId)
     detectorMap = butler.get('detectorMap_used', dataId)
 
     return arcLines, detectorMap
+
+
+def loadData(arcLines: ArcLineSet, detectorMap: DetectorMap, dropNaColumns: bool = True) -> pd.DataFrame:
+    """Looks up the data in butler and returns a dataframe with the arcline data.
+
+    The arcline data includes basic statistics, such as the median and sigma of the residuals.
+
+    This method is called on init.
+
+    Parameters
+    ----------
+    dropNaColumns : `bool`, optional
+        Drop columns where all values are NaN. Default is True.
+
+    """
+
+    # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
+    arcData = getArclineData(arcLines, dropNaColumns=dropNaColumns)
+    arcData = addTraceLambdaToArclines(arcData, detectorMap)
+    arcData = addResidualsToArclines(arcData)
+    arcData.reset_index(drop=True, inplace=True)
+
+    return arcData
 
 
 def getArclineData(arcLines: ArcLineSet,
