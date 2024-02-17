@@ -254,8 +254,6 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         divided.image /= calexp.image
         chiimage = subtracted.clone()
         chiimage.image.array /= np.sqrt(calexp.variance.array)
-        variance = subtracted.clone()
-        variance.image.array = np.sqrt(calexp.variance.array)
 
         msk = (pfsConfig.spectrograph == dataId["spectrograph"]) * (pfsConfig.fiberStatus == FiberStatus.GOOD)
         fiberIds = pfsConfig[msk].fiberId
@@ -273,7 +271,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
 
         for fiberId in fiberIds:
             stats = self.getStatsPerFiber(data, detectorMap, fiberId, xwin=self.config.fiberWidth)
-            stats.chi_f[stats.mask_f != 0] = float("nan")
+            stats.chi_f[stats.mask_f != 0] = math.nan
             chiSquare.append(stats.chi2)
             chiAve.append(np.average(stats.chi_f[stats.mask_f == 0]))
             chiMedian.append(np.median(stats.chi_f[stats.mask_f == 0]))
@@ -509,7 +507,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         ax[5].scatter(widthdif, ydif, s=3)
         ax[5].set_ylim(ymin, ymax)
         ax[5].plot([0, 0], [ymin, ymax], "0.8")
-        ax[5].set_xlabel("d$\sigma$/$\sigma$")
+        ax[5].set_xlabel("d$\\sigma$/$\\sigma$")
         ax[5].tick_params(labelbottom=True, labelleft=False, labelright=True, labeltop=False)
         ax[5].set_title("Width diff.")
 
@@ -568,13 +566,13 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                 ax[j][k].step(
                     xcoord,
                     pfsArmCut,
-                    label="pfsArm\n(x={:.2f}, $\sigma$={:.2f})".format(pfsArmCenter, pfsArmWidth),
+                    label="pfsArm\n(x={:.2f}, $\\sigma$={:.2f})".format(pfsArmCenter, pfsArmWidth),
                     color="b",
                 )
                 ax[j][k].step(
                     xcoord,
                     calExpCut,
-                    label="calExp\n(x={:.2f}, $\sigma$={:.2f})".format(calExpCenter, calExpWidth),
+                    label="calExp\n(x={:.2f}, $\\sigma$={:.2f})".format(calExpCenter, calExpWidth),
                     color="k",
                 )
                 ax[j][k].step(
@@ -598,7 +596,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                 )
                 ax[j][k].set_ylim(-ypeak / 10 * 3, ypeak * 1.5)
                 ax[j][k].set_title(
-                    "Y={} (dx={:.1e}, d$\sigma$={:.1e})".format(
+                    "Y={} (dx={:.1e}, d$\\sigma$={:.1e})".format(
                         yssub, calExpCenter - pfsArmCenter, calExpWidth - pfsArmWidth
                     ),
                     fontsize=8,
@@ -651,7 +649,6 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         yarray = qaStats["Yarray"]
         dxarray = qaStats["dx"]
         dwarray = qaStats["dsigma"]
-        idarray = qaStats["fiberIDarray"]
 
         aveRange = 5.0
         medRange = 5.0
@@ -994,7 +991,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         fig = plt.figure(figsize=(10, 10))
         ax = fig.add_subplot(1, 1, 1)
         mappable = ax.scatter(xarray, yarray, s=2, c=dwarray, cmap="coolwarm", vmin=-0.1, vmax=0.1)
-        plt.title("d$\sigma$/$\sigma$")
+        plt.title("d$\\sigma$/$\\sigma$")
         plt.xlabel("X (pix)")
         plt.ylabel("Y (pix)")
         plt.xlim(0, chiimage.getDimensions()[0])
@@ -1046,31 +1043,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         calExpCenter, calExpWidth = math.nan, math.nan
 
         try:
-            if self.config.fixWidth == False:
-                poptPfsArm, pcovPfsArm = curve_fit(
-                    gaussian_func,
-                    xcoordNarrow,
-                    pfsArmCutNarrow,
-                    p0=np.array([np.max(pfsArmCutNarrow), center0, 1.0]),
-                )
-                poptCalExp, pcovCalExp = curve_fit(
-                    gaussian_func,
-                    xcoordNarrow,
-                    calExpCutNarrow,
-                    p0=np.array([np.max(calExpCutNarrow), center0, 1.0]),
-                )
-                stdErrPfsArm = np.sqrt(np.diag(pcovPfsArm))
-                stdErrCalExp = np.sqrt(np.diag(pcovCalExp))
-                if (
-                    stdErrPfsArm[1] / poptPfsArm[1] < self.config.thresError
-                    and stdErrPfsArm[2] / poptPfsArm[2] < self.config.thresError
-                    and stdErrCalExp[1] / poptCalExp[1] < self.config.thresError
-                    and stdErrCalExp[2] / poptCalExp[2] < self.config.thresError
-                ):
-                    ok = True
-                    pfsArmCenter, pfsArmWidth = poptPfsArm[1], poptPfsArm[2]
-                    calExpCenter, calExpWidth = poptCalExp[1], poptCalExp[2]
-            else:
+            if self.config.fixWidth:
                 poptPfsArm, pcovPfsArm = curve_fit(
                     gaussianFixedWidth,
                     xcoordNarrow,
@@ -1097,6 +1070,30 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                     # but I obey the original code
                     pfsArmWidth = PSFFWHM
                     calExpWidth = PSFFWHM
+            else:
+                poptPfsArm, pcovPfsArm = curve_fit(
+                    gaussian_func,
+                    xcoordNarrow,
+                    pfsArmCutNarrow,
+                    p0=np.array([np.max(pfsArmCutNarrow), center0, 1.0]),
+                )
+                poptCalExp, pcovCalExp = curve_fit(
+                    gaussian_func,
+                    xcoordNarrow,
+                    calExpCutNarrow,
+                    p0=np.array([np.max(calExpCutNarrow), center0, 1.0]),
+                )
+                stdErrPfsArm = np.sqrt(np.diag(pcovPfsArm))
+                stdErrCalExp = np.sqrt(np.diag(pcovCalExp))
+                if (
+                    stdErrPfsArm[1] / poptPfsArm[1] < self.config.thresError
+                    and stdErrPfsArm[2] / poptPfsArm[2] < self.config.thresError
+                    and stdErrCalExp[1] / poptCalExp[1] < self.config.thresError
+                    and stdErrCalExp[2] / poptCalExp[2] < self.config.thresError
+                ):
+                    ok = True
+                    pfsArmCenter, pfsArmWidth = poptPfsArm[1], poptPfsArm[2]
+                    calExpCenter, calExpWidth = poptCalExp[1], poptCalExp[2]
 
         except (ValueError, RuntimeError):
             pass
