@@ -1,6 +1,0 @@
-description: Terrific QA task
-tasks:
-  qa:
-    class: pfs.qa.yabaiQa.YabaiQaTask
-    config:
-      nanikanoParam: 3.14
