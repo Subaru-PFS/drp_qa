@@ -292,7 +292,7 @@ def plotResiduals1D(arcLines: ArcLineSet,
     )
 
     # X center residual fiber errors.
-    plot_data = arcData.query('status_name.str.contains("RESERVED")')[['fiberId', 'dx', 'status_name']]
+    plot_data = arcData.query('isReserved == True')[['fiberId', 'dx', 'status_name']]
     plot_data = plot_data.groupby('fiberId').dx.agg(['median', iqr_sigma]).reset_index()
     label = f'USED\n'
     label += f'median={plot_data["median"].median():>13.03e}\n'
@@ -308,7 +308,7 @@ def plotResiduals1D(arcLines: ArcLineSet,
     )
 
     # Wavelength residual fiber errors.
-    plot_data = arcData.query('isTrace == False and status_name.str.contains("RESERVED")')[
+    plot_data = arcData.query('isTrace == False and isReserved == True')[
         ['fiberId', 'dy_nm', 'status_name']]
     plot_data = plot_data.groupby('fiberId').dy_nm.agg(['median', iqr_sigma]).reset_index()
     label = f'USED\n'
@@ -417,9 +417,9 @@ def plotResiduals2D(arcData: pd.DataFrame,
     norm = colors.Normalize(vmin=plotKws.pop('vmin', None), vmax=plotKws.pop('vmax', None))
 
     if hexBin:
-        im = ax.hexbin(arc_data.tracePos, arc_data.y, plot_col, norm=norm, gridsize=gridsize, **plotKws)
+        im = ax.hexbin(arc_data.x, arc_data.y, plot_col, norm=norm, gridsize=gridsize, **plotKws)
     else:
-        im = ax.scatter(arc_data.tracePos, arc_data.y, c=plot_col, s=1, norm=norm, **plotKws)
+        im = ax.scatter(arc_data.x, arc_data.y, c=plot_col, s=1, norm=norm, **plotKws)
 
     stats_string = f'median={plot_col.median():.03e} sigma={iqr_sigma(plot_col):.03e}'
 
@@ -435,6 +435,9 @@ def plotResiduals2D(arcData: pd.DataFrame,
 
     fig.suptitle(title, y=0.975)
 
+    ax.set_xlabel('x position')
+    ax.set_ylabel('y position')
+    
     if showLabels is False:
         ax.tick_params('x', bottom=False, labelbottom=False)
         ax.tick_params('y', left=False, labelleft=False)
