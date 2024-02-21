@@ -19,11 +19,16 @@ warnings.filterwarnings('ignore', message='Mean of empty slice')
 warnings.filterwarnings('ignore', message='This figure')
 
 
-def getObjects(dataId: Path, rerun: Path, calibDir: Path = '/work/drp/CALIB'):
-    butler = dafPersist.Butler(rerun.as_posix(), calibRoot=calibDir.as_posix())
+def getObjects(dataId: Path, 
+               rerun: Path, 
+               calibDir: Path = '/work/drp/CALIB',
+               butler: dafPersist.Butler = None):
+    if butler is None:
+        butler = dafPersist.Butler(rerun.as_posix(), calibRoot=calibDir.as_posix())
+        
     arcLines = butler.get('arcLines', dataId)
-    detectorMap = butler.get('detectorMap_used', dataId)
-
+    detectorMap = butler.get('detectorMap_used', dataId)    
+    
     return arcLines, detectorMap
 
 
@@ -84,13 +89,19 @@ def getArclineData(arcLines: ArcLineSet,
     # Replace inf with nans.
     arc_data = arc_data.replace([np.inf, -np.inf], np.nan)
 
-    # Only use DETECTORMAP_USED (32) and DETECTORMAP_RESERVED (64)
-    valid_status = [ReferenceLineStatus.DETECTORMAP_USED.value, ReferenceLineStatus.DETECTORMAP_RESERVED.value]
-    arc_data = arc_data.query('status in @valid_status').copy()
-
-    # Get status names.
-    arc_data['status_name'] = arc_data.status.map(lambda x: ReferenceLineStatus(x).name)
+    # Get status names. (the .name attribute doesn't work properly so need the str instance)
+    arc_data['status_name'] = arc_data.status.map(lambda x: str(ReferenceLineStatus(x)).split('.')[-1].split('|')[-1])
     arc_data['status_name'] = arc_data['status_name'].astype('category')
+        
+    # Make one-hot columns for status_names.
+    status_dummies = arc_data.status_name.str.get_dummies()
+    arc_data['isUsed'] = status_dummies.get('DETECTORMAP_USED', False).astype(bool)
+    arc_data['isReserved'] = status_dummies.get('DETECTORMAP_RESERVED', False).astype(bool)
+
+    # Filter to only the used or reserved.
+    arc_data = arc_data.query('isUsed == True or isReserved == True').copy()
+
+    arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
 
     # Make a one-hot for the Trace.
     arc_data['isTrace'] = False
