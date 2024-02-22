@@ -75,12 +75,24 @@ def getArclineData(arcLines: ArcLineSet,
     arc_data = arcLines.data.copy()
 
     if removeFlagged:
-        arc_data = arc_data.query('flag == False')
+        arc_data = arc_data.query('flag == False').copy()
+        
+    # Get USED and RESERVED status.
+    is_reserved = (arc_data.status & ReferenceLineStatus.DETECTORMAP_RESERVED) != 0
+    is_used = (arc_data.status & ReferenceLineStatus.DETECTORMAP_USED) != 0
+    
+    # Make one-hot columns for status_names.
+    arc_data.loc[:, 'isUsed'] = is_used
+    arc_data.loc[:, 'isReserved'] = is_reserved
 
+    # Filter to only the RESERVED and USED data.
+    arc_data = arc_data[is_used | is_reserved]
+    
+    # Drop empty rows.
     if dropNaColumns:
         arc_data = arc_data.dropna(axis=1, how='all')
 
-    # Drop rows without enough info.
+    # Drop rows without enough info in position.
     arc_data = arc_data.dropna(subset=['x', 'y'])
 
     # Change some of the dtypes explicitly.
@@ -88,19 +100,10 @@ def getArclineData(arcLines: ArcLineSet,
 
     # Replace inf with nans.
     arc_data = arc_data.replace([np.inf, -np.inf], np.nan)
-
+    
     # Get status names. (the .name attribute doesn't work properly so need the str instance)
-    arc_data['status_name'] = arc_data.status.map(lambda x: str(ReferenceLineStatus(x)).split('.')[-1].split('|')[-1])
+    arc_data['status_name'] = arc_data.status.map(lambda x: str(ReferenceLineStatus(x)).split('.')[-1])
     arc_data['status_name'] = arc_data['status_name'].astype('category')
-        
-    # Make one-hot columns for status_names.
-    status_dummies = arc_data.status_name.str.get_dummies()
-    arc_data['isUsed'] = status_dummies.get('DETECTORMAP_USED', False).astype(bool)
-    arc_data['isReserved'] = status_dummies.get('DETECTORMAP_RESERVED', False).astype(bool)
-
-    # Filter to only the used or reserved.
-    arc_data = arc_data.query('isUsed == True or isReserved == True').copy()
-
     arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
 
     # Make a one-hot for the Trace.
@@ -179,7 +182,7 @@ def getTargetType(arc_data, pfsConfig):
     # Add TargetType for each fiber.
     arc_data = arc_data.merge(pd.DataFrame({
         'fiberId': pfsConfig.fiberId,
-        'targetType': [TargetType(x).name for x in pfsConfig.targetType]
+        'targetType': [str(TargetType(x)) for x in pfsConfig.targetType]
     }), left_on='fiberId', right_on='fiberId')
     arc_data['targetType'] = arc_data.targetType.astype('category')
 
