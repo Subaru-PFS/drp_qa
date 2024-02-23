@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.axes import Axes
 from scipy.stats import iqr
 import pandas as pd
 import seaborn as sb
@@ -15,7 +16,22 @@ from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
 div_palette = plt.cm.RdBu_r.with_extremes(over='magenta', under='cyan', bad='lime')
 
 
-def iqr_sigma(x):
+def iqr_sigma(x) -> float:
+    """Calculate the sigma of the interquartile range as a robust estimate of the std.
+
+    Note: This will ignore NaNs.
+
+    Parameters
+    ----------
+    x : `numpy.ndarray`
+        The data.
+
+
+    Returns
+    -------
+    sigma : `float`
+        The sigma of the interquartile range.
+    """
     return iqr(x, nan_policy='omit') / 1.349
 
 
@@ -30,12 +46,28 @@ def plotResiduals1D(arcLines: ArcLineSet,
                     ) -> plt.Figure:
     """Plot the residuals as a function of wavelength and fiberId.
 
-    Parameters:
-        arcLines: The arc lines.
-        detectorMap: The detector map.
+    Parameters
+    ----------
+    arcLines : `ArcLineSet`
+        The arc lines.
+    detectorMap : `DetectorMap`
+        The detector map.
+    arcData : `pd.DataFrame`
+        The arc data.
+    showAllRange : `bool`
+        Show the full range of residuals. Default is ``False``.
+    xrange : `float`
+        The range of the x-axis. Default is 0.2.
+    wrange : `float`
+        The range of the y-axis. Default is 0.03.
+    pointSize : `float`
+        The size of the points. Default is 0.2.
+    quivLength : `float`
+        The length of the quiver. Default is 0.2.
 
-    Returns:
-        The figure.
+    Returns
+    -------
+    fig1 : `plt.Figure`
     """
     fmin, fmax = np.amin(arcLines.fiberId), np.amax(arcLines.fiberId)
     dmapUsed = (arcLines.status & ReferenceLineStatus.DETECTORMAP_USED) != 0
@@ -371,22 +403,34 @@ def plotResiduals2D(arcData: pd.DataFrame,
 
     Parameters
     ----------
-    positionCol: `str`
-        The column to plot for the position residuals. Default is 'dx'.
-    wavelengthCol: `str`
-        The column to plot for the wavelength residuals. Default is 'dy'.
-    showWavelength: `bool`
-        Show the y-axis. Default is ``True``.
-    hexBin: `bool`
-        Use hexbin plot. Default is ``True``.
-    gridsize: `int`
-        Grid size for hexbin plot. Default is 250.
-    plotKws: `dict`
-        Arguments passed to plotting function.
+    arcData : `pd.DataFrame`
+        The arc data.
+    detectorMap : `DetectorMap`, optional
+        The detector map. Default is ``None``.
+    reservedOnly : `bool`, optional
+        Show only reserved data? Default is ``True``.
+    positionCol : `str`, optional
+        The column to use for the position. Default is ``'dx'``.
+    wavelengthCol : `str`, optional
+        The column to use for the wavelength. Default is ``'dy'``.
+    showWavelength : `bool`, optional
+        Show the wavelength? Default is ``False``.
+    hexBin : `bool`, optional
+        Use hexbin? Default is ``False``.
+    gridsize : `int`, optional
+        The gridsize. Default is 250.
+    plotKws : `dict`, optional
+        The plot keywords. Default is ``None``.
+    title : `str`, optional
+        The title. Default is ``None``.
+    addCursor : `bool`, optional
+        Add cursor? Default is ``False``.
+    showLabels : `bool`, optional
+        Show labels? Default is ``True``.
 
     Returns
     -------
-    fig: `matplotlib.figure.Figure`
+    fig : `Figure`
     """
     plotKws = plotKws or dict()
     plotKws.setdefault('cmap', div_palette)
@@ -450,7 +494,27 @@ def plotResiduals2D(arcData: pd.DataFrame,
     return fig
 
 
-def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None):
+def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) -> Figure:
+    """Plot the 1D and 2D residuals on a single figure.
+
+    Parameters
+    ----------
+    data : `pandas.DataFrame`
+        The data.
+    column : `str`, optional
+        The column to use. Default is ``'dx'``.
+    use_dm_layout : `bool`, optional
+        Use the detector map layout? Default is ``True``.
+    vmin : `float`, optional
+        The minimum value. Default is ``None``.
+    vmax : `float`, optional
+        The maximum value. Default is ``None``.
+
+    Returns
+    -------
+    fig : `Figure`
+    """
+
     plot_data = data.melt(
         id_vars=['fiberId', 'wavelength', 'x', 'y', 'isTrace', column],
         value_vars=['isUsed', 'isReserved'],
@@ -599,7 +663,38 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
                             ymin=-0.1, ymax=0.1, palette=None,
                             ax=None, refline=None, vertical=False,
                             rasterized=False,
-                            ):
+                            ) -> Axes:
+    """Make a scatterplot with outliers marked.
+
+    Parameters
+    ----------
+    data : `pandas.DataFrame`
+        The data.
+    X : `str`
+        The x column.
+    Y : `str`
+        The y column.
+    hue : `str`, optional
+        The hue column. Default is ``'status_name'``.
+    ymin : `float`, optional
+        The minimum y value. Default is -0.1.
+    ymax : `float`, optional
+        The maximum y value. Default is 0.1.
+    palette : `dict`, optional
+        The palette. Default is ``None``.
+    ax : `matplotlib.axes.Axes`, optional
+        The axes. Default is ``None``.
+    refline : `float`, optional
+        The reference line. Default is ``None``.
+    vertical : `bool`, optional
+        Is the plot vertical? Default is ``False``.
+    rasterized : `bool`, optional
+        Rasterize the plot? Default is ``False``.
+
+    Returns
+    -------
+    ax : `matplotlib.axes.Axes`
+    """
     ax = sb.scatterplot(
         data=data,
         x=X,
