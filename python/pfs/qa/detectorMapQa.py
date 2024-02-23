@@ -82,7 +82,7 @@ class PlotResidualTask(Task):
         spectrograph = pfsArm.identity.spectrograph
         dataIdStr = f'v{visit}-{arm}{spectrograph}'
         rerun_name = ''
-        
+
         title_str = f'{visit:06}-{arm}{spectrograph}'
         self.log.info(f'Getting data for {title_str}')
 
@@ -102,15 +102,16 @@ class PlotResidualTask(Task):
 
         self.log.info(f"Number of fibers: {num_fibers}")
         self.log.info(f"Number of Measured lines: {num_lines}")
-        
+
         output_fn = f'dm-residuals-{dataIdStr}.pdf'
         with PdfPages(output_fn) as pdf:
             for column in ['dx', 'dy_nm']:
                 self.log.debug(f'Generating {column} plot for v{visit}-{arm}{spectrograph}')
                 fig = plotting.plotResidual(arc_data, column=column)
-                fig.suptitle(f'DetectorMap Residuals\nv{visit}-{arm}{spectrograph}\n{rerun_name}\n{column}', weight='bold')
+                fig.suptitle(f'DetectorMap Residuals\nv{visit}-{arm}{spectrograph}\n{rerun_name}\n{column}',
+                             weight='bold')
                 pdf.savefig(fig, dpi=150)
-        
+
         self.log.info(f'File saved to {output_fn}')
 
         return Struct()

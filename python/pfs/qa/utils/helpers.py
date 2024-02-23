@@ -19,16 +19,16 @@ warnings.filterwarnings('ignore', message='Mean of empty slice')
 warnings.filterwarnings('ignore', message='This figure')
 
 
-def getObjects(dataId: Path, 
-               rerun: Path, 
+def getObjects(dataId: Path,
+               rerun: Path,
                calibDir: Path = '/work/drp/CALIB',
                butler: dafPersist.Butler = None):
     if butler is None:
         butler = dafPersist.Butler(rerun.as_posix(), calibRoot=calibDir.as_posix())
-        
+
     arcLines = butler.get('arcLines', dataId)
-    detectorMap = butler.get('detectorMap_used', dataId)    
-    
+    detectorMap = butler.get('detectorMap_used', dataId)
+
     return arcLines, detectorMap
 
 
@@ -76,18 +76,18 @@ def getArclineData(arcLines: ArcLineSet,
 
     if removeFlagged:
         arc_data = arc_data.query('flag == False').copy()
-        
+
     # Get USED and RESERVED status.
     is_reserved = (arc_data.status & ReferenceLineStatus.DETECTORMAP_RESERVED) != 0
     is_used = (arc_data.status & ReferenceLineStatus.DETECTORMAP_USED) != 0
-    
+
     # Make one-hot columns for status_names.
     arc_data.loc[:, 'isUsed'] = is_used
     arc_data.loc[:, 'isReserved'] = is_reserved
 
     # Filter to only the RESERVED and USED data.
     arc_data = arc_data[is_used | is_reserved]
-    
+
     # Drop empty rows.
     if dropNaColumns:
         arc_data = arc_data.dropna(axis=1, how='all')
@@ -100,7 +100,7 @@ def getArclineData(arcLines: ArcLineSet,
 
     # Replace inf with nans.
     arc_data = arc_data.replace([np.inf, -np.inf], np.nan)
-    
+
     # Get status names. (the .name attribute doesn't work properly so need the str instance)
     arc_data['status_name'] = arc_data.status.map(lambda x: str(ReferenceLineStatus(x)).split('.')[-1])
     arc_data['status_name'] = arc_data['status_name'].astype('category')
