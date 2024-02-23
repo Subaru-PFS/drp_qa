@@ -37,8 +37,6 @@ class PlotResidualConfig(Config):
     showAllRange = Field(dtype=bool, default=False, doc="Show all data points in a plot?")
     xrange = Field(dtype=float, default=0.2, doc="Range of the residual (X center) in a plot in pix.")
     wrange = Field(dtype=float, default=0.03, doc="Range of the residual (wavelength) in a plot in nm.")
-    pointSize = Field(dtype=float, default=0.2, doc="Point size in plots.")
-    quivLength = Field(dtype=float, default=0.2, doc="Quiver length in plots")
 
 
 class PlotResidualTask(Task):
@@ -326,7 +324,6 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.makeSubtask("plotResidual")
-        # self.makeSubtask("overlapRegionLines")
         self.debugInfo = lsstDebug.Info(__name__)
 
     def runQuantum(
@@ -400,30 +397,6 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
 
         for detectorMap, arcLines, pfsArm in zip(detectorMapList, arcLinesList, pfsArmList):
             self.plotResidual.run(detectorMap, arcLines, pfsArm)
-            # for dd, aa, pp in zip(detectorMap, arcLines, pfsArm):
-            #     self.plotResidual.run(dd, aa, pp)
-
-            # Overlapping regions code.
-            #
-            # arm = np.array([pp.identity.arm for pp in pfsArm])
-            # brId = np.logical_or(arm == "b", arm == "r")
-            # rnId = np.logical_or(arm == "r", arm == "n")
-            # if np.sum(brId) == 2:
-            #     detectorMapBR, arcLinesBR, pfsArmBR = [], [], []
-            #     for i in range(brId.size):
-            #         if brId[i]:
-            #             detectorMapBR.append(detectorMap[i])
-            #             arcLinesBR.append(arcLines[i])
-            #             pfsArmBR.append(pfsArm[i])
-            #     self.overlapRegionLines.run(detectorMapBR, arcLinesBR, pfsArmBR)
-            # if np.sum(rnId) == 2:
-            #     detectorMapRN, arcLinesRN, pfsArmRN = [], [], []
-            #     for i in range(rnId.size):
-            #         if rnId[i]:
-            #             detectorMapRN.append(detectorMap[i])
-            #             arcLinesRN.append(arcLines[i])
-            #             pfsArmRN.append(pfsArm[i])
-            #     self.overlapRegionLines.run(detectorMapRN, arcLinesRN, pfsArmRN)
 
     def _getMetadataName(self):
         return None
