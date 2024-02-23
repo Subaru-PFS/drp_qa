@@ -2,10 +2,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import iqr
 import pandas as pd
+import seaborn as sb
 
 from matplotlib import colors
 from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from matplotlib.gridspec import GridSpec
 
 from pfs.drp.stella.utils import addPfsCursor
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
@@ -446,3 +448,203 @@ def plotResiduals2D(arcData: pd.DataFrame,
         ax.format_coord = addPfsCursor(None, detectorMap)
 
     return fig
+
+
+def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None):
+    plot_data = data.melt(
+        id_vars=['fiberId', 'wavelength', 'x', 'y', 'isTrace', column], 
+        value_vars=['isUsed', 'isReserved'],
+        var_name='status').query('value == True')
+
+    if column.startswith('dy'):
+        plot_data = plot_data.query('isTrace == False').copy()
+
+    reserved_data = plot_data.query('status == "isReserved"')
+
+    spatial_avg = plot_data.groupby(['fiberId', 'status'])[column].agg(['median', iqr_sigma, 'count']).reset_index()
+    wavelength_avg = plot_data.groupby(['fiberId', 'status'])[column].agg(['median', iqr_sigma, 'count']).reset_index()
+
+    pal = dict(zip(wavelength_avg.status.unique(), plt.cm.tab10.colors))
+    pal_colors = [pal[x] for x in wavelength_avg.status]
+
+    stats_df = plot_data.groupby('status')[column].agg(['median', iqr_sigma])
+
+    if column == 'dy_nm':
+        units = 'nm'
+        vmin = vmin or -0.1
+        vmax = vmax or 0.1
+    else:
+        units = 'pix'
+        vmin = vmin or -0.6
+        vmax = vmax or 0.6
+
+    fig = plt.figure(figsize=(10, 10), layout='constrained')
+
+    gs = GridSpec(2, 2, width_ratios=[4, 1], height_ratios=[1, 4], figure=fig)
+    ax0 = fig.add_subplot(gs[0])
+    ax1 = fig.add_subplot(gs[1])
+    ax2 = fig.add_subplot(gs[2])
+    ax3 = fig.add_subplot(gs[3])
+
+    # Upper row
+    # Fiber residual
+    # Just the errors, no markers
+    ax0.errorbar(spatial_avg.fiberId, spatial_avg['median'], spatial_avg.iqr_sigma, 
+                 ls='', ecolor=pal_colors, alpha=0.5,
+                )
+    
+    # Scatterplot with outliers marked.
+    ax0 = scatterplotWithOutliers(
+        spatial_avg, 
+        'fiberId', 
+        'median', 
+        hue='status', 
+        ymin=vmin, 
+        ymax=vmax, 
+        palette=pal, 
+        ax=ax0,
+        refline=0,
+    )
+    ax0.legend(loc='lower right', shadow=True, prop=dict(family='monospace', weight='bold'), bbox_to_anchor=(1.2, 0))
+    
+    if use_dm_layout is True:
+        # Reverse the fiber order to match the xy-pixel layout
+        ax0.set_xlim(list(reversed(ax0.get_xlim())))
+        
+    ax0.set_ylabel(f'Δ {units}')
+    ax0.xaxis.set_label_position('top')
+    ax0.set_xlabel('')
+    ax0.xaxis.tick_top()
+    ax0.set_title(f'Median fiber residual and 1-sigma error', weight='bold', fontsize='small')
+    legend = ax0.get_legend()
+    legend.set_title('')
+    legend.set_visible(False)
+
+    # Summary stats area is blank.
+    ax1.set_xticks([])
+    ax1.set_yticks([])
+    ax1.set_xticklabels([])
+    ax1.set_yticklabels([])
+    ax1.spines['top'].set_visible(False)
+    ax1.spines['bottom'].set_visible(False)
+    ax1.spines['left'].set_visible(False)
+    ax1.spines['right'].set_visible(False)
+
+    # Lower row
+    # 2d residual
+    norm = colors.Normalize(vmin=vmin, vmax=vmax)
+    if use_dm_layout:
+        X = 'x'
+        Y = 'y'
+    else:
+        X = 'fiberId'
+        Y = 'wavelength'
+
+    im = ax2.scatter(reserved_data[X], 
+                     reserved_data[Y], 
+                     c=reserved_data[column],
+                     norm=norm,
+                     cmap=div_palette,
+                     s=4
+                    )
+    fig.colorbar(im, ax=ax2, orientation='horizontal', extend='both', fraction=0.02, aspect=75, pad=0.01)
+    ax2.set_ylabel(Y)
+    ax2.set_xlabel(X)
+    resid_stats = f'{reserved_data[column].median():.06f} {iqr_sigma(reserved_data[column]):.06f}'
+    ax2.set_title(f'2D residual of RESERVED', weight='bold', fontsize='small')
+
+    # Wavelength residual
+    ax3 = scatterplotWithOutliers(
+        plot_data, 
+        column, 
+        'wavelength', 
+        hue='status', 
+        ymin=vmin, 
+        ymax=vmax, 
+        palette=pal, 
+        ax=ax3,
+        refline=0.,
+        vertical=True,
+    )
+    ax3.get_legend().set_visible(False)
+
+    ax3.yaxis.set_label_position('right')
+    ax3.yaxis.tick_right()
+    ax3.set_xlabel(f'Δ {units}')
+    ax3.set_title('Residual by wavelength', weight='bold', fontsize='small')
+
+    fig.suptitle(f'DetectorMap Residuals', weight='bold')
+    
+    # Make a legend with stats.
+    reserved_stats_str = f'RESERVED\n{stats_df.loc["isReserved"].to_string()}'
+    used_stats_str = f'USED\n{stats_df.loc["isUsed"].to_string()}'
+    handles, labels = ax0.get_legend_handles_labels()
+    handles = handles[:2] # Remove the outliers markers
+    labels = [reserved_stats_str, used_stats_str]
+    fig.legend(handles=handles, 
+               labels=labels, 
+               labelspacing=2,
+               prop=dict(family='monospace', weight='bold'), 
+               loc='upper right',
+               bbox_to_anchor=(0.97, 0.885),
+               title=f'Overall Stats ({units})',
+               title_fontproperties=dict(weight='bold')
+              )    
+
+    return fig
+
+
+def scatterplotWithOutliers(data, X, Y, hue='status_name', 
+                            ymin=-0.1, ymax=0.1, palette=None, 
+                            ax=None, refline=None, vertical=False,
+                           ):
+    ax = sb.scatterplot(
+        data=data,
+        x=X,
+        y=Y,
+        hue=hue,
+        s=20,
+        ec='k',
+        zorder=100,
+        palette=palette,
+        ax=ax
+    )
+
+    pos = data.query(f'{X if vertical else Y} >= @ymax').copy()
+    pos[X if vertical else Y] = ymax
+    neg = data.query(f'{X if vertical else Y} <= @ymin').copy()
+    neg[X if vertical else Y] = ymin
+
+    marker = 'v'
+    if vertical is True:
+        marker = '<'
+
+    sb.scatterplot(data=pos, x=X, y=Y, hue=hue, palette=palette,
+                   legend=False, 
+                   marker=marker, ec='k', lw=0.5, s=100, 
+                   clip_on=False, zorder=100, ax=ax
+                  )
+    
+    marker = '^'
+    if vertical is True:
+        marker = '>'
+    sb.scatterplot(data=neg, x=X, y=Y, hue=hue, palette=palette,
+                   legend=False, 
+                   marker=marker, ec='k', lw=0.5, s=100, 
+                   clip_on=False, zorder=100, ax=ax
+                  )
+
+    
+    # Reference line.
+    if isinstance(refline, (float, int)):
+        if vertical:
+            ax.axvline(refline, color='k', ls='--', alpha=0.5, zorder=-100)
+        else:
+            ax.axhline(refline, color='k', ls='--', alpha=0.5, zorder=-100)
+    
+    if vertical is True:
+        ax.set_xlim(ymin, ymax)
+    else:
+        ax.set_ylim(ymin, ymax)
+    
+    return ax
