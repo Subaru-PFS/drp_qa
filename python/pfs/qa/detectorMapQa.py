@@ -4,6 +4,7 @@ from typing import Iterable
 
 import lsstDebug
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 from scipy.stats import iqr
 
@@ -79,24 +80,18 @@ class PlotResidualTask(Task):
         visit = pfsArm.identity.visit
         arm = pfsArm.identity.arm
         spectrograph = pfsArm.identity.spectrograph
-
+        dataIdStr = f'v{visit}-{arm}{spectrograph}'
+        rerun_name = ''
+        
         title_str = f'{visit:06}-{arm}{spectrograph}'
         self.log.info(f'Getting data for {title_str}')
 
         try:
-            arc_data = helpers.getArclineData(arcLines, dropNaColumns=True)
-            arc_data = helpers.addTraceLambdaToArclines(arc_data, detectorMap)
-            arc_data = helpers.addResidualsToArclines(arc_data)
+            arc_data = helpers.loadData(arcLines, detectorMap)
+            arc_data.reset_index(drop=True, inplace=True)
         except Exception as e:
-            self.log.error(f'Error {e}')
+            self.log.error(f'Not enough data for {dataIdStr}')
             return
-
-        # Add dataId info to dataframe.
-        arc_data['arm'] = arm
-        arc_data['spectrograph'] = spectrograph
-        arc_data['visit'] = visit
-
-        arc_data.reset_index(drop=True, inplace=True)
 
         num_fibers = len(arc_data.fiberId.unique())
         num_lines = len(arc_data)
@@ -107,50 +102,16 @@ class PlotResidualTask(Task):
 
         self.log.info(f"Number of fibers: {num_fibers}")
         self.log.info(f"Number of Measured lines: {num_lines}")
-
-        # Plot the 1D residuals.
-        self.log.info(f"Plotting 1D residuals for {title_str}")
-        try:
-            fig = plotting.plotResiduals1D(arcLines, detectorMap, arc_data)
-            fig.set_size_inches(10, 8)
-            fig.suptitle(f"Detector map residual {title_str}")
-            fn = f'dmapQAPlot-1D-{title_str}.png'
-            fig.savefig(fn, format="png")
-            self.log.info(f'1D plot saved to {fn}')
-        except Exception as e:
-            self.log.error(f'Error {e}')
-
-        # Plot the 2D residuals.
-        self.log.info(f"Plotting 2D residuals for {title_str}")
-        try:
-            fig1 = plotting.plotResiduals2D(arc_data,
-                                            detectorMap=detectorMap,
-                                            showLabels=False,
-                                            title=f'{title_str}',
-                                            plotKws=dict(vmin=-0.1, vmax=0.1)
-                                            )
-            fig1.set_size_inches(10, 8)
-            fig1.set_tight_layout('inches')
-            fn = f'dmapQAPlot-2D-dx-{title_str}.png'
-            fig1.savefig(fn, format="png")
-            self.log.info(f'2D dx plot saved to {fn}')
-
-            fig1 = plotting.plotResiduals2D(arc_data,
-                                            detectorMap=detectorMap,
-                                            showWavelength=True,
-                                            showLabels=False,
-                                            title=f'{title_str}',
-                                            plotKws=dict(vmin=-0.1, vmax=0.1)
-                                            )
-            fig1.set_size_inches(10, 8)
-            fig1.set_tight_layout('inches')
-            fn = f'dmapQAPlot-2D-dy-{title_str}.png'
-            fig1.savefig(fn, format="png")
-            self.log.info(f'2D dy plot saved to {fn}')
-        except Exception as e:
-            self.log.error(f'Error {e}')
-
-        plt.close('all')
+        
+        output_fn = f'dm-residuals-{dataIdStr}.pdf'
+        with PdfPages(output_fn) as pdf:
+            for column in ['dx', 'dy_nm']:
+                self.log.debug(f'Generating {column} plot for v{visit}-{arm}{spectrograph}')
+                fig = plotting.plotResidual(arc_data, column=column)
+                fig.suptitle(f'DetectorMap Residuals\nv{visit}-{arm}{spectrograph}\n{rerun_name}\n{column}', weight='bold')
+                pdf.savefig(fig, dpi=150)
+        
+        self.log.info(f'File saved to {output_fn}')
 
         return Struct()
 

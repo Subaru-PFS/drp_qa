@@ -584,8 +584,8 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None):
     labels = [reserved_stats_str, used_stats_str]
     fig.legend(handles=handles, 
                labels=labels, 
-               labelspacing=2,
-               prop=dict(family='monospace', weight='bold'), 
+               labelspacing=1,
+               prop=dict(family='monospace', weight='bold', size='small'), 
                loc='upper right',
                bbox_to_anchor=(0.97, 0.885),
                title=f'Overall Stats ({units})',
