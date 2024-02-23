@@ -565,6 +565,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None):
         ax=ax3,
         refline=0.,
         vertical=True,
+        rasterized=True,
     )
     ax3.get_legend().set_visible(False)
 
@@ -597,6 +598,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None):
 def scatterplotWithOutliers(data, X, Y, hue='status_name', 
                             ymin=-0.1, ymax=0.1, palette=None, 
                             ax=None, refline=None, vertical=False,
+                            rasterized=False,
                            ):
     ax = sb.scatterplot(
         data=data,
@@ -607,6 +609,7 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
         ec='k',
         zorder=100,
         palette=palette,
+        rasterized=rasterized,
         ax=ax
     )
 
