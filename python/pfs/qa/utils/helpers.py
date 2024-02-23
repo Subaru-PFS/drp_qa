@@ -22,7 +22,25 @@ warnings.filterwarnings('ignore', message='This figure')
 def getObjects(dataId: Path,
                rerun: Path,
                calibDir: Path = '/work/drp/CALIB',
-               butler: dafPersist.Butler = None):
+               butler: dafPersist.Butler = None) -> (ArcLineSet, DetectorMap):
+    """Get the objects from the butler.
+
+    Parameters
+    ----------
+    dataId : `Path`
+        The dataId for the butler.
+    rerun : `Path`
+        The rerun directory.
+    calibDir : `Path`, optional
+        The calib directory. Default is '/work/drp/CALIB'.
+    butler : `dafPersist.Butler`, optional
+        The butler to use. Default is None.
+
+    Returns
+    -------
+    arcLines : `ArcLineSet`
+    detectorMap : `DetectorMap`
+    """
     if butler is None:
         butler = dafPersist.Butler(rerun.as_posix(), calibRoot=calibDir.as_posix())
 
@@ -41,9 +59,16 @@ def loadData(arcLines: ArcLineSet, detectorMap: DetectorMap, dropNaColumns: bool
 
     Parameters
     ----------
+    arcLines : `ArcLineSet`
+        The arc lines.
+    detectorMap : `DetectorMap`
+        The detector map.
     dropNaColumns : `bool`, optional
         Drop columns where all values are NaN. Default is True.
 
+    Returns
+    -------
+    arcData : `pandas.DataFrame`
     """
 
     # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
@@ -62,6 +87,8 @@ def getArclineData(arcLines: ArcLineSet,
 
     Parameters
     ----------
+    arcLines : `ArcLineSet`
+        The arc lines.
     dropNaColumns : `bool`, optional
         Drop columns where all values are NaN. Default is True.
     removeFlagged : `bool`, optional
@@ -117,6 +144,18 @@ def getArclineData(arcLines: ArcLineSet,
 def addTraceLambdaToArclines(arc_data: pd.DataFrame, detectorMap: DetectorMap) -> pd.DataFrame:
     """Adds detector map trace position and wavelength to arcline data.
 
+    This will add the following columns to the arcline data:
+
+    - ``lam``: Wavelength according to the detectormap for fiberId.
+    - ``lamErr``: Error in wavelength.
+    - ``dispersion``: Dispersion at the center of the detector.
+    - ``tracePos``: Trace position according to the detectormap.
+
+    Parameters
+    ----------
+    arc_data : `pandas.DataFrame`
+    detectorMap : `DetectorMap`
+
     Returns
     -------
     arc_data : `pandas.DataFrame`
@@ -129,7 +168,6 @@ def addTraceLambdaToArclines(arc_data: pd.DataFrame, detectorMap: DetectorMap) -
     arc_data['lamErr'] = arc_data.yErr * arc_data.lam / arc_data.y
 
     # Convert nm to pixels.
-    # dispersion = detectorMap.getDispersion(arc_data.fiberId.to_numpy(), arc_data.wavelength.to_numpy())
     dispersion = detectorMap.getDispersionAtCenter()
     arc_data['dispersion'] = dispersion
 
@@ -139,7 +177,7 @@ def addTraceLambdaToArclines(arc_data: pd.DataFrame, detectorMap: DetectorMap) -
     return arc_data
 
 
-def addResidualsToArclines(arc_data: pd.DataFrame, fitYTo: str = 'y') -> pd.DataFrame:
+def addResidualsToArclines(arc_data: pd.DataFrame) -> pd.DataFrame:
     """Adds residuals to arcline data.
 
     This will calculate residuals for the X-center position and wavelength.
@@ -155,8 +193,7 @@ def addResidualsToArclines(arc_data: pd.DataFrame, fitYTo: str = 'y') -> pd.Data
 
     Parameters
     ----------
-    fitYTo : `str`, optional
-        Column to fit Y to. Default is ``y``, could also be ``wavelength``.
+    arc_data : `pandas.DataFrame`
 
     Returns
     -------
@@ -178,7 +215,18 @@ def addResidualsToArclines(arc_data: pd.DataFrame, fitYTo: str = 'y') -> pd.Data
     return arc_data
 
 
-def getTargetType(arc_data, pfsConfig):
+def getTargetType(arc_data, pfsConfig) -> pd.DataFrame:
+    """Add targetType to the arcline data.
+
+    Parameters
+    ----------
+    arc_data : `pandas.DataFrame`
+    pfsConfig : `pfs.datamodel.PfsConfig`
+
+    Returns
+    -------
+    arc_data : `pandas.DataFrame`
+    """
     # Add TargetType for each fiber.
     arc_data = arc_data.merge(pd.DataFrame({
         'fiberId': pfsConfig.fiberId,
