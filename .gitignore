@@ -3,3 +3,5 @@ config.log
 python/pfs/qa/version.py
 .idea
 **/.DS_Store
+**/._*
+**/*egg*
