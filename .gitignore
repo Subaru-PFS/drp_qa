@@ -5,3 +5,7 @@ python/pfs/qa/version.py
 **/.DS_Store
 **/._*
 **/*egg*
+**/.ipynb_checkpoints
+**/__pycache__
+.coverage
+bin
