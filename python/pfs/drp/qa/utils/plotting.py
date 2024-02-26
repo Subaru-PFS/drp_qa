@@ -524,6 +524,8 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) ->
         plot_data = plot_data.query('isTrace == False').copy()
 
     reserved_data = plot_data.query('status == "isReserved"')
+    if len(reserved_data) == 0:
+        return None
 
     spatial_avg = plot_data.groupby(['fiberId', 'status'])[column].agg(['median', iqr_sigma, 'count']).reset_index()
     wavelength_avg = plot_data.groupby(['fiberId', 'status'])[column].agg(['median', iqr_sigma, 'count']).reset_index()
@@ -631,7 +633,11 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) ->
         vertical=True,
         rasterized=True,
     )
-    ax3.get_legend().set_visible(False)
+    try:
+        ax3.get_legend().set_visible(False)
+    except AttributeError:
+        # Skip missing wavelength legend.
+        pass
 
     ax3.yaxis.set_label_position('right')
     ax3.yaxis.tick_right()

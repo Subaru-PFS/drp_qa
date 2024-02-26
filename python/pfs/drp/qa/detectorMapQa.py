@@ -100,9 +100,11 @@ class PlotResidualTask(Task):
             for column in ['dx', 'dy_nm']:
                 self.log.debug(f'Generating {column} plot for v{visit}-{arm}{spectrograph}')
                 fig = plotting.plotResidual(arc_data, column=column)
-                fig.suptitle(f'DetectorMap Residuals\nv{visit}-{arm}{spectrograph}\n{rerun_name}\n{column}',
-                             weight='bold')
-                pdf.savefig(fig, dpi=150)
+                if fig is not None:
+                    fig.suptitle(f'DetectorMap Residuals\nv{visit}-{arm}{spectrograph}\n{rerun_name}\n{column}', weight='bold')
+                    pdf.savefig(fig, dpi=150)
+                else:
+                    self.log.info(f'Skipping wavelength')
 
         self.log.info(f'File saved to {output_fn}')
 
