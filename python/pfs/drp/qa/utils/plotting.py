@@ -494,7 +494,7 @@ def plotResiduals2D(arcData: pd.DataFrame,
     return fig
 
 
-def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) -> Figure:
+def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, binWavelength=None) -> Figure:
     """Plot the 1D and 2D residuals on a single figure.
 
     Parameters
@@ -514,9 +514,17 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) ->
     -------
     fig : `Figure`
     """
-
+    # Wavelength residual
+    data['bin'] = 1
+    bin_wl = False
+    if isinstance(binWavelength, (int, float)):
+        bins = np.arange(data.wavelength.min() - 1, data.wavelength.max() + 1, binWavelength)
+        s_cut, bins = pd.cut(data.wavelength, bins=bins, retbins=True, labels=False)
+        data['bin'] = pd.Categorical(s_cut)
+        bin_wl = True
+        
     plot_data = data.melt(
-        id_vars=['fiberId', 'wavelength', 'x', 'y', 'isTrace', column],
+        id_vars=['fiberId', 'wavelength', 'x', 'y', 'isTrace', 'bin', column],
         value_vars=['isUsed', 'isReserved'],
         var_name='status').query('value == True')
 
@@ -528,12 +536,10 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) ->
         return None
 
     spatial_avg = plot_data.groupby(['fiberId', 'status'])[column].agg(['median', iqr_sigma, 'count']).reset_index()
-    wavelength_avg = plot_data.groupby(['fiberId', 'status'])[column].agg(['median', iqr_sigma, 'count']).reset_index()
-
-    pal = dict(zip(wavelength_avg.status.unique(), plt.cm.tab10.colors))
-    pal_colors = [pal[x] for x in wavelength_avg.status]
-
     stats_df = plot_data.groupby('status')[column].agg(['median', iqr_sigma])
+
+    pal = dict(zip(spatial_avg.status.unique(), plt.cm.tab10.colors))
+    pal_colors = [pal[x] for x in spatial_avg.status]
 
     if column == 'dy_nm':
         units = 'nm'
@@ -618,8 +624,10 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) ->
     ax2.set_xlabel(X)
     resid_stats = f'{reserved_data[column].median():.06f} {iqr_sigma(reserved_data[column]):.06f}'
     ax2.set_title(f'2D residual of RESERVED', weight='bold', fontsize='small')
-
-    # Wavelength residual
+        
+    if bin_wl is True:
+        plot_data = plot_data.groupby(['bin', 'status'])[['wavelength', column]].agg('median', iqr_sigma).dropna().reset_index().sort_values('status')
+    
     ax3 = scatterplotWithOutliers(
         plot_data,
         column,
@@ -642,7 +650,10 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) ->
     ax3.yaxis.set_label_position('right')
     ax3.yaxis.tick_right()
     ax3.set_xlabel(f'Δ {units}')
-    ax3.set_title('Residual by wavelength', weight='bold', fontsize='small')
+    ax_title = f'Residual by {"binned" if bin_wl else ""} wavelength'
+    if bin_wl:
+        ax_title += f'\nbinsize={binWavelength} nm'
+    ax3.set_title(ax_title, weight='bold', fontsize='small')
 
     fig.suptitle(f'DetectorMap Residuals', weight='bold')
 
