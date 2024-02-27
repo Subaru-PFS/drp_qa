@@ -99,13 +99,13 @@ class PlotResidualTask(Task):
         with PdfPages(output_fn) as pdf:
             for column in ['dx', 'dy_nm']:
                 self.log.debug(f'Generating {column} plot for v{visit}-{arm}{spectrograph}')
-                fig = plotting.plotResidual(arc_data, column=column)
-                if fig is not None:
+                try:
+                    fig = plotting.plotResidual(arc_data, column=column)
                     fig.suptitle(f'DetectorMap Residuals\nv{visit}-{arm}{spectrograph}\n{rerun_name}\n{column}',
                                  weight='bold')
                     pdf.savefig(fig, dpi=150)
-                else:
-                    self.log.info(f'Skipping wavelength')
+                except ValueError:
+                    self.log.info(f'No residual wavelength information for v{visit}-{arm}{spectrograph}, skipping')
 
         self.log.info(f'File saved to {output_fn}')
 
