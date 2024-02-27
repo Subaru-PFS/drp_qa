@@ -674,7 +674,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
                prop=dict(family='monospace', weight='bold', size='small'),
                loc='upper right',
                bbox_to_anchor=(0.97, 0.885),
-               title=f'Overall Stats ({units})\n{num_fibers=}\n{num_lines=}',
+               title=f'Overall Stats ({units})',
                title_fontproperties=dict(weight='bold')
                )
 
