@@ -581,6 +581,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
         refline=0,
     )
     ax0.legend(loc='lower right', shadow=True, prop=dict(family='monospace', weight='bold'), bbox_to_anchor=(1.2, 0))
+    ax0.text(0.01, 0.9, f'Number of fibers: {num_fibers}', transform=ax0.transAxes)
 
     if use_dm_layout is True:
         # Reverse the fiber order to match the xy-pixel layout
@@ -649,6 +650,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
     except AttributeError:
         # Skip missing wavelength legend.
         pass
+    ax3.text(0.01, 0.98, f'Number of lines: {len(plot_data)}', transform=ax3.transAxes)
 
     ax3.yaxis.set_label_position('right')
     ax3.yaxis.tick_right()
