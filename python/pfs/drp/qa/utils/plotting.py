@@ -517,11 +517,14 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
     # Wavelength residual
     data['bin'] = 1
     bin_wl = False
-    if isinstance(binWavelength, (int, float)):
+    if isinstance(binWavelength, (int, float)) and binWavelength > 0:
         bins = np.arange(data.wavelength.min() - 1, data.wavelength.max() + 1, binWavelength)
         s_cut, bins = pd.cut(data.wavelength, bins=bins, retbins=True, labels=False)
         data['bin'] = pd.Categorical(s_cut)
         bin_wl = True
+        
+    num_fibers = len(data.fiberId.unique())
+    num_lines = len(data)
         
     plot_data = data.melt(
         id_vars=['fiberId', 'wavelength', 'x', 'y', 'isTrace', 'bin', column],
@@ -533,7 +536,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
 
     reserved_data = plot_data.query('status == "isReserved"')
     if len(reserved_data) == 0:
-        return None
+        raise ValueError('No data')
 
     spatial_avg = plot_data.groupby(['fiberId', 'status'])[column].agg(['median', iqr_sigma, 'count']).reset_index()
     stats_df = plot_data.groupby('status')[column].agg(['median', iqr_sigma])
@@ -669,7 +672,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
                prop=dict(family='monospace', weight='bold', size='small'),
                loc='upper right',
                bbox_to_anchor=(0.97, 0.885),
-               title=f'Overall Stats ({units})',
+               title=f'Overall Stats ({units})\n{num_fibers=}\n{num_lines=}',
                title_fontproperties=dict(weight='bold')
                )
 
@@ -679,7 +682,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
 def scatterplotWithOutliers(data, X, Y, hue='status_name',
                             ymin=-0.1, ymax=0.1, palette=None,
                             ax=None, refline=None, vertical=False,
-                            rasterized=False,
+                            rasterized=False, 
                             ) -> Axes:
     """Make a scatterplot with outliers marked.
 
@@ -712,6 +715,7 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
     -------
     ax : `matplotlib.axes.Axes`
     """
+    # Main plot.
     ax = sb.scatterplot(
         data=data,
         x=X,
@@ -719,36 +723,31 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
         hue=hue,
         s=20,
         ec='k',
+        marker='o' if len(data) < 1e5 else '.',
         zorder=100,
         palette=palette,
         rasterized=rasterized,
         ax=ax
     )
 
+    # Positive outliers.
     pos = data.query(f'{X if vertical else Y} >= @ymax').copy()
     pos[X if vertical else Y] = ymax
+    marker = '<' if vertical is True else 'v'
+    sb.scatterplot(data=pos, x=X, y=Y, hue=hue, palette=palette, legend=False,
+                   marker=marker, ec='k', lw=0.5, s=100,
+                   clip_on=False, zorder=100, ax=ax, 
+                   )
+    
+    # Negative outliers.
     neg = data.query(f'{X if vertical else Y} <= @ymin').copy()
     neg[X if vertical else Y] = ymin
-
-    marker = 'v'
-    if vertical is True:
-        marker = '<'
-
-    sb.scatterplot(data=pos, x=X, y=Y, hue=hue, palette=palette,
-                   legend=False,
+    marker = '>' if vertical is True else '^'
+    sb.scatterplot(data=neg, x=X, y=Y, hue=hue, palette=palette, legend=False,
                    marker=marker, ec='k', lw=0.5, s=100,
                    clip_on=False, zorder=100, ax=ax
                    )
-
-    marker = '^'
-    if vertical is True:
-        marker = '>'
-    sb.scatterplot(data=neg, x=X, y=Y, hue=hue, palette=palette,
-                   legend=False,
-                   marker=marker, ec='k', lw=0.5, s=100,
-                   clip_on=False, zorder=100, ax=ax
-                   )
-
+    
     # Reference line.
     if isinstance(refline, (float, int)):
         if vertical:
@@ -760,5 +759,7 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
         ax.set_xlim(ymin, ymax)
     else:
         ax.set_ylim(ymin, ymax)
+        
+    ax.grid(True, alpha=0.15)
 
     return ax
