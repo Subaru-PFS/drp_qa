@@ -522,10 +522,10 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
         s_cut, bins = pd.cut(data.wavelength, bins=bins, retbins=True, labels=False)
         data['bin'] = pd.Categorical(s_cut)
         bin_wl = True
-        
+
     num_fibers = len(data.fiberId.unique())
     num_lines = len(data)
-        
+
     plot_data = data.melt(
         id_vars=['fiberId', 'wavelength', 'x', 'y', 'isTrace', 'bin', column],
         value_vars=['isUsed', 'isReserved'],
@@ -628,10 +628,11 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
     ax2.set_xlabel(X)
     resid_stats = f'{reserved_data[column].median():.06f} {iqr_sigma(reserved_data[column]):.06f}'
     ax2.set_title(f'2D residual of RESERVED', weight='bold', fontsize='small')
-        
+
     if bin_wl is True:
-        plot_data = plot_data.groupby(['bin', 'status'])[['wavelength', column]].agg('median', iqr_sigma).dropna().reset_index().sort_values('status')
-    
+        binned_data = plot_data.groupby(['bin', 'status'])[['wavelength', column]]
+        plot_data = binned_data.agg('median', iqr_sigma).dropna().reset_index().sort_values('status')
+
     ax3 = scatterplotWithOutliers(
         plot_data,
         column,
@@ -684,7 +685,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
 def scatterplotWithOutliers(data, X, Y, hue='status_name',
                             ymin=-0.1, ymax=0.1, palette=None,
                             ax=None, refline=None, vertical=False,
-                            rasterized=False, 
+                            rasterized=False,
                             ) -> Axes:
     """Make a scatterplot with outliers marked.
 
@@ -738,9 +739,9 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
     marker = '<' if vertical is True else 'v'
     sb.scatterplot(data=pos, x=X, y=Y, hue=hue, palette=palette, legend=False,
                    marker=marker, ec='k', lw=0.5, s=100,
-                   clip_on=False, zorder=100, ax=ax, 
+                   clip_on=False, zorder=100, ax=ax,
                    )
-    
+
     # Negative outliers.
     neg = data.query(f'{X if vertical else Y} <= @ymin').copy()
     neg[X if vertical else Y] = ymin
@@ -749,7 +750,7 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
                    marker=marker, ec='k', lw=0.5, s=100,
                    clip_on=False, zorder=100, ax=ax
                    )
-    
+
     # Reference line.
     if isinstance(refline, (float, int)):
         if vertical:
@@ -761,7 +762,7 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
         ax.set_xlim(ymin, ymax)
     else:
         ax.set_ylim(ymin, ymax)
-        
+
     ax.grid(True, alpha=0.15)
 
     return ax
