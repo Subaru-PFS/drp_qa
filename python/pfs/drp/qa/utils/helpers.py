@@ -204,7 +204,7 @@ def addResidualsToArclines(arc_data: pd.DataFrame) -> pd.DataFrame:
     arc_data['dy_nm'] = arc_data.lam - arc_data.wavelength
 
     # Set the dy columns to NA (instead of 0) for Trace.
-    arc_data.dy_nm = arc_data.apply(lambda row: row.dy_nm if row.isTrace == False else np.NaN, axis=1)
+    arc_data.dy_nm = arc_data.apply(lambda row: row.dy_nm if row.isTrace is False else np.NaN, axis=1)
 
     # Do the dispersion correction to get pixels.
     arc_data['dy'] = arc_data.dy_nm / arc_data.dispersion

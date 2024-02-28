@@ -101,11 +101,10 @@ class PlotResidualTask(Task):
                 self.log.debug(f'Generating {column} plot for v{visit}-{arm}{spectrograph}')
                 try:
                     fig = plotting.plotResidual(arc_data, column=column)
-                    fig.suptitle(f'DetectorMap Residuals\nv{visit}-{arm}{spectrograph}\n{rerun_name}\n{column}',
-                                 weight='bold')
+                    fig.suptitle(f'DetectorMap Residuals\n{dataIdStr}\n{rerun_name}\n{column}', weight='bold')
                     pdf.savefig(fig, dpi=150)
                 except ValueError:
-                    self.log.info(f'No residual wavelength information for v{visit}-{arm}{spectrograph}, skipping')
+                    self.log.info(f'No residual wavelength information for {dataIdStr}, skipping')
 
         self.log.info(f'File saved to {output_fn}')
 

@@ -185,7 +185,7 @@ def plotResiduals1D(arcLines: ArcLineSet,
         ),
     )
     # Show full range on X center plot if requested.
-    if not showAllRange:
+    if showAllRange is False:
         if np.sum(largeX) + np.sum(smallX) > 0:
             bl_ax.quiver(arcLinesMeasured.wavelength[dmReservedMeasured & largeX],
                          np.zeros(np.sum(
@@ -242,7 +242,7 @@ def plotResiduals1D(arcLines: ArcLineSet,
             iqr(residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")]) / 1.349,
         ),
     )
-    if not showAllRange:
+    if showAllRange is False:
         if np.sum(largeW) + np.sum(smallW) > 0:
             tl_ax.quiver(
                 arcLinesMeasured.wavelength[dmUsedMeasured & largeW],
