@@ -614,7 +614,6 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) ->
     fig.colorbar(im, ax=ax2, orientation='horizontal', extend='both', fraction=0.02, aspect=75, pad=0.01)
     ax2.set_ylabel(Y)
     ax2.set_xlabel(X)
-    resid_stats = f'{reserved_data[column].median():.06f} {iqr_sigma(reserved_data[column]):.06f}'
     ax2.set_title(f'2D residual of RESERVED', weight='bold', fontsize='small')
 
     # Wavelength residual
