@@ -190,17 +190,15 @@ def plotResiduals1D(arcLines: ArcLineSet,
     # Show full range on X center plot if requested.
     if showAllRange is False:
         if np.sum(largeX) + np.sum(smallX) > 0:
+            label = (f"Greater than {yxmax:.2f} in absolute value "
+                     f"({np.sum(dmReservedMeasured & largeX) / np.sum(dmReservedMeasured) * 100:.1e}%)")
+
             bl_ax.quiver(arcLinesMeasured.wavelength[dmReservedMeasured & largeX],
                          np.zeros(np.sum(
                              dmReservedMeasured & largeX)) + yxmax - xrange * quivLength,
                          0,
                          xrange * quivLength,
-                         label="Greater than {:.2f} in absolute value ({:.1e}%)".format(
-                             yxmax,
-                             (np.sum(dmReservedMeasured & largeX) + np.sum(dmReservedMeasured & smallX))
-                             / np.sum(dmReservedMeasured)
-                             * 100,
-                         ),
+                         label=label,
                          color="r",
                          angles="xy",
                          scale_units="xy",
