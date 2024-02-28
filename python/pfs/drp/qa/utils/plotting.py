@@ -332,7 +332,7 @@ def plotResiduals1D(arcLines: ArcLineSet,
     # X center residual fiber errors.
     plot_data = arcData.query('isReserved == True')[['fiberId', 'dx', 'status_name']]
     plot_data = plot_data.groupby('fiberId').dx.agg(['median', iqr_sigma]).reset_index()
-    label = f'USED\n'
+    label = 'USED\n'
     label += f'median={plot_data["median"].median():>13.03e}\n'
     label += f'sigma  ={plot_data["iqr_sigma"].median():>13.03e}'
     br_ax.errorbar(
@@ -349,7 +349,7 @@ def plotResiduals1D(arcLines: ArcLineSet,
     plot_data = arcData.query('isTrace == False and isReserved == True')[
         ['fiberId', 'dy_nm', 'status_name']]
     plot_data = plot_data.groupby('fiberId').dy_nm.agg(['median', iqr_sigma]).reset_index()
-    label = f'USED\n'
+    label = 'USED\n'
     label += f'median={plot_data["median"].median():>13.03e}\n'
     label += f'sigma  ={plot_data["iqr_sigma"].median():>13.03e}'
     tr_ax.errorbar(
@@ -527,7 +527,6 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
         bin_wl = True
 
     num_fibers = len(data.fiberId.unique())
-    num_lines = len(data)
 
     plot_data = data.melt(
         id_vars=['fiberId', 'wavelength', 'x', 'y', 'isTrace', 'bin', column],
@@ -541,7 +540,9 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
     if len(reserved_data) == 0:
         raise ValueError('No data')
 
-    spatial_avg = plot_data.groupby(['fiberId', 'status'])[column].agg(['median', iqr_sigma, 'count']).reset_index()
+    spatial_avg = plot_data.groupby(
+        ['fiberId', 'status']
+    )[column].agg(['median', iqr_sigma, 'count']).reset_index()
     stats_df = plot_data.groupby('status')[column].agg(['median', iqr_sigma])
 
     pal = dict(zip(spatial_avg.status.unique(), plt.cm.tab10.colors))
@@ -583,7 +584,11 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
         ax=ax0,
         refline=0,
     )
-    ax0.legend(loc='lower right', shadow=True, prop=dict(family='monospace', weight='bold'), bbox_to_anchor=(1.2, 0))
+    ax0.legend(
+        loc='lower right',
+        shadow=True,
+        prop=dict(family='monospace', weight='bold'), bbox_to_anchor=(1.2, 0)
+    )
     ax0.text(0.01, 0.9, f'Number of fibers: {num_fibers}', transform=ax0.transAxes)
 
     if use_dm_layout is True:
@@ -594,7 +599,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
     ax0.xaxis.set_label_position('top')
     ax0.set_xlabel('')
     ax0.xaxis.tick_top()
-    ax0.set_title(f'Median fiber residual and 1-sigma error', weight='bold', fontsize='small')
+    ax0.set_title('Median fiber residual and 1-sigma error', weight='bold', fontsize='small')
     legend = ax0.get_legend()
     legend.set_title('')
     legend.set_visible(False)
