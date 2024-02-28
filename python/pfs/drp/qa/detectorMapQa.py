@@ -5,6 +5,7 @@ from typing import Iterable
 import lsstDebug
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from scipy.stats import iqr
 
 from lsst.pex.config import Field, ConfigurableField, Config
@@ -18,6 +19,7 @@ from lsst.pipe.base import (
     Task,
     TaskRunner,
 )
+from lsst.daf.persistence.butlerExceptions import NoResults
 
 from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
 from lsst.pipe.base.connectionTypes import Input as InputConnection
@@ -36,6 +38,7 @@ warnings.filterwarnings('ignore', message='addPfsCursor')
 class PlotResidualConfig(Config):
     """Configuration for PlotResidualTask"""
 
+    makeResidualPlots = Field(dtype=bool, default=True, doc="Generate a residual plot for each dataId.")
     useSigmaRange = Field(dtype=bool, default=True, doc='Use ±2.5 sigma as range')
     xrange = Field(dtype=float, default=0.1, doc="Range of the residual (X center) in a plot in pix.")
     wrange = Field(dtype=float, default=0.03, doc="Range of the residual (wavelength) in a plot in nm.")
@@ -68,14 +71,14 @@ class PlotResidualTask(Task):
         dmQaResidualImage : `MultipagePdfFigure`
             Detail plots.
             1D and 2D plots of the residual between the detectormap and the arclines.
-
-        Outputs
-        -------
-        plot : `dm-residuals-{visit}-{arm}{spectrograph}.pdf`
+        dmQaResidualStats : `QaDict`
+            Data to be pickled.
+            Statistics of the residual analysis.
         """
         visit = pfsArm.identity.visit
         arm = pfsArm.identity.arm
         spectrograph = pfsArm.identity.spectrograph
+        ccd = f'{arm}{spectrograph}'
         dataIdStr = f'v{visit}-{arm}{spectrograph}'
 
         title_str = f'{visit:06}-{arm}{spectrograph}'
@@ -84,8 +87,8 @@ class PlotResidualTask(Task):
         try:
             arc_data = helpers.loadData(arcLines, detectorMap)
             arc_data.reset_index(drop=True, inplace=True)
-        except Exception:
-            self.log.error(f'Not enough data for {dataIdStr}')
+        except Exception as e:
+            self.log.error(f'Not enough data for {dataIdStr} {e}')
             return Struct()
 
         num_fibers = len(arc_data.fiberId.unique())
@@ -98,23 +101,55 @@ class PlotResidualTask(Task):
         self.log.info(f"Number of fibers: {num_fibers}")
         self.log.info(f"Number of Measured lines: {num_lines}")
 
+        bbox = detectorMap.getBBox()
+
         dmQaResidualImagePdf = MultipagePdfFigure()
         useSigmaRange = self.config.useSigmaRange
-        for column in ['dx', 'dy_nm']:
-            which_range = 'xrange' if column == 'dx' else 'wrange'
-            slimit = getattr(self.config, which_range) if useSigmaRange is False else None
-            slimit = (-slimit, slimit) if slimit is not None else (None, None)
-            self.log.debug(f'Generating {column} plot for {dataIdStr}')
-            try:
-                fig = plotting.plotResidual(arc_data, column=column, vmin=slimit[0], vmax=slimit[1])
-                fig.suptitle(f'DetectorMap Residuals\n{dataIdStr}\n{column}', weight='bold')
-                dmQaResidualImagePdf.append(fig)
-            except ValueError:
-                self.log.info(f'No residual wavelength information for {dataIdStr}, skipping')
+        xrange = self.config.xrange if useSigmaRange is False else None
+        wrange = self.config.wrange if useSigmaRange is False else None
+        for column in ['xResid', 'yResid']:
+            if self.config.makeResidualPlots is True:
+                self.log.debug(f'Generating {column} plot for {dataIdStr}')
+                try:
+                    fig = plotting.plotResidual(
+                        arc_data,
+                        column=column,
+                        xrange=xrange,
+                        wrange=wrange,
+                        dmWidth=bbox.width,
+                        dmHeight=bbox.height,
+                    )
+                    fig.suptitle(f'DetectorMap Residuals\n{dataIdStr}\n{column}', weight='bold')
+                    dmQaResidualImagePdf.append(fig)
+                except ValueError:
+                    self.log.info(f'No residual wavelength information for {dataIdStr}, skipping')
 
-        return Struct(
-            dmQaResidualImage=dmQaResidualImagePdf
-        )
+        descriptions = sorted(list(arc_data.description.unique()))
+        try:
+            if len(descriptions) > 1:
+                descriptions.remove('Trace')
+        except ValueError:
+            pass
+
+        visitStats = list()
+        for idx, rows in arc_data.groupby('status_type'):
+            visit_stat = pd.json_normalize(helpers.getFitStats(rows).to_dict())
+            visit_stat['ccd'] = ccd
+            visit_stat['status_type'] = idx
+            visit_stat['description'] = ','.join(descriptions)
+            visit_stat['detector_width'] = bbox.width
+            visit_stat['detector_height'] = bbox.height
+            visitStats.append(visit_stat)
+
+        dmQaResidualStats = pd.concat(visitStats).reset_index().to_dict(orient='records')
+
+        if self.config.makeResidualPlots is True:
+            return Struct(
+                dmQaResidualImage=dmQaResidualImagePdf,
+                dmQaResidualStats=dmQaResidualStats
+            )
+        else:
+            return Struct(dmQaResidualStats=dmQaResidualStats)
 
     @classmethod
     def _makeArgumentParser(cls) -> ArgumentParser:
@@ -294,6 +329,12 @@ class DetectorMapQaConnections(
         storageClass="MultipagePdfFigure",
         dimensions=("instrument", "exposure", "detector"),
     )
+    dmQaResidualStats = OutputConnection(
+        name="dmQaResidualStats",
+        doc="Statistics of the residual analysis.",
+        storageClass="QaDict",
+        dimensions=("instrument", "exposure", "detector"),
+    )
 
 
 class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
@@ -372,15 +413,19 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         """
         for specRefList in expSpecRefList:
             for dataRef in specRefList:
-                detectorMap = dataRef.get('detectorMap_used')
-                arcLines = dataRef.get('arcLines')
-                pfsArm = dataRef.get('pfsArm')
+                try:
+                    detectorMap = dataRef.get('detectorMap_used')
+                    arcLines = dataRef.get('arcLines')
+                    pfsArm = dataRef.get('pfsArm')
 
-                # Run the task and get the outputs.
-                outputs = self.run(detectorMap, arcLines, pfsArm)
-                for datasetType, data in outputs.getDict().items():
-                    if data is not None:
-                        dataRef.put(data, datasetType=datasetType)
+                    # Run the task and get the outputs.
+                    outputs = self.run(detectorMap, arcLines, pfsArm)
+                    if outputs is not None:
+                        for datasetType, data in outputs.getDict().items():
+                            if data is not None:
+                                dataRef.put(data, datasetType=datasetType)
+                except NoResults:
+                    self.log.debug('No results, skipping')
 
     def run(self, detectorMap: DetectorMap, arcLines: ArcLineSet, pfsArm: PfsArm) -> Struct:
         """Generate detectorMapQa plots.

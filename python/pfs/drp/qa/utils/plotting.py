@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
-from scipy.stats import iqr
 import pandas as pd
 import seaborn as sb
 
@@ -9,29 +8,23 @@ from matplotlib import colors
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 
+from pfs.drp.qa.utils.helpers import iqr_sigma, getFitStats
+
 div_palette = plt.cm.RdBu_r.with_extremes(over='magenta', under='cyan', bad='lime')
 
 
-def iqr_sigma(x) -> float:
-    """Calculate the sigma of the interquartile range as a robust estimate of the std.
-
-    Note: This will ignore NaNs.
-
-    Parameters
-    ----------
-    x : `numpy.ndarray`
-        The data.
-
-
-    Returns
-    -------
-    sigma : `float`
-        The sigma of the interquartile range.
-    """
-    return iqr(x, nan_policy='omit') / 1.349
-
-
-def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, binWavelength=None) -> Figure:
+def plotResidual(
+        data: pd.DataFrame,
+        column: str = 'xResid',
+        xrange : float = None,
+        wrange : float = None,
+        sigmaRange : int = 2.5,
+        sigmaLines : list = [1.0, 2.5],
+        goodRange: float = None,
+        binWavelength : float = None,
+        useDMLayout: bool = True,
+        dmWidth: int = 4096,
+        dmHeight: int = 4176) -> Figure:
     """Plot the 1D and 2D residuals on a single figure.
 
     Parameters
@@ -39,13 +32,17 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
     data : `pandas.DataFrame`
         The data.
     column : `str`, optional
-        The column to use. Default is ``'dx'``.
-    use_dm_layout : `bool`, optional
+        The column to use. Default is ``'xResid'``.
+    xrange : `float`, optional
+        The range for the spatial data.
+    wrange : `float`, optional
+        The range for the wavelength data.
+    goodRange : `float`, optional
+        Used for showing an "acceptable" range.
+    binWavelength : `float`, optional
+        The value by which to bin the wavelength. If None, no binning.
+    useDMLayout : `bool`, optional
         Use the detector map layout? Default is ``True``.
-    vmin : `float`, optional
-        The minimum value. Default is ``None``.
-    vmax : `float`, optional
-        The maximum value. Default is ``None``.
 
     Returns
     -------
@@ -61,36 +58,39 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
         data['bin'] = pd.Categorical(s_cut)
         bin_wl = True
 
-    num_fibers = len(data.fiberId.unique())
-
-    plot_data = data.melt(
-        id_vars=['fiberId', 'wavelength', 'x', 'y', 'isTrace', 'bin', column],
+    plotData = data.melt(
+        id_vars=[
+            'fiberId',
+            'wavelength',
+            'x',
+            'y',
+            'isTrace',
+            'isLine',
+            'bin',
+            column,
+            f'{column}Outlier'
+        ],
         value_vars=['isUsed', 'isReserved'],
         var_name='status').query('value == True')
+    plotData.rename(columns={f'{column}Outlier': 'isOutlier'}, inplace=True)
 
-    if column.startswith('dy'):
-        plot_data = plot_data.query('isTrace == False').copy()
+    units = 'pix'
+    which_data = 'spatial'
+    if column.startswith('y'):
+        plotData = plotData.query('isTrace == False').copy()
+        which_data = 'wavelength'
 
-    reserved_data = plot_data.query('status == "isReserved"')
+    reserved_data = plotData.query('status == "isReserved" and isOutlier == False')
     if len(reserved_data) == 0:
         raise ValueError('No data')
 
     # Get summary statistics.
-    stats_df = plot_data.groupby('status')[column].agg(['median', iqr_sigma])
-    spatial_avg = plot_data.groupby(
-        ['fiberId', 'status'])[column].agg(['median', iqr_sigma, 'count']).reset_index()
+    fit_stats_all = getFitStats(data.query('isReserved == True'))
+    fit_stats = getattr(fit_stats_all, which_data)
+    fit_stats_used = getattr(getFitStats(data.query('isUsed == True')), which_data)
 
-    reserved_sigma = stats_df.loc['isReserved'].iqr_sigma
-    sigmaLimit = 2.5 * reserved_sigma
-    vmin = -sigmaLimit if vmin is None else vmin
-    vmax = sigmaLimit if vmax is None else vmax
-
-    pal = dict(zip(spatial_avg.status.unique(), plt.cm.tab10.colors))
-    pal_colors = [pal[x] for x in spatial_avg.status]
-
-    units = 'nm' if column == 'dy_nm' else 'pix'
-
-    fig = plt.figure(figsize=(10, 10), layout='constrained')
+    fig = Figure(layout='constrained')
+    fig.set_size_inches(10, 10)
 
     gs = GridSpec(2, 2, width_ratios=[4, 1], height_ratios=[1, 4], figure=fig)
     ax0 = fig.add_subplot(gs[0])
@@ -100,42 +100,98 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
 
     # Upper row
     # Fiber residual
+    fiber_avg = plotData.groupby([
+        'fiberId',
+        'status',
+        'isOutlier'
+    ])[column].agg(['median', iqr_sigma, 'count']).reset_index()
+
+    fiber_avg.sort_values(['fiberId', 'status'], inplace=True)
+
+    pal = dict(zip(sorted(fiber_avg.status.unique()), plt.cm.tab10.colors))
+    pal_colors = [pal[x] for x in fiber_avg.status]
+
     # Just the errors, no markers
-    ax0.errorbar(spatial_avg.fiberId, spatial_avg['median'], spatial_avg.iqr_sigma,
-                 ls='', ecolor=pal_colors, alpha=0.5,
-                 )
+    goodFibersAvg = fiber_avg.query('isOutlier == False')
+    ax0.errorbar(goodFibersAvg.fiberId, goodFibersAvg['median'], goodFibersAvg.iqr_sigma,
+                 ls='', ecolor=pal_colors, alpha=0.5)
+
+    # Use sigma range if no range given.
+    if xrange is None and sigmaRange is not None:
+        xrange = fit_stats.weightedRms * sigmaRange
 
     # Scatterplot with outliers marked.
     ax0 = scatterplotWithOutliers(
-        spatial_avg,
+        goodFibersAvg,
         'fiberId',
         'median',
         hue='status',
-        ymin=vmin,
-        ymax=vmax,
+        ymin=-xrange,
+        ymax=xrange,
         palette=pal,
         ax=ax0,
         refline=0,
     )
-    # Show sigmas.
-    ax0.axhline(-sigmaLimit, c='r', ls='--', alpha=0.35, label='±2.5 * sigma')
-    ax0.axhline(sigmaLimit, c='r', ls='--', alpha=0.35)
-    ax0.text(spatial_avg.fiberId.min() + 65, 3 * reserved_sigma, f'±2.5σ={sigmaLimit:.3f}', c='r',
-             clip_on=True)
-    ax0.legend(
-        loc='lower right',
-        shadow=True,
-        prop=dict(family='monospace', weight='bold'), bbox_to_anchor=(1.2, 0)
-    )
-    num_outliers = spatial_avg.query('abs(median) >= 2.5 * @reserved_sigma').fiberId.count()
-    ax0.text(0.02, 0.07,
-             f'Number of fibers: {num_fibers}; Number of outliers (2.5σ={sigmaLimit:.3f}): {num_outliers}',
-             transform=ax0.transAxes,
-             bbox=dict(boxstyle='round', ec='k', fc='wheat', alpha=0.75),
-             fontsize='small'
-             )
 
-    if use_dm_layout is True:
+    def drawRefLines(ax, goodRange, sigmaRange, isVertical=False):
+        method = 'axhline' if isVertical is False else 'axvline'
+        refLine = getattr(ax, method)
+        # Good sigmas
+        if goodRange is not None:
+            for i, lim in enumerate(goodRange):
+                refLine(lim, c='g', ls='-.', alpha=0.75, label='Good limits')
+                if i == 0:
+                    ax.text(
+                        fiber_avg.fiberId.min() + 85,
+                        1.5 * lim,
+                        f'±1.0σ={abs(lim):.4f}',
+                        c='g',
+                        clip_on=True,
+                        weight='bold',
+                        zorder=100,
+                        bbox=dict(boxstyle='round', ec='k', fc='wheat', alpha=0.75),
+                    )
+
+        if sigmaLines is not None:
+            for sigmaLine in sigmaLines:
+                for i, sigmaMultiplier in enumerate([sigmaLine, -1 * sigmaLine]):
+                    lim = sigmaMultiplier * fit_stats.weightedRms
+                    refLine(lim, c=pal['isReserved'], ls='--', alpha=0.75, label=f'{lim} * sigma')
+                    if i == 0:
+                        ax.text(
+                            fiber_avg.fiberId.min() + 85,
+                            1.5 * lim,
+                            f'±{sigmaMultiplier}σ={abs(lim):.4f}',
+                            c=pal['isReserved'],
+                            clip_on=True,
+                            weight='bold',
+                            zorder=100,
+                            bbox=dict(boxstyle='round', ec='k', fc='wheat', alpha=0.75),
+                        )
+
+    drawRefLines(ax0, goodRange, sigmaRange)
+
+    ax0.legend(loc='lower right',
+               shadow=True,
+               prop=dict(family='monospace', weight='bold'), bbox_to_anchor=(1.2, 0)
+               )
+
+    fiber_outliers = goodFibersAvg.query(f'status=="isReserved" and abs(median) >= {fit_stats.weightedRms}')
+    num_sig_outliers = fiber_outliers.fiberId.count()
+    fiber_big_outliers = fiber_outliers.query(f'abs(median) >= {sigmaRange * fit_stats.weightedRms}')
+    num_siglimit_outliers = fiber_big_outliers.fiberId.count()
+    ax0.text(
+        0.02, 0.07,
+        f'Number of fibers: {fit_stats.num_fibers}\n'
+        f'Number of outliers:\n'
+        f'>=1σ = {num_sig_outliers}\n'
+        f'>={sigmaRange}σ = {num_siglimit_outliers}',
+        transform=ax0.transAxes,
+        bbox=dict(boxstyle='round', ec='k', fc='wheat', alpha=0.75),
+        fontsize='small', zorder=100
+    )
+
+    if useDMLayout is True:
         # Reverse the fiber order to match the xy-pixel layout
         ax0.set_xlim(list(reversed(ax0.get_xlim())))
 
@@ -143,7 +199,11 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
     ax0.xaxis.set_label_position('top')
     ax0.set_xlabel('')
     ax0.xaxis.tick_top()
-    ax0.set_title('Median fiber residual and 1-sigma error', weight='bold', fontsize='small')
+    ax0.set_title(
+        f'Median {which_data} residual and 1-sigma weighted error by fiberId',
+        weight='bold',
+        fontsize='small'
+    )
     legend = ax0.get_legend()
     legend.set_title('')
     legend.set_visible(False)
@@ -160,8 +220,8 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
 
     # Lower row
     # 2d residual
-    norm = colors.Normalize(vmin=vmin, vmax=vmax)
-    if use_dm_layout:
+    norm = colors.Normalize(vmin=-xrange, vmax=xrange)
+    if useDMLayout:
         X = 'x'
         Y = 'y'
     else:
@@ -173,25 +233,31 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
                      c=reserved_data[column],
                      norm=norm,
                      cmap=div_palette,
-                     s=4
+                     s=4,
                      )
     fig.colorbar(im, ax=ax2, orientation='horizontal', extend='both', fraction=0.02, aspect=75, pad=0.01)
 
+    ax2.set_xlim(0, dmWidth)
+    ax2.set_ylim(0, dmHeight)
     ax2.set_ylabel(Y)
     ax2.set_xlabel(X)
-    ax2.set_title('2D residual of RESERVED', weight='bold', fontsize='small')
+    ax2.set_title(f'2D residual of RESERVED {which_data} data', weight='bold', fontsize='small')
+
+    # Use sigma range if no range given.
+    if wrange is None and sigmaRange is not None:
+        wrange = fit_stats.weightedRms * sigmaRange
 
     if bin_wl is True:
-        binned_data = plot_data.groupby(['bin', 'status'])[['wavelength', column]]
-        plot_data = binned_data.agg('median', iqr_sigma).dropna().reset_index().sort_values('status')
+        binned_data = plotData.groupby(['bin', 'status', 'isOutlier'])[['wavelength', column]]
+        plotData = binned_data.agg('median', iqr_sigma).dropna().reset_index().sort_values('status')
 
     ax3 = scatterplotWithOutliers(
-        plot_data,
+        plotData,
         column,
         'wavelength',
         hue='status',
-        ymin=vmin,
-        ymax=vmax,
+        ymin=-wrange,
+        ymax=wrange,
         palette=pal,
         ax=ax3,
         refline=0.,
@@ -203,41 +269,35 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
     except AttributeError:
         # Skip missing wavelength legend.
         pass
-    ax3.axvline(-sigmaLimit, c='r', ls='--', alpha=0.35, label='-2.5 * sigma')
-    ax3.axvline(sigmaLimit, c='r', ls='--', alpha=0.35)
-    num_outliers = plot_data.query(f'abs({column}) >= @sigmaLimit').wavelength.count()
-    ax3.text(0.05, 0.02,
-             f'Number of lines: {len(plot_data)}\nNumber of outliers: {num_outliers}',
-             bbox=dict(boxstyle='round', ec='k', fc='wheat', alpha=0.75),
-             transform=ax3.transAxes,
-             fontsize='small', zorder=100
-             )
+
+    drawRefLines(ax3, goodRange, sigmaRange, isVertical=True)
 
     ax3.yaxis.set_label_position('right')
     ax3.yaxis.tick_right()
     ax3.set_xlabel(f'Δ {units}')
-    ax_title = f'Residual by {"binned" if bin_wl else ""} wavelength'
+    ax_title = f'{which_data.title()} residual by {"binned" if bin_wl else ""} wavelength'
     if bin_wl:
-        ax_title += f'\nbinsize={binWavelength} nm'
+        ax_title += f'\nbinsize={binWavelength} {units}'
     ax3.set_title(ax_title, weight='bold', fontsize='small')
 
     fig.suptitle('DetectorMap Residuals', weight='bold')
 
     # Make a legend with stats.
-    reserved_stats_str = f'RESERVED\n{stats_df.loc["isReserved"].to_string()}'
-    used_stats_str = f'USED\n{stats_df.loc["isUsed"].to_string()}'
     handles, labels = ax0.get_legend_handles_labels()
-    handles = handles[:2]  # Remove the outliers markers
-    labels = [reserved_stats_str, used_stats_str]
-    fig.legend(handles=handles,
-               labels=labels,
-               labelspacing=1,
-               prop=dict(family='monospace', weight='bold', size='small'),
-               loc='upper right',
-               bbox_to_anchor=(0.97, 0.885),
-               title=f'Overall Stats ({units})',
-               title_fontproperties=dict(weight='bold')
-               )
+    handles = handles[1:3]  # Remove the outliers markers
+    labels = [
+        f'RESERVED:\n{fit_stats}',
+        f'USED:\n{fit_stats_used}'
+    ]
+    legend = fig.legend(handles=handles,
+                        labels=labels,
+                        labelspacing=0.15,
+                        prop=dict(family='monospace', weight='bold', size='small'),
+                        loc='upper right',
+                        bbox_to_anchor=(0.97, 0.95),
+                        title=f'{which_data.title()} Stats ({units})',
+                        title_fontproperties=dict(weight='bold')
+                        )
 
     return fig
 
@@ -288,9 +348,11 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
         x=X,
         y=Y,
         hue=hue,
+        hue_order=['isReserved', 'isUsed'] if hue == 'status' else None,
         s=20,
         ec='k',
-        marker='.',
+        style='isOutlier',
+        markers={True: 'X', False: '.'},
         zorder=100,
         palette=palette,
         rasterized=rasterized,
@@ -300,18 +362,18 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
     # Positive outliers.
     pos = data.query(f'{X if vertical else Y} >= @ymax').copy()
     pos[X if vertical else Y] = ymax
-    marker = '<' if vertical is True else 'v'
+    marker = 'X' if vertical is True else 'X'
     sb.scatterplot(data=pos, x=X, y=Y, hue=hue, palette=palette, legend=False,
-                   marker=marker, ec='k', lw=0.5, s=100,
+                   marker=marker, ec='k', lw=0.5, s=50,
                    clip_on=False, zorder=100, ax=ax,
                    )
 
     # Negative outliers.
     neg = data.query(f'{X if vertical else Y} <= @ymin').copy()
     neg[X if vertical else Y] = ymin
-    marker = '>' if vertical is True else '^'
+    marker = 'X' if vertical is True else 'X'
     sb.scatterplot(data=neg, x=X, y=Y, hue=hue, palette=palette, legend=False,
-                   marker=marker, ec='k', lw=0.5, s=100,
+                   marker=marker, ec='k', lw=0.5, s=50,
                    clip_on=False, zorder=100, ax=ax
                    )
 
@@ -330,3 +392,41 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
     ax.grid(True, alpha=0.15)
 
     return ax
+
+
+def plotVisits(plotData, detectorStats, desc_pal=None):
+    fig = Figure(layout='constrained')
+    fig.set_size_inches(8, 4)
+    ax0 = fig.add_subplot(121)
+    ax1 = fig.add_subplot(122, sharex=ax0, sharey=ax0)
+
+    plotData['visit_idx'] = plotData.visit.rank(method='first')
+
+    for ax, metric in zip([ax0, ax1], ['spatial', 'wavelength']):
+        for desc, grp in plotData.groupby('description'):
+            grp.plot.scatter(
+                y='visit_idx',
+                x=f'{metric}.median',
+                xerr=f'{metric}.weightedRms',
+                marker='o',
+                color=desc_pal[desc] if desc_pal is not None else None,
+                label=desc,
+                ax=ax,
+            )
+        ax.legend().set_visible(False)
+
+        ax.axvline(detectorStats[f'{metric}.weightedRms'], ls='--', c='g', alpha=0.5, label='±1σ detector')
+        ax.axvline(detectorStats[f'{metric}.weightedRms'] * -1, ls='--', c='g', alpha=0.5)
+        ax.grid(alpha=0.2)
+        ax.axvline(0, c='k', ls='--', alpha=0.5)
+        ax.set_title(f'{metric}')
+        ax.set_xlabel('pix')
+
+    visit_label = [f'{row.visit}-{row.ccd}' for idx, row in plotData.iterrows()]
+    ax1.set_yticks(plotData.visit_idx, visit_label, rotation=90)
+    ax0.set_ylabel('Visit')
+
+    fig.legend(*ax0.get_legend_handles_labels(), shadow=True, bbox_to_anchor=(1.2, 1))
+    fig.suptitle('RESERVED median and 1-sigma weighted errors')
+
+    return fig
