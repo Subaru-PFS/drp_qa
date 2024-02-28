@@ -68,6 +68,7 @@ def plotResiduals1D(arcLines: ArcLineSet,
     Returns
     -------
     fig1 : `plt.Figure`
+        A plot of the 1D residuals.
     """
     fmin, fmax = np.amin(arcLines.fiberId), np.amax(arcLines.fiberId)
     dmapUsed = (arcLines.status & ReferenceLineStatus.DETECTORMAP_USED) != 0
@@ -187,7 +188,7 @@ def plotResiduals1D(arcLines: ArcLineSet,
         ),
     )
     # Show full range on X center plot if requested.
-    if not showAllRange:
+    if showAllRange is False:
         if np.sum(largeX) + np.sum(smallX) > 0:
             bl_ax.quiver(arcLinesMeasured.wavelength[dmReservedMeasured & largeX],
                          np.zeros(np.sum(
@@ -244,7 +245,7 @@ def plotResiduals1D(arcLines: ArcLineSet,
             iqr(residualW[dmUsedMeasured & (arcLinesMeasured.description != "Trace")]) / 1.349,
         ),
     )
-    if not showAllRange:
+    if showAllRange is False:
         if np.sum(largeW) + np.sum(smallW) > 0:
             tl_ax.quiver(
                 arcLinesMeasured.wavelength[dmUsedMeasured & largeW],
@@ -434,6 +435,7 @@ def plotResiduals2D(arcData: pd.DataFrame,
     Returns
     -------
     fig : `Figure`
+        A plot of the 2D residuals.
     """
     plotKws = plotKws or dict()
     plotKws.setdefault('cmap', div_palette)
@@ -494,7 +496,7 @@ def plotResiduals2D(arcData: pd.DataFrame,
     return fig
 
 
-def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) -> Figure:
+def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, binWavelength=None) -> Figure:
     """Plot the 1D and 2D residuals on a single figure.
 
     Parameters
@@ -513,10 +515,22 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) ->
     Returns
     -------
     fig : `Figure`
+        A summary plot of the 1D and 2D residuals.
     """
+    # Wavelength residual
+    data['bin'] = 1
+    bin_wl = False
+    if isinstance(binWavelength, (int, float)) and binWavelength > 0:
+        bins = np.arange(data.wavelength.min() - 1, data.wavelength.max() + 1, binWavelength)
+        s_cut, bins = pd.cut(data.wavelength, bins=bins, retbins=True, labels=False)
+        data['bin'] = pd.Categorical(s_cut)
+        bin_wl = True
+
+    num_fibers = len(data.fiberId.unique())
+    num_lines = len(data)
 
     plot_data = data.melt(
-        id_vars=['fiberId', 'wavelength', 'x', 'y', 'isTrace', column],
+        id_vars=['fiberId', 'wavelength', 'x', 'y', 'isTrace', 'bin', column],
         value_vars=['isUsed', 'isReserved'],
         var_name='status').query('value == True')
 
@@ -524,14 +538,14 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) ->
         plot_data = plot_data.query('isTrace == False').copy()
 
     reserved_data = plot_data.query('status == "isReserved"')
+    if len(reserved_data) == 0:
+        raise ValueError('No data')
 
     spatial_avg = plot_data.groupby(['fiberId', 'status'])[column].agg(['median', iqr_sigma, 'count']).reset_index()
-    wavelength_avg = plot_data.groupby(['fiberId', 'status'])[column].agg(['median', iqr_sigma, 'count']).reset_index()
-
-    pal = dict(zip(wavelength_avg.status.unique(), plt.cm.tab10.colors))
-    pal_colors = [pal[x] for x in wavelength_avg.status]
-
     stats_df = plot_data.groupby('status')[column].agg(['median', iqr_sigma])
+
+    pal = dict(zip(spatial_avg.status.unique(), plt.cm.tab10.colors))
+    pal_colors = [pal[x] for x in spatial_avg.status]
 
     if column == 'dy_nm':
         units = 'nm'
@@ -570,6 +584,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) ->
         refline=0,
     )
     ax0.legend(loc='lower right', shadow=True, prop=dict(family='monospace', weight='bold'), bbox_to_anchor=(1.2, 0))
+    ax0.text(0.01, 0.9, f'Number of fibers: {num_fibers}', transform=ax0.transAxes)
 
     if use_dm_layout is True:
         # Reverse the fiber order to match the xy-pixel layout
@@ -616,7 +631,10 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) ->
     ax2.set_xlabel(X)
     ax2.set_title(f'2D residual of RESERVED', weight='bold', fontsize='small')
 
-    # Wavelength residual
+    if bin_wl is True:
+        binned_data = plot_data.groupby(['bin', 'status'])[['wavelength', column]]
+        plot_data = binned_data.agg('median', iqr_sigma).dropna().reset_index().sort_values('status')
+
     ax3 = scatterplotWithOutliers(
         plot_data,
         column,
@@ -630,12 +648,20 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None) ->
         vertical=True,
         rasterized=True,
     )
-    ax3.get_legend().set_visible(False)
+    try:
+        ax3.get_legend().set_visible(False)
+    except AttributeError:
+        # Skip missing wavelength legend.
+        pass
+    ax3.text(0.01, 0.98, f'Number of lines: {len(plot_data)}', transform=ax3.transAxes)
 
     ax3.yaxis.set_label_position('right')
     ax3.yaxis.tick_right()
     ax3.set_xlabel(f'Δ {units}')
-    ax3.set_title('Residual by wavelength', weight='bold', fontsize='small')
+    ax_title = f'Residual by {"binned" if bin_wl else ""} wavelength'
+    if bin_wl:
+        ax_title += f'\nbinsize={binWavelength} nm'
+    ax3.set_title(ax_title, weight='bold', fontsize='small')
 
     fig.suptitle(f'DetectorMap Residuals', weight='bold')
 
@@ -665,6 +691,9 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
                             ) -> Axes:
     """Make a scatterplot with outliers marked.
 
+    The plot can be rendered vertically but you should still use the `X` and
+    `Y` parameters as if it were horizontal.
+
     Parameters
     ----------
     data : `pandas.DataFrame`
@@ -693,7 +722,9 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
     Returns
     -------
     ax : `matplotlib.axes.Axes`
+        A scatter plot with the outliers marked.
     """
+    # Main plot.
     ax = sb.scatterplot(
         data=data,
         x=X,
@@ -701,32 +732,27 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
         hue=hue,
         s=20,
         ec='k',
+        marker='o' if len(data) < 1e5 else '.',
         zorder=100,
         palette=palette,
         rasterized=rasterized,
         ax=ax
     )
 
+    # Positive outliers.
     pos = data.query(f'{X if vertical else Y} >= @ymax').copy()
     pos[X if vertical else Y] = ymax
-    neg = data.query(f'{X if vertical else Y} <= @ymin').copy()
-    neg[X if vertical else Y] = ymin
-
-    marker = 'v'
-    if vertical is True:
-        marker = '<'
-
-    sb.scatterplot(data=pos, x=X, y=Y, hue=hue, palette=palette,
-                   legend=False,
+    marker = '<' if vertical is True else 'v'
+    sb.scatterplot(data=pos, x=X, y=Y, hue=hue, palette=palette, legend=False,
                    marker=marker, ec='k', lw=0.5, s=100,
-                   clip_on=False, zorder=100, ax=ax
+                   clip_on=False, zorder=100, ax=ax,
                    )
 
-    marker = '^'
-    if vertical is True:
-        marker = '>'
-    sb.scatterplot(data=neg, x=X, y=Y, hue=hue, palette=palette,
-                   legend=False,
+    # Negative outliers.
+    neg = data.query(f'{X if vertical else Y} <= @ymin').copy()
+    neg[X if vertical else Y] = ymin
+    marker = '>' if vertical is True else '^'
+    sb.scatterplot(data=neg, x=X, y=Y, hue=hue, palette=palette, legend=False,
                    marker=marker, ec='k', lw=0.5, s=100,
                    clip_on=False, zorder=100, ax=ax
                    )
@@ -742,5 +768,7 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
         ax.set_xlim(ymin, ymax)
     else:
         ax.set_ylim(ymin, ymax)
+
+    ax.grid(True, alpha=0.15)
 
     return ax
