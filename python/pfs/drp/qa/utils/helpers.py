@@ -1,28 +1,14 @@
-import warnings
 from contextlib import suppress
-
-from functools import partial
-from pathlib import Path
 from dataclasses import dataclass
-
-import lsst.daf.persistence as dafPersist
+from functools import partial
 
 import numpy as np
 import pandas as pd
+from astropy.stats import sigma_clip
+from lsst.daf.persistence import NoResults
+from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
 from scipy.optimize import bisect
 from scipy.stats import iqr
-from astropy.stats import sigma_clip
-
-from pfs.datamodel import TargetType
-from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
-
-
-warnings.filterwarnings('ignore', message='Input data contains invalid values')
-warnings.filterwarnings('ignore', message='Gen2 Butler')
-warnings.filterwarnings('ignore', message='addPfsCursor')
-warnings.filterwarnings('ignore', message='All-NaN slice')
-warnings.filterwarnings('ignore', message='Mean of empty slice')
-warnings.filterwarnings('ignore', message='This figure')
 
 
 @dataclass
@@ -36,19 +22,19 @@ class FitStat:
     num_lines: int
 
     def __str__(self):
-        return f'''median      = {self.median:>10.05f}
-robustRms   = {self.robustRms:>10.05f}
-weightedRms = {self.weightedRms:>10.05f}
-soften      = {self.softenFit:>10.05f}
-fibers      = {self.num_fibers:>10d}
-lines       = {self.num_lines:>10d}
+        return f'''median  = {self.median:> 7.05f}
+rms     = {self.weightedRms:> 7.05f}
+soften  = {self.softenFit:> 7.05f}
+fibers  = {self.num_fibers:>8d}
+lines   = {self.num_lines:>8d}
 '''
 
 
 @dataclass
 class FitStats:
     dof: int
-    chi2: float
+    chi2X: float
+    chi2Y: float
     spatial: FitStat
     wavelength: FitStat
 
@@ -56,7 +42,8 @@ class FitStats:
         """Output as dict."""
         return dict(
             dof=self.dof,
-            chi2=self.chi2,
+            chi2X=self.chi2X,
+            chi2Y=self.chi2Y,
             spatial=self.spatial.__dict__,
             wavelength=self.wavelength.__dict__
         )
@@ -81,42 +68,12 @@ def iqr_sigma(x) -> float:
     return iqr(x, nan_policy='omit') / 1.349
 
 
-def getObjects(dataId: Path,
-               rerun: Path,
-               calibDir: Path = '/work/drp/CALIB',
-               butler: dafPersist.Butler = None) -> (ArcLineSet, DetectorMap):
-    """Get the objects from the butler.
-
-    Parameters
-    ----------
-    dataId : `Path`
-        The dataId for the butler.
-    rerun : `Path`
-        The rerun directory.
-    calibDir : `Path`, optional
-        The calib directory. Default is '/work/drp/CALIB'.
-    butler : `dafPersist.Butler`, optional
-        The butler to use. Default is None.
-
-    Returns
-    -------
-    arcLines : `ArcLineSet`
-    detectorMap : `DetectorMap`
-    """
-    if butler is None:
-        butler = dafPersist.Butler(rerun.as_posix(), calibRoot=calibDir.as_posix())
-
-    arcLines = butler.get('arcLines', dataId)
-    detectorMap = butler.get('detectorMap_used', dataId)
-
-    return arcLines, detectorMap
-
-
 def loadData(
         arcLines: ArcLineSet,
         detectorMap: DetectorMap,
         dropNaColumns: bool = True,
-        **kwargs) -> pd.DataFrame:
+        **kwargs
+) -> pd.DataFrame:
     """Looks up the data in butler and returns a dataframe with the arcline data.
 
     The arcline data includes basic statistics, such as the median and sigma of the residuals.
@@ -157,7 +114,8 @@ def getArclineData(
         detectorMap: DetectorMap,
         dropNaColumns: bool = False,
         removeFlagged: bool = True,
-        onlyReservedAndUsed: bool = True) -> pd.DataFrame:
+        onlyReservedAndUsed: bool = True
+) -> pd.DataFrame:
     """Gets a copy of the arcline data, with some columns added.
 
     Parameters
@@ -173,7 +131,6 @@ def getArclineData(
     -------
     arc_data : `pandas.DataFrame`
     """
-
     isTrace = arcLines.description == "Trace"
     isLine = ~isTrace
 
@@ -182,10 +139,12 @@ def getArclineData(
     if isLine.any():
         fitPosition[isLine] = detectorMap.findPoint(
             arcLines.fiberId[isLine],
-            arcLines.wavelength[isLine])
+            arcLines.wavelength[isLine]
+        )
     if isTrace.any():
         fitPosition[isTrace, 0] = detectorMap.getXCenter(
-            arcLines.fiberId[isTrace], arcLines.y[isTrace])
+            arcLines.fiberId[isTrace], arcLines.y[isTrace]
+        )
         fitPosition[isTrace, 1] = np.nan
 
     arcLines.data['isTrace'] = isTrace
@@ -240,108 +199,6 @@ def getArclineData(
     arc_data['status_name'] = arc_data['status_name'].astype('category')
     arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
 
-    # Make a one-hot for the Trace.
-    arc_data['isTrace'] = False
-    with suppress():
-        arc_data.loc[arc_data.query('description == "Trace"').index, 'isTrace'] = True
-
-    return arc_data
-
-
-def addTraceLambdaToArclines(arc_data: pd.DataFrame, detectorMap: DetectorMap) -> pd.DataFrame:
-    """Adds detector map trace position and wavelength to arcline data.
-
-    This will add the following columns to the arcline data:
-
-    - ``lam``: Wavelength according to the detectormap for fiberId.
-    - ``lamErr``: Error in wavelength.
-    - ``dispersion``: Dispersion at the center of the detector.
-    - ``tracePos``: Trace position according to the detectormap.
-
-    Parameters
-    ----------
-    arc_data : `pandas.DataFrame`
-    detectorMap : `DetectorMap`
-
-    Returns
-    -------
-    arc_data : `pandas.DataFrame`
-    """
-    # Get the wavelength according to the detectormap for fiberId.
-    fiberList = arc_data.fiberId.to_numpy()
-    yList = arc_data.y.to_numpy()
-
-    arc_data['lam'] = detectorMap.findWavelength(fiberList, yList)
-    arc_data['lamErr'] = arc_data.yErr * arc_data.lam / arc_data.y
-
-    # Convert nm to pixels.
-    dispersion = detectorMap.getDispersionAtCenter()
-    arc_data['dispersion'] = dispersion
-
-    # Get the trace positions according to the detectormap.
-    arc_data['tracePos'] = detectorMap.getXCenter(fiberList, yList)
-
-    return arc_data
-
-
-def addResidualsToArclines(arc_data: pd.DataFrame) -> pd.DataFrame:
-    """Adds residuals to arcline data.
-
-    This will calculate residuals for the X-center position and wavelength.
-
-    Adds the following columns to the arcline data:
-
-    - ``dx``: X-center position minus trace position (from DetectorMap `getXCenter`).
-    - ``dy``: Y-center wavelegnth minus trace wavelength (from DetectorMap `findWavelength`).
-    - ``dy_nm``: Wavelength minus trace wavelength in nm.
-    - ``centroidErr``: Hypotenuse of ``xErr`` and ``yErr``.
-    - ``detectorMapErr``: Hypotenuse of ``dx`` and ``dy``.
-
-
-    Parameters
-    ----------
-    arc_data : `pandas.DataFrame`
-        The arcLines data.
-
-    Returns
-    -------
-    arc_data : `pandas.DataFrame`
-    """
-    # Get `observed - expected` for position and wavelength.
-    arc_data['dx'] = arc_data.tracePos - arc_data.x
-    arc_data['dy_nm'] = arc_data.lam - arc_data.wavelength
-
-    # Set the dy columns to NA (instead of 0) for Trace.
-    arc_data.dy_nm = arc_data.apply(lambda row: row.dy_nm if row.isTrace is False else np.NaN, axis=1)
-
-    # Do the dispersion correction to get pixels.
-    arc_data['dy'] = arc_data.dy_nm / arc_data.dispersion
-
-    arc_data['centroidErr'] = np.hypot(arc_data.xErr, arc_data.yErr)
-    arc_data['detectorMapErr'] = np.hypot(arc_data.dx, arc_data.dy)
-
-    return arc_data
-
-
-def getTargetType(arc_data, pfsConfig) -> pd.DataFrame:
-    """Add targetType to the arcline data.
-
-    Parameters
-    ----------
-    arc_data : `pandas.DataFrame`
-    pfsConfig : `pfs.datamodel.PfsConfig`
-
-    Returns
-    -------
-    arc_data : `pandas.DataFrame`
-    """
-    # Add TargetType for each fiber.
-    arc_data = arc_data.merge(pd.DataFrame({
-        'fiberId': pfsConfig.fiberId,
-        'targetType': [str(TargetType(x)) for x in pfsConfig.targetType]
-    }), left_on='fiberId', right_on='fiberId')
-    arc_data['targetType'] = arc_data.targetType.astype('category')
-
     return arc_data
 
 
@@ -351,39 +208,43 @@ def getFitStats(
         ySoften: float = 0.,
         numParams: int = 0,
         maxSoften: float = 1.,
-        sigmaClipOnly: bool = True) -> FitStats:
+        sigmaClipOnly: bool = True
+) -> FitStats:
     """Get the fit stats."""
     traces = arc_data.query('isTrace == True')
-    lines = arc_data.query('isLine == True')
+    lines = arc_data.query('isLine == True').dropna(subset=['yResid'])
 
     if sigmaClipOnly is True:
+        arc_data = arc_data.query('xResidOutlier == False')
         traces = traces.query('xResidOutlier == False')
         lines = lines.query('yResidOutlier == False')
 
-    xNum = len(traces)
+    xNum = len(arc_data)
     try:
         yNum = lines.isLine.value_counts()[True]
     except KeyError:
-        yNum = np.nan
+        yNum = 0
 
-    xWeightedRms = getWeightedRMS(traces.xResid, traces.xErr, soften=xSoften)
+    xWeightedRms = getWeightedRMS(arc_data.xResid, arc_data.xErr, soften=xSoften)
     yWeightedRms = getWeightedRMS(lines.yResid, lines.yErr, soften=ySoften)
 
-    xRobustRms = iqr_sigma(traces.xResid)
+    xRobustRms = iqr_sigma(arc_data.xResid)
     yRobustRms = iqr_sigma(lines.yResid)
 
-    chi2X = getChi2(traces.xResid, traces.xErr, xSoften)
+    chi2X = getChi2(arc_data.xResid, arc_data.xErr, xSoften)
     chi2Y = getChi2(lines.yResid, lines.yErr, ySoften)
-    chi2 = chi2X + chi2Y
 
     xDof = xNum - numParams / 2
     yDof = yNum - numParams / 2
     dof = xDof + yDof
 
     def getSoften(resid, err, dof, soften=0):
-        return getChi2(resid, err, soften) / dof - 1
+        if len(resid) == 0:
+            return 0
+        with np.errstate(invalid='ignore'):
+            return (getChi2(resid, err, soften) / dof) - 1
 
-    f_x = partial(getSoften, traces.xResid, traces.xErr, xDof)
+    f_x = partial(getSoften, arc_data.xResid, arc_data.xErr, xDof)
     f_y = partial(getSoften, lines.yResid, lines.yErr, yDof)
 
     if f_x(0) < 0:
@@ -391,22 +252,22 @@ def getFitStats(
     elif f_x(maxSoften) > 0:
         xSoftFit = np.nan
     else:
-        xSoftFit = bisect(f_x, 0, 1)
+        xSoftFit = bisect(f_x, 0, maxSoften)
 
     if f_y(0) < 0:
         ySoftFit = 0.
     elif f_y(maxSoften) > 0:
         ySoftFit = np.nan
     else:
-        ySoftFit = bisect(f_y, 0, 1)
+        ySoftFit = bisect(f_y, 0, maxSoften)
 
-    xFibers = len(traces.fiberId.unique())
+    xFibers = len(arc_data.fiberId.unique())
     yFibers = len(lines.fiberId.unique())
 
-    xFitStat = FitStat(traces.xResid.median(), xRobustRms, xWeightedRms, xSoftFit, xDof, xFibers, xNum)
+    xFitStat = FitStat(arc_data.xResid.median(), xRobustRms, xWeightedRms, xSoftFit, xDof, xFibers, xNum)
     yFitStat = FitStat(lines.yResid.median(), yRobustRms, yWeightedRms, ySoftFit, yDof, yFibers, yNum)
 
-    return FitStats(dof, chi2, xFitStat, yFitStat)
+    return FitStats(dof, chi2X, chi2Y, xFitStat, yFitStat)
 
 
 def getWeightedRMS(resid, err, soften=0):
@@ -418,4 +279,101 @@ def getWeightedRMS(resid, err, soften=0):
 
 def getChi2(resid, err, soften=0):
     """Small helper function to get the chi2 with optional softening."""
-    return (resid**2 / (err ** 2 + soften ** 2)).sum()
+    with np.errstate(invalid='ignore'):
+        resids = (resid ** 2) / (err ** 2 + soften ** 2)
+        return np.sum(resids)
+
+
+def getStats(arcLinesSet, detectorMaps, dataIds):
+    all_data = list()
+    visit_stats = list()
+    detector_stats = list()
+
+    all_arc_data = None
+    all_visit_stats = None
+    all_detector_stats = None
+
+    # calib_frames = list()
+
+    for arcLines, detectorMap, dataId in zip(arcLinesSet, detectorMaps, dataIds):
+        try:
+            arc_data = loadData(arcLines, detectorMap)
+
+            if len(arc_data) == 0:
+                continue
+
+            visit = dataId['visit']
+            arm = dataId['arm']
+            spectrograph = dataId['spectrograph']
+            ccd = f'{arm}{spectrograph}'
+            arc_data['visit'] = visit
+            arc_data['arm'] = arm
+            arc_data['spectrograph'] = spectrograph
+
+            all_data.append(arc_data)
+
+            descriptions = sorted(list(arc_data.description.unique()))
+            with suppress(ValueError):
+                if len(descriptions) > 1:
+                    descriptions.remove('Trace')
+
+            # print('Checking calib frames')
+            # if len(calib_frames) == 0:
+            #     for k, v in detectorMap.getMetadata().items():
+            #         if k.startswith('CALIB_INPUT'):
+            #             calib_frames.append(v)
+            #
+            #     calib_frames = calib_frames[1:]
+
+            # print('Adding calib frame information')
+            # arc_data['calib_inputs'] = np.tile(calib_frames, (len(arc_data), 1))
+
+            dmap_bbox = detectorMap.getBBox()
+
+            for idx, rows in arc_data.groupby('status_type'):
+                visit_stat = pd.json_normalize(getFitStats(rows).to_dict())
+                visit_stat['visit'] = visit
+                visit_stat['arm'] = arm
+                visit_stat['spectrograph'] = spectrograph
+                visit_stat['ccd'] = ccd
+                visit_stat['status_type'] = idx
+                visit_stat['description'] = ','.join(descriptions)
+                visit_stat['detector_width'] = dmap_bbox.width
+                visit_stat['detector_height'] = dmap_bbox.height
+                visit_stats.append(visit_stat)
+        except NoResults:
+            print(f'No results found for {dataId}')
+        except Exception as e:
+            print(e)
+
+    if len(visit_stats):
+        all_visit_stats = pd.concat(visit_stats)
+
+    if len(all_data):
+        all_arc_data = pd.concat(all_data)
+
+        # Get the stats for the whole detector by status type.
+        for status_type, rows in all_arc_data.groupby(['status_type']):
+            try:
+                detectorStats = pd.json_normalize(getFitStats(rows).to_dict())
+                # detectorStats['ccd'] = ccd
+                detectorStats['status_type'] = status_type
+                detectorStats['description'] = 'all'
+                detector_stats.append(detectorStats)
+            except Exception as e:
+                print(status_type, e)
+
+        # Get stats for each description type.
+        for (status_type, desc), rows in all_arc_data.groupby(['status_type', 'description']):
+            try:
+                detectorStats = pd.json_normalize(getFitStats(rows).to_dict())
+                # detectorStats['ccd'] = ccd
+                detectorStats['status_type'] = status_type
+                detectorStats['description'] = desc
+                detector_stats.append(detectorStats)
+            except Exception as e:
+                print(status_type, desc, e)
+
+        all_detector_stats = pd.concat(detector_stats)
+
+    return all_arc_data, all_visit_stats, all_detector_stats

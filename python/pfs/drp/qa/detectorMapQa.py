@@ -6,8 +6,7 @@ import lsstDebug
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy.stats import iqr
-
+from lsst.daf.persistence.butlerExceptions import NoResults
 from lsst.pex.config import Field, ConfigurableField, Config
 from lsst.pipe.base import (
     ArgumentParser,
@@ -19,29 +18,47 @@ from lsst.pipe.base import (
     Task,
     TaskRunner,
 )
-from lsst.daf.persistence.butlerExceptions import NoResults
-
 from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
 from lsst.pipe.base.connectionTypes import Input as InputConnection
 from lsst.pipe.base.connectionTypes import Output as OutputConnection
 from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
-from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm
 from pfs.drp.qa.utils import helpers
 from pfs.drp.qa.utils import plotting
+from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm
+from scipy.stats import iqr
 
 from .storageClasses import MultipagePdfFigure
 
-warnings.filterwarnings('ignore', message='Gen2 Butler')
-warnings.filterwarnings('ignore', message='addPfsCursor')
+warnings.filterwarnings('ignore', message='Input data contains invalid values')
 
 
 class PlotResidualConfig(Config):
     """Configuration for PlotResidualTask"""
 
-    makeResidualPlots = Field(dtype=bool, default=True, doc="Generate a residual plot for each dataId.")
-    useSigmaRange = Field(dtype=bool, default=True, doc='Use ±2.5 sigma as range')
-    xrange = Field(dtype=float, default=0.1, doc="Range of the residual (X center) in a plot in pix.")
-    wrange = Field(dtype=float, default=0.03, doc="Range of the residual (wavelength) in a plot in nm.")
+    combineVisits = Field(
+        dtype=bool, default=False,
+        doc='If all given visits should be combined and compared.'
+    )
+    makeResidualPlots = Field(
+        dtype=bool, default=True,
+        doc="Generate a residual plot for each dataId."
+    )
+    useSigmaRange = Field(
+        dtype=bool, default=False,
+        doc='Use ±2.5 sigma as range'
+    )
+    xrange = Field(
+        dtype=float, default=0.1,
+        doc="Range of the residual (X center) in a plot in pix."
+    )
+    wrange = Field(
+        dtype=float, default=0.1,
+        doc="Range of the residual (wavelength) in a plot in pix."
+    )
+    binWavelength = Field(
+        dtype=float, default=0.1,
+        doc="Bin the wavelength in the by-wavelength residual plot."
+    )
 
 
 class PlotResidualTask(Task):
@@ -54,7 +71,7 @@ class PlotResidualTask(Task):
         super().__init__(*args, **kwargs)
         self.debugInfo = lsstDebug.Info(__name__)
 
-    def run(self, detectorMap: DetectorMap, arcLines: ArcLineSet, pfsArm: PfsArm) -> Struct:
+    def run(self, groupName, arcLinesSet: ArcLineSet, detectorMaps: DetectorMap, dataIds) -> Struct:
         """QA of adjustDetectorMap by plotting the fitting residual.
 
         Parameters
@@ -75,81 +92,35 @@ class PlotResidualTask(Task):
             Data to be pickled.
             Statistics of the residual analysis.
         """
-        visit = pfsArm.identity.visit
-        arm = pfsArm.identity.arm
-        spectrograph = pfsArm.identity.spectrograph
-        ccd = f'{arm}{spectrograph}'
-        dataIdStr = f'v{visit}-{arm}{spectrograph}'
 
-        title_str = f'{visit:06}-{arm}{spectrograph}'
-        self.log.info(f'Getting data for {title_str}')
+        arc_data, visit_stats, detector_stats = helpers.getStats(arcLinesSet, detectorMaps, dataIds)
 
-        try:
-            arc_data = helpers.loadData(arcLines, detectorMap)
-            arc_data.reset_index(drop=True, inplace=True)
-        except Exception as e:
-            self.log.error(f'Not enough data for {dataIdStr} {e}')
-            return Struct()
+        if arc_data is not None and len(arc_data) and visit_stats is not None and len(visit_stats):
+            dmQaResidualStats = visit_stats.to_dict(orient='records')
 
-        num_fibers = len(arc_data.fiberId.unique())
-        num_lines = len(arc_data)
-
-        if num_fibers == 0 or num_lines == 0:
-            self.log.info(f'No measured lines found for {title_str}')
-            return
-
-        self.log.info(f"Number of fibers: {num_fibers}")
-        self.log.info(f"Number of Measured lines: {num_lines}")
-
-        bbox = detectorMap.getBBox()
-
-        dmQaResidualImagePdf = MultipagePdfFigure()
-        useSigmaRange = self.config.useSigmaRange
-        xrange = self.config.xrange if useSigmaRange is False else None
-        wrange = self.config.wrange if useSigmaRange is False else None
-        for column in ['xResid', 'yResid']:
             if self.config.makeResidualPlots is True:
-                self.log.debug(f'Generating {column} plot for {dataIdStr}')
-                try:
-                    fig = plotting.plotResidual(
-                        arc_data,
-                        column=column,
-                        xrange=xrange,
-                        wrange=wrange,
-                        dmWidth=bbox.width,
-                        dmHeight=bbox.height,
-                    )
-                    fig.suptitle(f'DetectorMap Residuals\n{dataIdStr}\n{column}', weight='bold')
-                    dmQaResidualImagePdf.append(fig)
-                except ValueError:
-                    self.log.info(f'No residual wavelength information for {dataIdStr}, skipping')
+                arm = str(groupName[-2])
+                spectrograph = int(groupName[-1])
+                residFig = plotting.makePlot(
+                    arc_data,
+                    visit_stats,
+                    arm,
+                    spectrograph,
+                    useSigmaRange=self.config.useSigmaRange,
+                    xrange=self.config.xrange,
+                    wrange=self.config.wrange,
+                    binWavelength=self.config.binWavelength,
+                )
+                residFig.suptitle(f'DetectorMap Residuals\n{groupName}', weight='bold')
+                dmQaResidualImagePdf = MultipagePdfFigure()
+                dmQaResidualImagePdf.append(residFig)
 
-        descriptions = sorted(list(arc_data.description.unique()))
-        try:
-            if len(descriptions) > 1:
-                descriptions.remove('Trace')
-        except ValueError:
-            pass
-
-        visitStats = list()
-        for idx, rows in arc_data.groupby('status_type'):
-            visit_stat = pd.json_normalize(helpers.getFitStats(rows).to_dict())
-            visit_stat['ccd'] = ccd
-            visit_stat['status_type'] = idx
-            visit_stat['description'] = ','.join(descriptions)
-            visit_stat['detector_width'] = bbox.width
-            visit_stat['detector_height'] = bbox.height
-            visitStats.append(visit_stat)
-
-        dmQaResidualStats = pd.concat(visitStats).reset_index().to_dict(orient='records')
-
-        if self.config.makeResidualPlots is True:
-            return Struct(
-                dmQaResidualImage=dmQaResidualImagePdf,
-                dmQaResidualStats=dmQaResidualStats
-            )
-        else:
-            return Struct(dmQaResidualStats=dmQaResidualStats)
+                return Struct(
+                    dmQaResidualImage=dmQaResidualImagePdf,
+                    dmQaResidualStats=dmQaResidualStats
+                )
+            else:
+                return Struct(dmQaResidualStats=dmQaResidualStats)
 
     @classmethod
     def _makeArgumentParser(cls) -> ArgumentParser:
@@ -177,8 +148,8 @@ class OverlapRegionLinesTask(Task):
         self.debugInfo = lsstDebug.Info(__name__)
 
     def run(
-        self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet],
-        pfsArm: Iterable[PfsArm]
+            self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet],
+            pfsArm: Iterable[PfsArm]
     ) -> Struct:
         """QA of adjustDetectorMap by plotting the wavelength difference of sky lines detected in multiple
         arms.
@@ -268,10 +239,11 @@ class OverlapRegionLinesTask(Task):
         plt.figure()
         wcommon.sort()
         for w in wcommon:
-            self.log.info(f"{w} nm ({len(fibers[w])} fibers, "
-                          f"median={np.median(difference[w]):.1e} nm, "
-                          f"1sigma={iqr(difference[w]) / 1.349:.3f} nm)"
-                          )
+            self.log.info(
+                f"{w} nm ({len(fibers[w])} fibers, "
+                f"median={np.median(difference[w]):.1e} nm, "
+                f"1sigma={iqr(difference[w]) / 1.349:.3f} nm)"
+            )
             plt.scatter(
                 fibers[w],
                 difference[w],
@@ -340,6 +312,11 @@ class DetectorMapQaConnections(
 class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
     """Configuration for DetectorMapQaTask"""
 
+    checkOverlap = Field(
+        dtype=bool, default=False,
+        doc='If the overlapRegionLines should be checked.'
+    )
+
     plotResidual = ConfigurableField(target=PlotResidualTask, doc="Plot the detector map residual.")
     overlapRegionLines = ConfigurableField(
         target=OverlapRegionLinesTask,
@@ -352,16 +329,36 @@ class DetectorMapQaRunner(TaskRunner):
 
     @staticmethod
     def getTargetList(parsedCmd, **kwargs):
-        """Produce list of targets for DetectorMapQaTask
+        """Produce list of targets for DetectorMapQaTask.
 
-        We want to operate on all data within a single exposure at once.
+        The visits and detector are processed as part of a group, with group
+        membership consisting of:
+
+            * If combineVisits, group all visits by detector.
+            * If checkOverlap, group all detectors by visit.
+            * Otherwise, group per visit per detector (i.e. don't group).
         """
-        exposures = defaultdict(lambda: defaultdict(list))
+
+        combineVisits = parsedCmd.config.plotResidual.combineVisits
+        checkOverlap = parsedCmd.config.checkOverlap
+
+        groups = defaultdict(list)
         for ref in parsedCmd.id.refList:
             visit = ref.dataId["visit"]
             spectrograph = ref.dataId["spectrograph"]
-            exposures[visit][spectrograph].append(ref)
-        return [(list(specs.values()), kwargs) for specs in exposures.values()]
+            arm = ref.dataId["arm"]
+            ccd = f'{arm}{spectrograph}'
+
+            if combineVisits is True:
+                groups[ccd].append(ref)
+            elif checkOverlap is True:
+                groups[visit].append(ref)
+            else:
+                groups[f'{visit}-{ccd}'].append(ref)
+
+        processGroups = [((key, group), kwargs) for key, group in groups.items()]
+
+        return processGroups
 
 
 class DetectorMapQaTask(CmdLineTask, PipelineTask):
@@ -377,10 +374,10 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         self.debugInfo = lsstDebug.Info(__name__)
 
     def runQuantum(
-        self,
-        butler: ButlerQuantumContext,
-        inputRefs: InputQuantizedConnection,
-        outputRefs: OutputQuantizedConnection,
+            self,
+            butler: ButlerQuantumContext,
+            inputRefs: InputQuantizedConnection,
+            outputRefs: OutputQuantizedConnection,
     ) -> None:
         """Entry point with butler I/O
 
@@ -411,23 +408,43 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         -------
         None
         """
-        for specRefList in expSpecRefList:
-            for dataRef in specRefList:
-                try:
-                    detectorMap = dataRef.get('detectorMap_used')
-                    arcLines = dataRef.get('arcLines')
-                    pfsArm = dataRef.get('pfsArm')
+        groupName = expSpecRefList[0]
+        groupDataRefs = expSpecRefList[1]
 
-                    # Run the task and get the outputs.
-                    outputs = self.run(detectorMap, arcLines, pfsArm)
-                    if outputs is not None:
-                        for datasetType, data in outputs.getDict().items():
-                            if data is not None:
-                                dataRef.put(data, datasetType=datasetType)
-                except NoResults:
-                    self.log.debug('No results, skipping')
+        print(f'Starting processing for {groupName=} with {len(groupDataRefs)} dataIds')
 
-    def run(self, detectorMap: DetectorMap, arcLines: ArcLineSet, pfsArm: PfsArm) -> Struct:
+        arcLinesSet = list()
+        detectorMaps = list()
+        dataIds = list()
+        for dataRef in groupDataRefs:
+            try:
+                detectorMap = dataRef.get('detectorMap_used')
+                arcLines = dataRef.get('arcLines')
+
+                arcLinesSet.append(arcLines)
+                detectorMaps.append(detectorMap)
+                dataIds.append(dataRef.dataId)
+            except NoResults:
+                print(f'No results for {dataRef}')
+
+        # Run the task and get the outputs.
+        outputs = self.run(groupName, arcLinesSet, detectorMaps, dataIds)
+        if outputs is not None:
+            for (datasetType, data), dataRef in zip(outputs.getDict().items(), groupDataRefs):
+                # Convert dataframe to dict to store as pickle.
+                if isinstance(data, pd.DataFrame):
+                    data = data.to_dict(orient='records')
+
+                if isinstance(data, MultipagePdfFigure):
+                    if self.plotResidual.config.combineVisits is True:
+                        saveFile = 'dmQA-residual-combined-{arm}{spectrograph}.pdf'.format(**dataRef.dataId)
+                        data.savefig(saveFile)
+                        self.log.info(f'Combined PDF {saveFile=}')
+                        continue
+
+                dataRef.put(data, datasetType=datasetType)
+
+    def run(self, *args, **kwargs) -> Struct:
         """Generate detectorMapQa plots.
 
         Parameters
@@ -443,7 +460,7 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         -------
         None
         """
-        return self.plotResidual.run(detectorMap, arcLines, pfsArm)
+        return self.plotResidual.run(*args, **kwargs)
 
     def _getMetadataName(self):
         return None
