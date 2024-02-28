@@ -75,12 +75,12 @@ def plotResiduals1D(arcLines: ArcLineSet,
     dmapReserved = (arcLines.status & ReferenceLineStatus.DETECTORMAP_RESERVED) != 0
 
     measured = (
-            np.logical_not(np.isnan(arcLines.flux))
-            & np.logical_not(np.isnan(arcLines.x))
-            & np.logical_not(np.isnan(arcLines.y))
-            & np.logical_not(np.isnan(arcLines.xErr))
-            & np.logical_not(np.isnan(arcLines.yErr))
-            & np.logical_not(np.isnan(arcLines.fluxErr))
+        np.logical_not(np.isnan(arcLines.flux))
+        & np.logical_not(np.isnan(arcLines.x))
+        & np.logical_not(np.isnan(arcLines.y))
+        & np.logical_not(np.isnan(arcLines.xErr))
+        & np.logical_not(np.isnan(arcLines.yErr))
+        & np.logical_not(np.isnan(arcLines.fluxErr))
     )
 
     flist = []
@@ -191,21 +191,21 @@ def plotResiduals1D(arcLines: ArcLineSet,
     if showAllRange is False:
         if np.sum(largeX) + np.sum(smallX) > 0:
             bl_ax.quiver(arcLinesMeasured.wavelength[dmReservedMeasured & largeX],
-                         np.zeros(np.sum(
-                             dmReservedMeasured & largeX)) + yxmax - xrange * quivLength,
-                         0,
-                         xrange * quivLength,
-                         label="Greater than {:.2f} in absolute value ({:.1e}%)".format(
-                             yxmax,
-                             (np.sum(dmReservedMeasured & largeX) + np.sum(dmReservedMeasured & smallX))
-                             / np.sum(dmReservedMeasured)
-                             * 100,
-                         ),
-                         color="r",
-                         angles="xy",
-                         scale_units="xy",
-                         scale=2,
-                         )
+                 np.zeros(np.sum(
+                     dmReservedMeasured & largeX)) + yxmax - xrange * quivLength,
+                 0,
+                 xrange * quivLength,
+                 label="Greater than {:.2f} in absolute value ({:.1e}%)".format(
+                     yxmax,
+                     (np.sum(dmReservedMeasured & largeX) + np.sum(dmReservedMeasured & smallX))
+                     / np.sum(dmReservedMeasured)
+                     * 100,
+                 ),
+                 color="r",
+                 angles="xy",
+                 scale_units="xy",
+                 scale=2,
+                 )
             bl_ax.quiver(
                 arcLinesMeasured.wavelength[dmReservedMeasured & smallX],
                 np.zeros(np.sum(dmReservedMeasured & smallX)) + yxmin + xrange * quivLength,
@@ -634,7 +634,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
     fig.colorbar(im, ax=ax2, orientation='horizontal', extend='both', fraction=0.02, aspect=75, pad=0.01)
     ax2.set_ylabel(Y)
     ax2.set_xlabel(X)
-    ax2.set_title(f'2D residual of RESERVED', weight='bold', fontsize='small')
+    ax2.set_title('2D residual of RESERVED', weight='bold', fontsize='small')
 
     if bin_wl is True:
         binned_data = plot_data.groupby(['bin', 'status'])[['wavelength', column]]
@@ -668,7 +668,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
         ax_title += f'\nbinsize={binWavelength} nm'
     ax3.set_title(ax_title, weight='bold', fontsize='small')
 
-    fig.suptitle(f'DetectorMap Residuals', weight='bold')
+    fig.suptitle('DetectorMap Residuals', weight='bold')
 
     # Make a legend with stats.
     reserved_stats_str = f'RESERVED\n{stats_df.loc["isReserved"].to_string()}'
