@@ -68,6 +68,7 @@ def plotResiduals1D(arcLines: ArcLineSet,
     Returns
     -------
     fig1 : `plt.Figure`
+        A plot of the 1D residuals.
     """
     fmin, fmax = np.amin(arcLines.fiberId), np.amax(arcLines.fiberId)
     dmapUsed = (arcLines.status & ReferenceLineStatus.DETECTORMAP_USED) != 0
@@ -431,6 +432,7 @@ def plotResiduals2D(arcData: pd.DataFrame,
     Returns
     -------
     fig : `Figure`
+        A plot of the 2D residuals.
     """
     plotKws = plotKws or dict()
     plotKws.setdefault('cmap', div_palette)
@@ -513,6 +515,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
     Returns
     -------
     fig : `Figure`
+        A summary plot of the 1D and 2D residuals.
     """
     # Wavelength residual
     data['bin'] = 1
@@ -689,6 +692,9 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
                             ) -> Axes:
     """Make a scatterplot with outliers marked.
 
+    The plot can be rendered vertically but you should still use the `X` and
+    `Y` parameters as if it were horizontal.
+
     Parameters
     ----------
     data : `pandas.DataFrame`
@@ -717,6 +723,7 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
     Returns
     -------
     ax : `matplotlib.axes.Axes`
+        A scatter plot with the outliers marked.
     """
     # Main plot.
     ax = sb.scatterplot(
