@@ -180,8 +180,8 @@ class OverlapRegionLinesTask(Task):
                 notNan_f = (arcLines[aa].fiberId == f) & measured[aa]
                 if np.sum(notNan_f) > 0:
                     flist[aa].append(f)
-            self.log.info("Fiber number ({}{}): {}".format(arm[aa], spectrograph, len(flist[aa])))
-            self.log.info("Measured line ({}{}): {}".format(arm[aa], spectrograph, np.sum(measured[aa])))
+            self.log.info(f"Fiber number ({arm[aa]}{spectrograph}): {len(flist[aa])}")
+            self.log.info(f"Measured line ({arm[aa]}{spectrograph}): {np.sum(measured[aa])}")
 
         plt.figure()
         fcommon = set(flist[0]) | set(flist[1])
@@ -219,29 +219,28 @@ class OverlapRegionLinesTask(Task):
                             difference[w] = []
                         y = [aa[(aa.fiberId == f) & (aa.wavelength == w)].y[0] for aa in arcLines]
                         fibers[w].append(f)
-                        difference[w].append(
-                            detectorMap[0].findWavelength(fiberId=f, row=y[0]) - detectorMap[1].findWavelength(
-                                fiberId=f, row=y[1])
-                        )
+                        diff_wl0 = detectorMap[0].findWavelength(fiberId=f, row=y[0])
+                        diff_wl1 = detectorMap[1].findWavelength(fiberId=f, row=y[1])
+                        difference[w].append(diff_wl0 - diff_wl1)
         plt.figure()
         wcommon.sort()
         for w in wcommon:
-            self.log.info(
-                "{} nm ({} fibers, median={:.1e} nm, 1sigma={:.3f} nm)".format(
-                    w, len(fibers[w]),
-                    np.median(difference[w]),
-                    iqr(difference[w]) / 1.349)
+            self.log.info(f"{w} nm ({len(fibers[w])} fibers, "
+                          f"median={np.median(difference[w]):.1e} nm, "
+                          f"1sigma={iqr(difference[w]) / 1.349:.3f} nm)"
+                          )
+            plt.scatter(
+                fibers[w],
+                difference[w],
+                s=3,
+                label=f"{w} nm ({len(fibers[w])} fibers, "
+                      f"median={np.median(difference[w]):.1e} nm, "
+                      f"1sigma={iqr(difference[w]) / 1.349:.3f} nm)"
             )
-            plt.scatter(fibers[w], difference[w], s=3,
-                        label="{} nm ({} fibers, median={:.1e} nm, 1sigma={:.3f} nm)".format(w, len(fibers[w]),
-                                                                                             np.median(difference[w]),
-                                                                                             iqr(difference[
-                                                                                                     w]) / 1.349),
-                        )
         plt.legend(fontsize=7)
         plt.xlabel("fiberId")
-        plt.ylabel("Wavelength difference ({}-{}) [nm]".format(arm[0], arm[1]))
-        plt.savefig("overlapLines-{:06}-{}{}{}.png".format(visit, arm[0], arm[1], spectrograph))
+        plt.ylabel(f"Wavelength difference ({arm[0]}-{arm[1]}) [nm]")
+        plt.savefig(f"overlapLines-{visit:06}-{arm[0]}{arm[1]}{spectrograph}.png")
         plt.close()
 
         return Struct()
