@@ -34,8 +34,8 @@ warnings.filterwarnings('ignore', message='addPfsCursor')
 class PlotResidualConfig(Config):
     """Configuration for PlotResidualTask"""
 
-    showAllRange = Field(dtype=bool, default=False, doc="Show all data points in a plot?")
-    xrange = Field(dtype=float, default=0.2, doc="Range of the residual (X center) in a plot in pix.")
+    useSigmaRange = Field(dtype=bool, default=True, doc='Use ±2.5 sigma as range')
+    xrange = Field(dtype=float, default=0.1, doc="Range of the residual (X center) in a plot in pix.")
     wrange = Field(dtype=float, default=0.03, doc="Range of the residual (wavelength) in a plot in nm.")
 
 
@@ -96,11 +96,15 @@ class PlotResidualTask(Task):
         self.log.info(f"Number of Measured lines: {num_lines}")
 
         output_fn = f'dm-residuals-{dataIdStr}.pdf'
+        useSigmaRange = self.config.useSigmaRange
         with PdfPages(output_fn) as pdf:
             for column in ['dx', 'dy_nm']:
+                which_range = 'xrange' if column == 'dx' else 'wrange'
+                slimit = getattr(self.config, which_range) if useSigmaRange is False else None
+                slimit = (-slimit, slimit) if slimit is not None else (None, None)
                 self.log.debug(f'Generating {column} plot for v{visit}-{arm}{spectrograph}')
                 try:
-                    fig = plotting.plotResidual(arc_data, column=column)
+                    fig = plotting.plotResidual(arc_data, column=column, vmin=slimit[0], vmax=slimit[1])
                     fig.suptitle(f'DetectorMap Residuals\n{dataIdStr}\n{rerun_name}\n{column}', weight='bold')
                     pdf.savefig(fig, dpi=150)
                 except ValueError:
@@ -136,8 +140,8 @@ class OverlapRegionLinesTask(Task):
         self.debugInfo = lsstDebug.Info(__name__)
 
     def run(
-            self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet],
-            pfsArm: Iterable[PfsArm]
+        self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet],
+        pfsArm: Iterable[PfsArm]
     ) -> Struct:
         """QA of adjustDetectorMap by plotting the wavelength difference of sky lines detected in multiple
         arms.
@@ -324,10 +328,10 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         self.debugInfo = lsstDebug.Info(__name__)
 
     def runQuantum(
-            self,
-            butler: ButlerQuantumContext,
-            inputRefs: InputQuantizedConnection,
-            outputRefs: OutputQuantizedConnection,
+        self,
+        butler: ButlerQuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
     ) -> None:
         """Entry point with butler I/O
 
@@ -370,10 +374,10 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         return self.run(detectorMapList, arcLinesList, pfsArmList)
 
     def run(
-            self,
-            detectorMapList: Iterable[DetectorMap],
-            arcLinesList: Iterable[ArcLineSet],
-            pfsArmList: Iterable[PfsArm],
+        self,
+        detectorMapList: Iterable[DetectorMap],
+        arcLinesList: Iterable[ArcLineSet],
+        pfsArmList: Iterable[PfsArm],
     ) -> Struct:
         """Generate detectorMapQa plots: 1) Residual of the adjustDetectorMap fitting, 2) Wavelength
         difference of the lines detected in multiple arms.
