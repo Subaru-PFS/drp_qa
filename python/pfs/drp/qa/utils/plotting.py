@@ -94,10 +94,14 @@ def plotResiduals1D(arcLines: ArcLineSet,
     residualW = arcLinesMeasured.wavelength - detectorMap.findWavelength(
         fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y.astype(np.float64)
     )
-    minw = np.amin(
-        detectorMap.findWavelength(fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y.astype(np.float64)))
-    maxw = np.amax(
-        detectorMap.findWavelength(fiberId=arcLinesMeasured.fiberId, row=arcLinesMeasured.y.astype(np.float64)))
+    minw = np.amin(detectorMap.findWavelength(
+        fiberId=arcLinesMeasured.fiberId,
+        row=arcLinesMeasured.y.astype(np.float64)
+    ))
+    maxw = np.amax(detectorMap.findWavelength(
+        fiberId=arcLinesMeasured.fiberId,
+        row=arcLinesMeasured.y.astype(np.float64)
+    ))
     bufw = (maxw - minw) * 0.02
 
     dmUsedMeasured = dmapUsed[measured]
@@ -151,13 +155,12 @@ def plotResiduals1D(arcLines: ArcLineSet,
     # Show full range on X center plot if requested.
     if not showAllRange:
         if np.sum(largeX) + np.sum(smallX) > 0:
+            label = (f"Greater than {yxmax:.2f} in absolute value "
+                     f"({np.sum(dmUsedMeasured & largeX) / np.sum(dmUsedMeasured) * 100:.1e}%)")
             bl_ax.quiver(arcLinesMeasured.wavelength[dmUsedMeasured & largeX],
-                         np.zeros(np.sum(
-                             dmUsedMeasured & largeX)) + yxmax - xrange * quivLength, 0,
+                         np.zeros(np.sum(dmUsedMeasured & largeX)) + yxmax - xrange * quivLength, 0,
                          xrange * quivLength,
-                         label="Greater than {:.2f} in absolute value ({:.1e}%)".format(
-                             yxmax, np.sum(dmUsedMeasured & largeX) / np.sum(dmUsedMeasured) * 100
-                         ),
+                         label=label,
                          color="b",
                          angles="xy",
                          scale_units="xy",
@@ -446,9 +449,6 @@ def plotResiduals2D(arcData: pd.DataFrame,
 
     width = None if detectorMap is None else detectorMap.getBBox().width
     height = None if detectorMap is None else detectorMap.getBBox().height
-
-    # ncols = 2 if showWavelength else 1
-    ncols = 1
 
     fig = Figure()
     ax = fig.add_subplot()
