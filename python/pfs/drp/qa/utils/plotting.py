@@ -538,22 +538,20 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
     if len(reserved_data) == 0:
         raise ValueError('No data')
 
-    spatial_avg = plot_data.groupby(
-        ['fiberId', 'status']
-    )[column].agg(['median', iqr_sigma, 'count']).reset_index()
+    # Get summary statistics.
     stats_df = plot_data.groupby('status')[column].agg(['median', iqr_sigma])
+    spatial_avg = plot_data.groupby(
+        ['fiberId', 'status'])[column].agg(['median', iqr_sigma, 'count']).reset_index()
+
+    reserved_sigma = stats_df.loc['isReserved'].iqr_sigma
+    sigmaLimit = 2.5 * reserved_sigma
+    vmin = -sigmaLimit if vmin is None else vmin
+    vmax = sigmaLimit if vmax is None else vmax
 
     pal = dict(zip(spatial_avg.status.unique(), plt.cm.tab10.colors))
     pal_colors = [pal[x] for x in spatial_avg.status]
 
-    if column == 'dy_nm':
-        units = 'nm'
-        vmin = vmin or -0.1
-        vmax = vmax or 0.1
-    else:
-        units = 'pix'
-        vmin = vmin or -0.6
-        vmax = vmax or 0.6
+    units = 'nm' if column == 'dy_nm' else 'pix'
 
     fig = plt.figure(figsize=(10, 10), layout='constrained')
 
@@ -582,12 +580,23 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
         ax=ax0,
         refline=0,
     )
+    # Show sigmas.
+    ax0.axhline(-sigmaLimit, c='r', ls='--', alpha=0.35, label='±2.5 * sigma')
+    ax0.axhline(sigmaLimit, c='r', ls='--', alpha=0.35)
+    ax0.text(spatial_avg.fiberId.min() + 65, 3 * reserved_sigma, f'±2.5σ={sigmaLimit:.3f}', c='r',
+             clip_on=True)
     ax0.legend(
         loc='lower right',
         shadow=True,
         prop=dict(family='monospace', weight='bold'), bbox_to_anchor=(1.2, 0)
     )
-    ax0.text(0.01, 0.9, f'Number of fibers: {num_fibers}', transform=ax0.transAxes)
+    num_outliers = spatial_avg.query('abs(median) >= 2.5 * @reserved_sigma').fiberId.count()
+    ax0.text(0.02, 0.07,
+             f'Number of fibers: {num_fibers}; Number of outliers (2.5σ={sigmaLimit:.3f}): {num_outliers}',
+             transform=ax0.transAxes,
+             bbox=dict(boxstyle='round', ec='k', fc='wheat', alpha=0.75),
+             fontsize='small'
+             )
 
     if use_dm_layout is True:
         # Reverse the fiber order to match the xy-pixel layout
@@ -630,6 +639,7 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
                      s=4
                      )
     fig.colorbar(im, ax=ax2, orientation='horizontal', extend='both', fraction=0.02, aspect=75, pad=0.01)
+
     ax2.set_ylabel(Y)
     ax2.set_xlabel(X)
     ax2.set_title('2D residual of RESERVED', weight='bold', fontsize='small')
@@ -656,7 +666,15 @@ def plotResidual(data, column='dx', use_dm_layout=True, vmin=None, vmax=None, bi
     except AttributeError:
         # Skip missing wavelength legend.
         pass
-    ax3.text(0.01, 0.98, f'Number of lines: {len(plot_data)}', transform=ax3.transAxes)
+    ax3.axvline(-sigmaLimit, c='r', ls='--', alpha=0.35, label='-2.5 * sigma')
+    ax3.axvline(sigmaLimit, c='r', ls='--', alpha=0.35)
+    num_outliers = plot_data.query(f'abs({column}) >= @sigmaLimit').wavelength.count()
+    ax3.text(0.05, 0.02,
+             f'Number of lines: {len(plot_data)}\nNumber of outliers: {num_outliers}',
+             bbox=dict(boxstyle='round', ec='k', fc='wheat', alpha=0.75),
+             transform=ax3.transAxes,
+             fontsize='small', zorder=100
+             )
 
     ax3.yaxis.set_label_position('right')
     ax3.yaxis.tick_right()
@@ -735,7 +753,7 @@ def scatterplotWithOutliers(data, X, Y, hue='status_name',
         hue=hue,
         s=20,
         ec='k',
-        marker='o' if len(data) < 1e5 else '.',
+        marker='.',
         zorder=100,
         palette=palette,
         rasterized=rasterized,
