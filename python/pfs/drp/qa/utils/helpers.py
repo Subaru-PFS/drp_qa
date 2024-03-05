@@ -10,6 +10,7 @@ import pandas as pd
 
 from pfs.datamodel import TargetType
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
+from pfs.drp.stella.fitDistortedDetectorMap import calculateFitStatistics
 
 warnings.filterwarnings('ignore', message='Input data contains invalid values')
 warnings.filterwarnings('ignore', message='Gen2 Butler')
@@ -235,3 +236,43 @@ def getTargetType(arc_data, pfsConfig) -> pd.DataFrame:
     arc_data['targetType'] = arc_data.targetType.astype('category')
 
     return arc_data
+
+
+def getFitStats(
+    arcLines: ArcLineSet,
+    detectorMap: DetectorMap,
+    selection: np.ndarray[bool],
+    numParams: int = 0):
+    """Gets output from calculateFitStatistics
+
+    Parameters
+    ----------
+    arcLines : `ArcLineSet`
+        The arc lines.
+    detectorMap : `DetectorMap`
+        The detector map.
+    selection : `np.ndarray[bool]`
+        The selection of fibers to use.
+    numParams : `int`, optional
+        The number of parameters to use. Default is 0.
+
+    Returns
+    -------
+    stats : `dict`
+        The fit statistics.
+    """
+    isTrace = np.array(arcLines.description == "Trace")
+    isLine = ~isTrace
+
+    fitPosition = np.full((len(arcLines), 2), np.nan, dtype=float)
+
+    if isLine.any():
+        fitPosition[isLine] = detectorMap.findPoint(
+            arcLines.fiberId[isLine],
+            arcLines.wavelength[isLine])
+    if isTrace.any():
+        fitPosition[isTrace, 0] = detectorMap.getXCenter(
+            arcLines.fiberId[isTrace], arcLines.y[isTrace])
+        fitPosition[isTrace, 1] = np.nan
+
+    return calculateFitStatistics(fitPosition, arcLines, selection, numParams)
