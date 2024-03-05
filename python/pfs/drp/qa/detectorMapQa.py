@@ -4,7 +4,6 @@ from typing import Iterable
 
 import lsstDebug
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_pdf import PdfPages
 import numpy as np
 from scipy.stats import iqr
 
@@ -22,10 +21,13 @@ from lsst.pipe.base import (
 
 from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
 from lsst.pipe.base.connectionTypes import Input as InputConnection
+from lsst.pipe.base.connectionTypes import Output as OutputConnection
 from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm
 from pfs.drp.qa.utils import helpers
 from pfs.drp.qa.utils import plotting
+
+from .storageClasses import MultipagePdfFigure
 
 warnings.filterwarnings('ignore', message='Gen2 Butler')
 warnings.filterwarnings('ignore', message='addPfsCursor')
@@ -63,7 +65,9 @@ class PlotResidualTask(Task):
 
         Returns
         -------
-        None
+        dmQaResidualImage : `MultipagePdfFigure`
+            Detail plots.
+            1D and 2D plots of the residual between the detectormap and the arclines.
 
         Outputs
         -------
@@ -73,7 +77,6 @@ class PlotResidualTask(Task):
         arm = pfsArm.identity.arm
         spectrograph = pfsArm.identity.spectrograph
         dataIdStr = f'v{visit}-{arm}{spectrograph}'
-        rerun_name = ''
 
         title_str = f'{visit:06}-{arm}{spectrograph}'
         self.log.info(f'Getting data for {title_str}')
@@ -95,24 +98,23 @@ class PlotResidualTask(Task):
         self.log.info(f"Number of fibers: {num_fibers}")
         self.log.info(f"Number of Measured lines: {num_lines}")
 
-        output_fn = f'dm-residuals-{dataIdStr}.pdf'
+        dmQaResidualImagePdf = MultipagePdfFigure()
         useSigmaRange = self.config.useSigmaRange
-        with PdfPages(output_fn) as pdf:
-            for column in ['dx', 'dy_nm']:
-                which_range = 'xrange' if column == 'dx' else 'wrange'
-                slimit = getattr(self.config, which_range) if useSigmaRange is False else None
-                slimit = (-slimit, slimit) if slimit is not None else (None, None)
-                self.log.debug(f'Generating {column} plot for v{visit}-{arm}{spectrograph}')
-                try:
-                    fig = plotting.plotResidual(arc_data, column=column, vmin=slimit[0], vmax=slimit[1])
-                    fig.suptitle(f'DetectorMap Residuals\n{dataIdStr}\n{rerun_name}\n{column}', weight='bold')
-                    pdf.savefig(fig, dpi=150)
-                except ValueError:
-                    self.log.info(f'No residual wavelength information for {dataIdStr}, skipping')
+        for column in ['dx', 'dy_nm']:
+            which_range = 'xrange' if column == 'dx' else 'wrange'
+            slimit = getattr(self.config, which_range) if useSigmaRange is False else None
+            slimit = (-slimit, slimit) if slimit is not None else (None, None)
+            self.log.debug(f'Generating {column} plot for {dataIdStr}')
+            try:
+                fig = plotting.plotResidual(arc_data, column=column, vmin=slimit[0], vmax=slimit[1])
+                fig.suptitle(f'DetectorMap Residuals\n{dataIdStr}\n{column}', weight='bold')
+                dmQaResidualImagePdf.append(fig)
+            except ValueError:
+                self.log.info(f'No residual wavelength information for {dataIdStr}, skipping')
 
-        self.log.info(f'File saved to {output_fn}')
-
-        return Struct()
+        return Struct(
+            dmQaResidualImage=dmQaResidualImagePdf
+        )
 
     @classmethod
     def _makeArgumentParser(cls) -> ArgumentParser:
@@ -286,6 +288,12 @@ class DetectorMapQaConnections(
         dimensions=("instrument", "exposure", "detector"),
         multiple=True,
     )
+    dmQaResidualImage = OutputConnection(
+        name="dmQaResidualImage",
+        doc="Detail plots. The 1D and 2D residual plots of the detectormap with the arclines.",
+        storageClass="MultipagePdfFigure",
+        dimensions=("instrument", "exposure", "detector"),
+    )
 
 
 class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
@@ -362,44 +370,35 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         -------
         None
         """
-        detectorMapList = list()
-        arcLinesList = list()
-        pfsArmList = list()
         for specRefList in expSpecRefList:
             for dataRef in specRefList:
-                detectorMapList.append(dataRef.get('detectorMap_used'))
-                arcLinesList.append(dataRef.get('arcLines'))
-                pfsArmList.append(dataRef.get('pfsArm'))
+                detectorMap = dataRef.get('detectorMap_used')
+                arcLines = dataRef.get('arcLines')
+                pfsArm = dataRef.get('pfsArm')
 
-        return self.run(detectorMapList, arcLinesList, pfsArmList)
+                # Run the task and get the outputs.
+                outputs = self.run(detectorMap, arcLines, pfsArm)
+                for datasetType, data in outputs.getDict().items():
+                    if data is not None:
+                        dataRef.put(data, datasetType=datasetType)
 
-    def run(
-        self,
-        detectorMapList: Iterable[DetectorMap],
-        arcLinesList: Iterable[ArcLineSet],
-        pfsArmList: Iterable[PfsArm],
-    ) -> Struct:
-        """Generate detectorMapQa plots: 1) Residual of the adjustDetectorMap fitting, 2) Wavelength
-        difference of the lines detected in multiple arms.
+    def run(self, detectorMap: DetectorMap, arcLines: ArcLineSet, pfsArm: PfsArm) -> Struct:
+        """Generate detectorMapQa plots.
 
         Parameters
         ----------
-        detectorMapList : iterable of `DetectorMap`
+        detectorMap: `DetectorMap`
             Mapping from fiberId,wavelength to x,y.
-        arcLinesList : iterable of `ArcLineSet`
+        arcLines : `ArcLineSet`
             Emission line measurements by adjustDetectorMap.
-        pfsArmList : iterable of `PfsArm`
+        pfsArm : `PfsArm`
             Extracted spectra from arm.
 
         Returns
         -------
         None
         """
-
-        for detectorMap, arcLines, pfsArm in zip(detectorMapList, arcLinesList, pfsArmList):
-            self.plotResidual.run(detectorMap, arcLines, pfsArm)
-
-        return Struct()
+        return self.plotResidual.run(detectorMap, arcLines, pfsArm)
 
     def _getMetadataName(self):
         return None

@@ -7,11 +7,7 @@ import seaborn as sb
 
 from matplotlib import colors
 from matplotlib.figure import Figure
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.gridspec import GridSpec
-
-from pfs.drp.stella.utils import addPfsCursor
-from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
 
 div_palette = plt.cm.RdBu_r.with_extremes(over='magenta', under='cyan', bad='lime')
 
