@@ -239,10 +239,10 @@ def getTargetType(arc_data, pfsConfig) -> pd.DataFrame:
 
 
 def getFitStats(
-    arcLines: ArcLineSet,
-    detectorMap: DetectorMap,
-    selection: np.ndarray[bool],
-    numParams: int = 0):
+        arcLines: ArcLineSet,
+        detectorMap: DetectorMap,
+        selection: 'np.ndarray[bool]',
+        numParams: int = 0):
     """Gets output from calculateFitStatistics
 
     Parameters
