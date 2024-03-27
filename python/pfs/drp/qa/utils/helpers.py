@@ -72,62 +72,6 @@ def iqr_sigma(x) -> float:
     return iqr(x, nan_policy='omit') / 1.349
 
 
-@dataclass
-class FitStat:
-    median: float
-    robustRms: float
-    weightedRms: float
-    softenFit: float
-    dof: float
-    num_fibers: int
-    num_lines: int
-
-    def __str__(self):
-        return f'''median      = {self.median:>10.05f}
-robustRms   = {self.robustRms:>10.05f}
-weightedRms = {self.weightedRms:>10.05f}
-soften      = {self.softenFit:>10.05f}
-fibers      = {self.num_fibers:>10d}
-lines       = {self.num_lines:>10d}
-'''
-
-
-@dataclass
-class FitStats:
-    dof: int
-    chi2: float
-    spatial: FitStat
-    wavelength: FitStat
-
-    def to_dict(self):
-        """Output as dict."""
-        return dict(
-            dof=self.dof,
-            chi2=self.chi2,
-            spatial=self.spatial.__dict__,
-            wavelength=self.wavelength.__dict__
-        )
-
-
-def iqr_sigma(x) -> float:
-    """Calculate the sigma of the interquartile range as a robust estimate of the std.
-
-    Note: This will ignore NaNs.
-
-    Parameters
-    ----------
-    x : `numpy.ndarray`
-        The data.
-
-
-    Returns
-    -------
-    sigma : `float`
-        The sigma of the interquartile range.
-    """
-    return iqr(x, nan_policy='omit') / 1.349
-
-
 def getObjects(dataId: Path,
                rerun: Path,
                calibDir: Path = '/work/drp/CALIB',
