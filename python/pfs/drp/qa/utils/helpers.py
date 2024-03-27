@@ -52,6 +52,15 @@ class FitStats:
     spatial: FitStat
     wavelength: FitStat
 
+    def to_dict(self):
+        """Output as dict."""
+        return dict(
+            dof=self.dof,
+            chi2=self.chi2,
+            spatial=self.spatial.__dict__,
+            wavelength=self.wavelength.__dict__
+        )
+
 
 def iqr_sigma(x) -> float:
     """Calculate the sigma of the interquartile range as a robust estimate of the std.
