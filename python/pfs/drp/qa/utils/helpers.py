@@ -24,9 +24,6 @@ warnings.filterwarnings('ignore', message='All-NaN slice')
 warnings.filterwarnings('ignore', message='Mean of empty slice')
 warnings.filterwarnings('ignore', message='This figure')
 
-OPDB_CON = 'postgresql://pfs@pfsa-db01/opdb'
-QADB_CON = 'postgresql://pfs@pfsa-db01:5433/qadb'
-
 
 @dataclass
 class FitStat:
@@ -54,14 +51,6 @@ class FitStats:
     chi2: float
     spatial: FitStat
     wavelength: FitStat
-
-
-def queryQaDb(sql):
-    return pd.read_sql(sql, QADB_CON).convert_dtypes()
-
-
-def queryOpsDb(sql):
-    return pd.read_sql(sql, OPDB_CON).convert_dtypes()
 
 
 def iqr_sigma(x) -> float:
