@@ -30,6 +30,7 @@ from scipy.stats import iqr
 from .storageClasses import MultipagePdfFigure
 
 warnings.filterwarnings('ignore', message='Input data contains invalid values')
+warnings.filterwarnings('ignore', message='Warning: converting a masked element to nan.*')
 
 
 class PlotResidualConfig(Config):
@@ -96,8 +97,6 @@ class PlotResidualTask(Task):
         arc_data, visit_stats, detector_stats = helpers.getStats(arcLinesSet, detectorMaps, dataIds)
 
         if arc_data is not None and len(arc_data) and visit_stats is not None and len(visit_stats):
-            dmQaResidualStats = visit_stats.to_dict(orient='records')
-
             if self.config.makeResidualPlots is True:
                 arm = str(groupName[-2])
                 spectrograph = int(groupName[-1])
@@ -117,10 +116,11 @@ class PlotResidualTask(Task):
 
                 return Struct(
                     dmQaResidualImage=dmQaResidualImagePdf,
-                    dmQaResidualStats=dmQaResidualStats
+                    dmQaResidualStats=visit_stats,
+                    dmQaDetectorStats=detector_stats,
                 )
             else:
-                return Struct(dmQaResidualStats=dmQaResidualStats)
+                return Struct(dmQaResidualStats=visit_stats)
 
     @classmethod
     def _makeArgumentParser(cls) -> ArgumentParser:
@@ -411,7 +411,7 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         groupName = expSpecRefList[0]
         groupDataRefs = expSpecRefList[1]
 
-        print(f'Starting processing for {groupName=} with {len(groupDataRefs)} dataIds')
+        self.log.info(f'Starting processing for {groupName=} with {len(groupDataRefs)} dataIds')
 
         arcLinesSet = list()
         detectorMaps = list()
@@ -425,24 +425,35 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
                 detectorMaps.append(detectorMap)
                 dataIds.append(dataRef.dataId)
             except NoResults:
-                print(f'No results for {dataRef}')
+                self.log.info(f'No results for {dataRef}')
+            except Exception as e:
+                self.log.error(e)
 
         # Run the task and get the outputs.
         outputs = self.run(groupName, arcLinesSet, detectorMaps, dataIds)
         if outputs is not None:
-            for (datasetType, data), dataRef in zip(outputs.getDict().items(), groupDataRefs):
-                # Convert dataframe to dict to store as pickle.
-                if isinstance(data, pd.DataFrame):
-                    data = data.to_dict(orient='records')
+            if self.plotResidual.config.combineVisits is True:
+                for datasetType, data in outputs.getDict().items():
+                    if datasetType == 'dmQaDetectorStats':
+                        saveFile = 'dmQA-combined-stats-{arm}{spectrograph}.csv'.format(**dataRef.dataId)
+                        data.to_csv(saveFile)
+                        self.log.info(f'Combined CSV {saveFile=}')
+                    if datasetType == 'dmQaResidualImage':
+                        if self.plotResidual.config.combineVisits is True:
+                            saveFile = 'dmQA-combined-plot-{arm}{spectrograph}.pdf'.format(**dataRef.dataId)
+                            data.savefig(saveFile)
+                            self.log.info(f'Combined PDF {saveFile=}')
+            else:
+                for dataRef in groupDataRefs:
+                    for datasetType, data in outputs.getDict().items():
+                        if datasetType == 'dmQaDetectorStats':
+                            continue
+                        if isinstance(data, pd.DataFrame):
+                            data = data.to_dict(orient='records')
 
-                if isinstance(data, MultipagePdfFigure):
-                    if self.plotResidual.config.combineVisits is True:
-                        saveFile = 'dmQA-residual-combined-{arm}{spectrograph}.pdf'.format(**dataRef.dataId)
-                        data.savefig(saveFile)
-                        self.log.info(f'Combined PDF {saveFile=}')
-                        continue
-
-                dataRef.put(data, datasetType=datasetType)
+                        dataIdStr = 'v{visit}-{arm}{spectrograph}'.format(**dataRef.dataId)
+                        self.log.info(f'Saving {datasetType} for {dataIdStr}')
+                        dataRef.put(data, datasetType=datasetType)
 
     def run(self, *args, **kwargs) -> Struct:
         """Generate detectorMapQa plots.

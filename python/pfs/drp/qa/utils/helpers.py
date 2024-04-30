@@ -317,17 +317,6 @@ def getStats(arcLinesSet, detectorMaps, dataIds):
                 if len(descriptions) > 1:
                     descriptions.remove('Trace')
 
-            # print('Checking calib frames')
-            # if len(calib_frames) == 0:
-            #     for k, v in detectorMap.getMetadata().items():
-            #         if k.startswith('CALIB_INPUT'):
-            #             calib_frames.append(v)
-            #
-            #     calib_frames = calib_frames[1:]
-
-            # print('Adding calib frame information')
-            # arc_data['calib_inputs'] = np.tile(calib_frames, (len(arc_data), 1))
-
             dmap_bbox = detectorMap.getBBox()
 
             for idx, rows in arc_data.groupby('status_type'):
