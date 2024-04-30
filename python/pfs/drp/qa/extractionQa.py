@@ -143,6 +143,7 @@ class ExtractionQaConfig(PipelineTaskConfig, pipelineConnections=ExtractionQaCon
     fitWidth = Field(dtype=int, default=3, doc="Half width  of a fitting region (pix)")
     plotWidth = Field(dtype=int, default=15, doc="Half width  of plot (pix)")
     plotFiberNum = Field(dtype=int, default=20, doc="Maximum fiber number of detailed plots")
+    figureDpi = Field(dtype=int, default=72, doc="resolution of plot for residual")
 
 
 class ExtractionQaTask(CmdLineTask, PipelineTask):
@@ -973,10 +974,10 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         disp.setMaskPlaneColor("REFLINE", afwDisplay.IGNORE)
         disp.mtv(chiimage, title=f"{'%(visit)d %(arm)s%(spectrograph)d' % dataId}")
         addPfsCursor(disp, detectorMap)
-        qaImagePdf.append(fig, bbox_inches="tight")
+        qaImagePdf.append(fig, dpi=self.config.figureDpi, bbox_inches="tight")
         plt.close(fig)
 
-        fig = plt.figure(figsize=(10, 10))
+        fig = plt.figure(figsize=(11.5, 10))
         ax = fig.add_subplot(1, 1, 1)
         mappable = ax.scatter(xarray, yarray, s=2, c=dxarray, cmap="coolwarm", vmin=-0.1, vmax=0.1)
         plt.title("dX (pix)")
@@ -984,11 +985,11 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         plt.ylabel("Y (pix)")
         plt.xlim(0, chiimage.getDimensions()[0])
         plt.ylim(0, chiimage.getDimensions()[1])
-        fig.colorbar(mappable, ax=ax)
+        fig.colorbar(mappable, ax=ax, pad=0.01)
         qaImagePdf.append(fig, bbox_inches="tight")
         plt.close(fig)
 
-        fig = plt.figure(figsize=(10, 10))
+        fig = plt.figure(figsize=(11.5, 10))
         ax = fig.add_subplot(1, 1, 1)
         mappable = ax.scatter(xarray, yarray, s=2, c=dwarray, cmap="coolwarm", vmin=-0.1, vmax=0.1)
         plt.title("d$\\sigma$/$\\sigma$")
@@ -996,7 +997,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         plt.ylabel("Y (pix)")
         plt.xlim(0, chiimage.getDimensions()[0])
         plt.ylim(0, chiimage.getDimensions()[1])
-        fig.colorbar(mappable, ax=ax)
+        fig.colorbar(mappable, ax=ax, pad=0.01)
         qaImagePdf.append(fig, bbox_inches="tight")
         plt.close(fig)
 
