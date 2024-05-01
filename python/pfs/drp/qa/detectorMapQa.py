@@ -436,7 +436,7 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
                 for datasetType, data in outputs.getDict().items():
                     if datasetType == 'dmQaDetectorStats':
                         saveFile = 'dmQA-combined-stats-{arm}{spectrograph}.csv'.format(**dataRef.dataId)
-                        data.to_csv(saveFile)
+                        data.to_csv(saveFile, index=False)
                         self.log.info(f'Combined CSV {saveFile=}')
                     if datasetType == 'dmQaResidualImage':
                         if self.plotResidual.config.combineVisits is True:

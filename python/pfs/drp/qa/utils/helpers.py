@@ -293,8 +293,6 @@ def getStats(arcLinesSet, detectorMaps, dataIds):
     all_visit_stats = None
     all_detector_stats = None
 
-    # calib_frames = list()
-
     for arcLines, detectorMap, dataId in zip(arcLinesSet, detectorMaps, dataIds):
         try:
             arc_data = loadData(arcLines, detectorMap)
@@ -345,7 +343,7 @@ def getStats(arcLinesSet, detectorMaps, dataIds):
         for status_type, rows in all_arc_data.groupby(['status_type']):
             try:
                 detectorStats = pd.json_normalize(getFitStats(rows).to_dict())
-                # detectorStats['ccd'] = ccd
+                detectorStats['ccd'] = ccd
                 detectorStats['status_type'] = status_type
                 detectorStats['description'] = 'all'
                 detector_stats.append(detectorStats)
@@ -356,7 +354,7 @@ def getStats(arcLinesSet, detectorMaps, dataIds):
         for (status_type, desc), rows in all_arc_data.groupby(['status_type', 'description']):
             try:
                 detectorStats = pd.json_normalize(getFitStats(rows).to_dict())
-                # detectorStats['ccd'] = ccd
+                detectorStats['ccd'] = ccd
                 detectorStats['status_type'] = status_type
                 detectorStats['description'] = desc
                 detector_stats.append(detectorStats)
