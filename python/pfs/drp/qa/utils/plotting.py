@@ -16,6 +16,15 @@ detector_palette = {
     'm': 'tab:pink'
 }
 
+description_palette = {
+    'ArI': 'tab:green',
+    'CdI,HgI': 'tab:purple',
+    'KrI': 'tab:brown',
+    'NeI': 'tab:pink',
+    'Trace': 'tab:cyan',
+    'XeI': 'tab:olive'
+}
+
 
 def makePlot(
         arc_data,
@@ -86,15 +95,13 @@ def makePlot(
             except Exception as e:
                 print(f'Problem plotting residual {e}')
 
-        desc_pal = {desc: plt.cm.tab10(i) for i, desc in enumerate(sorted(visit_stats.description.unique()))}
-
         visit_fig = plotVisits(
             visit_stats.query(
                 'status_type == "RESERVED"'
                 ' and ccd == @ccd'
                 # f' and visit {"" if calib_inputs_only else "not"} in @visit'
             ).sort_values(by='visit').copy(),
-            desc_pal,
+            description_palette,
             showLegend=True,
             fig=bottom_fig
         )
