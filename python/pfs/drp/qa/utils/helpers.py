@@ -316,6 +316,10 @@ def getStats(arcLinesSet, detectorMaps, dataIds):
                     descriptions.remove('Trace')
 
             dmap_bbox = detectorMap.getBBox()
+            fiberIdMin = detectorMap.fiberId.min()
+            fiberIdMax = detectorMap.fiberId.max()
+            wavelengthMin = int(arcLines.wavelength.min())
+            wavelengthMax = int(arcLines.wavelength.max())
 
             for idx, rows in arc_data.groupby('status_type'):
                 visit_stat = pd.json_normalize(getFitStats(rows).to_dict())
@@ -327,6 +331,10 @@ def getStats(arcLinesSet, detectorMaps, dataIds):
                 visit_stat['description'] = ','.join(descriptions)
                 visit_stat['detector_width'] = dmap_bbox.width
                 visit_stat['detector_height'] = dmap_bbox.height
+                visit_stat['fiberId_min'] = fiberIdMin
+                visit_stat['fiberId_max'] = fiberIdMax
+                visit_stat['wavelength_min'] = wavelengthMin
+                visit_stat['wavelength_max'] = wavelengthMax
                 visit_stats.append(visit_stat)
         except NoResults:
             print(f'No results found for {dataId}')

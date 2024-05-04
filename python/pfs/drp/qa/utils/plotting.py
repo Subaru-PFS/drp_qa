@@ -46,34 +46,35 @@ def makePlot(
         visit_stat = visit_stats.iloc[0]
         dmWidth = visit_stat.detector_width
         dmHeight = visit_stat.detector_height
+        fiberIdMin = visit_stat.fiberId_min
+        fiberIdMax = visit_stat.fiberId_max
+        wavelengthMin = visit_stat.wavelength_min
+        wavelengthMax = visit_stat.wavelength_max
     except IndexError:
         dmWidth = None
         dmHeight = None
+        fiberIdMin = None
+        fiberIdMax = None
+        wavelengthMin = None
+        wavelengthMax = None
 
     # One big fig.
     main_fig = Figure(layout='constrained', figsize=(14, 10))
 
     # Split into two rows.
     (top_fig, bottom_fig) = main_fig.subfigures(2, 1, wspace=0, height_ratios=[5, 1.5])
-    # top_fig.suptitle(
-    #     f'DetectorMap Residuals\n'
-    #     f'rerun={rerun_name}\n'
-    #     f'calib={calibDir.as_posix()}\n'
-    #     f'{arm}{spectrograph}\n'
-    #     f'{include} {calib_inputs_only=}',
-    #     weight='bold',
-    #     fontsize='small'
-    # )
+    top_fig.suptitle(
+        f'DetectorMap Residuals\n'
+        f'{arm}{spectrograph}\n',
+        weight='bold',
+        fontsize='small'
+    )
 
     # Split top fig into wo columns.
     (x_fig, y_fig) = top_fig.subfigures(1, 2, wspace=0)
 
     try:
-        pd0 = arc_data.query(
-            f'arm == "{arm}"'
-            f' and spectrograph == {spectrograph}'
-            # f' and visit {"" if calib_inputs_only else "not"} in @visit'
-        ).copy()
+        pd0 = arc_data.query(f'arm == "{arm}" and spectrograph == {spectrograph}').copy()
 
         for sub_fig, column in zip([x_fig, y_fig], ['xResid', 'yResid']):
             try:
@@ -87,8 +88,10 @@ def makePlot(
                     sigmaLines=[1.],
                     dmWidth=dmWidth,
                     dmHeight=dmHeight,
-                    # wavelengthMin=wavelengthLimits[arm][0],
-                    # wavelengthMax=wavelengthLimits[arm][1],
+                    fiberIdMin=fiberIdMin,
+                    fiberIdMax=fiberIdMax,
+                    wavelengthMin=wavelengthMin,
+                    wavelengthMax=wavelengthMax,
                     fig=sub_fig,
                 )
                 sub_fig.suptitle(f'{arm}{spectrograph}\n{column}', fontsize='small', fontweight='bold')
@@ -127,6 +130,8 @@ def plotResidual(
         useDMLayout: bool = True,
         dmWidth: int = 4096,
         dmHeight: int = 4176,
+        fiberIdMin: int = None,
+        fiberIdMax: int = None,
         wavelengthMin: float = None,
         wavelengthMax: float = None,
         fig: Figure = None
@@ -315,6 +320,9 @@ def plotResidual(
         bbox=dict(boxstyle='round', ec='k', fc='wheat'),
         fontsize='small', zorder=100
     )
+
+    if fiberIdMin is not None and fiberIdMax is not None:
+        ax0.set_xlim(fiberIdMin, fiberIdMax)
 
     if useDMLayout is True:
         # Reverse the fiber order to match the xy-pixel layout
