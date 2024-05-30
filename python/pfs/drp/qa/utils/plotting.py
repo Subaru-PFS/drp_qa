@@ -22,7 +22,8 @@ description_palette = {
     'KrI': 'tab:brown',
     'NeI': 'tab:pink',
     'Trace': 'tab:cyan',
-    'XeI': 'tab:olive'
+    'XeI': 'tab:olive',
+    'O2,OH': 'tab:blue'
 }
 
 
@@ -544,7 +545,7 @@ def plotVisits(plotData, desc_pal=None, fig=None, showLegend=False):
                 x=f'{metric}.median',
                 xerr=f'{metric}.weightedRms',
                 marker='o',
-                color=desc_pal[desc] if desc_pal is not None else None,
+                color=desc_pal.get(desc, 'red') if desc_pal is not None else None,
                 label=desc,
                 ax=ax,
             )
@@ -622,7 +623,7 @@ def plotDetectorMedians(detector_stats):
             )
 
         sb.scatterplot(
-            data=plot_data,
+            data=plot_data.fillna(0),
             x='ccd',
             y=f'{metric}.median',
             hue='arm',
