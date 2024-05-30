@@ -1,3 +1,4 @@
+import warnings
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
@@ -9,6 +10,9 @@ from lsst.daf.persistence import NoResults
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
 from scipy.optimize import bisect
 from scipy.stats import iqr
+
+
+warnings.filterwarnings('ignore', message='WARNING: Input data contains invalid values.*')
 
 
 @dataclass
@@ -298,6 +302,7 @@ def getStats(arcLinesSet, detectorMaps, dataIds):
             arc_data = loadData(arcLines, detectorMap)
 
             if len(arc_data) == 0:
+                print(f'No data for {dataId}')
                 continue
 
             visit = dataId['visit']
@@ -351,6 +356,9 @@ def getStats(arcLinesSet, detectorMaps, dataIds):
         for status_type, rows in all_arc_data.groupby(['status_type']):
             try:
                 detectorStats = pd.json_normalize(getFitStats(rows).to_dict())
+                arm = rows['arm'].iloc[0]
+                spectrograph = rows['spectrograph'].iloc[0]
+                ccd = f'{arm}{spectrograph}'
                 detectorStats['ccd'] = ccd
                 detectorStats['status_type'] = status_type
                 detectorStats['description'] = 'all'
@@ -362,6 +370,9 @@ def getStats(arcLinesSet, detectorMaps, dataIds):
         for (status_type, desc), rows in all_arc_data.groupby(['status_type', 'description']):
             try:
                 detectorStats = pd.json_normalize(getFitStats(rows).to_dict())
+                arm = rows['arm'].iloc[0]
+                spectrograph = rows['spectrograph'].iloc[0]
+                ccd = f'{arm}{spectrograph}'
                 detectorStats['ccd'] = ccd
                 detectorStats['status_type'] = status_type
                 detectorStats['description'] = desc
