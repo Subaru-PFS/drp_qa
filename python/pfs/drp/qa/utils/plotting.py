@@ -64,12 +64,6 @@ def makePlot(
 
     # Split into two rows.
     (top_fig, bottom_fig) = main_fig.subfigures(2, 1, wspace=0, height_ratios=[5, 1.5])
-    top_fig.suptitle(
-        f'DetectorMap Residuals\n'
-        f'{arm}{spectrograph}\n',
-        weight='bold',
-        fontsize='small'
-    )
 
     # Split top fig into wo columns.
     (x_fig, y_fig) = top_fig.subfigures(1, 2, wspace=0)
@@ -426,8 +420,6 @@ def plotResidual(
     if bin_wl:
         ax_title += f' binsize={binWavelength} {units}'
     ax3.set_title(ax_title, weight='bold', fontsize='small')
-
-    fig.suptitle('DetectorMap Residuals', weight='bold')
 
     return fig
 
