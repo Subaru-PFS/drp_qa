@@ -111,11 +111,9 @@ class PlotResidualTask(Task):
                     binWavelength=self.config.binWavelength,
                 )
                 residFig.suptitle(f'DetectorMap Residuals\n{groupName}', weight='bold')
-                dmQaResidualImagePdf = MultipagePdfFigure()
-                dmQaResidualImagePdf.append(residFig)
 
                 return Struct(
-                    dmQaResidualImage=dmQaResidualImagePdf,
+                    dmQaResidualImage=residFig,
                     dmQaResidualStats=visit_stats,
                     dmQaDetectorStats=detector_stats,
                 )
@@ -338,7 +336,6 @@ class DetectorMapQaRunner(TaskRunner):
             * If checkOverlap, group all detectors by visit.
             * Otherwise, group per visit per detector (i.e. don't group).
         """
-
         combineVisits = parsedCmd.config.plotResidual.combineVisits
         checkOverlap = parsedCmd.config.checkOverlap
 
@@ -416,7 +413,15 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         arcLinesSet = list()
         detectorMaps = list()
         dataIds = list()
+        rerun_name = None
+        calib_dir = None
+        ccd = ''
         for dataRef in groupDataRefs:
+            if rerun_name is None:
+                # TODO fix this one day with Gen3
+                rerun_name = dataRef.butlerSubset.butler._repos.inputs()[0].repoArgs.root
+                calib_dir = dataRef.butlerSubset.butler._repos.inputs()[0].repoArgs.mapperArgs['calibRoot']
+                ccd = '{arm}{spectrograph}'.format(**dataRef.dataId)
             try:
                 detectorMap = dataRef.get('detectorMap_used')
                 arcLines = dataRef.get('arcLines')
@@ -435,25 +440,30 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
             if self.plotResidual.config.combineVisits is True:
                 for datasetType, data in outputs.getDict().items():
                     if datasetType == 'dmQaDetectorStats':
-                        saveFile = 'dmQA-combined-stats-{arm}{spectrograph}.csv'.format(**dataRef.dataId)
+                        saveFile = f'dmQA-combined-stats-{ccd}.csv'
                         data.to_csv(saveFile, index=False)
                         self.log.info(f'Combined CSV {saveFile=}')
                     if datasetType == 'dmQaResidualImage':
-                        if self.plotResidual.config.combineVisits is True:
-                            saveFile = 'dmQA-combined-plot-{arm}{spectrograph}.pdf'.format(**dataRef.dataId)
-                            data.savefig(saveFile)
-                            self.log.info(f'Combined PDF {saveFile=}')
+                        saveFile = f'dmQA-combined-plot-{ccd}.png'
+                        data.suptitle(f'DetectorMap Residuals - {ccd}\n'
+                                      f'{rerun_name}\n{calib_dir}',
+                                      weight='bold', fontsize='small')
+                        data.savefig(saveFile, dpi=120)
+                        self.log.info(f'Combined PNG {saveFile=}')
             else:
                 for dataRef in groupDataRefs:
                     for datasetType, data in outputs.getDict().items():
+                        dataIdStr = 'v{visit}-{arm}{spectrograph}'.format(**dataRef.dataId)
                         if datasetType == 'dmQaDetectorStats':
                             continue
+                        if datasetType == 'dmQaResidualImage':
+                            save_data = MultipagePdfFigure()
+                            save_data.append(data)
                         if isinstance(data, pd.DataFrame):
-                            data = data.to_dict(orient='records')
+                            save_data = data.to_dict(orient='records')
 
-                        dataIdStr = 'v{visit}-{arm}{spectrograph}'.format(**dataRef.dataId)
                         self.log.info(f'Saving {datasetType} for {dataIdStr}')
-                        dataRef.put(data, datasetType=datasetType)
+                        dataRef.put(save_data, datasetType=datasetType)
 
     def run(self, *args, **kwargs) -> Struct:
         """Generate detectorMapQa plots.
