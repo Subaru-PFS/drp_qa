@@ -3,6 +3,8 @@ from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
 
+from pfs.utils.fiberids import FiberIds
+
 import numpy as np
 import pandas as pd
 from astropy.stats import sigma_clip
@@ -76,8 +78,8 @@ def loadData(
         arcLines: ArcLineSet,
         detectorMap: DetectorMap,
         dropNaColumns: bool = True,
-        **kwargs
-) -> pd.DataFrame:
+        addFiberInfo: bool = True,
+        **kwargs) -> pd.DataFrame:
     """Looks up the data in butler and returns a dataframe with the arcline data.
 
     The arcline data includes basic statistics, such as the median and sigma of the residuals.
@@ -109,6 +111,15 @@ def loadData(
 
     arcData = arcData.groupby(['status_type', 'isLine']).apply(maskOutliers)
     arcData.reset_index(drop=True, inplace=True)
+
+    if addFiberInfo is True:
+        mtp_df = pd.DataFrame(
+            FiberIds().fiberIdToMTP(detectorMap.fiberId),
+            columns=['mtpId', 'mtpHoles', 'cobraId']
+        )
+        mtp_df.index = detectorMap.fiberId
+        mtp_df.index.name = 'fiberId'
+        arcData = arcData.merge(mtp_df.reset_index(), on='fiberId')
 
     return arcData
 
