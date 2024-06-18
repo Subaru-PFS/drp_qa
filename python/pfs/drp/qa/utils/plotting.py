@@ -81,7 +81,7 @@ def makePlot(
         wavelengthMax = None
 
     # One big fig.
-    main_fig = Figure(layout="constrained", figsize=(14, 10))
+    main_fig = Figure(layout="constrained", figsize=(12, 10), dpi=150)
 
     # Split into two rows.
     (top_fig, bottom_fig) = main_fig.subfigures(2, 1, wspace=0, height_ratios=[5, 1.5])
