@@ -1,4 +1,6 @@
-import matplotlib.pyplot as plt
+import warnings
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 import seaborn as sb
@@ -6,7 +8,14 @@ from matplotlib import colors
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
+import matplotlib.pyplot as plt
+import matplotlib.cm
+from matplotlib.colors import Normalize
+from pfs.drp.stella.utils.plotting import addColorbar
 from pfs.drp.qa.utils.helpers import iqr_sigma, getFitStats, getWeightedRMS
+from pfs.drp.stella.utils.math import robustRms
+from pfs.drp.stella.datamodel import PfsFiberNorms
+from pfs.datamodel import PfsConfig
 
 div_palette = plt.cm.RdBu_r.with_extremes(over='magenta', under='cyan', bad='lime')
 detector_palette = {
@@ -28,14 +37,14 @@ description_palette = {
 
 
 def makePlot(
-        arc_data,
-        visit_stats,
-        arm,
-        spectrograph,
-        useSigmaRange=False,
-        xrange=0.1,
-        wrange=0.1,
-        binWavelength=0.1
+    arc_data,
+    visit_stats,
+    arm,
+    spectrograph,
+    useSigmaRange=False,
+    xrange=0.1,
+    wrange=0.1,
+    binWavelength=0.1
 ):
     if useSigmaRange is True:
         xrange = None
@@ -114,22 +123,22 @@ def makePlot(
 
 
 def plotResidual(
-        data: pd.DataFrame,
-        column: str = 'xResid',
-        xrange: float = None,
-        wrange: float = None,
-        sigmaRange: int = 2.5,
-        sigmaLines: list = [1.0, 2.5],
-        goodRange: float = None,
-        binWavelength: float = None,
-        useDMLayout: bool = True,
-        dmWidth: int = 4096,
-        dmHeight: int = 4176,
-        fiberIdMin: int = None,
-        fiberIdMax: int = None,
-        wavelengthMin: float = None,
-        wavelengthMax: float = None,
-        fig: Figure = None
+    data: pd.DataFrame,
+    column: str = 'xResid',
+    xrange: float = None,
+    wrange: float = None,
+    sigmaRange: int = 2.5,
+    sigmaLines: list = [1.0, 2.5],
+    goodRange: float = None,
+    binWavelength: float = None,
+    useDMLayout: bool = True,
+    dmWidth: int = 4096,
+    dmHeight: int = 4176,
+    fiberIdMin: int = None,
+    fiberIdMax: int = None,
+    wavelengthMin: float = None,
+    wavelengthMax: float = None,
+    fig: Figure = None
 ) -> Figure:
     """Plot the 1D and 2D residuals on a single figure.
 
@@ -421,14 +430,16 @@ def plotResidual(
         ax_title += f' binsize={binWavelength} {units}'
     ax3.set_title(ax_title, weight='bold', fontsize='small')
 
+    fig.suptitle('DetectorMap Residuals', weight='bold')
+
     return fig
 
 
 def scatterplotWithOutliers(
-        data, X, Y, hue='status_name',
-        ymin=-0.1, ymax=0.1, palette=None,
-        ax=None, refline=None, vertical=False,
-        rasterized=False, showUnusedOutliers=False,
+    data, X, Y, hue='status_name',
+    ymin=-0.1, ymax=0.1, palette=None,
+    ax=None, refline=None, vertical=False,
+    rasterized=False, showUnusedOutliers=False,
 ) -> Axes:
     """Make a scatterplot with outliers marked.
 
@@ -633,5 +644,70 @@ def plotDetectorMedians(detector_stats):
         ax.axhline(-0.1, c='g', ls='--', alpha=0.35)
         ax.axhline(0.1, c='g', ls='--', alpha=0.35)
         ax.axhline(0., c='k', ls='--', alpha=0.35, zorder=-100)
+
+    return fig
+
+
+def plotFiberNorms(
+    fiberNorms: PfsFiberNorms,
+    pfsConfig: PfsConfig,
+    axes: Optional[Axes] = None,
+    lower: float = 2.5,
+    upper: float = 2.5,
+    size: float = 10,
+    title: Optional[str] = None
+) -> Figure:
+    """Plot fiber normalization values
+
+    Parameters
+    ----------
+    fiberNorms : `PfsFiberNorms`
+        Fiber normalization values.
+    pfsConfig : `pfs.datamodel.PfsConfig`
+        Configuration for the PFS system
+    axes : `matplotlib.axes.Axes`, optional
+        Axes to plot on; if None, create a new figure and axes.
+    lower, upper : `float`
+        Lower and upper bounds for plot, in units of standard deviations. Default is 2.5.
+    size : `float`
+        Size of the markers. Default is 10.
+    title : `str`, optional
+        Title for the plot.
+
+    Returns
+    -------
+    fig : `matplotlib.figure.Figure`
+        Figure containing the plot.
+    """
+
+    cmap = matplotlib.cm.coolwarm
+    if axes is None:
+        fig, axes = plt.subplots()
+    else:
+        fig = axes.figure
+
+    pfsConfig = pfsConfig.select(fiberId=fiberNorms.fiberId)
+    indices = np.argsort(pfsConfig.fiberId)
+    assert np.array_equal(pfsConfig.fiberId[indices], fiberNorms.fiberId)
+    xx = pfsConfig.pfiCenter[indices, 0]
+    yy = pfsConfig.pfiCenter[indices, 1]
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", r"All-NaN (slice|axis) encountered")
+        values = np.nanmedian(fiberNorms.values, axis=1)
+
+    good = np.isfinite(values)
+    median = np.median(values[good])
+    rms = robustRms(values[good])
+    lower = max(median - lower * rms, np.nanmin(values))
+    upper = min(median + upper * rms, np.nanmax(values))
+    norm = Normalize(vmin=lower, vmax=upper)
+
+    axes.scatter(xx, yy, marker="o", c=values, cmap=cmap, norm=norm, s=size)
+    axes.set_aspect("equal")
+    addColorbar(fig, axes, cmap, norm, "Fiber normalization")
+
+    if title is not None:
+        axes.set_title(title)
 
     return fig
