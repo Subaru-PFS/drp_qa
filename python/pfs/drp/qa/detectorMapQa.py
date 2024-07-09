@@ -4,7 +4,6 @@ from typing import Iterable
 import lsstDebug
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from lsst.daf.persistence.butlerExceptions import NoResults
 from lsst.pex.config import Field, ConfigurableField, Config
 from lsst.pipe.base import (
@@ -128,7 +127,8 @@ class OverlapRegionLinesTask(Task):
         self.debugInfo = lsstDebug.Info(__name__)
 
     def run(
-        self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet], pfsArm: Iterable[PfsArm]
+        self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet],
+        pfsArm: Iterable[PfsArm]
     ) -> Struct:
         """QA of adjustDetectorMap by plotting the wavelength difference of sky lines detected in multiple
         arms.

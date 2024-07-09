@@ -646,8 +646,6 @@ def plotVisits(
     ax0.set_ylabel("Visit")
     ax0.invert_yaxis()
 
-    if showLegend:
-        fig.legend(*ax0.get_legend_handles_labels(), shadow=True)
     fig.suptitle("RESERVED median and 1-sigma weighted errors")
 
     return fig
