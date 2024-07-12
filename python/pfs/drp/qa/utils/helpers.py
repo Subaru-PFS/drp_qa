@@ -1,4 +1,3 @@
-import warnings
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
@@ -11,8 +10,6 @@ from lsst.daf.persistence import NoResults
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
 from scipy.optimize import bisect
 from scipy.stats import iqr
-
-warnings.filterwarnings("ignore", message="WARNING: Input data contains invalid values.*")
 
 
 @dataclass

@@ -1,4 +1,3 @@
-import warnings
 from collections import defaultdict
 from typing import Iterable
 
@@ -28,9 +27,6 @@ from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm
 from scipy.stats import iqr
 
 from .storageClasses import MultipagePdfFigure
-
-warnings.filterwarnings("ignore", message="Input data contains invalid values")
-warnings.filterwarnings("ignore", message="Warning: converting a masked element to nan.*")
 
 
 class PlotResidualConfig(Config):
