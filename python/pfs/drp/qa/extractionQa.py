@@ -1,3 +1,8 @@
+import dataclasses
+import itertools
+import math
+from typing import Dict, Union
+
 import lsstDebug
 from lsst.pipe.base import (
     ArgumentParser,
@@ -14,10 +19,8 @@ from lsst.pipe.base.connectionTypes import Output as OutputConnection
 from lsst.pipe.base.connectionTypes import PrerequisiteInput as PrerequisiteConnection
 from lsst.daf.persistence import ButlerDataRef
 from lsst.pex.config import Field
-
 import lsst.afw.display as afwDisplay
 from lsst.afw.image import ExposureF, MaskedImageF, ImageF
-
 from pfs.drp.stella import (
     DetectorMap,
     FiberProfileSet,
@@ -26,21 +29,13 @@ from pfs.drp.stella import (
 )
 from pfs.drp.stella.utils import addPfsCursor
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
-
-from .storageClasses import MultipagePdfFigure, QaDict
-
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import iqr
 from scipy.optimize import curve_fit
 
-import dataclasses
-import itertools
-import math
-
-from typing import Dict, Union
-
+from .storageClasses import MultipagePdfFigure, QaDict
 
 __all__ = [
     "ExtractionQaConnections",

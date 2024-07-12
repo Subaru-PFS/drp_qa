@@ -1,9 +1,8 @@
-from matplotlib.backends.backend_pdf import PdfPages
-from matplotlib.figure import Figure
-
 import io
 from typing import Union
 
+from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.figure import Figure
 
 __all__ = [
     "MultipagePdfFigure",
