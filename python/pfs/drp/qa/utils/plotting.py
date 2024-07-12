@@ -1,3 +1,6 @@
+from collections.abc import Iterable
+from typing import Optional
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -6,7 +9,9 @@ from matplotlib import colors
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
-from pfs.drp.qa.utils.helpers import iqr_sigma, getFitStats, getWeightedRMS
+from pfs.drp.qa.utils.helpers import getFitStats
+from pfs.drp.qa.utils.math import getWeightedRMS
+from pfs.drp.stella.utils.math import robustRms
 
 div_palette = plt.cm.RdBu_r.with_extremes(over="magenta", under="cyan", bad="lime")
 detector_palette = {"b": "tab:blue", "r": "tab:red", "n": "tab:orange", "m": "tab:pink"}
@@ -23,8 +28,36 @@ description_palette = {
 
 
 def makePlot(
-    arc_data, visit_stats, arm, spectrograph, useSigmaRange=False, xrange=0.1, wrange=0.1, binWavelength=0.1
+    arc_data: pd.DataFrame,
+    visit_stats: pd.DataFrame,
+    arm: str,
+    spectrograph: int,
+    useSigmaRange: bool = False,
+    xrange: float = 0.1,
+    wrange: float = 0.1,
+    binWavelength: float = 0.1,
 ):
+    """Make a plot of the residuals.
+
+    Parameters
+    ----------
+    arc_data : `pandas.DataFrame`
+        The arc data.
+    visit_stats : `pandas.DataFrame`
+        The visit statistics.
+    arm : `str`
+        The arm.
+    spectrograph : `int`
+        The spectrograph.
+    useSigmaRange : `bool`
+        Use the sigma range? Default is ``False``.
+    xrange : `float`, optional
+        The range for the spatial data. Default is 0.1.
+    wrange : `float`, optional
+        The range for the wavelength data. Default is 0.1.
+    binWavelength : `float`, optional
+        The value by which to bin the wavelength. If None, no binning.
+    """
     if useSigmaRange is True:
         xrange = None
         wrange = None
@@ -67,8 +100,7 @@ def makePlot(
                     xrange=xrange,
                     wrange=wrange,
                     binWavelength=binWavelength,
-                    # goodRange=goodLimits[column],
-                    sigmaLines=[1.0],
+                    sigmaLines=(1.0,),
                     dmWidth=dmWidth,
                     dmHeight=dmHeight,
                     fiberIdMin=fiberIdMin,
@@ -82,13 +114,7 @@ def makePlot(
                 print(f"Problem plotting residual {e}")
 
         visit_fig = plotVisits(
-            visit_stats.query(
-                'status_type == "RESERVED"'
-                " and ccd == @ccd"
-                # f' and visit {"" if calib_inputs_only else "not"} in @visit'
-            )
-            .sort_values(by="visit")
-            .copy(),
+            visit_stats.query('status_type == "RESERVED" and ccd == @ccd').sort_values(by="visit").copy(),
             description_palette,
             showLegend=True,
             fig=bottom_fig,
@@ -109,17 +135,17 @@ def plotResidual(
     xrange: float = None,
     wrange: float = None,
     sigmaRange: int = 2.5,
-    sigmaLines: list = [1.0, 2.5],
+    sigmaLines: Optional[tuple[float]] = None,
     goodRange: float = None,
-    binWavelength: float = None,
+    binWavelength: Optional[float] = None,
     useDMLayout: bool = True,
     dmWidth: int = 4096,
     dmHeight: int = 4176,
-    fiberIdMin: int = None,
-    fiberIdMax: int = None,
-    wavelengthMin: float = None,
-    wavelengthMax: float = None,
-    fig: Figure = None,
+    fiberIdMin: Optional[int] = None,
+    fiberIdMax: Optional[int] = None,
+    wavelengthMin: Optional[float] = None,
+    wavelengthMax: Optional[float] = None,
+    fig: Optional[Figure] = None,
 ) -> Figure:
     """Plot the 1D and 2D residuals on a single figure.
 
@@ -133,12 +159,30 @@ def plotResidual(
         The range for the spatial data.
     wrange : `float`, optional
         The range for the wavelength data.
+    sigmaRange : `int`, optional
+        The sigma range. Default is 2.5.
+    sigmaLines : `tuple`, optional
+        The sigma lines to plot. If None, use [1.0, 2.5].
     goodRange : `float`, optional
         Used for showing an "acceptable" range.
     binWavelength : `float`, optional
         The value by which to bin the wavelength. If None, no binning.
     useDMLayout : `bool`, optional
         Use the detector map layout? Default is ``True``.
+    dmWidth : `int`, optional
+        The detector map width. Default is 4096.
+    dmHeight : `int`, optional
+        The detector map height. Default is 4176.
+    fiberIdMin : `int`, optional
+        The minimum fiberId. Default is ``None``.
+    fiberIdMax : `int`, optional
+        The maximum fiberId. Default is ``None``.
+    wavelengthMin : `float`, optional
+        The minimum wavelength. Default is ``None``.
+    wavelengthMax : `float`, optional
+        The maximum wavelength. Default is ``None``.
+    fig : `Figure`, optional
+        The figure. Default is ``None``.
 
     Returns
     -------
@@ -146,6 +190,9 @@ def plotResidual(
         A summary plot of the 1D and 2D residuals.
     """
     # Wavelength residual
+    if sigmaLines is None:
+        sigmaLines = [1.0, 2.5]
+
     data["bin"] = 1
     bin_wl = False
     if isinstance(binWavelength, (int, float)) and binWavelength > 0:
@@ -377,8 +424,10 @@ def plotResidual(
         wrange = fit_stats.weightedRms * sigmaRange
 
     if bin_wl is True:
-        binned_data = plotData.groupby(["bin", "status", "isOutlier"])[["wavelength", column]]
-        plotData = binned_data.agg("median", iqr_sigma).dropna().reset_index().sort_values("status")
+        binned_data = plotData.dropna(subset=["wavelength", column]).groupby(["bin", "status", "isOutlier"])[
+            ["wavelength", column]
+        ]
+        plotData = binned_data.agg("median", robustRms).reset_index().sort_values("status")
 
     ax3 = scatterplotWithOutliers(
         plotData.query("isOutlier == False"),
@@ -415,18 +464,18 @@ def plotResidual(
 
 
 def scatterplotWithOutliers(
-    data,
-    X,
-    Y,
-    hue="status_name",
-    ymin=-0.1,
-    ymax=0.1,
-    palette=None,
-    ax=None,
-    refline=None,
-    vertical=False,
-    rasterized=False,
-    showUnusedOutliers=False,
+    data: pd.DataFrame,
+    X: str,
+    Y: str,
+    hue: str = "status_name",
+    ymin: float = -0.1,
+    ymax: float = 0.1,
+    palette: Optional[dict] = None,
+    ax: Optional[Axes] = None,
+    refline: Optional[Iterable[float]] = None,
+    vertical: bool = False,
+    rasterized: bool = False,
+    showUnusedOutliers: bool = False,
 ) -> Axes:
     """Make a scatterplot with outliers marked.
 
@@ -452,7 +501,7 @@ def scatterplotWithOutliers(
     ax : `matplotlib.axes.Axes`, optional
         The axes. Default is ``None``.
     refline : `float`, optional
-        The reference line. Default is ``None``.
+        Reference lines to plot. Default is ``None``.
     vertical : `bool`, optional
         Is the plot vertical? Default is ``False``.
     rasterized : `bool`, optional
@@ -542,7 +591,32 @@ def scatterplotWithOutliers(
     return ax
 
 
-def plotVisits(plotData, desc_pal=None, fig=None, showLegend=False):
+def plotVisits(
+    plotData: pd.DataFrame,
+    palette: Optional[dict] = None,
+    showLegend: bool = False,
+    fig: Optional[Figure] = None,
+) -> Figure:
+    """Plot the visit statistics.
+
+    Parameters
+    ----------
+    plotData : `pandas.DataFrame`
+        The data.
+    palette : `dict`, optional
+        The palette to use for the arcline descriptions. Keys are the descriptions
+        and values are the colors. Default is ``None``.
+    showLegend : `bool`, optional
+        Show the legend? Default is ``False``.
+    fig : `Figure`, optional
+        The figure. Default is ``None``.
+
+    Returns
+    -------
+    fig : `Figure`
+        The visit statistics plot.
+
+    """
     plotData = plotData.copy()
     fig = fig or Figure(layout="constrained")
     ax0 = fig.add_subplot(121)
@@ -557,11 +631,10 @@ def plotVisits(plotData, desc_pal=None, fig=None, showLegend=False):
                 x=f"{metric}.median",
                 xerr=f"{metric}.weightedRms",
                 marker="o",
-                color=desc_pal.get(desc, "red") if desc_pal is not None else None,
+                color=palette.get(desc, "red") if palette is not None else None,
                 label=desc,
                 ax=ax,
             )
-        # ax.legend().set_visible(False)
 
         ax.grid(alpha=0.2)
         ax.axvline(0, c="k", ls="--", alpha=0.5)
@@ -573,14 +646,29 @@ def plotVisits(plotData, desc_pal=None, fig=None, showLegend=False):
     ax0.set_ylabel("Visit")
     ax0.invert_yaxis()
 
-    # if showLegend:
-    #     fig.legend(*ax0.get_legend_handles_labels(), shadow=True)
+    if showLegend:
+        fig.legend(*ax0.get_legend_handles_labels(), shadow=True)
     fig.suptitle("RESERVED median and 1-sigma weighted errors")
 
     return fig
 
 
-def plotDetectorSoften(detector_stats):
+def plotDetectorSoften(detector_stats: pd.DataFrame) -> Figure:
+    """Plot the soften values.
+
+    The soften value is the pixel value that is added to the spatial and wavelength
+    values so that chi^2/dof = 1.
+
+    Parameters
+    ----------
+    detector_stats : `pandas.DataFrame`
+        The detector statistics.
+
+    Returns
+    -------
+    fig : `Figure`
+        The soften plot.
+    """
     plot_data = detector_stats.melt(id_vars=["ccd", "status_type", "description"])
 
     plot_data.loc[plot_data.query('variable.str.contains("spatial")').index, "metric"] = "spatial"
@@ -603,14 +691,29 @@ def plotDetectorSoften(detector_stats):
     )
     for ax in fg.figure.axes:
         ax.grid(alpha=0.25)
-        # ax.set_ylim(0, 1)
+
     fg.figure.legend(*fg.figure.axes[0].get_legend_handles_labels(), shadow=True, fontsize="small")
     fg.figure.set_tight_layout("inches")
 
     return fg.figure
 
 
-def plotDetectorMedians(detector_stats):
+def plotDetectorMedians(detector_stats: pd.DataFrame) -> Figure:
+    """Plot the median values.
+
+    A plot of the median values for the RESERVED spatial and wavelength data for
+    the detector as a whole.
+
+    Parameters
+    ----------
+    detector_stats : `pandas.DataFrame`
+        The detector statistics.
+
+    Returns
+    -------
+    fig : `Figure`
+        The median plot.
+    """
     plot_data = detector_stats.query('description == "all" and status_type=="RESERVED"').filter(
         regex="ccd|median|soften|weighted"
     )
@@ -625,13 +728,11 @@ def plotDetectorMedians(detector_stats):
                 x=row.ccd,
                 y=row[f"{metric}.median"],
                 yerr=row[f"{metric}.weightedRms"],
-                # ms=row[f'{metric}.softenFit'][0] * 100,
                 c=detector_palette[row.arm[0]],
                 ls="",
                 lw=1.5,
                 capsize=2,
                 zorder=-100,
-                # marker='o',
             )
 
         sb.scatterplot(
@@ -645,7 +746,7 @@ def plotDetectorMedians(detector_stats):
             legend=False,
             ax=ax,
         )
-        # ax.legend(title='softenFit (pix)', loc='upper right', bbox_to_anchor=(1.25, 1))
+
         ax.grid(alpha=0.15)
         ax.set_title(metric)
         ax.set_ylim(-0.1, 0.1)

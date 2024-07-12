@@ -21,6 +21,7 @@ from lsst.daf.persistence import ButlerDataRef
 from lsst.pex.config import Field
 import lsst.afw.display as afwDisplay
 from lsst.afw.image import ExposureF, MaskedImageF, ImageF
+from pfs.drp.qa.utils.math import gaussian_func, gaussianFixedWidth
 from pfs.drp.stella import (
     DetectorMap,
     FiberProfileSet,
@@ -1199,11 +1200,3 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         method.
         """
         return None
-
-
-def gaussian_func(x, a, mu, sigma):
-    return a * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
-
-
-def gaussianFixedWidth(x, a, mu, sigma=1.5):
-    return a * np.exp(-((x - mu) ** 2) / (2 * sigma**2))

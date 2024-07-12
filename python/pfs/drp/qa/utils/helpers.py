@@ -1,7 +1,10 @@
+from collections.abc import Iterable
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
 
+from pfs.drp.qa.utils.math import getWeightedRMS, getChi2
+from pfs.drp.stella.utils.math import robustRms
 from pfs.utils.fiberids import FiberIds
 import numpy as np
 import pandas as pd
@@ -9,7 +12,6 @@ from astropy.stats import sigma_clip
 from lsst.daf.persistence import NoResults
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
 from scipy.optimize import bisect
-from scipy.stats import iqr
 
 
 @dataclass
@@ -50,25 +52,6 @@ class FitStats:
         )
 
 
-def iqr_sigma(x) -> float:
-    """Calculate the sigma of the interquartile range as a robust estimate of the std.
-
-    Note: This will ignore NaNs.
-
-    Parameters
-    ----------
-    x : `numpy.ndarray`
-        The data.
-
-
-    Returns
-    -------
-    sigma : `float`
-        The sigma of the interquartile range.
-    """
-    return iqr(x, nan_policy="omit") / 1.349
-
-
 def loadData(
     arcLines: ArcLineSet,
     detectorMap: DetectorMap,
@@ -90,6 +73,8 @@ def loadData(
         The detector map.
     dropNaColumns : `bool`, optional
         Drop columns where all values are NaN. Default is True.
+    addFiberInfo : `bool`, optional
+        Add fiber information to the dataframe. Default is True.
 
     Returns
     -------
@@ -132,10 +117,14 @@ def getArclineData(
     ----------
     arcLines : `ArcLineSet`
         The arc lines.
+    detectorMap : `DetectorMap`
+        The detector map.
     dropNaColumns : `bool`, optional
         Drop columns where all values are NaN. Default is True.
     removeFlagged : `bool`, optional
         Remove rows with ``flag=True``? Default is True.
+    onlyReservedAndUsed : `bool`, optional
+        Only include rows with status RESERVED or USED? Default is True.
 
     Returns
     -------
@@ -215,7 +204,27 @@ def getFitStats(
     maxSoften: float = 1.0,
     sigmaClipOnly: bool = True,
 ) -> FitStats:
-    """Get the fit stats."""
+    """Get the fit stats.
+
+    Parameters
+    ----------
+    arc_data : `pandas.DataFrame`
+        The arc data.
+    xSoften : `float`, optional
+        The softening parameter for the x residuals. Default is 0.0.
+    ySoften : `float`, optional
+        The softening parameter for the y residuals. Default is 0.0.
+    numParams : `int`, optional
+        The number of parameters in the model. Default is 0.
+    maxSoften : `float`, optional
+        The maximum value for the softening parameter. Default is 1.0.
+    sigmaClipOnly : `bool`, optional
+        Only include non-outliers in the fit stats. Default is True.
+
+    Returns
+    -------
+    fitStats : `FitStats`
+    """
     traces = arc_data.query("isTrace == True")
     lines = arc_data.query("isLine == True").dropna(subset=["yResid"])
 
@@ -233,8 +242,8 @@ def getFitStats(
     xWeightedRms = getWeightedRMS(arc_data.xResid, arc_data.xErr, soften=xSoften)
     yWeightedRms = getWeightedRMS(lines.yResid, lines.yErr, soften=ySoften)
 
-    xRobustRms = iqr_sigma(arc_data.xResid)
-    yRobustRms = iqr_sigma(lines.yResid)
+    xRobustRms = robustRms(arc_data.xResid.dropna())
+    yRobustRms = robustRms(lines.yResid.dropna())
 
     chi2X = getChi2(arc_data.xResid, arc_data.xErr, xSoften)
     chi2Y = getChi2(lines.yResid, lines.yErr, ySoften)
@@ -275,21 +284,26 @@ def getFitStats(
     return FitStats(dof, chi2X, chi2Y, xFitStat, yFitStat)
 
 
-def getWeightedRMS(resid, err, soften=0):
-    """Small helper function to get the weighted RMS with optional softening."""
-    weight = 1 / (err**2 + soften**2)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        return np.sqrt(np.sum(weight * resid**2) / np.sum(weight))
+def getStats(
+    arcLinesSet: Iterable[ArcLineSet], detectorMaps: Iterable[DetectorMap], dataIds: Iterable[dict]
+) -> tuple:
+    """Get the stats for the arc lines.
 
+    Parameters
+    ----------
+    arcLinesSet : `Iterable[ArcLineSet]`
+        The arc lines.
+    detectorMaps : `Iterable[DetectorMap]`
+        The detector maps.
+    dataIds : `Iterable[dict]`
+        The data IDs.
 
-def getChi2(resid, err, soften=0):
-    """Small helper function to get the chi2 with optional softening."""
-    with np.errstate(invalid="ignore"):
-        resids = (resid**2) / (err**2 + soften**2)
-        return np.sum(resids)
-
-
-def getStats(arcLinesSet, detectorMaps, dataIds):
+    Returns
+    -------
+    all_arc_data : `pandas.DataFrame`
+    all_visit_stats : `pandas.DataFrame`
+    all_detector_stats : `pandas.DataFrame`
+    """
     all_data = list()
     visit_stats = list()
     detector_stats = list()
