@@ -1,4 +1,3 @@
-import warnings
 from collections import defaultdict
 from typing import Iterable
 
@@ -29,36 +28,19 @@ from scipy.stats import iqr
 
 from .storageClasses import MultipagePdfFigure
 
-warnings.filterwarnings('ignore', message='Input data contains invalid values')
-warnings.filterwarnings('ignore', message='Warning: converting a masked element to nan.*')
-
 
 class PlotResidualConfig(Config):
     """Configuration for PlotResidualTask"""
 
     combineVisits = Field(
-        dtype=bool, default=False,
-        doc='If all given visits should be combined and compared.'
+        dtype=bool, default=False, doc="If all given visits should be combined and compared."
     )
-    makeResidualPlots = Field(
-        dtype=bool, default=True,
-        doc="Generate a residual plot for each dataId."
-    )
-    useSigmaRange = Field(
-        dtype=bool, default=False,
-        doc='Use ±2.5 sigma as range'
-    )
-    xrange = Field(
-        dtype=float, default=0.1,
-        doc="Range of the residual (X center) in a plot in pix."
-    )
-    wrange = Field(
-        dtype=float, default=0.1,
-        doc="Range of the residual (wavelength) in a plot in pix."
-    )
+    makeResidualPlots = Field(dtype=bool, default=True, doc="Generate a residual plot for each dataId.")
+    useSigmaRange = Field(dtype=bool, default=False, doc="Use ±2.5 sigma as range")
+    xrange = Field(dtype=float, default=0.1, doc="Range of the residual (X center) in a plot in pix.")
+    wrange = Field(dtype=float, default=0.1, doc="Range of the residual (wavelength) in a plot in pix.")
     binWavelength = Field(
-        dtype=float, default=0.1,
-        doc="Bin the wavelength in the by-wavelength residual plot."
+        dtype=float, default=0.1, doc="Bin the wavelength in the by-wavelength residual plot."
     )
 
 
@@ -110,7 +92,7 @@ class PlotResidualTask(Task):
                     wrange=self.config.wrange,
                     binWavelength=self.config.binWavelength,
                 )
-                residFig.suptitle(f'DetectorMap Residuals\n{groupName}', weight='bold')
+                residFig.suptitle(f"DetectorMap Residuals\n{groupName}", weight="bold")
 
                 return Struct(
                     dmQaResidualImage=residFig,
@@ -146,8 +128,7 @@ class OverlapRegionLinesTask(Task):
         self.debugInfo = lsstDebug.Info(__name__)
 
     def run(
-            self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet],
-            pfsArm: Iterable[PfsArm]
+        self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet], pfsArm: Iterable[PfsArm]
     ) -> Struct:
         """QA of adjustDetectorMap by plotting the wavelength difference of sky lines detected in multiple
         arms.
@@ -247,8 +228,8 @@ class OverlapRegionLinesTask(Task):
                 difference[w],
                 s=3,
                 label=f"{w} nm ({len(fibers[w])} fibers, "
-                      f"median={np.median(difference[w]):.1e} nm, "
-                      f"1sigma={iqr(difference[w]) / 1.349:.3f} nm)"
+                f"median={np.median(difference[w]):.1e} nm, "
+                f"1sigma={iqr(difference[w]) / 1.349:.3f} nm)",
             )
         plt.legend(fontsize=7)
         plt.xlabel("fiberId")
@@ -273,6 +254,7 @@ class DetectorMapQaConnections(
     dimensions=("instrument", "exposure"),
 ):
     """Connections for DetectorMapQaTask"""
+
     detectorMap = InputConnection(
         name="detectorMap_used",
         doc="Mapping from fiberId,wavelength to x,y",
@@ -310,15 +292,12 @@ class DetectorMapQaConnections(
 class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
     """Configuration for DetectorMapQaTask"""
 
-    checkOverlap = Field(
-        dtype=bool, default=False,
-        doc='If the overlapRegionLines should be checked.'
-    )
+    checkOverlap = Field(dtype=bool, default=False, doc="If the overlapRegionLines should be checked.")
 
     plotResidual = ConfigurableField(target=PlotResidualTask, doc="Plot the detector map residual.")
     overlapRegionLines = ConfigurableField(
         target=OverlapRegionLinesTask,
-        doc="Plot the wavelength difference of the sky lines commonly detected in multiple arms."
+        doc="Plot the wavelength difference of the sky lines commonly detected in multiple arms.",
     )
 
 
@@ -344,14 +323,14 @@ class DetectorMapQaRunner(TaskRunner):
             visit = ref.dataId["visit"]
             spectrograph = ref.dataId["spectrograph"]
             arm = ref.dataId["arm"]
-            ccd = f'{arm}{spectrograph}'
+            ccd = f"{arm}{spectrograph}"
 
             if combineVisits is True:
                 groups[ccd].append(ref)
             elif checkOverlap is True:
                 groups[visit].append(ref)
             else:
-                groups[f'{visit}-{ccd}'].append(ref)
+                groups[f"{visit}-{ccd}"].append(ref)
 
         processGroups = [((key, group), kwargs) for key, group in groups.items()]
 
@@ -371,10 +350,10 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         self.debugInfo = lsstDebug.Info(__name__)
 
     def runQuantum(
-            self,
-            butler: ButlerQuantumContext,
-            inputRefs: InputQuantizedConnection,
-            outputRefs: OutputQuantizedConnection,
+        self,
+        butler: ButlerQuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
     ) -> None:
         """Entry point with butler I/O
 
@@ -408,29 +387,29 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         groupName = expSpecRefList[0]
         groupDataRefs = expSpecRefList[1]
 
-        self.log.info(f'Starting processing for {groupName=} with {len(groupDataRefs)} dataIds')
+        self.log.info(f"Starting processing for {groupName=} with {len(groupDataRefs)} dataIds")
 
         arcLinesSet = list()
         detectorMaps = list()
         dataIds = list()
         rerun_name = None
         calib_dir = None
-        ccd = ''
+        ccd = ""
         for dataRef in groupDataRefs:
             if rerun_name is None:
                 # TODO fix this one day with Gen3
                 rerun_name = dataRef.butlerSubset.butler._repos.inputs()[0].repoArgs.root
-                calib_dir = dataRef.butlerSubset.butler._repos.inputs()[0].repoArgs.mapperArgs['calibRoot']
-                ccd = '{arm}{spectrograph}'.format(**dataRef.dataId)
+                calib_dir = dataRef.butlerSubset.butler._repos.inputs()[0].repoArgs.mapperArgs["calibRoot"]
+                ccd = "{arm}{spectrograph}".format(**dataRef.dataId)
             try:
-                detectorMap = dataRef.get('detectorMap_used')
-                arcLines = dataRef.get('arcLines')
+                detectorMap = dataRef.get("detectorMap_used")
+                arcLines = dataRef.get("arcLines")
 
                 arcLinesSet.append(arcLines)
                 detectorMaps.append(detectorMap)
                 dataIds.append(dataRef.dataId)
             except NoResults:
-                self.log.info(f'No results for {dataRef}')
+                self.log.info(f"No results for {dataRef}")
             except Exception as e:
                 self.log.error(e)
 
@@ -439,30 +418,32 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         if outputs is not None:
             if self.plotResidual.config.combineVisits is True:
                 for datasetType, data in outputs.getDict().items():
-                    if datasetType == 'dmQaDetectorStats':
-                        saveFile = f'dmQA-combined-stats-{ccd}.csv'
+                    if datasetType == "dmQaDetectorStats":
+                        saveFile = f"dmQA-combined-stats-{ccd}.csv"
                         data.to_csv(saveFile, index=False)
-                        self.log.info(f'Combined CSV {saveFile=}')
-                    if datasetType == 'dmQaResidualImage':
-                        saveFile = f'dmQA-combined-plot-{ccd}.png'
-                        data.suptitle(f'DetectorMap Residuals - {ccd}\n'
-                                      f'{rerun_name}\n{calib_dir}',
-                                      weight='bold', fontsize='small')
+                        self.log.info(f"Combined CSV {saveFile=}")
+                    if datasetType == "dmQaResidualImage":
+                        saveFile = f"dmQA-combined-plot-{ccd}.png"
+                        data.suptitle(
+                            f"DetectorMap Residuals - {ccd}\n" f"{rerun_name}\n{calib_dir}",
+                            weight="bold",
+                            fontsize="small",
+                        )
                         data.savefig(saveFile, dpi=120)
-                        self.log.info(f'Combined PNG {saveFile=}')
+                        self.log.info(f"Combined PNG {saveFile=}")
             else:
                 for dataRef in groupDataRefs:
                     for datasetType, data in outputs.getDict().items():
-                        dataIdStr = 'v{visit}-{arm}{spectrograph}'.format(**dataRef.dataId)
-                        if datasetType == 'dmQaDetectorStats':
+                        dataIdStr = "v{visit}-{arm}{spectrograph}".format(**dataRef.dataId)
+                        if datasetType == "dmQaDetectorStats":
                             continue
-                        if datasetType == 'dmQaResidualImage':
+                        if datasetType == "dmQaResidualImage":
                             save_data = MultipagePdfFigure()
                             save_data.append(data)
                         if isinstance(data, pd.DataFrame):
-                            save_data = data.to_dict(orient='records')
+                            save_data = data.to_dict(orient="records")
 
-                        self.log.info(f'Saving {datasetType} for {dataIdStr}')
+                        self.log.info(f"Saving {datasetType} for {dataIdStr}")
                         dataRef.put(save_data, datasetType=datasetType)
 
     def run(self, *args, **kwargs) -> Struct:
