@@ -594,7 +594,6 @@ def scatterplotWithOutliers(
 def plotVisits(
     plotData: pd.DataFrame,
     palette: Optional[dict] = None,
-    showLegend: bool = False,
     fig: Optional[Figure] = None,
 ) -> Figure:
     """Plot the visit statistics.
@@ -606,8 +605,6 @@ def plotVisits(
     palette : `dict`, optional
         The palette to use for the arcline descriptions. Keys are the descriptions
         and values are the colors. Default is ``None``.
-    showLegend : `bool`, optional
-        Show the legend? Default is ``False``.
     fig : `Figure`, optional
         The figure. Default is ``None``.
 
