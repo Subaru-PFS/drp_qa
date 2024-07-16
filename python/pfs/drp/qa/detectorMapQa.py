@@ -4,7 +4,6 @@ from typing import Iterable
 import lsstDebug
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from lsst.daf.persistence.butlerExceptions import NoResults
 from lsst.pex.config import Field, ConfigurableField, Config
 from lsst.pipe.base import (
@@ -128,7 +127,8 @@ class OverlapRegionLinesTask(Task):
         self.debugInfo = lsstDebug.Info(__name__)
 
     def run(
-        self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet], pfsArm: Iterable[PfsArm]
+        self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet],
+        pfsArm: Iterable[PfsArm]
     ) -> Struct:
         """QA of adjustDetectorMap by plotting the wavelength difference of sky lines detected in multiple
         arms.
@@ -284,7 +284,7 @@ class DetectorMapQaConnections(
     dmQaResidualStats = OutputConnection(
         name="dmQaResidualStats",
         doc="Statistics of the residual analysis.",
-        storageClass="QaDict",
+        storageClass="pandas.core.frame.DataFrame",
         dimensions=("instrument", "exposure", "detector"),
     )
 
@@ -416,35 +416,12 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         # Run the task and get the outputs.
         outputs = self.run(groupName, arcLinesSet, detectorMaps, dataIds)
         if outputs is not None:
-            if self.plotResidual.config.combineVisits is True:
+            for dataRef in groupDataRefs:
                 for datasetType, data in outputs.getDict().items():
-                    if datasetType == "dmQaDetectorStats":
-                        saveFile = f"dmQA-combined-stats-{ccd}.csv"
-                        data.to_csv(saveFile, index=False)
-                        self.log.info(f"Combined CSV {saveFile=}")
-                    if datasetType == "dmQaResidualImage":
-                        saveFile = f"dmQA-combined-plot-{ccd}.png"
-                        data.suptitle(
-                            f"DetectorMap Residuals - {ccd}\n" f"{rerun_name}\n{calib_dir}",
-                            weight="bold",
-                            fontsize="small",
-                        )
-                        data.savefig(saveFile, dpi=120)
-                        self.log.info(f"Combined PNG {saveFile=}")
-            else:
-                for dataRef in groupDataRefs:
-                    for datasetType, data in outputs.getDict().items():
-                        dataIdStr = "v{visit}-{arm}{spectrograph}".format(**dataRef.dataId)
-                        if datasetType == "dmQaDetectorStats":
-                            continue
-                        if datasetType == "dmQaResidualImage":
-                            save_data = MultipagePdfFigure()
-                            save_data.append(data)
-                        if isinstance(data, pd.DataFrame):
-                            save_data = data.to_dict(orient="records")
+                    dataIdStr = "v{visit}-{arm}{spectrograph}".format(**dataRef.dataId)
 
-                        self.log.info(f"Saving {datasetType} for {dataIdStr}")
-                        dataRef.put(save_data, datasetType=datasetType)
+                    self.log.info(f"Saving {datasetType} for {dataIdStr}")
+                    dataRef.put(data, datasetType=datasetType)
 
     def run(self, *args, **kwargs) -> Struct:
         """Generate detectorMapQa plots.

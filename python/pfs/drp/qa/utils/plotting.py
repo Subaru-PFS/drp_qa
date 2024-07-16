@@ -81,7 +81,7 @@ def makePlot(
         wavelengthMax = None
 
     # One big fig.
-    main_fig = Figure(layout="constrained", figsize=(14, 10))
+    main_fig = Figure(layout="constrained", figsize=(12, 10), dpi=150)
 
     # Split into two rows.
     (top_fig, bottom_fig) = main_fig.subfigures(2, 1, wspace=0, height_ratios=[5, 1.5])
@@ -594,7 +594,6 @@ def scatterplotWithOutliers(
 def plotVisits(
     plotData: pd.DataFrame,
     palette: Optional[dict] = None,
-    showLegend: bool = False,
     fig: Optional[Figure] = None,
 ) -> Figure:
     """Plot the visit statistics.
@@ -606,8 +605,6 @@ def plotVisits(
     palette : `dict`, optional
         The palette to use for the arcline descriptions. Keys are the descriptions
         and values are the colors. Default is ``None``.
-    showLegend : `bool`, optional
-        Show the legend? Default is ``False``.
     fig : `Figure`, optional
         The figure. Default is ``None``.
 
@@ -646,8 +643,6 @@ def plotVisits(
     ax0.set_ylabel("Visit")
     ax0.invert_yaxis()
 
-    if showLegend:
-        fig.legend(*ax0.get_legend_handles_labels(), shadow=True)
     fig.suptitle("RESERVED median and 1-sigma weighted errors")
 
     return fig
