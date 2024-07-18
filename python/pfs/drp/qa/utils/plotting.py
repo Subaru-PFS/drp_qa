@@ -1,4 +1,4 @@
-from typing import Optional, Iterable
+from typing import Optional, Iterable, Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,13 +8,16 @@ from matplotlib import colors
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
+from matplotlib.lines import Line2D
 from pfs.drp.qa.utils.helpers import getFitStats
 from pfs.drp.qa.utils.math import getWeightedRMS
+from pfs.drp.stella import PfsConfig
+from pfs.drp.stella.fitReference import TransmissionCurve
 from pfs.drp.stella.utils.math import robustRms
 
 div_palette = plt.cm.RdBu_r.with_extremes(over="magenta", under="cyan", bad="lime")
 detector_palette = {"b": "tab:blue", "r": "tab:red", "n": "tab:orange", "m": "tab:pink"}
-
+spectrograph_plot_markers = {1: "s", 2: "o", 3: "X", 4: "P"}
 description_palette = {
     "ArI": "tab:green",
     "CdI,HgI": "tab:purple",
@@ -89,7 +92,9 @@ def makePlot(
     (x_fig, y_fig) = top_fig.subfigures(1, 2, wspace=0)
 
     try:
-        pd0 = arc_data.query(f'arm == "{arm}" and spectrograph == {spectrograph}').copy()
+        pd0 = arc_data.query(
+            f'arm == "{arm}" and spectrograph == {spectrograph}'
+        ).copy()
 
         for sub_fig, column in zip([x_fig, y_fig], ["xResid", "yResid"]):
             try:
@@ -108,18 +113,26 @@ def makePlot(
                     wavelengthMax=wavelengthMax,
                     fig=sub_fig,
                 )
-                sub_fig.suptitle(f"{arm}{spectrograph}\n{column}", fontsize="small", fontweight="bold")
+                sub_fig.suptitle(
+                    f"{arm}{spectrograph}\n{column}",
+                    fontsize="small",
+                    fontweight="bold",
+                )
             except Exception as e:
                 print(f"Problem plotting residual {e}")
 
         visit_fig = plotVisits(
-            visit_stats.query('status_type == "RESERVED" and ccd == @ccd').sort_values(by="visit").copy(),
+            visit_stats.query('status_type == "RESERVED" and ccd == @ccd')
+            .sort_values(by="visit")
+            .copy(),
             description_palette,
             fig=bottom_fig,
         )
         for ax in visit_fig.axes:
             ax.set_xlim(-0.3, 0.3)
-        visit_fig.suptitle(f"RESERVED median and 1-sigma weighted error per visit {ccd=}")
+        visit_fig.suptitle(
+            f"RESERVED median and 1-sigma weighted error per visit {ccd=}"
+        )
 
         return main_fig
     except ValueError as e:
@@ -194,7 +207,9 @@ def plotResidual(
     data["bin"] = 1
     bin_wl = False
     if isinstance(binWavelength, (int, float)) and binWavelength > 0:
-        bins = np.arange(data.wavelength.min() - 1, data.wavelength.max() + 1, binWavelength)
+        bins = np.arange(
+            data.wavelength.min() - 1, data.wavelength.max() + 1, binWavelength
+        )
         s_cut, bins = pd.cut(data.wavelength, bins=bins, retbins=True, labels=False)
         data["bin"] = pd.Categorical(s_cut)
         bin_wl = True
@@ -229,7 +244,9 @@ def plotResidual(
         raise ValueError("No data")
 
     # Get summary statistics.
-    fit_stats_all = getFitStats(data.query(f"isReserved == True and {column}Outlier == False"))
+    fit_stats_all = getFitStats(
+        data.query(f"isReserved == True and {column}Outlier == False")
+    )
     fit_stats = getattr(fit_stats_all, which_data)
     fit_stats_used = getattr(getFitStats(data.query("isUsed == True")), which_data)
 
@@ -256,7 +273,9 @@ def plotResidual(
         .rename(columns={0: "vals"})
     )
     fiber_avg = fiber_avg.join(
-        pd.DataFrame(fiber_avg.vals.to_list(), columns=["count", "median", "weightedRms"])
+        pd.DataFrame(
+            fiber_avg.vals.to_list(), columns=["count", "median", "weightedRms"]
+        )
     ).drop(columns=["vals"])
 
     fiber_avg.sort_values(["fiberId", "status"], inplace=True)
@@ -316,7 +335,13 @@ def plotResidual(
             for sigmaLine in sigmaLines:
                 for i, sigmaMultiplier in enumerate([sigmaLine, -1 * sigmaLine]):
                     lim = sigmaMultiplier * fit_stats.weightedRms
-                    refLine(lim, c=pal["isReserved"], ls="--", alpha=0.75, label=f"{lim} * sigma")
+                    refLine(
+                        lim,
+                        c=pal["isReserved"],
+                        ls="--",
+                        alpha=0.75,
+                        label=f"{lim} * sigma",
+                    )
                     if i == 0:
                         ax.text(
                             fiber_avg.fiberId.min(),
@@ -333,12 +358,19 @@ def plotResidual(
     drawRefLines(ax0, goodRange, sigmaRange)
 
     ax0.legend(
-        loc="lower right", shadow=True, prop=dict(family="monospace", weight="bold"), bbox_to_anchor=(1.2, 0)
+        loc="lower right",
+        shadow=True,
+        prop=dict(family="monospace", weight="bold"),
+        bbox_to_anchor=(1.2, 0),
     )
 
-    fiber_outliers = goodFibersAvg.query(f'status=="isReserved" and abs(median) >= {fit_stats.weightedRms}')
+    fiber_outliers = goodFibersAvg.query(
+        f'status=="isReserved" and abs(median) >= {fit_stats.weightedRms}'
+    )
     num_sig_outliers = fiber_outliers.fiberId.count()
-    fiber_big_outliers = fiber_outliers.query(f"abs(median) >= {sigmaRange * fit_stats.weightedRms}")
+    fiber_big_outliers = fiber_outliers.query(
+        f"abs(median) >= {sigmaRange * fit_stats.weightedRms}"
+    )
     num_siglimit_outliers = fiber_big_outliers.fiberId.count()
     ax0.text(
         0.01,
@@ -365,7 +397,9 @@ def plotResidual(
     ax0.set_xlabel("")
     ax0.xaxis.tick_top()
     ax0.set_title(
-        f"Median {which_data} residual and 1-sigma weighted error by fiberId", weight="bold", fontsize="small"
+        f"Median {which_data} residual and 1-sigma weighted error by fiberId",
+        weight="bold",
+        fontsize="small",
     )
     legend = ax0.get_legend()
     legend.set_title("")
@@ -409,23 +443,35 @@ def plotResidual(
         cmap=div_palette,
         s=2,
     )
-    fig.colorbar(im, ax=ax2, orientation="horizontal", extend="both", fraction=0.02, aspect=75, pad=0.01)
+    fig.colorbar(
+        im,
+        ax=ax2,
+        orientation="horizontal",
+        extend="both",
+        fraction=0.02,
+        aspect=75,
+        pad=0.01,
+    )
 
     ax2.set_xlim(0, dmWidth)
     ax2.set_ylim(0, dmHeight)
     ax2.set_ylabel(Y)
     ax2.set_xlabel(X)
-    ax2.set_title(f"2D residual of RESERVED {which_data} data", weight="bold", fontsize="small")
+    ax2.set_title(
+        f"2D residual of RESERVED {which_data} data", weight="bold", fontsize="small"
+    )
 
     # Use sigma range if no range given.
     if wrange is None and sigmaRange is not None:
         wrange = fit_stats.weightedRms * sigmaRange
 
     if bin_wl is True:
-        binned_data = plotData.dropna(subset=["wavelength", column]).groupby(["bin", "status", "isOutlier"])[
-            ["wavelength", column]
-        ]
-        plotData = binned_data.agg("median", robustRms).reset_index().sort_values("status")
+        binned_data = plotData.dropna(subset=["wavelength", column]).groupby(
+            ["bin", "status", "isOutlier"]
+        )[["wavelength", column]]
+        plotData = (
+            binned_data.agg("median", robustRms).reset_index().sort_values("status")
+        )
 
     ax3 = scatterplotWithOutliers(
         plotData.query("isOutlier == False"),
@@ -664,12 +710,18 @@ def plotDetectorSoften(detector_stats: pd.DataFrame) -> Figure:
     """
     plot_data = detector_stats.melt(id_vars=["ccd", "status_type", "description"])
 
-    plot_data.loc[plot_data.query('variable.str.contains("spatial")').index, "metric"] = "spatial"
-    plot_data.loc[plot_data.query('variable.str.contains("wavelength")').index, "metric"] = "wavelength"
+    plot_data.loc[
+        plot_data.query('variable.str.contains("spatial")').index, "metric"
+    ] = "spatial"
+    plot_data.loc[
+        plot_data.query('variable.str.contains("wavelength")').index, "metric"
+    ] = "wavelength"
 
     fg = sb.catplot(
         data=plot_data.dropna()
-        .query('description != "all" and variable.str.contains("soften") and status_type == "RESERVED"')
+        .query(
+            'description != "all" and variable.str.contains("soften") and status_type == "RESERVED"'
+        )
         .sort_values(by=["ccd"]),
         row="metric",
         x="ccd",
@@ -685,7 +737,9 @@ def plotDetectorSoften(detector_stats: pd.DataFrame) -> Figure:
     for ax in fg.figure.axes:
         ax.grid(alpha=0.25)
 
-    fg.figure.legend(*fg.figure.axes[0].get_legend_handles_labels(), shadow=True, fontsize="small")
+    fg.figure.legend(
+        *fg.figure.axes[0].get_legend_handles_labels(), shadow=True, fontsize="small"
+    )
     fg.figure.set_tight_layout("inches")
 
     return fg.figure
@@ -707,9 +761,9 @@ def plotDetectorMedians(detector_stats: pd.DataFrame) -> Figure:
     fig : `Figure`
         The median plot.
     """
-    plot_data = detector_stats.query('description == "all" and status_type=="RESERVED"').filter(
-        regex="ccd|median|soften|weighted"
-    )
+    plot_data = detector_stats.query(
+        'description == "all" and status_type=="RESERVED"'
+    ).filter(regex="ccd|median|soften|weighted")
     plot_data["arm"] = plot_data.ccd.str[0]
 
     fig, axes = plt.subplots(nrows=2, sharex=True, layout="constrained")
@@ -747,5 +801,127 @@ def plotDetectorMedians(detector_stats: pd.DataFrame) -> Figure:
         ax.axhline(-0.1, c="g", ls="--", alpha=0.35)
         ax.axhline(0.1, c="g", ls="--", alpha=0.35)
         ax.axhline(0.0, c="k", ls="--", alpha=0.35, zorder=-100)
+
+    return fig
+
+
+def plot_flux_cal_mag_diff(
+    plot_data: pd.DataFrame,
+    filter_set: Dict[str, TransmissionCurve],
+    pfsConfig: PfsConfig,
+    column_prefix: str = 'single-design',
+    title: str = "Magnitude differences",
+) -> Figure:
+    """Plot the flux calibration magnitude differences.
+
+    Parameters
+    ----------
+    plot_data : `pandas.DataFrame`
+        The data to plot.
+    filter_set : `dict`
+        The filter set.
+    pfsConfig : `PfsConfig`
+        The PfsConfig.
+    column_prefix : `str`, optional
+        The column prefix, which determines what to plot. One of ``'comp-design'``
+        (for magnitude difference) or ``'comp-comp'`` (for color difference). Default
+        is ``'comp-design'``.
+    title : `str`, optional
+        The optional title.
+
+    Returns
+    -------
+    fig : `Figure`
+        The plot.
+    """
+    fig = Figure(layout="constrained")
+    fig.set_size_inches(12, 8)
+    axes = fig.subplots(nrows=2, ncols=3, sharex=True, sharey=True)
+
+    sm = plt.cm.ScalarMappable(cmap=div_palette, norm=plt.Normalize(-1, 1))
+
+    all_fibers = pd.DataFrame(
+        {
+            "x": pfsConfig.pfiCenter[:, 1].byteswap().newbyteorder(),
+            "y": pfsConfig.pfiCenter[:, 0].byteswap().newbyteorder(),
+            "ra": pfsConfig.ra,
+            "dec": pfsConfig.dec,
+            "spec": pfsConfig.spectrograph,
+        }
+    )
+
+    for i, (filter_name, filter_curve) in enumerate(filter_set.items()):
+        ax = axes.flatten()[i]
+        # Plot all fibers.
+        sb.scatterplot(
+            data=all_fibers,
+            x="ra",
+            y="dec",
+            style="spec",
+            ax=ax,
+            alpha=0.15,
+            color="k",
+            s=15,
+            legend=False,
+        )
+        # Plot the FLUXSTD fibers.
+        sb.scatterplot(
+            data=plot_data,
+            x="ra",
+            y="dec",
+            hue=f"{column_prefix}.ABMag.{filter_name}",
+            palette=div_palette,
+            hue_norm=(-1, 1),
+            style="spectrograph",
+            markers=spectrograph_plot_markers,
+            edgecolor="k",
+            linewidths=0.5,
+            ax=ax,
+            legend=False,
+        )
+
+        # Set the title.
+        wl_min = filter_curve.wavelength.min().astype(int)
+        wl_max = filter_curve.wavelength.max().astype(int)
+        med = plot_data[f"{column_prefix}.ABMag.{filter_name}"].median()
+        try:
+            rms = robustRms(plot_data[f"{column_prefix}.ABMag.{filter_name}"].dropna())
+            rms = f'{rms:.03f}'
+        except IndexError:
+            rms = 'N/A'
+        ax.set_title(
+            f"{filter_name} ({wl_min}-{wl_max}nm)\n"
+            f"median={med:.03f}mag rms={rms}mag",
+            fontfamily="monospace",
+        )
+
+        # Set the colorbar for the last plot.
+        if i == len(filter_set) - 1:
+            cbar = fig.colorbar(
+                sm,
+                ax=axes.ravel().tolist(),
+                orientation="vertical",
+                extend="both",
+                aspect=45,
+                pad=0.01,
+            )
+            cbar.set_label("Magnitude difference", fontsize="small")
+            cbar.ax.tick_params(labelsize="small")
+
+    # Add the legend to the blank axis.
+    fig.legend(
+        handles=[
+            Line2D([0], [0], ls="", marker=m, mec="k", mfc="none", label=f"{t}", ms=7)
+            for t, m in spectrograph_plot_markers.items()
+        ],
+        title="Spec",
+        shadow=True,
+        loc="upper right",
+        bbox_to_anchor=(1.0, 0.95),
+        fontsize="small",
+        title_fontsize="small",
+    )
+
+    fig.suptitle(title)
 
     return fig
