@@ -25,8 +25,6 @@ from pfs.drp.qa.utils import plotting
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm
 from scipy.stats import iqr
 
-from .storageClasses import MultipagePdfFigure
-
 
 class PlotResidualConfig(Config):
     """Configuration for PlotResidualTask"""
@@ -127,8 +125,7 @@ class OverlapRegionLinesTask(Task):
         self.debugInfo = lsstDebug.Info(__name__)
 
     def run(
-        self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet],
-        pfsArm: Iterable[PfsArm]
+        self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet], pfsArm: Iterable[PfsArm]
     ) -> Struct:
         """QA of adjustDetectorMap by plotting the wavelength difference of sky lines detected in multiple
         arms.
@@ -394,13 +391,12 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         dataIds = list()
         rerun_name = None
         calib_dir = None
-        ccd = ""
         for dataRef in groupDataRefs:
             if rerun_name is None:
                 # TODO fix this one day with Gen3
                 rerun_name = dataRef.butlerSubset.butler._repos.inputs()[0].repoArgs.root
                 calib_dir = dataRef.butlerSubset.butler._repos.inputs()[0].repoArgs.mapperArgs["calibRoot"]
-                ccd = "{arm}{spectrograph}".format(**dataRef.dataId)
+
             try:
                 detectorMap = dataRef.get("detectorMap_used")
                 arcLines = dataRef.get("arcLines")
