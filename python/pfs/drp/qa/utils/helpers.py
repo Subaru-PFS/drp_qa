@@ -242,8 +242,14 @@ def getFitStats(
     xWeightedRms = getWeightedRMS(arc_data.xResid, arc_data.xErr, soften=xSoften)
     yWeightedRms = getWeightedRMS(lines.yResid, lines.yErr, soften=ySoften)
 
-    xRobustRms = robustRms(arc_data.xResid.dropna())
-    yRobustRms = robustRms(lines.yResid.dropna())
+    def doRobust(x):
+        try:
+            return robustRms(x.dropna())
+        except (IndexError, ValueError):
+            return np.nan
+
+    xRobustRms = doRobust(arc_data.xResid)
+    yRobustRms = doRobust(lines.yResid)
 
     chi2X = getChi2(arc_data.xResid, arc_data.xErr, xSoften)
     chi2Y = getChi2(lines.yResid, lines.yErr, ySoften)
