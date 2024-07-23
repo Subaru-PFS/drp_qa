@@ -389,7 +389,19 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         arcLinesSet = list()
         detectorMaps = list()
         dataIds = list()
+        rerun_name = ""
+        calib_dir = ""
+
         for dataRef in groupDataRefs:
+            if rerun_name == "":
+                # TODO fix this one day with Gen3
+                try:
+                    repo_args = dataRef.butlerSubset.butler._repos.inputs()[0].repoArgs
+                    rerun_name = repo_args.root
+                    calib_dir = repo_args.mapperArgs["calibRoot"]
+                except Exception as e:
+                    self.log.error(e)
+
             try:
                 detectorMap = dataRef.get("detectorMap_used")
                 arcLines = dataRef.get("arcLines")
@@ -409,8 +421,19 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
                 for datasetType, data in outputs.getDict().items():
                     dataIdStr = "v{visit}-{arm}{spectrograph}".format(**dataRef.dataId)
 
+                    if datasetType == "dmQaDetectorStats":
+                        # Skip this datasetType for now.
+                        self.log.info(f"Skipping {datasetType} for {dataRef.dataId}")
+                        continue
+                    if datasetType == "dmQaResidualImage":
+                        # Add the rerun and calib dirs to the suptitle.
+                        data.suptitle(f"Detector Map Residuals {dataIdStr}\n{rerun_name}\n{calib_dir}")
+                        dataRef.put(data, datasetType=datasetType)
+
                     self.log.info(f"Saving {datasetType} for {dataIdStr}")
                     dataRef.put(data, datasetType=datasetType)
+
+        return outputs
 
     def run(self, *args, **kwargs) -> Struct:
         """Generate detectorMapQa plots.
