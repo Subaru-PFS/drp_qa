@@ -389,14 +389,7 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         arcLinesSet = list()
         detectorMaps = list()
         dataIds = list()
-        rerun_name = None
-        calib_dir = None
         for dataRef in groupDataRefs:
-            if rerun_name is None:
-                # TODO fix this one day with Gen3
-                rerun_name = dataRef.butlerSubset.butler._repos.inputs()[0].repoArgs.root
-                calib_dir = dataRef.butlerSubset.butler._repos.inputs()[0].repoArgs.mapperArgs["calibRoot"]
-
             try:
                 detectorMap = dataRef.get("detectorMap_used")
                 arcLines = dataRef.get("arcLines")
