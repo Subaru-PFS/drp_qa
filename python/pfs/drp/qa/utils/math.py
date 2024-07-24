@@ -65,7 +65,7 @@ def gaussian_func(x: ArrayLike, a: float, mu: float, sigma: float) -> np.ndarray
     return a * np.exp(-((x - mu) ** 2) / (2 * sigma**2))
 
 
-def gaussianFixedWidth(x: ArrayLike, a: float, mu: float, sigma: float=1.5) -> ArrayLike:
+def gaussianFixedWidth(x: ArrayLike, a: float, mu: float, sigma: float = 1.5) -> ArrayLike:
     """Gaussian function with fixed width.
 
     Parameters

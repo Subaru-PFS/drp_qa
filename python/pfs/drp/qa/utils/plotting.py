@@ -1,5 +1,4 @@
-from collections.abc import Iterable
-from typing import Optional
+from typing import Optional, Iterable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -116,7 +115,6 @@ def makePlot(
         visit_fig = plotVisits(
             visit_stats.query('status_type == "RESERVED" and ccd == @ccd').sort_values(by="visit").copy(),
             description_palette,
-            showLegend=True,
             fig=bottom_fig,
         )
         for ax in visit_fig.axes:
@@ -135,7 +133,7 @@ def plotResidual(
     xrange: float = None,
     wrange: float = None,
     sigmaRange: int = 2.5,
-    sigmaLines: Optional[tuple[float]] = None,
+    sigmaLines: Optional[Iterable[float]] = None,
     goodRange: float = None,
     binWavelength: Optional[float] = None,
     useDMLayout: bool = True,
@@ -191,7 +189,7 @@ def plotResidual(
     """
     # Wavelength residual
     if sigmaLines is None:
-        sigmaLines = [1.0, 2.5]
+        sigmaLines = (1.0, 2.5)
 
     data["bin"] = 1
     bin_wl = False
