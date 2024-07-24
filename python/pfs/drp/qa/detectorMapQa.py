@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Iterable
+from typing import Iterable, Dict
 
 import lsstDebug
 import matplotlib.pyplot as plt
@@ -56,25 +56,30 @@ class PlotResidualTask(Task):
 
         Parameters
         ----------
-        detectorMap : `DetectorMap`
-            Mapping from fiberId,wavelength to x,y
-        arcLines : `ArcLineSet`
+        groupName : `str`
+            Group name, either the visit or the detector.
+        arcLinesSet : `ArcLineSet`
             Emission line measurements by adjustDetectorMap.
-        pfsArm : `PfsArm`
-            Extracted spectra from arm.
+        detectorMaps : `DetectorMap`
+            Mapping from fiberId,wavelength to x,y.
+        dataIds : `list`
+            List of dataIds.
 
         Returns
         -------
-        dmQaResidualImage : `MultipagePdfFigure`
-            Detail plots.
-            1D and 2D plots of the residual between the detectormap and the arclines.
-        dmQaResidualStats : `QaDict`
-            Data to be pickled.
+        dmQaResidualPlot : `MultipagePdfFigure`
+            1D and 2D plots of the residual between the detectormap and the arclines for a given visit.
+        dmQaCombinedResidualPlot : `MultipagePdfFigure`
+            1D and 2D plots of the residual between the detectormap and the arclines for the entire detector.
+        dmQaResidualStats : `pd.DataFrame`
+            Statistics of the residual analysis.
+        dmQaDetectorStats : `pd.DataFrame`
             Statistics of the residual analysis.
         """
 
         arc_data, visit_stats, detector_stats = helpers.getStats(arcLinesSet, detectorMaps, dataIds)
 
+        results = Struct()
         if arc_data is not None and len(arc_data) and visit_stats is not None and len(visit_stats):
             if self.config.makeResidualPlots is True:
                 arm = str(groupName[-2])
@@ -89,15 +94,24 @@ class PlotResidualTask(Task):
                     wrange=self.config.wrange,
                     binWavelength=self.config.binWavelength,
                 )
-                residFig.suptitle(f"DetectorMap Residuals\n{groupName}", weight="bold")
 
-                return Struct(
-                    dmQaResidualImage=residFig,
-                    dmQaResidualStats=visit_stats,
-                    dmQaDetectorStats=detector_stats,
-                )
-            else:
-                return Struct(dmQaResidualStats=visit_stats)
+                suptitle = f"DetectorMap Residuals\n{groupName}"
+                if self.config.combineVisits is True:
+                    suptitle = f"Combined {suptitle}"
+
+                residFig.suptitle(suptitle, weight="bold")
+                if self.config.combineVisits is True:
+                    results = Struct(
+                        dmQaCombinedResidualPlot=residFig,
+                        dmQaDetectorStats=detector_stats,
+                    )
+                else:
+                    results = Struct(
+                        dmQaResidualPlot=residFig,
+                        dmQaResidualStats=visit_stats,
+                    )
+
+        return results
 
     @classmethod
     def _makeArgumentParser(cls) -> ArgumentParser:
@@ -272,15 +286,27 @@ class DetectorMapQaConnections(
         dimensions=("instrument", "exposure", "detector"),
         multiple=True,
     )
-    dmQaResidualImage = OutputConnection(
-        name="dmQaResidualImage",
-        doc="Detail plots. The 1D and 2D residual plots of the detectormap with the arclines.",
+    dmQaResidualPlot = OutputConnection(
+        name="dmQaResidualPlot",
+        doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
+        storageClass="MultipagePdfFigure",
+        dimensions=("instrument", "exposure", "detector"),
+    )
+    dmQaCombinedResidualPlot = OutputConnection(
+        name="dmQaCombinedResidualPlot",
+        doc="The 1D and 2D residual plots of the detectormap with the arclines for the entire detector.",
         storageClass="MultipagePdfFigure",
         dimensions=("instrument", "exposure", "detector"),
     )
     dmQaResidualStats = OutputConnection(
         name="dmQaResidualStats",
-        doc="Statistics of the residual analysis.",
+        doc="Statistics of the residual analysis for the visit.",
+        storageClass="pandas.core.frame.DataFrame",
+        dimensions=("instrument", "exposure", "detector"),
+    )
+    dmQaDetectorStats = OutputConnection(
+        name="dmQaDetectorStats",
+        doc="Statistics of the residual analysis for the entire detector.",
         storageClass="pandas.core.frame.DataFrame",
         dimensions=("instrument", "exposure", "detector"),
     )
@@ -375,11 +401,12 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         Parameters
         ----------
         expSpecRefList : iterable of iterable of `lsst.daf.persistence.ButlerDataRef`
-            Data references for each sensor, grouped by spectrograph.
+            Data references for each sensor, grouped either by visit or by detector.
 
         Returns
         -------
-        None
+        Struct
+            Output data products. See `DetectorMapQaConnections`.
         """
         groupName = expSpecRefList[0]
         groupDataRefs = expSpecRefList[1]
@@ -389,6 +416,7 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         arcLinesSet = list()
         detectorMaps = list()
         dataIds = list()
+
         for dataRef in groupDataRefs:
             try:
                 detectorMap = dataRef.get("detectorMap_used")
@@ -404,31 +432,58 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
 
         # Run the task and get the outputs.
         outputs = self.run(groupName, arcLinesSet, detectorMaps, dataIds)
+
+        # Save the outputs in butler.
         if outputs is not None:
-            for dataRef in groupDataRefs:
-                for datasetType, data in outputs.getDict().items():
-                    dataIdStr = "v{visit}-{arm}{spectrograph}".format(**dataRef.dataId)
+            for datasetType, data in outputs.getDict().items():
+                # Add the rerun and calib dirs to the suptitle.
+                if datasetType == "dmQaResidualPlot" or datasetType == "dmQaCombinedResidualPlot":
+                    try:
+                        # TODO fix this one day with Gen3.
+                        repo_args = groupDataRefs[0].butlerSubset.butler._repos.inputs()[0].repoArgs
+                        rerun_name = repo_args.root
+                        calib_dir = repo_args.mapperArgs["calibRoot"]
+                        suptitle = data._suptitle.get_text()
+                        data.suptitle(f"{suptitle}\n{rerun_name}\n{calib_dir}")
+                    except Exception as e:
+                        self.log.error(e)
 
-                    self.log.info(f"Saving {datasetType} for {dataIdStr}")
-                    dataRef.put(data, datasetType=datasetType)
+                # Store the combined info in the first dataRef and the individual info in the others.
+                self.log.info(f"Saving {datasetType}")
+                if self.config.plotResidual.combineVisits is True:
+                    groupDataRefs[0].put(data, datasetType=datasetType)
+                else:
+                    for dataRef in groupDataRefs:
+                        dataRef.put(data, datasetType=datasetType)
 
-    def run(self, *args, **kwargs) -> Struct:
+        return outputs
+
+    def run(
+        self,
+        groupName: str,
+        arclineSet: Iterable[ArcLineSet],
+        detectorMaps: Iterable[DetectorMap],
+        dataIds: Iterable[Dict],
+    ) -> Struct:
         """Generate detectorMapQa plots.
 
         Parameters
         ----------
-        detectorMap: `DetectorMap`
-            Mapping from fiberId,wavelength to x,y.
-        arcLines : `ArcLineSet`
+        groupName : `str`
+            Group name, either the visit or the detector.
+        arclineSet : iterable of `ArcLineSet`
             Emission line measurements by adjustDetectorMap.
-        pfsArm : `PfsArm`
-            Extracted spectra from arm.
+        detectorMaps : iterable of `DetectorMap`
+            Mapping from fiberId,wavelength to x,y.
+        dataIds : iterable of `dict`
+            List of dataIds.
 
         Returns
         -------
-        None
+        Struct
+            Output data products. See `DetectorMapQaConnections`.
         """
-        return self.plotResidual.run(*args, **kwargs)
+        return self.plotResidual.run(groupName, arclineSet, detectorMaps, dataIds)
 
     def _getMetadataName(self):
         return None
