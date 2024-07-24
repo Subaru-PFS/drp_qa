@@ -81,8 +81,6 @@ class PlotResidualTask(Task):
 
         results = Struct()
         if arc_data is not None and len(arc_data) and visit_stats is not None and len(visit_stats):
-            results = Struct(dmQaResidualStats=visit_stats)
-
             if self.config.makeResidualPlots is True:
                 arm = str(groupName[-2])
                 spectrograph = int(groupName[-1])
@@ -103,10 +101,15 @@ class PlotResidualTask(Task):
 
                 residFig.suptitle(suptitle, weight="bold")
                 if self.config.combineVisits is True:
-                    results.mergeItems(Struct(dmQaCombinedResidualPlot=residFig), "dmQaCombinedResidualPlot")
-                    results.mergeItems(Struct(dmQaDetectorStats=detector_stats), "dmQaDetectorStats")
+                    results = Struct(
+                        dmQaCombinedResidualPlot=residFig,
+                        dmQaDetectorStats=detector_stats,
+                    )
                 else:
-                    results.mergeItems(Struct(dmQaResidualPlot=residFig), "dmQaResidualPlot")
+                    results = Struct(
+                        dmQaResidualPlot=residFig,
+                        dmQaResidualStats=visit_stats,
+                    )
 
         return results
 
@@ -432,22 +435,26 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
 
         # Save the outputs in butler.
         if outputs is not None:
-            for dataRef in groupDataRefs:
-                for datasetType, data in outputs.getDict().items():
-                    if datasetType == "dmQaResidualPlot" or datasetType == "dmQaCombinedResidualPlot":
-                        # Add the rerun and calib dirs to the suptitle.
+            for datasetType, data in outputs.getDict().items():
+                # Add the rerun and calib dirs to the suptitle.
+                if datasetType == "dmQaResidualPlot" or datasetType == "dmQaCombinedResidualPlot":
+                    try:
                         # TODO fix this one day with Gen3.
-                        try:
-                            repo_args = groupDataRefs[0].butlerSubset.butler._repos.inputs()[0].repoArgs
-                            rerun_name = repo_args.root
-                            calib_dir = repo_args.mapperArgs["calibRoot"]
-                            suptitle = data._suptitle.get_text()
-                            data.suptitle(f"{suptitle}\n{rerun_name}\n{calib_dir}")
-                        except Exception as e:
-                            self.log.error(e)
+                        repo_args = groupDataRefs[0].butlerSubset.butler._repos.inputs()[0].repoArgs
+                        rerun_name = repo_args.root
+                        calib_dir = repo_args.mapperArgs["calibRoot"]
+                        suptitle = data._suptitle.get_text()
+                        data.suptitle(f"{suptitle}\n{rerun_name}\n{calib_dir}")
+                    except Exception as e:
+                        self.log.error(e)
 
-                    self.log.info(f"Saving {datasetType}")
-                    dataRef.put(data, datasetType=datasetType)
+                # Store the combined info in the first dataRef and the individual info in the others.
+                self.log.info(f"Saving {datasetType}")
+                if self.config.plotResidual.combineVisits is True:
+                    groupDataRefs[0].put(data, datasetType=datasetType)
+                else:
+                    for dataRef in groupDataRefs:
+                        dataRef.put(data, datasetType=datasetType)
 
         return outputs
 
