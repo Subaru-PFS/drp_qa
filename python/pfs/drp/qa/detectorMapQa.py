@@ -81,10 +81,7 @@ class PlotResidualTask(Task):
 
         results = Struct()
         if arc_data is not None and len(arc_data) and visit_stats is not None and len(visit_stats):
-            results = Struct(
-                dmQaResidualStats=visit_stats,
-                dmQaDetectorStats=detector_stats,
-            )
+            results = Struct(dmQaResidualStats=visit_stats)
 
             if self.config.makeResidualPlots is True:
                 arm = str(groupName[-2])
@@ -107,6 +104,7 @@ class PlotResidualTask(Task):
                 residFig.suptitle(suptitle, weight="bold")
                 if self.config.combineVisits is True:
                     results.mergeItems(Struct(dmQaCombinedResidualPlot=residFig), "dmQaCombinedResidualPlot")
+                    results.mergeItems(Struct(dmQaDetectorStats=detector_stats), "dmQaDetectorStats")
                 else:
                     results.mergeItems(Struct(dmQaResidualPlot=residFig), "dmQaResidualPlot")
 
