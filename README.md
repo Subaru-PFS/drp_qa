@@ -1,35 +1,52 @@
-drp_qa
+DRP QA
 ======
 
-To actually run the gen2 executable, add an entry `command_name_config` in the PfsMapper yaml file should be added.
+## Introduction
 
+This repository contains command line tasks for quality assurance (QA) of the
+Data Release Production (DRP) pipeline. The QA tasks are implemented as
+`CmdLineTask` classes in the LSST Science Pipelines. The tasks are run on the
+output of the DRP pipeline to assess the quality of the data products.
 
-File description below:
+## Available Commands
 
-   -`SConstruct`
-     Configuring scons (a replacement for make)
+Each of the following commands are available on the command line.
 
-   - `mypy.ini`
-     mypy (type checker) configuration
+### DetectorMap QA
 
-   - `pyproject.toml`
-     black (shaping tool) settings
+Measures the residuals in the spatial and wavelength directions between the
+detector map and the arcline centroids. The residuals are measured for each
+visit and for the combined data from multiple visits.
 
-   - `setup.cfg`
-     Configuring flake8 (Coding Convention Checker)
+#### Command and Options
 
-   - `bin.src/`
-     gen2 executables
-     There are no meaningful files in this directory to read.
+The command to run the `DetectorMapQA` task is:
 
-     Copied to bin/ by running `scons`. For platforms that require shebang changes, shebang changes are made and copied to bin/
+```bash
+detectorMapQA.py </PATH/TO/DATA/REPO> --rerun <RERUN_NAME> --id <ID_STR> 
+```
 
-   - `pipelines/`
-     gen3 pipeline definition files run like:
-     `pipetask run -p '$PFS_QA_DIR/pipelines/qa.yaml'`
+Available config options are:
 
-   - `python/`
-     Script entities
+- `--combineVisits`: Combine the data from multiple visits into a single plot. Default is `True`.
+- `--makeResidualPlots`: Make residual plots for each visit or combined visit, if `--combineVisits` is set. Default is
+  `True`.
+- `--useSigmaRange`: Use the sigma range to determine the range of the color scale in the residual plots. Default is
+  `False`.
+- `--xrange`: The range of the x-center (i.e. spatial) in the residual plots. Default is `0.1`.
+- `--wrange`: The range of the y-center (i.e. wavelength) in the residual plots. Default is `0.1`.
+- `--binWavelength`: The bin size in wavelength for the residual plots in nm. Default is `0.1`.
 
-   - `ups/`
-     Information files for the setup command (EUPS)
+#### Outputs
+
+Outputs of the `DetectorMapQA` task are:
+
+- `dmQaResidualPlot` : 1D and 2D plots of the residual between the detectormap and the arclines for a given visit.
+- `dmQaCombinedResidualPlot` : 1D and 2D plots of the residual between the detectormap and the arclines for the entire
+  detector.
+- `dmQaResidualStats` : Statistics of the residual analysis per visit.
+- `dmQaDetectorStats` :  Statistics of the residual analysis per detector.
+
+### Extraction QA
+
+### Flux Calibration QA
