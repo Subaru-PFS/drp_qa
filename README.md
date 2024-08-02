@@ -47,6 +47,30 @@ Outputs of the `DetectorMapQA` task are:
 - `dmQaResidualStats` : Statistics of the residual analysis per visit.
 - `dmQaDetectorStats` :  Statistics of the residual analysis per detector.
 
-### Extraction QA
-
 ### Flux Calibration QA
+
+Measures the residuals in the flux calibration between the standard star
+magnitudes and the instrumental magnitudes.
+
+#### Command and Options
+
+The command to run the `FluxCalibrationQA` task is:
+
+```bash
+fluxCalQA.py </PATH/TO/DATA/REPO> --rerun <RERUN_NAME> --id <ID_STR> 
+```
+
+Available config options are:
+
+- `--filterSet`: The filter set to use for the flux calibration. Default is `ps1`.
+- `--includeFakeJ`: Include the fake J band in the flux calibration. Default is `False`.
+- `--diffFilter`: The filter to use for the differential flux calibration. Default is `g_ps1`.
+
+
+#### Outputs
+
+Outputs of the `FluxCalibrationQA` task are:
+
+- `fluxCalMagDiffPlot` : Plot of the difference between the standard star magnitudes and the instrumental magnitudes.
+- `fluxCalColorDiffPlot` : Plot of the difference between the instrumental magnitudes and a given filter.
+- `fluxCalStats` : Statistics of the flux calibration analysis.
