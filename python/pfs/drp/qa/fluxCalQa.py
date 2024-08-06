@@ -3,6 +3,9 @@ from typing import Dict, Tuple
 import lsstDebug
 import numpy as np
 import pandas as pd
+from astropy import units as u
+from lsst.daf.persistence import ButlerDataRef, NoResults
+from lsst.pex.config import Field
 from lsst.pipe.base import (
     ArgumentParser,
     CmdLineTask,
@@ -12,24 +15,14 @@ from lsst.pipe.base import (
     Struct,
     TaskRunner,
 )
-from lsst.daf.persistence import NoResults
-from lsst.daf.persistence import ButlerDataRef
 from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
+from lsst.pipe.base.connectionTypes import (
+    Output as OutputConnection,
+    PrerequisiteInput as PrerequisiteConnection,
+)
 from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
-from lsst.pipe.base.connectionTypes import PrerequisiteInput as PrerequisiteConnection
-from lsst.pipe.base.connectionTypes import Output as OutputConnection
-from lsst.pex.config import Field
-from astropy import units as u
 from pfs.datamodel import PfsConfig, PfsSingle, TargetType
-
-__all__ = [
-    "FluxCalQaConnections",
-    "FluxCalQaConfig",
-    "FluxCalQaTask",
-]
-
 from pfs.drp.qa.utils.plotting import plot_flux_cal_mag_diff
-
 from pfs.drp.stella.fitReference import FilterCurve, TransmissionCurve
 
 
