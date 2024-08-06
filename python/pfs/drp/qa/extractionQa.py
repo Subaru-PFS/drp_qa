@@ -19,13 +19,11 @@ from lsst.pipe.base import (
     PipelineTaskConnections,
     Struct,
 )
-from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
 from lsst.pipe.base.connectionTypes import (
     Input as InputConnection,
     Output as OutputConnection,
     PrerequisiteInput as PrerequisiteConnection,
 )
-from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
 from pfs.drp.qa.utils.math import gaussianFixedWidth, gaussian_func
 from pfs.drp.qa.utils.storageClasses import MultipagePdfFigure, QaDict
@@ -146,29 +144,6 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.debugInfo = lsstDebug.Info(__name__)
-
-    def runQuantum(
-        self,
-        butler: ButlerQuantumContext,
-        inputRefs: InputQuantizedConnection,
-        outputRefs: OutputQuantizedConnection,
-    ) -> None:
-        """Entry point with butler I/O
-
-        Parameters
-        ----------
-        butler : `ButlerQuantumContext`
-            Data butler, specialised to operate in the context of a quantum.
-        inputRefs : `InputQuantizedConnection`
-            Container with attributes that are data references for the various
-            input connections.
-        outputRefs : `OutputQuantizedConnection`
-            Container with attributes that are data references for the various
-            output connections.
-        """
-        inputs = butler.get(inputRefs)
-        outputs = self.run(**inputs)
-        butler.put(outputs, outputRefs)
 
     def runDataRef(self, dataRef: ButlerDataRef) -> None:
         """Calls ``self.run()``
