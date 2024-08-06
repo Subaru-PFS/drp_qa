@@ -3,7 +3,14 @@ import itertools
 import math
 from typing import Dict, Union
 
+import lsst.afw.display as afwDisplay
 import lsstDebug
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+from lsst.afw.image import ExposureF, ImageF, MaskedImageF
+from lsst.daf.persistence import ButlerDataRef
+from lsst.pex.config import Field
 from lsst.pipe.base import (
     ArgumentParser,
     CmdLineTask,
@@ -13,15 +20,14 @@ from lsst.pipe.base import (
     Struct,
 )
 from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
+from lsst.pipe.base.connectionTypes import (
+    Input as InputConnection,
+    Output as OutputConnection,
+    PrerequisiteInput as PrerequisiteConnection,
+)
 from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
-from lsst.pipe.base.connectionTypes import Input as InputConnection
-from lsst.pipe.base.connectionTypes import Output as OutputConnection
-from lsst.pipe.base.connectionTypes import PrerequisiteInput as PrerequisiteConnection
-from lsst.daf.persistence import ButlerDataRef
-from lsst.pex.config import Field
-import lsst.afw.display as afwDisplay
-from lsst.afw.image import ExposureF, MaskedImageF, ImageF
-from pfs.drp.qa.utils.math import gaussian_func, gaussianFixedWidth
+from pfs.datamodel import FiberStatus, PfsConfig, TargetType
+from pfs.drp.qa.utils.math import gaussianFixedWidth, gaussian_func
 from pfs.drp.stella import (
     DetectorMap,
     FiberProfileSet,
@@ -29,12 +35,8 @@ from pfs.drp.stella import (
     SpectrumSet,
 )
 from pfs.drp.stella.utils import addPfsCursor
-from pfs.datamodel import FiberStatus, PfsConfig, TargetType
-import matplotlib
-import matplotlib.pyplot as plt
-import numpy as np
-from scipy.stats import iqr
 from scipy.optimize import curve_fit
+from scipy.stats import iqr
 
 from .storageClasses import MultipagePdfFigure, QaDict
 
