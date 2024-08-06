@@ -28,6 +28,7 @@ from lsst.pipe.base.connectionTypes import (
 from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
 from pfs.drp.qa.utils.math import gaussianFixedWidth, gaussian_func
+from pfs.drp.qa.utils.storageClasses import MultipagePdfFigure, QaDict
 from pfs.drp.stella import (
     DetectorMap,
     FiberProfileSet,
@@ -37,8 +38,6 @@ from pfs.drp.stella import (
 from pfs.drp.stella.utils import addPfsCursor
 from scipy.optimize import curve_fit
 from scipy.stats import iqr
-
-from .storageClasses import MultipagePdfFigure, QaDict
 
 
 @dataclasses.dataclass

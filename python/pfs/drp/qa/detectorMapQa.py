@@ -1,9 +1,9 @@
 from collections import defaultdict
-from typing import Iterable, Dict
+from typing import Dict, Iterable
 
 import lsstDebug
 from lsst.daf.persistence.butlerExceptions import NoResults
-from lsst.pex.config import Field, ConfigurableField
+from lsst.pex.config import ConfigurableField, Field
 from lsst.pipe.base import (
     CmdLineTask,
     PipelineTask,
@@ -13,8 +13,7 @@ from lsst.pipe.base import (
     TaskRunner,
 )
 from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
-from lsst.pipe.base.connectionTypes import Input as InputConnection
-from lsst.pipe.base.connectionTypes import Output as OutputConnection
+from lsst.pipe.base.connectionTypes import Input as InputConnection, Output as OutputConnection
 from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.drp.qa.tasks.detectorMapResiduals import PlotResidualTask
 from pfs.drp.stella import ArcLineSet, DetectorMap

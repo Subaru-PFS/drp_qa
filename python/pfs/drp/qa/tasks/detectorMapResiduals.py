@@ -1,5 +1,5 @@
 from lsst.pex.config import Config, Field
-from lsst.pipe.base import ArgumentParser, Struct, Task
+from lsst.pipe.base import Struct, Task
 from pfs.drp.qa.utils import helpers, plotting
 from pfs.drp.stella import ArcLineSet, DetectorMap
 
@@ -86,11 +86,3 @@ class PlotResidualTask(Task):
                     )
 
         return results
-
-    @classmethod
-    def _makeArgumentParser(cls) -> ArgumentParser:
-        parser = ArgumentParser(name=cls._DefaultName)
-        parser.add_id_argument(
-            name="--id", datasetType="arcLines", level="Visit", help="data IDs, e.g. --id exp=12345"
-        )
-        return parser
