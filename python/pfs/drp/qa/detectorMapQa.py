@@ -12,9 +12,7 @@ from lsst.pipe.base import (
     Struct,
     TaskRunner,
 )
-from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
 from lsst.pipe.base.connectionTypes import Input as InputConnection, Output as OutputConnection
-from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.drp.qa.tasks.detectorMapResiduals import PlotResidualTask
 from pfs.drp.stella import ArcLineSet, DetectorMap
 
@@ -35,13 +33,6 @@ class DetectorMapQaConnections(
         name="arcLines",
         doc="Emission line measurements",
         storageClass="ArcLineSet",
-        dimensions=("instrument", "exposure", "detector"),
-        multiple=True,
-    )
-    pfsArm = InputConnection(
-        name="pfsArm",
-        doc="Extracted spectra from arm",
-        storageClass="PfsArm",
         dimensions=("instrument", "exposure", "detector"),
         multiple=True,
     )
@@ -125,29 +116,6 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         super().__init__(*args, **kwargs)
         self.makeSubtask("plotResidual")
         self.debugInfo = lsstDebug.Info(__name__)
-
-    def runQuantum(
-        self,
-        butler: ButlerQuantumContext,
-        inputRefs: InputQuantizedConnection,
-        outputRefs: OutputQuantizedConnection,
-    ) -> None:
-        """Entry point with butler I/O
-
-        Parameters
-        ----------
-        butler : `ButlerQuantumContext`
-            Data butler, specialised to operate in the context of a quantum.
-        inputRefs : `InputQuantizedConnection`
-            Container with attributes that are data references for the various
-            input connections.
-        outputRefs : `OutputQuantizedConnection`
-            Container with attributes that are data references for the various
-            output connections.
-        """
-        inputs = butler.get(inputRefs)
-        outputs = self.run(**inputs)
-        butler.put(outputs, outputRefs)
 
     def runDataRef(self, expSpecRefList) -> Struct:
         """Calls ``self.run()``

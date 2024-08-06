@@ -2,6 +2,7 @@ from typing import Dict
 
 import lsstDebug
 import numpy as np
+from lsst.pex.config import Field
 from lsst.pipe.base import Struct, Task
 from pfs.datamodel import PfsConfig, PfsSingle, TargetType
 from pfs.drp.qa.tasks.fluxCalibration import get_filter_curves, get_flux_info
@@ -11,12 +12,16 @@ from pfs.drp.qa.utils.plotting import plot_flux_cal_mag_diff
 class FluxCalibrationConfig(Config):
     """Configuration for FluxCalibrationTask"""
 
+    filterSet = Field(dtype=str, default="ps1", doc="Filter set to use, e.g. 'ps1'")
+    includeFakeJ = Field(dtype=bool, default=False, doc="Include the fake narrow J filter")
+    diffFilter = Field(dtype=str, default="g_ps1", doc="Filter to use for the color magnitude difference")
+
 
 class FluxCalibrationTask(Task):
     """Task for QA of detectorMap."""
 
     ConfigClass = FluxCalibrationConfig
-    _DefaultName = "plotResidual"
+    _DefaultName = "fluxCalibration"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

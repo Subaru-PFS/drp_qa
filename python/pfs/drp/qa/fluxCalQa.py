@@ -2,7 +2,7 @@ from typing import Dict, Tuple
 
 import lsstDebug
 from lsst.daf.persistence import ButlerDataRef, NoResults
-from lsst.pex.config import Field
+from lsst.pex.config import ConfigurableField
 from lsst.pipe.base import (
     CmdLineTask,
     PipelineTask,
@@ -11,13 +11,12 @@ from lsst.pipe.base import (
     Struct,
     TaskRunner,
 )
-from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
 from lsst.pipe.base.connectionTypes import (
     Output as OutputConnection,
     PrerequisiteInput as PrerequisiteConnection,
 )
-from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.datamodel import PfsConfig, PfsSingle, TargetType
+from pfs.drp.qa.tasks.fluxCalibration import FluxCalibrationTask
 
 
 class FluxCalQaConnections(
@@ -55,9 +54,7 @@ class FluxCalQaConnections(
 class FluxCalQaConfig(PipelineTaskConfig, pipelineConnections=FluxCalQaConnections):
     """Configuration for fluxCalQaTask"""
 
-    filterSet = Field(dtype=str, default="ps1", doc="Filter set to use, e.g. 'ps1'")
-    includeFakeJ = Field(dtype=bool, default=False, doc="Include the fake narrow J filter")
-    diffFilter = Field(dtype=str, default="g_ps1", doc="Filter to use for the color magnitude difference")
+    fluxCal = ConfigurableField(target=FluxCalibrationTask, doc="Flux Calibration Task.")
 
 
 class FluxCalQaRunner(TaskRunner):
@@ -88,30 +85,8 @@ class FluxCalQaTask(CmdLineTask, PipelineTask):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.makeSubtask("fluxCal")
         self.debugInfo = lsstDebug.Info(__name__)
-
-    def runQuantum(
-        self,
-        butler: ButlerQuantumContext,
-        inputRefs: InputQuantizedConnection,
-        outputRefs: OutputQuantizedConnection,
-    ) -> None:
-        """Entry point with butler I/O
-
-        Parameters
-        ----------
-        butler : `ButlerQuantumContext`
-            Data butler, specialised to operate in the context of a quantum.
-        inputRefs : `InputQuantizedConnection`
-            Container with attributes that are data references for the various
-            input connections.
-        outputRefs : `OutputQuantizedConnection`
-            Container with attributes that are data references for the various
-            output connections.
-        """
-        inputs = butler.get(inputRefs)
-        outputs = self.run(**inputs)
-        butler.put(outputs, outputRefs)
 
     def runDataRef(self, dataRefList: Tuple[str, ButlerDataRef]) -> Struct:
         """Calls ``self.run()``
@@ -161,15 +136,7 @@ class FluxCalQaTask(CmdLineTask, PipelineTask):
         outputs : `Struct`
             QA outputs.
         """
-        return self.fluxCalQa(pfsConfig, pfsSingles)
+        return self.fluxCal.run(pfsConfig, pfsSingles)
 
     def _getMetadataName(self):
-        """Get the name of the metadata dataset type, or `None` if metadata is
-        not to be persisted.
-
-        Notes
-        -----
-        The name may depend on the config; that is why this is not a class
-        method.
-        """
         return None
