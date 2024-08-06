@@ -2,11 +2,13 @@ from typing import Dict
 
 import lsstDebug
 import numpy as np
-from lsst.pex.config import Field
+import pandas as pd
+from astropy import units as u
+from lsst.pex.config import Config, Field
 from lsst.pipe.base import Struct, Task
 from pfs.datamodel import PfsConfig, PfsSingle, TargetType
-from pfs.drp.qa.tasks.fluxCalibration import get_filter_curves, get_flux_info
 from pfs.drp.qa.utils.plotting import plot_flux_cal_mag_diff
+from pfs.drp.stella.fitReference import FilterCurve, TransmissionCurve
 
 
 class FluxCalibrationConfig(Config):
@@ -27,6 +29,12 @@ class FluxCalibrationTask(Task):
         super().__init__(*args, **kwargs)
         self.debugInfo = lsstDebug.Info(__name__)
 
+        # Get the filter curves.
+        self.filter_curves = get_filter_curves(
+            filter_set=self.config.filterSet, include_fake_j=self.config.includeFakeJ
+        )
+        self.log.info(f"Filter curves: {list(self.filter_curves.keys())}")
+
     def run(self, pfsConfig: PfsConfig, pfsSingles: Dict[str, PfsSingle]) -> Struct:
         """QA plots for flux calibration.
 
@@ -35,7 +43,7 @@ class FluxCalibrationTask(Task):
         pfsConfig : `pfs.datamodel.PfsConfig`, optional
             Top-end configuration.
         pfsSingles : dict of `pfs.datamodel.PfsSingle`
-            Flux-calibrated, single epoch spectra.
+            Flux-calibrated, single epoch spectra corresponding to the pfsConfig.
 
         Returns
         -------
@@ -43,12 +51,6 @@ class FluxCalibrationTask(Task):
             QA outputs.
         """
         self.log.info(f"Flux Calibration QA for {pfsConfig}")
-
-        # Get the filter curves.
-        filter_curves = get_filter_curves(
-            filter_set=self.config.filterSet, include_fake_j=self.config.includeFakeJ
-        )
-        self.log.info(f"Filter curves: {list(filter_curves.keys())}")
 
         pfsConfigFluxStd = pfsConfig.select(targetType=TargetType.FLUXSTD)
 
@@ -61,15 +63,15 @@ class FluxCalibrationTask(Task):
 
         diff_filter = self.config.diffFilter
 
-        flux_info = get_flux_info(pfsConfigFluxStd, pfsSingles, filter_curves, diff_filter=diff_filter)
+        flux_info = get_flux_info(pfsConfigFluxStd, pfsSingles, self.filter_curves, diff_filter=diff_filter)
 
         # Make plots.
         self.log.info("Making magnitude difference plot")
         title = f"Magnitude Difference for v{pfsConfig.visit} designId={hex(pfsConfig.pfsDesignId)}"
-        mag_diff_plot = plot_flux_cal_mag_diff(flux_info, filter_curves, pfsConfig, title=title)
+        mag_diff_plot = plot_flux_cal_mag_diff(flux_info, self.filter_curves, pfsConfig, title=title)
 
         # Make a new set of filters with fake names, which makes plotting easy.
-        fcs = {f"{diff_filter}-{k}": fc for k, fc in filter_curves.items()}
+        fcs = {f"{diff_filter}-{k}": fc for k, fc in self.filter_curves.items()}
         title = f"Color Magnitude Difference for v{pfsConfig.visit} designId={hex(pfsConfig.pfsDesignId)}"
         color_diff_plot = plot_flux_cal_mag_diff(
             flux_info, fcs, pfsConfig, title=title, column_prefix="single-single"
