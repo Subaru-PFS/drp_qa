@@ -5,3 +5,11 @@ target-version = ["py38"]
 [tool.isort]
 profile = "black"
 line_length = 110
+
+[tool.setuptools.packages.find]
+where = ["python/"]
+include = ["pfs.drp.qa"]
+
+[project]
+name = "pfs.drp.qa"
+version = "0.0.0"
