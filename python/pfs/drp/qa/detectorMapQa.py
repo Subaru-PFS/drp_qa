@@ -2,8 +2,6 @@ from collections import defaultdict
 from typing import Dict, Iterable
 
 import lsstDebug
-import pfs.drp.qa.tasks.detectorMapResiduals
-from lsst.daf.persistence.butlerExceptions import NoResults
 from lsst.pex.config import ConfigurableField, Field
 from lsst.pipe.base import (
     CmdLineTask,
@@ -14,8 +12,10 @@ from lsst.pipe.base import (
     TaskRunner,
 )
 from lsst.pipe.base.connectionTypes import Input as InputConnection, Output as OutputConnection
-from pfs.drp.qa.tasks.detectorMapResiduals import PlotResidualTask
 from pfs.drp.stella import ArcLineSet, DetectorMap
+
+import pfs.drp.qa.tasks.detectorMapResiduals
+from pfs.drp.qa.tasks.detectorMapResiduals import PlotResidualTask
 
 
 class DetectorMapQaConnections(
@@ -148,8 +148,6 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
                 arcLinesSet.append(arcLines)
                 detectorMaps.append(detectorMap)
                 dataIds.append(dataRef.dataId)
-            except NoResults:
-                self.log.info(f"No results for {dataRef}")
             except Exception as e:
                 self.log.error(e)
 
