@@ -2,10 +2,10 @@ from typing import Iterable
 
 import numpy as np
 from lsst.pex.config import Config
-from lsst.pipe.base import Task, Struct, ArgumentParser
+from lsst.pipe.base import Struct, Task
 from matplotlib import pyplot as plt
-from scipy.stats import iqr
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm
+from scipy.stats import iqr
 
 
 class OverlapRegionLinesConfig(Config):
@@ -135,11 +135,3 @@ class OverlapRegionLinesTask(Task):
         plt.close()
 
         return Struct()
-
-    @classmethod
-    def _makeArgumentParser(cls) -> ArgumentParser:
-        parser = ArgumentParser(name=cls._DefaultName)
-        parser.add_id_argument(
-            name="--id", datasetType="arcLines", level="Visit", help="data IDs, e.g. --id exp=12345"
-        )
-        return parser

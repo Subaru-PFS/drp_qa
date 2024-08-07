@@ -2,6 +2,7 @@ from collections import defaultdict
 from typing import Dict, Iterable
 
 import lsstDebug
+import pfs.drp.qa.tasks.detectorMapResiduals
 from lsst.daf.persistence.butlerExceptions import NoResults
 from lsst.pex.config import ConfigurableField, Field
 from lsst.pipe.base import (
@@ -83,7 +84,7 @@ class DetectorMapQaRunner(TaskRunner):
             * If checkOverlap, group all detectors by visit.
             * Otherwise, group per visit per detector (i.e. don't group).
         """
-        combineVisits = parsedCmd.config.plotResidual.combineVisits
+        combineVisits = pfs.drp.qa.tasks.detectorMapResiduals.plot_residual.combineVisits
         checkOverlap = parsedCmd.config.checkOverlap
 
         groups = defaultdict(list)
