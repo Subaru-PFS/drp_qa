@@ -1,17 +1,18 @@
-from typing import Iterable
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
+from typing import Iterable
 
-from pfs.drp.qa.utils.math import getWeightedRMS, getChi2
-from pfs.drp.stella.utils.math import robustRms
-from pfs.utils.fiberids import FiberIds
 import numpy as np
 import pandas as pd
 from astropy.stats import sigma_clip
 from lsst.daf.persistence import NoResults
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
+from pfs.drp.stella.utils.math import robustRms
+from pfs.utils.fiberids import FiberIds
 from scipy.optimize import bisect
+
+from pfs.drp.qa.utils.math import getChi2, getWeightedRMS
 
 
 @dataclass
@@ -281,7 +282,7 @@ def getFitStats(
     else:
         ySoftFit = bisect(f_y, 0, maxSoften)
 
-    xFibers = len(arc_data.fiberId.unique())
+    xFibers = len(traces.fiberId.unique())
     yFibers = len(lines.fiberId.unique())
 
     xFitStat = FitStat(arc_data.xResid.median(), xRobustRms, xWeightedRms, xSoftFit, xDof, xFibers, xNum)
