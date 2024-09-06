@@ -1,4 +1,4 @@
-from typing import Optional, Iterable, Dict
+from typing import Dict, Iterable, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,11 +9,12 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from matplotlib.lines import Line2D
-from pfs.drp.qa.utils.helpers import getFitStats
-from pfs.drp.qa.utils.math import getWeightedRMS
 from pfs.drp.stella import PfsConfig
 from pfs.drp.stella.fitReference import TransmissionCurve
 from pfs.drp.stella.utils.math import robustRms
+
+from pfs.drp.qa.utils.helpers import getFitStats
+from pfs.drp.qa.utils.math import getWeightedRMS
 
 div_palette = plt.cm.RdBu_r.with_extremes(over="magenta", under="cyan", bad="lime")
 detector_palette = {"b": "tab:blue", "r": "tab:red", "n": "tab:orange", "m": "tab:pink"}
@@ -65,6 +66,10 @@ def makePlot(
         wrange = None
 
     ccd = f"{arm}{spectrograph}"
+
+    visit_stats = visit_stats.query(
+        'status_type == "RESERVED" and ccd == @ccd'
+    ).sort_values(by="visit").copy()
 
     try:
         visit_stat = visit_stats.iloc[0]
@@ -122,9 +127,7 @@ def makePlot(
                 print(f"Problem plotting residual {e}")
 
         visit_fig = plotVisits(
-            visit_stats.query('status_type == "RESERVED" and ccd == @ccd')
-            .sort_values(by="visit")
-            .copy(),
+            visit_stats,
             description_palette,
             fig=bottom_fig,
         )
