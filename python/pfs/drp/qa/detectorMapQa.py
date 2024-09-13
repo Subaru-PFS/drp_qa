@@ -1,15 +1,13 @@
-from collections import defaultdict
 from typing import Dict, Iterable
 
 import lsstDebug
-from lsst.pex.config import ConfigurableField, Field
+from lsst.pex.config import ConfigurableField
 from lsst.pipe.base import (
     CmdLineTask,
     PipelineTask,
     PipelineTaskConfig,
     PipelineTaskConnections,
     Struct,
-    TaskRunner,
 )
 from lsst.pipe.base.connectionTypes import Input as InputConnection, Output as OutputConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap
@@ -65,44 +63,7 @@ class DetectorMapQaConnections(
 class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
     """Configuration for DetectorMapQaTask"""
 
-    checkOverlap = Field(dtype=bool, default=False, doc="If the overlapRegionLines should be checked.")
     plotResidual = ConfigurableField(target=PlotResidualTask, doc="Plot the detector map residual.")
-
-
-class DetectorMapQaRunner(TaskRunner):
-    """Runner for DetectorMapQaTask"""
-
-    @staticmethod
-    def getTargetList(parsedCmd, **kwargs):
-        """Produce list of targets for DetectorMapQaTask.
-
-        The visits and detector are processed as part of a group, with group
-        membership consisting of:
-
-            * If combineVisits, group all visits by detector.
-            * If checkOverlap, group all detectors by visit.
-            * Otherwise, group per visit per detector (i.e. don't group).
-        """
-        combineVisits = parsedCmd.config.plotResidual.combineVisits
-        checkOverlap = parsedCmd.config.checkOverlap
-
-        groups = defaultdict(list)
-        for ref in parsedCmd.id.refList:
-            visit = ref.dataId["visit"]
-            spectrograph = ref.dataId["spectrograph"]
-            arm = ref.dataId["arm"]
-            ccd = f"{arm}{spectrograph}"
-
-            if combineVisits is True:
-                groups[ccd].append(ref)
-            elif checkOverlap is True:
-                groups[visit].append(ref)
-            else:
-                groups[f"{visit}-{ccd}"].append(ref)
-
-        processGroups = [((key, group), kwargs) for key, group in groups.items()]
-
-        return processGroups
 
 
 class DetectorMapQaTask(CmdLineTask, PipelineTask):
@@ -110,7 +71,6 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
 
     ConfigClass = DetectorMapQaConfig
     _DefaultName = "detectorMapQa"
-    RunnerClass = DetectorMapQaRunner
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
