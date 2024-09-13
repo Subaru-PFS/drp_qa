@@ -19,7 +19,7 @@ from pfs.drp.qa.tasks.detectorMapResiduals import PlotResidualTask
 
 class DetectorMapQaConnections(
     PipelineTaskConnections,
-    dimensions=("instrument", "exposure", "detector"),
+    dimensions=("exposure", "detector", "physical_filter"),
 ):
     """Connections for DetectorMapQaTask"""
 
@@ -27,20 +27,20 @@ class DetectorMapQaConnections(
         name="detectorMap_used",
         doc="Mapping from fiberId,wavelength to x,y",
         storageClass="DetectorMap",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("exposure", "detector"),
     )
     arcLines = InputConnection(
         name="arcLines",
         doc="Emission line measurements",
         storageClass="ArcLineSet",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("exposure", "detector"),
         multiple=True,
     )
     dmQaResidualPlot = OutputConnection(
         name="dmQaResidualPlot",
         doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
         storageClass="MultipagePdfFigure",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("exposure", "detector"),
     )
     dmQaCombinedResidualPlot = OutputConnection(
         name="dmQaCombinedResidualPlot",
@@ -52,13 +52,13 @@ class DetectorMapQaConnections(
         name="dmQaResidualStats",
         doc="Statistics of the residual analysis for the visit.",
         storageClass="pandas.core.frame.DataFrame",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("exposure", "detector"),
     )
     dmQaDetectorStats = OutputConnection(
         name="dmQaDetectorStats",
         doc="Statistics of the residual analysis for the entire detector.",
         storageClass="pandas.core.frame.DataFrame",
-        dimensions=("instrument",),
+        dimensions=("detector",),
     )
 
 
