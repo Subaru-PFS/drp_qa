@@ -1,7 +1,7 @@
 from typing import Dict, Iterable
 
 import lsstDebug
-from lsst.pex.config import ConfigurableField
+from lsst.pex.config import Field
 from lsst.pipe.base import (
     CmdLineTask,
     PipelineTask,
@@ -11,8 +11,6 @@ from lsst.pipe.base import (
 )
 from lsst.pipe.base.connectionTypes import Input as InputConnection, Output as OutputConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap
-
-from pfs.drp.qa.tasks.detectorMapResiduals import PlotResidualTask
 
 
 class DetectorMapQaConnections(
@@ -26,6 +24,7 @@ class DetectorMapQaConnections(
         doc="Mapping from fiberId,wavelength to x,y",
         storageClass="DetectorMap",
         dimensions=("exposure", "detector"),
+        multiple=True,
     )
     arcLines = InputConnection(
         name="arcLines",
@@ -39,31 +38,35 @@ class DetectorMapQaConnections(
         doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
         storageClass="MultipagePdfFigure",
         dimensions=("exposure", "detector"),
+        multiple=True,
     )
     dmQaCombinedResidualPlot = OutputConnection(
         name="dmQaCombinedResidualPlot",
         doc="The 1D and 2D residual plots of the detectormap with the arclines for the entire detector.",
         storageClass="MultipagePdfFigure",
         dimensions=("instrument",),
+        multiple=True,
     )
     dmQaResidualStats = OutputConnection(
         name="dmQaResidualStats",
         doc="Statistics of the residual analysis for the visit.",
         storageClass="pandas.core.frame.DataFrame",
         dimensions=("exposure", "detector"),
+        multiple=True,
     )
     dmQaDetectorStats = OutputConnection(
         name="dmQaDetectorStats",
         doc="Statistics of the residual analysis for the entire detector.",
         storageClass="pandas.core.frame.DataFrame",
         dimensions=("detector",),
+        multiple=True,
     )
 
 
 class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
     """Configuration for DetectorMapQaTask"""
 
-    plotResidual = ConfigurableField(target=PlotResidualTask, doc="Plot the detector map residual.")
+    saveOutput = Field(doc="Save the results via butler", dtype=bool, default=True)
 
 
 class DetectorMapQaTask(CmdLineTask, PipelineTask):
@@ -76,67 +79,6 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         super().__init__(*args, **kwargs)
         self.makeSubtask("plotResidual")
         self.debugInfo = lsstDebug.Info(__name__)
-
-    def runDataRef(self, expSpecRefList) -> Struct:
-        """Calls ``self.run()``
-
-        Parameters
-        ----------
-        expSpecRefList : iterable of iterable of `lsst.daf.persistence.ButlerDataRef`
-            Data references for each sensor, grouped either by visit or by detector.
-
-        Returns
-        -------
-        Struct
-            Output data products. See `DetectorMapQaConnections`.
-        """
-        groupName = expSpecRefList[0]
-        groupDataRefs = expSpecRefList[1]
-
-        self.log.info(f"Starting processing for {groupName=} with {len(groupDataRefs)} dataIds")
-
-        arcLinesSet = list()
-        detectorMaps = list()
-        dataIds = list()
-
-        for dataRef in groupDataRefs:
-            try:
-                detectorMap = dataRef.get("detectorMap_used")
-                arcLines = dataRef.get("arcLines")
-
-                arcLinesSet.append(arcLines)
-                detectorMaps.append(detectorMap)
-                dataIds.append(dataRef.dataId)
-            except Exception as e:
-                self.log.error(e)
-
-        # Run the task and get the outputs.
-        outputs = self.run(groupName, arcLinesSet, detectorMaps, dataIds)
-
-        # Save the outputs in butler.
-        if outputs is not None:
-            for datasetType, data in outputs.getDict().items():
-                # Add the rerun and calib dirs to the suptitle.
-                if datasetType == "dmQaResidualPlot" or datasetType == "dmQaCombinedResidualPlot":
-                    try:
-                        # TODO fix this one day with Gen3.
-                        repo_args = groupDataRefs[0].butlerSubset.butler._repos.inputs()[0].repoArgs
-                        rerun_name = repo_args.root
-                        calib_dir = repo_args.mapperArgs["calibRoot"]
-                        suptitle = data._suptitle.get_text()
-                        data.suptitle(f"{suptitle}\n{rerun_name}\n{calib_dir}")
-                    except Exception as e:
-                        self.log.error(e)
-
-                # Store the combined info in the first dataRef and the individual info in the others.
-                self.log.info(f"Saving {datasetType}")
-                if self.config.plotResidual.combineVisits is True:
-                    groupDataRefs[0].put(data, datasetType=datasetType)
-                else:
-                    for dataRef in groupDataRefs:
-                        dataRef.put(data, datasetType=datasetType)
-
-        return outputs
 
     def run(
         self,
@@ -163,7 +105,8 @@ class DetectorMapQaTask(CmdLineTask, PipelineTask):
         Struct
             Output data products. See `DetectorMapQaConnections`.
         """
-        return self.plotResidual.run(groupName, arclineSet, detectorMaps, dataIds)
+        # List all the objects we have received.
+        self.log.info(f"Processing {len(arclineSet)} ArcLineSets and {len(detectorMaps)} DetectorMaps")
 
     def _getMetadataName(self):
         return None
