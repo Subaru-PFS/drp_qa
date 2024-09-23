@@ -3,7 +3,6 @@ from lsst.afw.image import ExposureF
 from lsst.daf.persistence import ButlerDataRef
 from lsst.pex.config import ConfigurableField
 from lsst.pipe.base import (
-    CmdLineTask,
     PipelineTask,
     PipelineTaskConfig,
     PipelineTaskConnections,
@@ -84,7 +83,7 @@ class ExtractionQaConfig(PipelineTaskConfig, pipelineConnections=ExtractionQaCon
     fiberExtractionQa = ConfigurableField(target=ExtractionQaTask, doc="Plot the fiber extraction QA.")
 
 
-class ExtractionQaTask(CmdLineTask, PipelineTask):
+class ExtractionQaTask(PipelineTask):
     """Task for QA of extraction"""
 
     ConfigClass = ExtractionQaConfig

@@ -3,7 +3,6 @@ from typing import Dict, Iterable
 import lsstDebug
 from lsst.pex.config import Field
 from lsst.pipe.base import (
-    CmdLineTask,
     PipelineTask,
     PipelineTaskConfig,
     PipelineTaskConnections,
@@ -15,7 +14,7 @@ from pfs.drp.stella import ArcLineSet, DetectorMap
 
 class DetectorMapQaConnections(
     PipelineTaskConnections,
-    dimensions=("exposure", "detector", "physical_filter"),
+    dimensions=("exposure", "detector"),
 ):
     """Connections for DetectorMapQaTask"""
 
@@ -69,7 +68,7 @@ class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaC
     saveOutput = Field(doc="Save the results via butler", dtype=bool, default=True)
 
 
-class DetectorMapQaTask(CmdLineTask, PipelineTask):
+class DetectorMapQaTask(PipelineTask):
     """Task for QA of detectorMap"""
 
     ConfigClass = DetectorMapQaConfig
