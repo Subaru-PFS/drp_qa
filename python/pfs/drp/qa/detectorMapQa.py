@@ -29,7 +29,6 @@ class DetectorMapQaConnections(
         storageClass="DetectorMap",
         dimensions=(
             "instrument",
-            "exposure",
             "arm",
             "spectrograph",
         ),
