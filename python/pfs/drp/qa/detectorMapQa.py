@@ -32,7 +32,7 @@ class DetectorMapQaConnections(
             "arm",
             "spectrograph",
         ),
-        multiple=True,
+        isCalibration=True,
     )
     arcLines = InputConnection(
         name="lines",
@@ -44,7 +44,6 @@ class DetectorMapQaConnections(
             "arm",
             "spectrograph",
         ),
-        multiple=True,
     )
     dmQaResidualPlot = OutputConnection(
         name="dmQaResidualPlot",
@@ -56,7 +55,6 @@ class DetectorMapQaConnections(
             "arm",
             "spectrograph",
         ),
-        multiple=True,
     )
     dmQaCombinedResidualPlot = OutputConnection(
         name="dmQaCombinedResidualPlot",
@@ -68,7 +66,6 @@ class DetectorMapQaConnections(
             "arm",
             "spectrograph",
         ),
-        multiple=True,
     )
     dmQaResidualStats = OutputConnection(
         name="dmQaResidualStats",
@@ -80,7 +77,6 @@ class DetectorMapQaConnections(
             "arm",
             "spectrograph",
         ),
-        multiple=True,
     )
     dmQaDetectorStats = OutputConnection(
         name="dmQaDetectorStats",
@@ -92,7 +88,6 @@ class DetectorMapQaConnections(
             "arm",
             "spectrograph",
         ),
-        multiple=True,
     )
 
 
