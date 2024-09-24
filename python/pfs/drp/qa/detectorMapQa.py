@@ -1,11 +1,12 @@
 from typing import Dict, Iterable
 
-import lsstDebug
-from lsst.pex.config import Field
+from lsst.pex.config import ConfigurableField
 from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, QuantumContext, Struct
 from lsst.pipe.base.connectionTypes import Input as InputConnection, Output as OutputConnection
 from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap
+
+from pfs.drp.qa.tasks.detectorMapResiduals import PlotResidualTask
 
 
 class DetectorMapQaConnections(
@@ -88,7 +89,10 @@ class DetectorMapQaConnections(
 class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
     """Configuration for DetectorMapQaTask"""
 
-    saveOutput = Field(doc="Save the results via butler", dtype=bool, default=True)
+    plotResidual = ConfigurableField(
+        target=PlotResidualTask,
+        doc="Plot the residual of the detectormap with the arclines.",
+    )
 
 
 class DetectorMapQaTask(PipelineTask):
@@ -100,7 +104,6 @@ class DetectorMapQaTask(PipelineTask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.makeSubtask("plotResidual")
-        self.debugInfo = lsstDebug.Info(__name__)
 
     def runQuantum(
         self,
@@ -144,6 +147,7 @@ class DetectorMapQaTask(PipelineTask):
         """
         # List all the objects we have received.
         self.log.info(f"Processing {len(arclineSet)} ArcLineSets and {len(detectorMaps)} DetectorMaps")
+        # self.plotResidual.run(arclineSet, detectorMaps, dataIds)
 
     def _getMetadataName(self):
         return None
