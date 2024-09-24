@@ -14,7 +14,12 @@ from pfs.drp.stella import ArcLineSet, DetectorMap
 
 class DetectorMapQaConnections(
     PipelineTaskConnections,
-    dimensions=("exposure", "detector"),
+    dimensions=(
+        "instrument",
+        "exposure",
+        "arm",
+        "spectrograph",
+    ),
 ):
     """Connections for DetectorMapQaTask"""
 
@@ -22,42 +27,72 @@ class DetectorMapQaConnections(
         name="detectorMap_calib",
         doc="Mapping from fiberId,wavelength to x,y",
         storageClass="DetectorMap",
-        dimensions=("exposure", "detector"),
+        dimensions=(
+            "instrument",
+            "exposure",
+            "arm",
+            "spectrograph",
+        ),
         multiple=True,
     )
     arcLines = InputConnection(
         name="lines",
         doc="Emission line measurements",
         storageClass="lineCentroids",
-        dimensions=("exposure", "detector"),
+        dimensions=(
+            "instrument",
+            "exposure",
+            "arm",
+            "spectrograph",
+        ),
         multiple=True,
     )
     dmQaResidualPlot = OutputConnection(
         name="dmQaResidualPlot",
         doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
         storageClass="MultipagePdfFigure",
-        dimensions=("exposure", "detector"),
+        dimensions=(
+            "instrument",
+            "exposure",
+            "arm",
+            "spectrograph",
+        ),
         multiple=True,
     )
     dmQaCombinedResidualPlot = OutputConnection(
         name="dmQaCombinedResidualPlot",
         doc="The 1D and 2D residual plots of the detectormap with the arclines for the entire detector.",
         storageClass="MultipagePdfFigure",
-        dimensions=("instrument",),
+        dimensions=(
+            "instrument",
+            "exposure",
+            "arm",
+            "spectrograph",
+        ),
         multiple=True,
     )
     dmQaResidualStats = OutputConnection(
         name="dmQaResidualStats",
         doc="Statistics of the residual analysis for the visit.",
         storageClass="pandas.core.frame.DataFrame",
-        dimensions=("exposure", "detector"),
+        dimensions=(
+            "instrument",
+            "exposure",
+            "arm",
+            "spectrograph",
+        ),
         multiple=True,
     )
     dmQaDetectorStats = OutputConnection(
         name="dmQaDetectorStats",
         doc="Statistics of the residual analysis for the entire detector.",
         storageClass="pandas.core.frame.DataFrame",
-        dimensions=("detector",),
+        dimensions=(
+            "instrument",
+            "exposure",
+            "arm",
+            "spectrograph",
+        ),
         multiple=True,
     )
 
