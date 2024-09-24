@@ -2,13 +2,9 @@ from typing import Dict, Iterable
 
 import lsstDebug
 from lsst.pex.config import Field
-from lsst.pipe.base import (
-    PipelineTask,
-    PipelineTaskConfig,
-    PipelineTaskConnections,
-    Struct,
-)
+from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, QuantumContext, Struct
 from lsst.pipe.base.connectionTypes import Input as InputConnection, Output as OutputConnection
+from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap
 
 
@@ -62,7 +58,6 @@ class DetectorMapQaConnections(
         storageClass="MultipagePdfFigure",
         dimensions=(
             "instrument",
-            "exposure",
             "arm",
             "spectrograph",
         ),
@@ -84,7 +79,6 @@ class DetectorMapQaConnections(
         storageClass="pandas.core.frame.DataFrame",
         dimensions=(
             "instrument",
-            "exposure",
             "arm",
             "spectrograph",
         ),
@@ -107,6 +101,21 @@ class DetectorMapQaTask(PipelineTask):
         super().__init__(*args, **kwargs)
         self.makeSubtask("plotResidual")
         self.debugInfo = lsstDebug.Info(__name__)
+
+    def runQuantum(
+        self,
+        butler: QuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
+    ) -> None:
+        inputs = butler.get(inputRefs)
+        dataId = inputRefs.exposure.dataId
+
+        # Run the task
+        print(f"Running {self.name} for {dataId}")
+        outputs = self.run(**inputs, dataId=dataId)
+        butler.put(outputs, outputRefs)
+        return outputs
 
     def run(
         self,
