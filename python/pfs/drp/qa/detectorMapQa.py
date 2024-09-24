@@ -148,6 +148,3 @@ class DetectorMapQaTask(PipelineTask):
         # List all the objects we have received.
         self.log.info(f"Processing {len(arclineSet)} ArcLineSets and {len(detectorMaps)} DetectorMaps")
         # self.plotResidual.run(arclineSet, detectorMaps, dataIds)
-
-    def _getMetadataName(self):
-        return None
