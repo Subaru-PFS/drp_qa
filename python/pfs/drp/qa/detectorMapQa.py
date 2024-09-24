@@ -38,7 +38,7 @@ class DetectorMapQaConnections(
     arcLines = InputConnection(
         name="lines",
         doc="Emission line measurements",
-        storageClass="lineCentroids",
+        storageClass="arcLines",
         dimensions=(
             "instrument",
             "exposure",
