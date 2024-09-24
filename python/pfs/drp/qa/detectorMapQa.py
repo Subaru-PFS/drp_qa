@@ -19,16 +19,16 @@ class DetectorMapQaConnections(
     """Connections for DetectorMapQaTask"""
 
     detectorMap = InputConnection(
-        name="detectorMap_used",
+        name="detectorMap_calib",
         doc="Mapping from fiberId,wavelength to x,y",
         storageClass="DetectorMap",
         dimensions=("exposure", "detector"),
         multiple=True,
     )
     arcLines = InputConnection(
-        name="arcLines",
+        name="lines",
         doc="Emission line measurements",
-        storageClass="ArcLineSet",
+        storageClass="lineCentroids",
         dimensions=("exposure", "detector"),
         multiple=True,
     )
