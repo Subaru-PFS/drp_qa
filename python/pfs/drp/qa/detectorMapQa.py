@@ -53,16 +53,6 @@ class DetectorMapQaConnections(
             "spectrograph",
         ),
     )
-    dmQaCombinedResidualPlot = OutputConnection(
-        name="dmQaCombinedResidualPlot",
-        doc="The 1D and 2D residual plots of the detectormap with the arclines for the entire detector.",
-        storageClass="MultipagePdfFigure",
-        dimensions=(
-            "instrument",
-            "arm",
-            "spectrograph",
-        ),
-    )
     dmQaResidualStats = OutputConnection(
         name="dmQaResidualStats",
         doc="Statistics of the residual analysis for the visit.",
@@ -74,16 +64,27 @@ class DetectorMapQaConnections(
             "spectrograph",
         ),
     )
-    dmQaDetectorStats = OutputConnection(
-        name="dmQaDetectorStats",
-        doc="Statistics of the residual analysis for the entire detector.",
-        storageClass="pandas.core.frame.DataFrame",
-        dimensions=(
-            "instrument",
-            "arm",
-            "spectrograph",
-        ),
-    )
+    # dmQaCombinedResidualPlot = OutputConnection(
+    #     name="dmQaCombinedResidualPlot",
+    #     doc="The 1D and 2D residual plots of the detectormap with the arclines for the entire detector.",
+    #     storageClass="MultipagePdfFigure",
+    #     dimensions=(
+    #         "instrument",
+    #         "arm",
+    #         "spectrograph",
+    #     ),
+    # )
+
+    # dmQaDetectorStats = OutputConnection(
+    #     name="dmQaDetectorStats",
+    #     doc="Statistics of the residual analysis for the entire detector.",
+    #     storageClass="pandas.core.frame.DataFrame",
+    #     dimensions=(
+    #         "instrument",
+    #         "arm",
+    #         "spectrograph",
+    #     ),
+    # )
 
 
 class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
