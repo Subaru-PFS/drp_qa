@@ -1,5 +1,7 @@
 from typing import Iterable
 
+import numpy as np
+import pandas as pd
 from lsst.pex.config import ConfigurableField
 from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, Struct
 from lsst.pipe.base.connectionTypes import Input as InputConnection, Output as OutputConnection
@@ -129,5 +131,11 @@ class DetectorMapQaTask(PipelineTask):
         """
         # List all the objects we have received.
         self.log.info(f"Processing {len(arcLines)} ArcLineSets and {len(detectorMaps)} DetectorMaps")
-        # self.plotResidual.run(arclineSet, detectorMaps, dataIds)
-        return Struct()
+
+        df = pd.DataFrame(
+            {
+                "mean": np.random.rand(10),
+            }
+        )
+
+        return Struct(dmQaResidualStats=df)
