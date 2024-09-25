@@ -62,6 +62,7 @@ class DetectorMapQaConnections(
             "arm",
             "spectrograph",
         ),
+        multiple=True,
     )
 
     # dmQaResidualPlot = OutputConnection(
