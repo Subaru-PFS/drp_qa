@@ -127,7 +127,8 @@ class DetectorMapQaTask(PipelineTask):
         data_ids = []
         for name, refs in inputRefs:
             for ref in refs:
-                data_ids.append(ref.dataId)
+                if "exposure" in ref.dataId.full:
+                    data_ids.append(ref.dataId.full)
         inputs = butlerQC.get(inputRefs)
         inputs["dataIds"] = data_ids
         outputs = self.run(**inputs)
@@ -157,15 +158,14 @@ class DetectorMapQaTask(PipelineTask):
         """
         # List all the objects we have received.
         self.log.info(f"Processing {len(arcLines)} ArcLineSets and {len(detectorMaps)} DetectorMaps")
-        self.log.info(f"Data IDs: {dataIds}")
 
         df = pd.DataFrame(
             {
                 "mean": np.random.rand(10),
             }
         )
-        for k, v in dataIds.items():
-            print(k, v)
-            df[k] = v
+
+        for i, dataId in enumerate(dataIds):
+            print(i, dataId)
 
         return Struct(dmQaResidualStats=df)
