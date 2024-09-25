@@ -126,9 +126,7 @@ class DetectorMapQaTask(PipelineTask):
     ):
         data_ids = []
         for name, refs in inputRefs:
-            self.log.info(f"Processing {name}: {refs}")
             for ref in refs:
-                self.log.info(f"Processing {ref.dataId}")
                 data_ids.append(ref.dataId)
         inputs = butlerQC.get(inputRefs)
         inputs["dataIds"] = data_ids
@@ -166,7 +164,8 @@ class DetectorMapQaTask(PipelineTask):
                 "mean": np.random.rand(10),
             }
         )
-        for k, v in dataIds[0].items():
+        for k, v in dataIds.items():
+            print(k, v)
             df[k] = v
 
         return Struct(dmQaResidualStats=df)
