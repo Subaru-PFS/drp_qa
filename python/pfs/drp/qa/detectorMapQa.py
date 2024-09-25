@@ -1,7 +1,5 @@
 from typing import Iterable
 
-import numpy as np
-import pandas as pd
 from lsst.pex.config import ConfigurableField
 from lsst.pipe.base import (
     InputQuantizedConnection,
@@ -160,13 +158,6 @@ class DetectorMapQaTask(PipelineTask):
         # List all the objects we have received.
         self.log.info(f"Processing {len(arcLines)} ArcLineSets and {len(detectorMaps)} DetectorMaps")
 
-        df = pd.DataFrame(
-            {
-                "mean": np.random.rand(10),
-            }
-        )
+        detector_name = "{arm}{spectrograph}".format(**dataIds[0])
 
-        for i, dataId in enumerate(dataIds):
-            print(i, dataId)
-
-        return Struct(dmQaResidualStats=df)
+        return self.plotResidual.run(detector_name, arcLines, detectorMaps, dataIds)
