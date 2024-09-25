@@ -124,7 +124,12 @@ class DetectorMapQaTask(PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ):
-        data_ids = [ref.dataId for name, ref in inputRefs]
+        data_ids = []
+        for name, refs in inputRefs:
+            self.log.info(f"Processing {name}: {refs}")
+            for ref in refs:
+                self.log.info(f"Processing {ref.dataId}")
+                data_ids.append(ref.dataId)
         inputs = butlerQC.get(inputRefs)
         inputs["dataIds"] = data_ids
         outputs = self.run(**inputs)
