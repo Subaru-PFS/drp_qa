@@ -1,9 +1,6 @@
-from typing import Dict, Iterable
-
 from lsst.pex.config import ConfigurableField
-from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, QuantumContext, Struct
+from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, Struct
 from lsst.pipe.base.connectionTypes import Input as InputConnection, Output as OutputConnection
-from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap
 
 from pfs.drp.qa.tasks.detectorMapResiduals import PlotResidualTask
@@ -106,27 +103,11 @@ class DetectorMapQaTask(PipelineTask):
         super().__init__(*args, **kwargs)
         self.makeSubtask("plotResidual")
 
-    def runQuantum(
-        self,
-        butler: QuantumContext,
-        inputRefs: InputQuantizedConnection,
-        outputRefs: OutputQuantizedConnection,
-    ) -> None:
-        inputs = butler.get(inputRefs)
-        dataId = inputRefs.exposure.dataId
-
-        # Run the task
-        print(f"Running {self.name} for {dataId}")
-        outputs = self.run(**inputs, dataId=dataId)
-        butler.put(outputs, outputRefs)
-        return outputs
-
     def run(
         self,
         groupName: str,
-        arclineSet: Iterable[ArcLineSet],
-        detectorMaps: Iterable[DetectorMap],
-        dataIds: Iterable[Dict],
+        arcLines: ArcLineSet,
+        detectorMap: DetectorMap,
     ) -> Struct:
         """Generate detectorMapQa plots.
 
@@ -147,5 +128,5 @@ class DetectorMapQaTask(PipelineTask):
             Output data products. See `DetectorMapQaConnections`.
         """
         # List all the objects we have received.
-        self.log.info(f"Processing {len(arclineSet)} ArcLineSets and {len(detectorMaps)} DetectorMaps")
+        self.log.info(f"Processing {len(arcLines)} ArcLineSets and {len(detectorMap)} DetectorMaps")
         # self.plotResidual.run(arclineSet, detectorMaps, dataIds)
