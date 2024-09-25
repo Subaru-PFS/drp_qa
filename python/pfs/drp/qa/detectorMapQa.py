@@ -1,6 +1,6 @@
 from lsst.pex.config import ConfigurableField
 from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, Struct
-from lsst.pipe.base.connectionTypes import Input as InputConnection, Output as OutputConnection
+from lsst.pipe.base.connectionTypes import Input as InputConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap
 
 from pfs.drp.qa.tasks.detectorMapResiduals import PlotResidualTask
@@ -39,28 +39,28 @@ class DetectorMapQaConnections(
             "spectrograph",
         ),
     )
-    dmQaResidualPlot = OutputConnection(
-        name="dmQaResidualPlot",
-        doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
-        storageClass="MultipagePdfFigure",
-        dimensions=(
-            "instrument",
-            "exposure",
-            "arm",
-            "spectrograph",
-        ),
-    )
-    dmQaResidualStats = OutputConnection(
-        name="dmQaResidualStats",
-        doc="Statistics of the residual analysis for the visit.",
-        storageClass="QaDict",
-        dimensions=(
-            "instrument",
-            "exposure",
-            "arm",
-            "spectrograph",
-        ),
-    )
+    # dmQaResidualPlot = OutputConnection(
+    #     name="dmQaResidualPlot",
+    #     doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
+    #     storageClass="MultipagePdfFigure",
+    #     dimensions=(
+    #         "instrument",
+    #         "exposure",
+    #         "arm",
+    #         "spectrograph",
+    #     ),
+    # )
+    # dmQaResidualStats = OutputConnection(
+    #     name="dmQaResidualStats",
+    #     doc="Statistics of the residual analysis for the visit.",
+    #     storageClass="QaDict",
+    #     dimensions=(
+    #         "instrument",
+    #         "exposure",
+    #         "arm",
+    #         "spectrograph",
+    #     ),
+    # )
     # dmQaCombinedResidualPlot = OutputConnection(
     #     name="dmQaCombinedResidualPlot",
     #     doc="The 1D and 2D residual plots of the detectormap with the arclines for the entire detector.",
@@ -129,3 +129,4 @@ class DetectorMapQaTask(PipelineTask):
         # List all the objects we have received.
         self.log.info(f"Processing {len(arcLines)} ArcLineSets and {len(detectorMap)} DetectorMaps")
         # self.plotResidual.run(arclineSet, detectorMaps, dataIds)
+        return Struct()
