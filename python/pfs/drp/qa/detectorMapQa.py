@@ -18,7 +18,7 @@ class DetectorMapQaConnections(
 ):
     """Connections for DetectorMapQaTask"""
 
-    detectorMap = InputConnection(
+    detectorMaps = InputConnection(
         name="detectorMap_calib",
         doc="Mapping from fiberId,wavelength to x,y",
         storageClass="DetectorMap",
