@@ -105,7 +105,6 @@ class DetectorMapQaTask(PipelineTask):
 
     def run(
         self,
-        groupName: str,
         arcLines: ArcLineSet,
         detectorMap: DetectorMap,
     ) -> Struct:
