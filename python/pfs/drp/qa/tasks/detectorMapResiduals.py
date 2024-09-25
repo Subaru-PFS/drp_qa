@@ -45,13 +45,13 @@ class PlotResidualTask(Task):
         super().__init__(*args, **kwargs)
         self.debugInfo = lsstDebug.Info(__name__)
 
-    def run(self, groupName, arcLinesSet: ArcLineSet, detectorMaps: DetectorMap, dataIds) -> Struct:
+    def run(self, detectorName, arcLinesSet: ArcLineSet, detectorMaps: DetectorMap, dataIds) -> Struct:
         """QA of adjustDetectorMap by plotting the fitting residual.
 
         Parameters
         ----------
-        groupName : `str`
-            Group name, either the visit or the detector.
+        detectorName : `str`
+            The detector name, e.g. ``"r2"``.
         arcLinesSet : `ArcLineSet`
             Emission line measurements by adjustDetectorMap.
         detectorMaps : `DetectorMap`
@@ -76,8 +76,8 @@ class PlotResidualTask(Task):
         results = Struct()
         if arc_data is not None and len(arc_data) and visit_stats is not None and len(visit_stats):
             if self.config.makeResidualPlots is True:
-                arm = str(groupName[-2])
-                spectrograph = int(groupName[-1])
+                arm = str(detectorName[-2])
+                spectrograph = int(detectorName[-1])
                 residFig = plot_detectormap_residuals(
                     arc_data,
                     visit_stats,
@@ -89,7 +89,7 @@ class PlotResidualTask(Task):
                     binWavelength=self.config.binWavelength,
                 )
 
-                suptitle = f"DetectorMap Residuals\n{groupName}"
+                suptitle = f"DetectorMap Residuals\n{detectorName}"
                 if self.config.combineVisits is True:
                     suptitle = f"Combined {suptitle}"
 

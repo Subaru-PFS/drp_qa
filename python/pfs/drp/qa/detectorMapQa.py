@@ -3,7 +3,15 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 from lsst.pex.config import ConfigurableField
-from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, Struct
+from lsst.pipe.base import (
+    InputQuantizedConnection,
+    OutputQuantizedConnection,
+    PipelineTask,
+    PipelineTaskConfig,
+    PipelineTaskConnections,
+    QuantumContext,
+    Struct,
+)
 from lsst.pipe.base.connectionTypes import Input as InputConnection, Output as OutputConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap
 
@@ -110,10 +118,23 @@ class DetectorMapQaTask(PipelineTask):
         super().__init__(*args, **kwargs)
         self.makeSubtask("plotResidual")
 
+    def runQuantum(
+        self,
+        butlerQC: QuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
+    ):
+        data_ids = [ref.dataId for name, ref in inputRefs]
+        inputs = butlerQC.get(inputRefs)
+        inputs["dataIds"] = data_ids
+        outputs = self.run(**inputs)
+        butlerQC.put(outputs, outputRefs)
+
     def run(
         self,
         arcLines: Iterable[ArcLineSet],
         detectorMaps: Iterable[DetectorMap],
+        dataIds: Iterable[dict],
     ) -> Struct:
         """Generate detectorMapQa plots.
 
@@ -123,6 +144,8 @@ class DetectorMapQaTask(PipelineTask):
             Emission line measurements by adjustDetectorMap.
         detectorMaps : iterable of `DetectorMap`
             Mapping from fiberId,wavelength to x,y.
+        dataIds : iterable of `dict`
+            Data IDs for the input data.
 
         Returns
         -------
@@ -131,11 +154,14 @@ class DetectorMapQaTask(PipelineTask):
         """
         # List all the objects we have received.
         self.log.info(f"Processing {len(arcLines)} ArcLineSets and {len(detectorMaps)} DetectorMaps")
+        self.log.info(f"Data IDs: {dataIds}")
 
         df = pd.DataFrame(
             {
                 "mean": np.random.rand(10),
             }
         )
+        for k, v in dataIds[0].items():
+            df[k] = v
 
         return Struct(dmQaResidualStats=df)
