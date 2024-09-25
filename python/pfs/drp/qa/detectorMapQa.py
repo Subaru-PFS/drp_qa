@@ -56,7 +56,7 @@ class DetectorMapQaConnections(
     dmQaResidualStats = OutputConnection(
         name="dmQaResidualStats",
         doc="Statistics of the residual analysis for the visit.",
-        storageClass="pandas.core.frame.DataFrame",
+        storageClass="QaDict",
         dimensions=(
             "instrument",
             "exposure",
