@@ -2,7 +2,7 @@ from typing import Iterable
 
 from lsst.pex.config import ConfigurableField
 from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, Struct
-from lsst.pipe.base.connectionTypes import Input as InputConnection
+from lsst.pipe.base.connectionTypes import Input as InputConnection, Output as OutputConnection
 from pfs.drp.stella import ArcLineSet, DetectorMap
 
 from pfs.drp.qa.tasks.detectorMapResiduals import PlotResidualTask
@@ -42,6 +42,18 @@ class DetectorMapQaConnections(
         ),
         multiple=True,
     )
+    dmQaResidualStats = OutputConnection(
+        name="dmQaResidualStats",
+        doc="Statistics of the DM residual analysis.",
+        storageClass="DataFrame",
+        dimensions=(
+            "instrument",
+            "exposure",
+            "arm",
+            "spectrograph",
+        ),
+    )
+
     # dmQaResidualPlot = OutputConnection(
     #     name="dmQaResidualPlot",
     #     doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
@@ -53,17 +65,7 @@ class DetectorMapQaConnections(
     #         "spectrograph",
     #     ),
     # )
-    # dmQaResidualStats = OutputConnection(
-    #     name="dmQaResidualStats",
-    #     doc="Statistics of the residual analysis for the visit.",
-    #     storageClass="QaDict",
-    #     dimensions=(
-    #         "instrument",
-    #         "exposure",
-    #         "arm",
-    #         "spectrograph",
-    #     ),
-    # )
+
     # dmQaCombinedResidualPlot = OutputConnection(
     #     name="dmQaCombinedResidualPlot",
     #     doc="The 1D and 2D residual plots of the detectormap with the arclines for the entire detector.",
