@@ -70,6 +70,8 @@ class PlotResidualTask(Task):
         dmQaDetectorStats : `pd.DataFrame`
             Statistics of the residual analysis.
         """
+        # gen3 wants 'exposure' instead of 'visit' so we duplicate the keyword.
+        dataIds = [dict(visit=did["exposure"], **did) for did in dataIds]
 
         arc_data, visit_stats, detector_stats = get_residual_info(arcLinesSet, detectorMaps, dataIds)
 
