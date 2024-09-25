@@ -1,3 +1,5 @@
+from typing import Iterable
+
 from lsst.pex.config import ConfigurableField
 from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, Struct
 from lsst.pipe.base.connectionTypes import Input as InputConnection
@@ -10,7 +12,6 @@ class DetectorMapQaConnections(
     PipelineTaskConnections,
     dimensions=(
         "instrument",
-        "exposure",
         "arm",
         "spectrograph",
     ),
@@ -27,6 +28,7 @@ class DetectorMapQaConnections(
             "spectrograph",
         ),
         isCalibration=True,
+        multiple=True,
     )
     arcLines = InputConnection(
         name="lines",
@@ -38,6 +40,7 @@ class DetectorMapQaConnections(
             "arm",
             "spectrograph",
         ),
+        multiple=True,
     )
     # dmQaResidualPlot = OutputConnection(
     #     name="dmQaResidualPlot",
@@ -105,21 +108,17 @@ class DetectorMapQaTask(PipelineTask):
 
     def run(
         self,
-        arcLines: ArcLineSet,
-        detectorMap: DetectorMap,
+        arcLines: Iterable[ArcLineSet],
+        detectorMaps: Iterable[DetectorMap],
     ) -> Struct:
         """Generate detectorMapQa plots.
 
         Parameters
         ----------
-        groupName : `str`
-            Group name, either the visit or the detector.
-        arclineSet : iterable of `ArcLineSet`
+        arcLines : iterable of `ArcLineSet`
             Emission line measurements by adjustDetectorMap.
         detectorMaps : iterable of `DetectorMap`
             Mapping from fiberId,wavelength to x,y.
-        dataIds : iterable of `dict`
-            List of dataIds.
 
         Returns
         -------
@@ -127,6 +126,6 @@ class DetectorMapQaTask(PipelineTask):
             Output data products. See `DetectorMapQaConnections`.
         """
         # List all the objects we have received.
-        self.log.info(f"Processing {len(arcLines)} ArcLineSets and {len(detectorMap)} DetectorMaps")
+        self.log.info(f"Processing {len(arcLines)} ArcLineSets and {len(detectorMaps)} DetectorMaps")
         # self.plotResidual.run(arclineSet, detectorMaps, dataIds)
         return Struct()
