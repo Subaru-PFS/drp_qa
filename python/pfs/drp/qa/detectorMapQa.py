@@ -81,7 +81,7 @@ class DetectorMapQaConnections(
         pprint(f"adjustQuantum: {inputs=}")
         pprint(f"adjustQuantum: {outputs=}")
 
-        adjusted_outputs = dict(outputs)
+        adjusted_outputs = outputs.copy()
         if self.config.plotResidual.combineVisits:
             del adjusted_outputs["dmQaResidualPlot"]
             del adjusted_outputs["dmQaResidualStats"]
