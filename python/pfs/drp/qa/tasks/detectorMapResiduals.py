@@ -45,14 +45,20 @@ class PlotResidualTask(Task):
         super().__init__(*args, **kwargs)
         self.debugInfo = lsstDebug.Info(__name__)
 
-    def run(self, detectorName, arcLinesSet: ArcLineSet, detectorMaps: DetectorMap, dataIds) -> Struct:
+    def run(
+        self,
+        detectorName,
+        arcLines: Iterable[ArcLineSet],
+        detectorMaps: Iterable[DetectorMap],
+        dataIds: Iterable[dict],
+    ) -> Struct:
         """QA of adjustDetectorMap by plotting the fitting residual.
 
         Parameters
         ----------
         detectorName : `str`
             The detector name, e.g. ``"r2"``.
-        arcLinesSet : `ArcLineSet`
+        arcLines : `ArcLineSet`
             Emission line measurements by adjustDetectorMap.
         detectorMaps : `DetectorMap`
             Mapping from fiberId,wavelength to x,y.
@@ -70,7 +76,9 @@ class PlotResidualTask(Task):
         dmQaDetectorStats : `pd.DataFrame`
             Statistics of the residual analysis.
         """
-        arc_data, visit_stats, detector_stats = get_residual_info(arcLinesSet, detectorMaps, dataIds)
+        print(f"Running PlotResidualTask for {detectorName}")
+        print(f"arcLines: {len(arcLines)=}")
+        arc_data, visit_stats, detector_stats = get_residual_info(arcLines, detectorMaps, dataIds)
 
         run = dataIds[0]["run"]
 
