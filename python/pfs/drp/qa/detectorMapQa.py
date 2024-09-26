@@ -75,15 +75,22 @@ class DetectorMapQaConnections(
         dict
             The adjusted outputs for the quantum.
         """
-        print(f"adjustQuantum: {label=} {data_id=}")
-        print(f"adjustQuantum: {inputs=}")
-        print(f"adjustQuantum: {outputs=}")
+        from pprint import pprint
 
-        # Show the config options
-        print(f"adjustQuantum: {self.config.plotResidual=}")
+        pprint(f"adjustQuantum: {label=} {data_id=}")
+        pprint(f"adjustQuantum: {inputs=}")
+        pprint(f"adjustQuantum: {outputs=}")
+
+        adjusted_outputs = dict(outputs)
+        if self.config.plotResidual.combineVisits:
+            del adjusted_outputs["dmQaResidualPlot"]
+            del adjusted_outputs["dmQaResidualStats"]
+        else:
+            del adjusted_outputs["dmQaCombinedResidualPlot"]
+            del adjusted_outputs["dmQaDetectorStats"]
 
         super().adjustQuantum(inputs, outputs, label, data_id)
-        return inputs, outputs
+        return inputs, adjusted_outputs
 
     detectorMaps = InputConnection(
         name="detectorMap_calib",
