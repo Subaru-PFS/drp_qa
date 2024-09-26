@@ -26,6 +26,11 @@ class DetectorMapQaConnections(
 ):
     """Connections for DetectorMapQaTask"""
 
+    def __init__(self, *, config=None):
+        print(self.detectorMaps.dimensions)
+        if config.plotResidual.combineVisits:
+            print("Combining all visits into one.")
+
     detectorMaps = InputConnection(
         name="detectorMap_calib",
         doc="Mapping from fiberId,wavelength to x,y",
@@ -173,7 +178,9 @@ class DetectorMapQaTask(PipelineTask):
         self.log.info(
             f"Processing {detectorName=} {len(arcLines)} ArcLineSets and {len(detectorMaps)} DetectorMaps"
         )
-        return self.plotResidual.run(detectorName, arcLines, detectorMaps, dataIds)
+        outputs = self.plotResidual.run(detectorName, arcLines, detectorMaps, dataIds)
+
+        return outputs
 
         # If processing every exposure individually.
         # stats = list()
