@@ -66,7 +66,7 @@ class DetectorMapQaConnections(
     dmQaResidualPlot = OutputConnection(
         name="dmQaResidualPlot",
         doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
-        storageClass="MultipagePdfFigure",
+        storageClass="Plot",
         dimensions=(
             "instrument",
             "exposure",
