@@ -127,7 +127,9 @@ class DetectorMapQaTask(PipelineTask):
         for name, refs in inputRefs:
             for ref in refs:
                 if "exposure" in ref.dataId.full:
-                    data_ids.append(ref.dataId.full)
+                    data_id = {k: v for k, v in ref.dataId.full.items()}
+                    data_id["visit"] = data_id["exposure"]
+                    data_ids.append(data_id)
         inputs = butlerQC.get(inputRefs)
         inputs["dataIds"] = data_ids
         outputs = self.run(**inputs)
