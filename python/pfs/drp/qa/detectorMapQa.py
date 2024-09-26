@@ -28,20 +28,11 @@ class DetectorMapQaConnections(
 
     def __init__(self, *, config=None):
         if config.plotResidual.combineVisits:
-            print("Combining all exposures into one.")
-            self.detectorMaps = InputConnection(
-                name="detectorMap_calib",
-                doc="Mapping from fiberId,wavelength to x,y",
-                storageClass="DetectorMap",
-                dimensions=(
-                    "instrument",
-                    "arm",
-                    "spectrograph",
-                ),
-                isCalibration=True,
-            )
-
-        print(self.detectorMaps.dimensions)
+            del self.dmQaResidualPlot
+            del self.dmQaResidualStats
+        else:
+            del self.dmQaCombinedResidualPlot
+            del self.dmQaDetectorStats
 
     detectorMaps = InputConnection(
         name="detectorMap_calib",
@@ -95,27 +86,27 @@ class DetectorMapQaConnections(
         multiple=True,
     )
 
-    # dmQaCombinedResidualPlot = OutputConnection(
-    #     name="dmQaCombinedResidualPlot",
-    #     doc="The 1D and 2D residual plots of the detectormap with the arclines for the entire detector.",
-    #     storageClass="MultipagePdfFigure",
-    #     dimensions=(
-    #         "instrument",
-    #         "arm",
-    #         "spectrograph",
-    #     ),
-    # )
+    dmQaCombinedResidualPlot = OutputConnection(
+        name="dmQaCombinedResidualPlot",
+        doc="The 1D and 2D residual plots of the detectormap with the arclines for the entire detector.",
+        storageClass="MultipagePdfFigure",
+        dimensions=(
+            "instrument",
+            "arm",
+            "spectrograph",
+        ),
+    )
 
-    # dmQaDetectorStats = OutputConnection(
-    #     name="dmQaDetectorStats",
-    #     doc="Statistics of the residual analysis for the entire detector.",
-    #     storageClass="pandas.core.frame.DataFrame",
-    #     dimensions=(
-    #         "instrument",
-    #         "arm",
-    #         "spectrograph",
-    #     ),
-    # )
+    dmQaDetectorStats = OutputConnection(
+        name="dmQaDetectorStats",
+        doc="Statistics of the residual analysis for the entire detector.",
+        storageClass="pandas.core.frame.DataFrame",
+        dimensions=(
+            "instrument",
+            "arm",
+            "spectrograph",
+        ),
+    )
 
 
 class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
