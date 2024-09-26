@@ -126,7 +126,7 @@ class DetectorMapQaTask(PipelineTask):
     ):
         # If we are combining all the dataIds into one.
         data_ids = []
-        for ref in inputRefs["arcLines"]:
+        for ref in inputRefs.arcLines:
             if "exposure" in ref.dataId.full:
                 data_id = {k: v for k, v in ref.dataId.full.items()}
                 data_id["visit"] = data_id["exposure"]
@@ -135,7 +135,7 @@ class DetectorMapQaTask(PipelineTask):
 
         inputs = butlerQC.get(inputRefs)
         # There should only be one detectorMap input ref, so get it's detector name.
-        inputs["detectorName"] = "{arm}{spectrograph}".format(**inputRefs["detectorMaps"][0].dataId)
+        inputs["detectorName"] = "{arm}{spectrograph}".format(**inputRefs.detectorMaps[0].dataId)
         inputs["dataIds"] = data_ids
 
         # Perform the actual processing.
@@ -173,7 +173,7 @@ class DetectorMapQaTask(PipelineTask):
         self.log.info(
             f"Processing {detectorName=} {len(arcLines)} ArcLineSets and {len(detectorMaps)} DetectorMaps"
         )
-        return self.plotResiduals.run(detectorName, arcLines, detectorMaps, dataIds)
+        return self.plotResidual.run(detectorName, arcLines, detectorMaps, dataIds)
 
         # If processing every exposure individually.
         # stats = list()
