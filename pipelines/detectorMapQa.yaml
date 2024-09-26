@@ -2,3 +2,5 @@ description: DetectorMap QA task
 tasks:
   dm_qa:
     class: pfs.drp.qa.detectorMapQa.DetectorMapQaTask
+    config:
+      plotResidual.useSigma: true
