@@ -76,6 +76,14 @@ class DetectorMapQaConnections(
         multiple=True,
     )
 
+    def adjustQuantum(self, inputs, outputs, label, data_id):
+        print(f"Adjusting {label} for {data_id}")
+        print(f"Inputs: {inputs}")
+        print(f"Outputs: {outputs}")
+
+        super().adjustQuantum(inputs, outputs, label, data_id)
+        return inputs, outputs
+
     # dmQaCombinedResidualPlot = OutputConnection(
     #     name="dmQaCombinedResidualPlot",
     #     doc="The 1D and 2D residual plots of the detectormap with the arclines for the entire detector.",
@@ -117,14 +125,6 @@ class DetectorMapQaTask(PipelineTask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.makeSubtask("plotResidual")
-
-    def adjustQuantum(self, inputs, outputs, label, data_id):
-        print(f"Adjusting {label} for {data_id}")
-        print(f"Inputs: {inputs}")
-        print(f"Outputs: {outputs}")
-
-        super().adjustQuantum(inputs, outputs, label, data_id)
-        return inputs, outputs
 
     def runQuantum(
         self,
