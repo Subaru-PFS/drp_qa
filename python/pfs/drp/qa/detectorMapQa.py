@@ -29,7 +29,8 @@ class DetectorMapQaConnections(
     def __init__(self, *, config=None):
         print(self.detectorMaps.dimensions)
         if config.plotResidual.combineVisits:
-            print("Combining all visits into one.")
+            print("Combining all exposures into one.")
+            self.detectorMaps.dimensions = ("instrument", "arm", "spectrograph")
 
     detectorMaps = InputConnection(
         name="detectorMap_calib",
@@ -37,6 +38,7 @@ class DetectorMapQaConnections(
         storageClass="DetectorMap",
         dimensions=(
             "instrument",
+            "exposure",
             "arm",
             "spectrograph",
         ),
