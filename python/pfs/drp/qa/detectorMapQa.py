@@ -63,17 +63,18 @@ class DetectorMapQaConnections(
         multiple=True,
     )
 
-    # dmQaResidualPlot = OutputConnection(
-    #     name="dmQaResidualPlot",
-    #     doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
-    #     storageClass="MultipagePdfFigure",
-    #     dimensions=(
-    #         "instrument",
-    #         "exposure",
-    #         "arm",
-    #         "spectrograph",
-    #     ),
-    # )
+    dmQaResidualPlot = OutputConnection(
+        name="dmQaResidualPlot",
+        doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
+        storageClass="MultipagePdfFigure",
+        dimensions=(
+            "instrument",
+            "exposure",
+            "arm",
+            "spectrograph",
+        ),
+        multiple=True,
+    )
 
     # dmQaCombinedResidualPlot = OutputConnection(
     #     name="dmQaCombinedResidualPlot",
@@ -160,6 +161,13 @@ class DetectorMapQaTask(PipelineTask):
         # List all the objects we have received.
         self.log.info(f"Processing {len(arcLines)} ArcLineSets and {len(detectorMaps)} DetectorMaps")
 
-        detector_name = "{arm}{spectrograph}".format(**dataIds[0])
+        # If processing every exposure individually.
+        outputs = list()
+        for data_id, lines in zip(dataIds, arcLines):
+            self.log.info(f"Processing dataId {data_id}")
+            detector_name = "{arm}{spectrograph}".format(**data_id)
 
-        return self.plotResidual.run(detector_name, arcLines, detectorMaps, dataIds)
+            output = self.plotResidual.run(detector_name, lines, detectorMaps, [data_id])
+            outputs.append(output)
+
+        return outputs
