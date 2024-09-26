@@ -118,6 +118,14 @@ class DetectorMapQaTask(PipelineTask):
         super().__init__(*args, **kwargs)
         self.makeSubtask("plotResidual")
 
+    def adjustQuantum(self, inputs, outputs, label, data_id):
+        print(f"Adjusting {label} for {data_id}")
+        print(f"Inputs: {inputs}")
+        print(f"Outputs: {outputs}")
+
+        super().adjustQuantum(inputs, outputs, label, data_id)
+        return inputs, outputs
+
     def runQuantum(
         self,
         butlerQC: QuantumContext,
