@@ -14,7 +14,6 @@ from lsst.pipe.base.connectionTypes import Input as InputConnection, Output as O
 from pfs.drp.stella import ArcLineSet, DetectorMap
 
 from pfs.drp.qa.tasks.detectorMapResiduals import PlotResidualTask
-from pfs.drp.qa.utils.storageClasses import MultipagePdfFigure
 
 
 class DetectorMapQaConnections(
@@ -67,7 +66,7 @@ class DetectorMapQaConnections(
     dmQaResidualPlot = OutputConnection(
         name="dmQaResidualPlot",
         doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
-        storageClass=MultipagePdfFigure,
+        storageClass="Plot",
         dimensions=(
             "instrument",
             "exposure",
