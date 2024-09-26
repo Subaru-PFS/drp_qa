@@ -27,10 +27,21 @@ class DetectorMapQaConnections(
     """Connections for DetectorMapQaTask"""
 
     def __init__(self, *, config=None):
-        print(self.detectorMaps.dimensions)
         if config.plotResidual.combineVisits:
             print("Combining all exposures into one.")
-            self.detectorMaps.dimensions = ("instrument", "arm", "spectrograph")
+            self.detectorMaps = InputConnection(
+                name="detectorMap_calib",
+                doc="Mapping from fiberId,wavelength to x,y",
+                storageClass="DetectorMap",
+                dimensions=(
+                    "instrument",
+                    "arm",
+                    "spectrograph",
+                ),
+                isCalibration=True,
+            )
+
+        print(self.detectorMaps.dimensions)
 
     detectorMaps = InputConnection(
         name="detectorMap_calib",
@@ -45,6 +56,7 @@ class DetectorMapQaConnections(
         isCalibration=True,
         multiple=True,
     )
+
     arcLines = InputConnection(
         name="lines",
         doc="Emission line measurements",
