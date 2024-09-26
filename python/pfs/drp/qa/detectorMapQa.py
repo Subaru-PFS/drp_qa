@@ -75,16 +75,14 @@ class DetectorMapQaConnections(
         dict
             The adjusted outputs for the quantum.
         """
-        from pprint import pprint
+        print(f"adjustQuantum: {label=} {data_id=}")
+        print(inputs.arcLines)
 
-        pprint(f"adjustQuantum: {label=} {data_id=}")
-        pprint(f"adjustQuantum: {inputs=}")
-        pprint(f"adjustQuantum: {outputs=}")
-
+        adjusted_inputs = inputs.copy()
         adjusted_outputs = outputs.copy()
 
         super().adjustQuantum(inputs, outputs, label, data_id)
-        return inputs, adjusted_outputs
+        return adjusted_inputs, adjusted_outputs
 
     detectorMaps = InputConnection(
         name="detectorMap_calib",

@@ -79,6 +79,7 @@ class PlotResidualTask(Task):
         print(f"Running PlotResidualTask for {detectorName}")
         print(f"arcLines: {len(arcLines)=}")
         arc_data, visit_stats, detector_stats = get_residual_info(arcLines, detectorMaps, dataIds)
+        print(visit_stats.visit.value_counts())
 
         run = dataIds[0]["run"]
 
