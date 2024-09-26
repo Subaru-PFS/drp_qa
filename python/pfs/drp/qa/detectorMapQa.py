@@ -167,7 +167,7 @@ class DetectorMapQaTask(PipelineTask):
             self.log.info(f"Processing dataId {data_id}")
             detector_name = "{arm}{spectrograph}".format(**data_id)
 
-            output = self.plotResidual.run(detector_name, lines, detectorMaps, [data_id])
+            output = self.plotResidual.run(detector_name, [lines], detectorMaps, [data_id])
             outputs.append(output)
 
         return outputs
