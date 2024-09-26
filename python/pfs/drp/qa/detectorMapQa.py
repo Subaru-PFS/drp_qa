@@ -12,7 +12,12 @@ from lsst.pipe.base import (
     QuantumContext,
     Struct,
 )
-from lsst.pipe.base.connectionTypes import (BaseInput, Input as InputConnection, Output, Output as OutputConnection)
+from lsst.pipe.base.connectionTypes import (
+    BaseInput,
+    Input as InputConnection,
+    Output,
+    Output as OutputConnection,
+)
 from pfs.drp.stella import ArcLineSet, DetectorMap
 
 from pfs.drp.qa.tasks.detectorMapResiduals import PlotResidualTask
@@ -73,13 +78,11 @@ class DetectorMapQaConnections(
         print(f"adjustQuantum: {label=} {data_id=}")
         print(f"adjustQuantum: {inputs=}")
         print(f"adjustQuantum: {outputs=}")
-        if self.plotResidual.config.combineVisits:
-            del outputs["dmQaResidualPlot"]
-            del outputs["dmQaResidualStats"]
-        else:
-            del outputs["dmQaCombinedResidualPlot"]
-            del outputs["dmQaDetectorStats"]
 
+        # Show the config options
+        print(f"adjustQuantum: {self.config.plotResidual=}")
+
+        super().adjustQuantum(inputs, outputs, label, data_id)
         return inputs, outputs
 
     detectorMaps = InputConnection(
