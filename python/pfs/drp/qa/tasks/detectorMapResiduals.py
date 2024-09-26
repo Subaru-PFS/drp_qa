@@ -97,8 +97,8 @@ class PlotResidualTask(Task):
                 residFig.suptitle(suptitle, weight="bold")
                 if self.config.combineVisits is True:
                     results = Struct(
-                        dmQaCombinedResidualPlot=[residFig],
-                        dmQaDetectorStats=[detector_stats],
+                        dmQaCombinedResidualPlot=residFig,
+                        dmQaDetectorStats=detector_stats,
                     )
                 else:
                     results = Struct(
