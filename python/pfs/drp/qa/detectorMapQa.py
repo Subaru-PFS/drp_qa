@@ -162,12 +162,17 @@ class DetectorMapQaTask(PipelineTask):
         self.log.info(f"Processing {len(arcLines)} ArcLineSets and {len(detectorMaps)} DetectorMaps")
 
         # If processing every exposure individually.
-        outputs = list()
+        stats = list()
+        plots = list()
         for data_id, lines in zip(dataIds, arcLines):
             self.log.info(f"Processing dataId {data_id}")
             detector_name = "{arm}{spectrograph}".format(**data_id)
 
             output = self.plotResidual.run(detector_name, [lines], detectorMaps, [data_id])
-            outputs.append(output)
+            stats.append(output.dmQaResidualStats)
+            plots.append(output.dmQaResidualPlot)
 
-        return outputs
+        return Struct(
+            dmQaResidualStats=stats,
+            dmQaResidualPlot=plots,
+        )
