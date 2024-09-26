@@ -124,21 +124,29 @@ class DetectorMapQaTask(PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ):
+        # If we are combining all the dataIds into one.
         data_ids = []
-        for name, refs in inputRefs:
-            for ref in refs:
-                if "exposure" in ref.dataId.full:
-                    data_id = {k: v for k, v in ref.dataId.full.items()}
-                    data_id["visit"] = data_id["exposure"]
-                    data_id["run"] = ref.run
-                    data_ids.append(data_id)
+        for ref in inputRefs["arcLines"]:
+            if "exposure" in ref.dataId.full:
+                data_id = {k: v for k, v in ref.dataId.full.items()}
+                data_id["visit"] = data_id["exposure"]
+                data_id["run"] = ref.run
+                data_ids.append(data_id)
+
         inputs = butlerQC.get(inputRefs)
+        # There should only be one detectorMap input ref, so get it's detector name.
+        inputs["detectorName"] = "{arm}{spectrograph}".format(**inputRefs["detectorMaps"][0].dataId)
         inputs["dataIds"] = data_ids
+
+        # Perform the actual processing.
         outputs = self.run(**inputs)
+
+        # Store the results.
         butlerQC.put(outputs, outputRefs)
 
     def run(
         self,
+        detectorName: str,
         arcLines: Iterable[ArcLineSet],
         detectorMaps: Iterable[DetectorMap],
         dataIds: Iterable[dict],
@@ -147,6 +155,8 @@ class DetectorMapQaTask(PipelineTask):
 
         Parameters
         ----------
+        detectorName : str
+            Name of the detector.
         arcLines : iterable of `ArcLineSet`
             Emission line measurements by adjustDetectorMap.
         detectorMaps : iterable of `DetectorMap`
@@ -160,20 +170,23 @@ class DetectorMapQaTask(PipelineTask):
             Output data products. See `DetectorMapQaConnections`.
         """
         # List all the objects we have received.
-        self.log.info(f"Processing {len(arcLines)} ArcLineSets and {len(detectorMaps)} DetectorMaps")
+        self.log.info(
+            f"Processing {detectorName=} {len(arcLines)} ArcLineSets and {len(detectorMaps)} DetectorMaps"
+        )
+        return self.plotResiduals.run(detectorName, arcLines, detectorMaps, dataIds)
 
         # If processing every exposure individually.
-        stats = list()
-        plots = list()
-        for data_id, lines in zip(dataIds, arcLines):
-            self.log.info(f"Processing dataId {data_id}")
-            detector_name = "{arm}{spectrograph}".format(**data_id)
+        # stats = list()
+        # plots = list()
+        # for data_id, lines in zip(dataIds, arcLines):
+        #     self.log.info(f"Processing dataId {data_id}")
+        #     detector_name = "{arm}{spectrograph}".format(**data_id)
+        #
+        #     output = self.plotResidual.run(detector_name, [lines], detectorMaps, [data_id])
+        #     stats.append(output.dmQaResidualStats)
+        #     plots.append(output.dmQaResidualPlot)
 
-            output = self.plotResidual.run(detector_name, [lines], detectorMaps, [data_id])
-            stats.append(output.dmQaResidualStats)
-            plots.append(output.dmQaResidualPlot)
-
-        return Struct(
-            dmQaResidualStats=stats,
-            dmQaResidualPlot=plots,
-        )
+        # return Struct(
+        #     dmQaResidualStats=stats,
+        #     dmQaResidualPlot=plots,
+        # )
