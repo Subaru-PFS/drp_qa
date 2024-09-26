@@ -3,4 +3,4 @@ tasks:
   dm_qa:
     class: pfs.drp.qa.detectorMapQa.DetectorMapQaTask
     config:
-      plotResidual.useSigma: true
+      plotResidual.useSigmaRange: true
