@@ -72,6 +72,8 @@ class PlotResidualTask(Task):
         """
         arc_data, visit_stats, detector_stats = get_residual_info(arcLinesSet, detectorMaps, dataIds)
 
+        run = dataIds[0]["run"]
+
         results = Struct()
         if arc_data is not None and len(arc_data) and visit_stats is not None and len(visit_stats):
             if self.config.makeResidualPlots is True:
@@ -88,7 +90,7 @@ class PlotResidualTask(Task):
                     binWavelength=self.config.binWavelength,
                 )
 
-                suptitle = f"DetectorMap Residuals\n{detectorName}"
+                suptitle = f"DetectorMap Residuals {detectorName}\n{run}"
                 if self.config.combineVisits is True:
                     suptitle = f"Combined {suptitle}"
 
