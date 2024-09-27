@@ -248,6 +248,7 @@ class DetectorMapQaTask(PipelineTask):
         self.log.info(f"DetectorMapQaTask.run: {arm}{spectrograph} {run_name}")
         self.log.info(f"DetectorMapQaTask.run: {self.config}")
 
+        self.log.info(f"DetectorMapQaTask.run: {len(arcLines)=}, {len(detectorMaps)=}, {len(dataIds)=}")
         arc_data, visit_stats, detector_stats = get_residual_info(arcLines, detectorMaps, dataIds)
 
         make_plots = self.config.makeResidualPlots
