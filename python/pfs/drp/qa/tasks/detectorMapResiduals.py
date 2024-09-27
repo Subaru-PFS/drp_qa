@@ -463,8 +463,8 @@ def plot_residual(
             c=rows[column],
             norm=norm,
             cmap=div_palette,
-            s=5 if isLine else 2,
-            marker="o" if isLine else ".",
+            s=2,
+            marker="d" if isLine else ".",
             zorder=100 if isLine else 0,
         )
 
