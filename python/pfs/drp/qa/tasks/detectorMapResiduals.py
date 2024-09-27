@@ -153,7 +153,13 @@ def plot_detectormap_residuals(
             except Exception as e:
                 print(f"Problem plotting residual {e}")
 
-        visit_fig = plot_visits(visit_stats, description_palette, fig=bottom_fig)
+        visit_fig = plot_visits(
+            visit_stats,
+            description_palette,
+            fig=bottom_fig,
+            spatialRange=spatialRange,
+            wavelengthRange=wavelengthRange,
+        )
         for ax in visit_fig.axes:
             ax.set_xlim(-0.3, 0.3)
         visit_fig.suptitle(f"RESERVED median and 1-sigma weighted error per visit {ccd=}")
