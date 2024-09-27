@@ -84,6 +84,7 @@ class DetectorMapQaConnections(
             inputs["detectorMaps"][0],
             inputs["detectorMaps"][1] * len(inputs["arcLines"]),
         )
+        inputs["detectorMaps"] = adjusted_inputs["detectorMaps"]
 
         super().adjustQuantum(inputs, outputs, label, data_id)
         return adjusted_inputs, adjusted_outputs
