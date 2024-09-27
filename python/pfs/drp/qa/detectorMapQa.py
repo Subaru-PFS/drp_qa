@@ -33,7 +33,6 @@ class DetectorMapQaConnections(
     """Connections for DetectorMapQaTask"""
 
     def __init__(self, *, config=None):
-        self.log.info(f"DetectorMapQaConnections.__init__ {config=}")
         # Remove the unused connections depending on the configuration.
         if config.combineVisits:
             del self.dmQaResidualPlot
