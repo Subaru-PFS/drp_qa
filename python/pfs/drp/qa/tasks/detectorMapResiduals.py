@@ -66,8 +66,8 @@ def plot_detectormap_residuals(
     arm: str,
     spectrograph: int,
     useSigmaRange: bool = False,
-    xrange: float = 0.1,
-    wrange: float = 0.1,
+    spatialRange: float = 0.1,
+    wavelengthRange: float = 0.1,
     binWavelength: float = 0.1,
 ):
     """Make a plot of the residuals.
@@ -84,16 +84,16 @@ def plot_detectormap_residuals(
         The spectrograph.
     useSigmaRange : `bool`
         Use the sigma range? Default is ``False``.
-    xrange : `float`, optional
+    spatialRange : `float`, optional
         The range for the spatial data. Default is 0.1.
-    wrange : `float`, optional
+    wavelengthRange : `float`, optional
         The range for the wavelength data. Default is 0.1.
     binWavelength : `float`, optional
         The value by which to bin the wavelength. If None, no binning.
     """
     if useSigmaRange is True:
-        xrange = None
-        wrange = None
+        spatialRange = None
+        wavelengthRange = None
 
     ccd = f"{arm}{spectrograph}"
 
@@ -133,8 +133,8 @@ def plot_detectormap_residuals(
                 plot_residual(
                     pd0,
                     column=column,
-                    xrange=xrange,
-                    wrange=wrange,
+                    spatialRange=spatialRange,
+                    wavelengthRange=wavelengthRange,
                     binWavelength=binWavelength,
                     sigmaLines=(1.0,),
                     dmWidth=dmWidth,
@@ -167,8 +167,8 @@ def plot_detectormap_residuals(
 def plot_residual(
     data: pd.DataFrame,
     column: str = "xResid",
-    xrange: float = None,
-    wrange: float = None,
+    spatialRange: float = None,
+    wavelengthRange: float = None,
     sigmaRange: int = 2.5,
     sigmaLines: Optional[Iterable[float]] = None,
     goodRange: float = None,
@@ -190,9 +190,9 @@ def plot_residual(
         The data.
     column : `str`, optional
         The column to use. Default is ``'xResid'``.
-    xrange : `float`, optional
+    spatialRange : `float`, optional
         The range for the spatial data.
-    wrange : `float`, optional
+    wavelengthRange : `float`, optional
         The range for the wavelength data.
     sigmaRange : `int`, optional
         The sigma range. Default is 2.5.
@@ -313,8 +313,8 @@ def plot_residual(
     )
 
     # Use sigma range if no range given.
-    if xrange is None and sigmaRange is not None:
-        xrange = fit_stats.weightedRms * sigmaRange
+    if spatialRange is None and sigmaRange is not None:
+        spatialRange = fit_stats.weightedRms * sigmaRange
 
     # Scatterplot with outliers marked.
     ax0 = scatterplot_with_outliers(
@@ -322,8 +322,8 @@ def plot_residual(
         "fiberId",
         "median",
         hue="status",
-        ymin=-xrange,
-        ymax=xrange,
+        ymin=-spatialRange,
+        ymax=spatialRange,
         palette=pal,
         ax=ax0,
         refline=0,
@@ -441,7 +441,7 @@ def plot_residual(
 
     # Lower row
     # 2d residual
-    norm = colors.Normalize(vmin=-xrange, vmax=xrange)
+    norm = colors.Normalize(vmin=-spatialRange, vmax=spatialRange)
     if useDMLayout:
         X = "x"
         Y = "y"
@@ -474,8 +474,8 @@ def plot_residual(
     ax2.set_title(f"2D residual of RESERVED {which_data} data", weight="bold", fontsize="small")
 
     # Use sigma range if no range given.
-    if wrange is None and sigmaRange is not None:
-        wrange = fit_stats.weightedRms * sigmaRange
+    if wavelengthRange is None and sigmaRange is not None:
+        wavelengthRange = fit_stats.weightedRms * sigmaRange
 
     if bin_wl is True:
         binned_data = plotData.dropna(subset=["wavelength", column]).groupby(["bin", "status", "isOutlier"])[
@@ -488,8 +488,8 @@ def plot_residual(
         column,
         "wavelength",
         hue="status",
-        ymin=-wrange,
-        ymax=wrange,
+        ymin=-wavelengthRange,
+        ymax=wavelengthRange,
         palette=pal,
         ax=ax3,
         refline=0.0,
@@ -648,6 +648,8 @@ def scatterplot_with_outliers(
 def plot_visits(
     plotData: pd.DataFrame,
     palette: Optional[dict] = None,
+    spatialRange: float = 0.1,
+    wavelengthRange: float = 0.1,
     fig: Optional[Figure] = None,
 ) -> Figure:
     """Plot the visit statistics.
@@ -659,6 +661,10 @@ def plot_visits(
     palette : `dict`, optional
         The palette to use for the arcline descriptions. Keys are the descriptions
         and values are the colors. Default is ``None``.
+    spatialRange : `float`, optional
+        The range for the spatial data. Default is 0.1.
+    wavelengthRange : `float`, optional
+        The range for the wavelength data. Default is 0.1.
     fig : `Figure`, optional
         The figure. Default is ``None``.
 
@@ -691,6 +697,10 @@ def plot_visits(
         ax.axvline(0, c="k", ls="--", alpha=0.5)
         ax.set_title(f"{metric}")
         ax.set_xlabel("pix")
+        ax.set_xlim(
+            -spatialRange if metric == "spatial" else -wavelengthRange,
+            spatialRange if metric == "spatial" else wavelengthRange,
+        )
 
     visit_label = [f"{row.visit}" for idx, row in plotData.iterrows()]
     ax0.set_yticks(plotData.visit_idx, visit_label, fontsize="xx-small")

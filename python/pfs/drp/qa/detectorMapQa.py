@@ -259,8 +259,8 @@ class DetectorMapQaTask(PipelineTask):
                     arm,
                     spectrograph,
                     useSigmaRange=self.config.useSigmaRange,
-                    xrange=self.config.spatialRange,
-                    wrange=self.config.wavelengthRange,
+                    spatialRange=self.config.spatialRange,
+                    wavelengthRange=self.config.wavelengthRange,
                     binWavelength=self.config.binWavelength,
                 )
 
