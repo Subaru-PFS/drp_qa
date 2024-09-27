@@ -1,3 +1,4 @@
+import warnings
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
@@ -754,8 +755,10 @@ def load_and_mask_data(
         grp["yResidOutlier"] = sigma_clip(grp.yResid).mask
         return grp
 
-    arcData = arcData.groupby(["status_type", "isLine"]).apply(maskOutliers)
-    arcData.reset_index(drop=True, inplace=True)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        arcData = arcData.groupby(["status_type", "isLine"]).apply(maskOutliers)
+        arcData.reset_index(drop=True, inplace=True)
 
     if addFiberInfo is True:
         mtp_df = pd.DataFrame(
