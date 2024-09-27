@@ -208,6 +208,7 @@ class DetectorMapQaTask(PipelineTask):
 
         # Perform the actual processing.
         outputs = self.run(**inputs)
+        self.log.info(f"DetectorMapQaTask.runQuantum: {outputs}")
 
         # Store the results.
         butlerQC.put(outputs, outputRefs)
@@ -246,6 +247,8 @@ class DetectorMapQaTask(PipelineTask):
 
         arc_data, visit_stats, detector_stats = get_residual_info(arcLines, detectorMaps, dataIds)
 
+        # Show the config
+        self.log.info(f"DetectorMapQaTask.run: {self.config}")
         make_plots = self.config.makeResidualPlots
         combine_visits = self.config.combineVisits
 
