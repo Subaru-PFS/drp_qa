@@ -1,8 +1,7 @@
-import typing
-from typing import Iterable
+from typing import Collection, Dict, Iterable, Mapping, Tuple
 
 from lsst.daf.butler import DataCoordinate, DatasetRef
-from lsst.pex.config import ConfigurableField
+from lsst.pex.config import Field
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -20,7 +19,7 @@ from lsst.pipe.base.connectionTypes import (
 )
 from pfs.drp.stella import ArcLineSet, DetectorMap
 
-from pfs.drp.qa.tasks.detectorMapResiduals import PlotResidualTask
+from pfs.drp.qa.tasks.detectorMapResiduals import get_residual_info, plot_detectormap_residuals
 
 
 class DetectorMapQaConnections(
@@ -34,7 +33,9 @@ class DetectorMapQaConnections(
     """Connections for DetectorMapQaTask"""
 
     def __init__(self, *, config=None):
-        if config.plotResidual.combineVisits:
+        self.log.info(f"DetectorMapQaConnections.__init__ {config=}")
+        # Remove the unused connections depending on the configuration.
+        if config.combineVisits:
             del self.dmQaResidualPlot
             del self.dmQaResidualStats
         else:
@@ -43,13 +44,13 @@ class DetectorMapQaConnections(
 
     def adjustQuantum(
         self,
-        inputs: typing.Dict[str, typing.Tuple[BaseInput, typing.Collection[DatasetRef]]],
-        outputs: typing.Dict[str, typing.Tuple[Output, typing.Collection[DatasetRef]]],
+        inputs: Dict[str, Tuple[BaseInput, Collection[DatasetRef]]],
+        outputs: Dict[str, Tuple[Output, Collection[DatasetRef]]],
         label: str,
         data_id: DataCoordinate,
-    ) -> typing.Tuple[
-        typing.Mapping[str, typing.Tuple[BaseInput, typing.Collection[DatasetRef]]],
-        typing.Mapping[str, typing.Tuple[Output, typing.Collection[DatasetRef]]],
+    ) -> Tuple[
+        Mapping[str, Tuple[BaseInput, Collection[DatasetRef]]],
+        Mapping[str, Tuple[Output, Collection[DatasetRef]]],
     ]:
         """Adjust the connections for a single quantum.
 
@@ -164,10 +165,18 @@ class DetectorMapQaConnections(
 class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
     """Configuration for DetectorMapQaTask"""
 
-    plotResidual = ConfigurableField(
-        target=PlotResidualTask,
-        doc="Plot the residual of the detectormap with the arclines.",
+    combineVisits = Field(dtype=bool, default=False, doc="Combine all visits for processing.")
+    makeResidualPlots = Field(dtype=bool, default=True, doc="Generate a residual plot for each dataId.")
+    useSigmaRange = Field(dtype=bool, default=False, doc="Use ±2.5 sigma as range")
+    spatialRange = Field(
+        dtype=float, default=0.1, doc="Spatial range for the residual plot, implies useSigmaRange is False."
     )
+    wavelengthRange = Field(
+        dtype=float,
+        default=0.1,
+        doc="Wavelegnth range for the residual plot, implies useSigmaRange is False.",
+    )
+    binWavelength = Field(dtype=float, default=0.1, doc="Wavelength bin for residual plot.")
 
 
 class DetectorMapQaTask(PipelineTask):
@@ -178,7 +187,6 @@ class DetectorMapQaTask(PipelineTask):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.makeSubtask("plotResidual")
 
     def runQuantum(
         self,
@@ -209,49 +217,69 @@ class DetectorMapQaTask(PipelineTask):
 
     def run(
         self,
-        detectorName: str,
+        detectorName,
         arcLines: Iterable[ArcLineSet],
         detectorMaps: Iterable[DetectorMap],
         dataIds: Iterable[dict],
     ) -> Struct:
-        """Generate detectorMapQa plots.
+        """QA of adjustDetectorMap by plotting the fitting residual.
 
         Parameters
         ----------
-        detectorName : str
-            Name of the detector.
-        arcLines : iterable of `ArcLineSet`
+        detectorName : `str`
+            The detector name, e.g. ``"r2"``.
+        arcLines : `ArcLineSet`
             Emission line measurements by adjustDetectorMap.
-        detectorMaps : iterable of `DetectorMap`
+        detectorMaps : `DetectorMap`
             Mapping from fiberId,wavelength to x,y.
-        dataIds : iterable of `dict`
-            Data IDs for the input data.
+        dataIds : `list`
+            List of dataIds.
 
         Returns
         -------
-        Struct
-            Output data products. See `DetectorMapQaConnections`.
+        dmQaResidualPlot : `MultipagePdfFigure`
+            1D and 2D plots of the residual between the detectormap and the arclines for a given visit.
+        dmQaCombinedResidualPlot : `MultipagePdfFigure`
+            1D and 2D plots of the residual between the detectormap and the arclines for the entire detector.
+        dmQaResidualStats : `pd.DataFrame`
+            Statistics of the residual analysis.
+        dmQaDetectorStats : `pd.DataFrame`
+            Statistics of the residual analysis.
         """
-        # List all the objects we have received.
-        self.log.info(
-            f"Processing {detectorName=} {len(arcLines)} ArcLineSets and {len(detectorMaps)} DetectorMaps"
-        )
-        outputs = self.plotResidual.run(detectorName, arcLines, detectorMaps, dataIds)
+        arc_data, visit_stats, detector_stats = get_residual_info(arcLines, detectorMaps, dataIds)
 
-        return outputs
+        run = dataIds[0]["run"]
 
-        # If processing every exposure individually.
-        # stats = list()
-        # plots = list()
-        # for data_id, lines in zip(dataIds, arcLines):
-        #     self.log.info(f"Processing dataId {data_id}")
-        #     detector_name = "{arm}{spectrograph}".format(**data_id)
-        #
-        #     output = self.plotResidual.run(detector_name, [lines], detectorMaps, [data_id])
-        #     stats.append(output.dmQaResidualStats)
-        #     plots.append(output.dmQaResidualPlot)
+        results = Struct()
+        if arc_data is not None and len(arc_data) and visit_stats is not None and len(visit_stats):
+            if self.config.makeResidualPlots is True:
+                arm = str(detectorName[-2])
+                spectrograph = int(detectorName[-1])
+                residFig = plot_detectormap_residuals(
+                    arc_data,
+                    visit_stats,
+                    arm,
+                    spectrograph,
+                    useSigmaRange=self.config.useSigmaRange,
+                    xrange=self.config.xrange,
+                    wrange=self.config.wrange,
+                    binWavelength=self.config.binWavelength,
+                )
 
-        # return Struct(
-        #     dmQaResidualStats=stats,
-        #     dmQaResidualPlot=plots,
-        # )
+                suptitle = f"DetectorMap Residuals {detectorName}\n{run}"
+                if self.config.combineVisits is True:
+                    suptitle = f"Combined {suptitle}"
+
+                residFig.suptitle(suptitle, weight="bold")
+                if self.config.combineVisits is True:
+                    results = Struct(
+                        dmQaCombinedResidualPlot=residFig,
+                        dmQaDetectorStats=detector_stats,
+                    )
+                else:
+                    results = Struct(
+                        dmQaResidualPlot=[residFig],
+                        dmQaResidualStats=[visit_stats],
+                    )
+
+        return results
