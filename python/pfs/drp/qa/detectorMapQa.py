@@ -75,11 +75,15 @@ class DetectorMapQaConnections(
         dict
             The adjusted outputs for the quantum.
         """
-        print(f"adjustQuantum: {label=} {data_id=}")
-        print(inputs.arcLines)
 
         adjusted_inputs = inputs.copy()
         adjusted_outputs = outputs.copy()
+
+        # Each lines files should have a detectorMap file.
+        adjusted_inputs["detectorMaps"] = (
+            inputs["detectorMaps"][0],
+            inputs["detectorMaps"][1] * len(inputs["arcLines"]),
+        )
 
         super().adjustQuantum(inputs, outputs, label, data_id)
         return adjusted_inputs, adjusted_outputs
