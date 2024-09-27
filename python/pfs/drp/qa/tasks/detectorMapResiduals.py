@@ -456,14 +456,18 @@ def plot_residual(
         X = "fiberId"
         Y = "wavelength"
 
-    im = ax2.scatter(
-        reserved_data[X],
-        reserved_data[Y],
-        c=reserved_data[column],
-        norm=norm,
-        cmap=div_palette,
-        s=2,
-    )
+    for isLine, rows in reserved_data.groupby("isLine"):
+        im = ax2.scatter(
+            rows[X],
+            rows[Y],
+            c=rows[column],
+            norm=norm,
+            cmap=div_palette,
+            s=5 if isLine else 2,
+            marker="o" if isLine else ".",
+            zorder=100 if isLine else 0,
+        )
+
     fig.colorbar(
         im,
         ax=ax2,
