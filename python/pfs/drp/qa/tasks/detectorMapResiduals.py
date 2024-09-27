@@ -859,7 +859,7 @@ def scrub_data(
     arc_data = arc_data.replace([np.inf, -np.inf], np.nan)
 
     # Get full status names. (the .name attribute doesn't work properly so need the str instance)
-    arc_data["status_name"] = arc_data.status.map(lambda x: str(ReferenceLineStatus(x)).split(".")[-1])
+    arc_data["status_name"] = arc_data.status.map(lambda x: ReferenceLineStatus(x).name)
     arc_data["status_name"] = arc_data["status_name"].astype("category")
     arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
 
