@@ -245,17 +245,18 @@ class DetectorMapQaTask(PipelineTask):
         arm = dataIds[0]["arm"]
         spectrograph = dataIds[0]["spectrograph"]
 
+        self.log.info(f"DetectorMapQaTask.run: {arm}{spectrograph} {run_name}")
+        self.log.info(f"DetectorMapQaTask.run: {self.config}")
+
         arc_data, visit_stats, detector_stats = get_residual_info(arcLines, detectorMaps, dataIds)
 
-        # Show the config
-        self.log.info(f"DetectorMapQaTask.run: {self.config}")
         make_plots = self.config.makeResidualPlots
         combine_visits = self.config.combineVisits
 
         results = Struct()
         if arc_data is not None and len(arc_data) and visit_stats is not None and len(visit_stats):
             if make_plots is True:
-
+                self.log.info("Making residual plots")
                 residFig = plot_detectormap_residuals(
                     arc_data,
                     visit_stats,
@@ -284,4 +285,5 @@ class DetectorMapQaTask(PipelineTask):
                         dmQaResidualStats=[visit_stats],
                     )
 
+        self.log.info(f"DetectorMapQaTask.run: {results=}")
         return results
