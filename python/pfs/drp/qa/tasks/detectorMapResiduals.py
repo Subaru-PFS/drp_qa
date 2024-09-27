@@ -702,10 +702,10 @@ def plot_visits(
         ax.axvline(0, c="k", ls="--", alpha=0.5)
         ax.set_title(f"{metric}")
         ax.set_xlabel("pix")
-        ax.set_xlim(
-            -spatialRange if metric == "spatial" else -wavelengthRange,
-            spatialRange if metric == "spatial" else wavelengthRange,
-        )
+        if spatialRange is not None and metric == "spatial":
+            ax.set_xlim(-spatialRange, spatialRange)
+        if wavelengthRange is not None and metric == "wavelength":
+            ax.set_xlim(-wavelengthRange, wavelengthRange)
 
     visit_label = [f"{row.visit}" for idx, row in plotData.iterrows()]
     ax0.set_yticks(plotData.visit_idx, visit_label, fontsize="xx-small")
