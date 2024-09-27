@@ -206,8 +206,6 @@ class DetectorMapQaTask(PipelineTask):
         inputs = butlerQC.get(inputRefs)
 
         inputs["dataIds"] = data_ids
-        # There should only be one detectorMap unique input ref, so get from the first.
-        inputs["detectorName"] = "{arm}{spectrograph}".format(**data_ids[0])
 
         # Perform the actual processing.
         outputs = self.run(**inputs)
@@ -217,7 +215,6 @@ class DetectorMapQaTask(PipelineTask):
 
     def run(
         self,
-        detectorName,
         arcLines: Iterable[ArcLineSet],
         detectorMaps: Iterable[DetectorMap],
         dataIds: Iterable[dict],
@@ -226,8 +223,6 @@ class DetectorMapQaTask(PipelineTask):
 
         Parameters
         ----------
-        detectorName : `str`
-            The detector name, e.g. ``"r2"``.
         arcLines : `ArcLineSet`
             Emission line measurements by adjustDetectorMap.
         detectorMaps : `DetectorMap`
@@ -246,15 +241,19 @@ class DetectorMapQaTask(PipelineTask):
         dmQaDetectorStats : `pd.DataFrame`
             Statistics of the residual analysis.
         """
+        run_name = dataIds[0]["run"]
+        arm = dataIds[0]["arm"]
+        spectrograph = dataIds[0]["spectrograph"]
+
         arc_data, visit_stats, detector_stats = get_residual_info(arcLines, detectorMaps, dataIds)
 
-        run = dataIds[0]["run"]
+        make_plots = self.config.makeResidualPlots
+        combine_visits = self.config.combineVisits
 
         results = Struct()
         if arc_data is not None and len(arc_data) and visit_stats is not None and len(visit_stats):
-            if self.config.makeResidualPlots is True:
-                arm = str(detectorName[-2])
-                spectrograph = int(detectorName[-1])
+            if make_plots is True:
+
                 residFig = plot_detectormap_residuals(
                     arc_data,
                     visit_stats,
@@ -266,12 +265,13 @@ class DetectorMapQaTask(PipelineTask):
                     binWavelength=self.config.binWavelength,
                 )
 
-                suptitle = f"DetectorMap Residuals {detectorName}\n{run}"
-                if self.config.combineVisits is True:
+                # Update the title with the detector name.
+                suptitle = f"DetectorMap Residuals {arm}{spectrograph}\n{run_name}"
+                if combine_visits is True:
                     suptitle = f"Combined {suptitle}"
-
                 residFig.suptitle(suptitle, weight="bold")
-                if self.config.combineVisits is True:
+
+                if combine_visits is True:
                     results = Struct(
                         dmQaCombinedResidualPlot=residFig,
                         dmQaDetectorStats=detector_stats,
