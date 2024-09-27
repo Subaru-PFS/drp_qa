@@ -252,6 +252,7 @@ class DetectorMapQaTask(PipelineTask):
 
         make_plots = self.config.makeResidualPlots
         combine_visits = self.config.combineVisits
+        self.log.info(f"DetectorMapQaTask.run: {make_plots=}, {combine_visits=}")
 
         results = Struct()
         if arc_data is not None and len(arc_data) and visit_stats is not None and len(visit_stats):
