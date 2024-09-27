@@ -1,4 +1,3 @@
-import warnings
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
@@ -16,7 +15,6 @@ from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
 from pfs.drp.stella.utils.math import robustRms
 from pfs.utils.fiberids import FiberIds
 from scipy.optimize import bisect
-from sqlalchemy.testing.plugin.plugin_base import warnings
 
 from pfs.drp.qa.utils.math import getChi2, getWeightedRMS
 from pfs.drp.qa.utils.plotting import description_palette, div_palette
@@ -752,11 +750,9 @@ def load_and_mask_data(
 
     # Mark the sigma-clipped outliers for each relevant group.
     def maskOutliers(grp):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            grp["xResidOutlier"] = sigma_clip(grp.xResid).mask
-            grp["yResidOutlier"] = sigma_clip(grp.yResid).mask
-            return grp
+        grp["xResidOutlier"] = sigma_clip(grp.xResid).mask
+        grp["yResidOutlier"] = sigma_clip(grp.yResid).mask
+        return grp
 
     arcData = arcData.groupby(["status_type", "isLine"]).apply(maskOutliers)
     arcData.reset_index(drop=True, inplace=True)
