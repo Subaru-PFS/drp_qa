@@ -223,11 +223,11 @@ class DetectorMapQaTask(PipelineTask):
 
         Parameters
         ----------
-        arcLines : `ArcLineSet`
+        arcLines : Iterable[`ArcLineSet`]
             Emission line measurements by adjustDetectorMap.
-        detectorMaps : `DetectorMap`
+        detectorMaps : Iterable[`DetectorMap`]
             Mapping from fiberId,wavelength to x,y.
-        dataIds : `list`
+        dataIds : Iterable[dict]
             List of dataIds.
 
         Returns
@@ -250,6 +250,7 @@ class DetectorMapQaTask(PipelineTask):
 
         self.log.info(f"DetectorMapQaTask.run: {len(arcLines)=}, {len(detectorMaps)=}, {len(dataIds)=}")
         arc_data, visit_stats, detector_stats = get_residual_info(arcLines, detectorMaps, dataIds)
+        self.log.info(f"DetectorMapQaTask.run: {arc_data=}, {visit_stats=}, {detector_stats=}")
 
         make_plots = self.config.makeResidualPlots
         combine_visits = self.config.combineVisits
