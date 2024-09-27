@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 import seaborn as sb
 from astropy.stats import sigma_clip
-from lsst.daf.persistence import NoResults
 from matplotlib import colors, pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
@@ -1029,9 +1028,8 @@ def get_residual_info(
                 visit_stat["wavelength_min"] = wavelengthMin
                 visit_stat["wavelength_max"] = wavelengthMax
                 visit_stats.append(visit_stat)
-        except NoResults:
-            print(f"No results found for {dataId}")
         except Exception as e:
+            print(f"No results found for {dataId}")
             print(e)
 
     if len(visit_stats):
