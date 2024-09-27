@@ -53,9 +53,7 @@ class DetectorMapQaConnections(
     ]:
         """Adjust the connections for a single quantum.
 
-        This method is called by the `QuantumContext` to adjust the connections
-        for a single quantum. The default implementation simply returns the
-        inputs and outputs unchanged.
+        We duplicate the detectorMap for each arcline.
 
         Parameters
         ----------
@@ -79,10 +77,10 @@ class DetectorMapQaConnections(
         adjusted_inputs = inputs.copy()
         adjusted_outputs = outputs.copy()
 
-        # Each lines files should have a detectorMap file.
+        # Duplicate the detectorMap for each arcline.
         adjusted_inputs["detectorMaps"] = (
             inputs["detectorMaps"][0],
-            inputs["detectorMaps"][1] * len(inputs["arcLines"]),
+            inputs["detectorMaps"][1] * len(inputs["arcLines"][1]),
         )
         inputs["detectorMaps"] = adjusted_inputs["detectorMaps"]
 
@@ -188,7 +186,7 @@ class DetectorMapQaTask(PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ):
-        # If we are combining all the dataIds into one.
+        # Get the dataIds for help with plotting.
         data_ids = []
         for ref in inputRefs.arcLines:
             if "exposure" in ref.dataId.full:
@@ -198,9 +196,10 @@ class DetectorMapQaTask(PipelineTask):
                 data_ids.append(data_id)
 
         inputs = butlerQC.get(inputRefs)
-        # There should only be one detectorMap input ref, so get it's detector name.
-        inputs["detectorName"] = "{arm}{spectrograph}".format(**inputRefs.detectorMaps[0].dataId)
+
         inputs["dataIds"] = data_ids
+        # There should only be one detectorMap unique input ref, so get from the first.
+        inputs["detectorName"] = "{arm}{spectrograph}".format(**data_ids[0])
 
         # Perform the actual processing.
         outputs = self.run(**inputs)
