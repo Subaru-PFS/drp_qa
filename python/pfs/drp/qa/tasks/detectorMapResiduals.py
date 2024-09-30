@@ -160,8 +160,10 @@ def plot_detectormap_residuals(
             spatialRange=spatialRange,
             wavelengthRange=wavelengthRange,
         )
-        exposure_fig.axes[0].set_xlim(-spatialRange, spatialRange)
-        exposure_fig.axes[1].set_xlim(-wavelengthRange, wavelengthRange)
+        if spatialRange is not None:
+            exposure_fig.axes[0].set_xlim(-spatialRange, spatialRange)
+        if wavelengthRange is not None:
+            exposure_fig.axes[1].set_xlim(-wavelengthRange, wavelengthRange)
         exposure_fig.suptitle(f"RESERVED median and 1-sigma weighted error per exposure {ccd=}")
 
         return main_fig
