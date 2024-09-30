@@ -134,8 +134,7 @@ def plot_detectormap_residuals(
                 plot_residual(
                     pd0,
                     column=column,
-                    spatialRange=spatialRange,
-                    wavelengthRange=wavelengthRange,
+                    dataRange=spatialRange if column == "xResid" else wavelengthRange,
                     binWavelength=binWavelength,
                     sigmaLines=(1.0,),
                     dmWidth=dmWidth,
@@ -161,8 +160,8 @@ def plot_detectormap_residuals(
             spatialRange=spatialRange,
             wavelengthRange=wavelengthRange,
         )
-        for ax in exposure_fig.axes:
-            ax.set_xlim(-0.3, 0.3)
+        exposure_fig.axes[0].set_xlim(-spatialRange, spatialRange)
+        exposure_fig.axes[1].set_xlim(-wavelengthRange, wavelengthRange)
         exposure_fig.suptitle(f"RESERVED median and 1-sigma weighted error per exposure {ccd=}")
 
         return main_fig
@@ -174,8 +173,7 @@ def plot_detectormap_residuals(
 def plot_residual(
     data: pd.DataFrame,
     column: str = "xResid",
-    spatialRange: float = None,
-    wavelengthRange: float = None,
+    dataRange: float = None,
     sigmaRange: int = 2.5,
     sigmaLines: Optional[Iterable[float]] = None,
     goodRange: float = None,
@@ -197,10 +195,8 @@ def plot_residual(
         The data.
     column : `str`, optional
         The column to use. Default is ``'xResid'``.
-    spatialRange : `float`, optional
-        The range for the spatial data.
-    wavelengthRange : `float`, optional
-        The range for the wavelength data.
+    dataRange : `float`, optional
+        The range for the data. Default is ``None``.
     sigmaRange : `int`, optional
         The sigma range. Default is 2.5.
     sigmaLines : `tuple`, optional
@@ -320,8 +316,8 @@ def plot_residual(
     )
 
     # Use sigma range if no range given.
-    if spatialRange is None and sigmaRange is not None:
-        spatialRange = fit_stats.weightedRms * sigmaRange
+    if dataRange is None and sigmaRange is not None:
+        dataRange = fit_stats.weightedRms * sigmaRange
 
     # Scatterplot with outliers marked.
     ax0 = scatterplot_with_outliers(
@@ -329,8 +325,8 @@ def plot_residual(
         "fiberId",
         "median",
         hue="status",
-        ymin=-spatialRange,
-        ymax=spatialRange,
+        ymin=-dataRange,
+        ymax=dataRange,
         palette=pal,
         ax=ax0,
         refline=0,
@@ -448,7 +444,7 @@ def plot_residual(
 
     # Lower row
     # 2d residual
-    norm = colors.Normalize(vmin=-spatialRange, vmax=spatialRange)
+    norm = colors.Normalize(vmin=-dataRange, vmax=dataRange)
     if useDMLayout:
         X = "x"
         Y = "y"
@@ -484,10 +480,6 @@ def plot_residual(
     ax2.set_xlabel(X)
     ax2.set_title(f"2D residual of RESERVED {which_data} data", weight="bold", fontsize="small")
 
-    # Use sigma range if no range given.
-    if wavelengthRange is None and sigmaRange is not None:
-        wavelengthRange = fit_stats.weightedRms * sigmaRange
-
     if bin_wl is True:
         binned_data = plotData.dropna(subset=["wavelength", column]).groupby(["bin", "status", "isOutlier"])[
             ["wavelength", column]
@@ -499,8 +491,8 @@ def plot_residual(
         column,
         "wavelength",
         hue="status",
-        ymin=-wavelengthRange,
-        ymax=wavelengthRange,
+        ymin=-dataRange,
+        ymax=dataRange,
         palette=pal,
         ax=ax3,
         refline=0.0,
