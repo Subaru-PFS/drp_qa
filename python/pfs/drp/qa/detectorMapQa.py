@@ -206,7 +206,7 @@ class DetectorMapQaTask(PipelineTask):
 
         # Perform the actual processing.
         outputs = self.run(**inputs)
-        self.log.info(f"DetectorMapQaTask.runQuantum: {len(outputs)=}")
+        self.log.debug(f"DetectorMapQaTask.runQuantum: {len(outputs)=}")
 
         # Store the results.
         butlerQC.put(outputs, outputRefs)
