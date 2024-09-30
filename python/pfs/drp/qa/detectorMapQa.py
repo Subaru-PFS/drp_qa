@@ -77,19 +77,14 @@ class DetectorMapQaConnections(
         adjusted_inputs = inputs.copy()
         adjusted_outputs = outputs.copy()
 
-        # Duplicate the detectorMap for each arcline.
-        adjusted_inputs["detectorMaps"] = (
-            inputs["detectorMaps"][0],
-            inputs["detectorMaps"][1] * len(inputs["arcLines"][1]),
-        )
-        inputs["detectorMaps"] = adjusted_inputs["detectorMaps"]
+        # TODO determine if this is necessary.
 
         super().adjustQuantum(inputs, outputs, label, data_id)
         return adjusted_inputs, adjusted_outputs
 
     detectorMaps = InputConnection(
         name="detectorMap",
-        doc="Adjusted detector m¡apping from fiberId,wavelength to x,y",
+        doc="Adjusted detector mapping from fiberId,wavelength to x,y",
         storageClass="DetectorMap",
         dimensions=(
             "instrument",
