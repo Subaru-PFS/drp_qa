@@ -248,7 +248,7 @@ class DetectorMapQaTask(PipelineTask):
 
         self.log.info(f"DetectorMapQaTask.run: {len(arcLines)=}, {len(detectorMaps)=}, {len(dataIds)=}")
         arc_data, visit_stats, detector_stats = get_residual_info(arcLines, detectorMaps, dataIds)
-        self.log.info(f"DetectorMapQaTask.run: {arc_data=}, {visit_stats=}, {detector_stats=}")
+        self.log.info(f"DetectorMapQaTask.run: {len(arc_data)=}, {len(visit_stats)=}, {len(detector_stats)=}")
 
         make_plots = self.config.makeResidualPlots
         combine_visits = self.config.combineVisits
