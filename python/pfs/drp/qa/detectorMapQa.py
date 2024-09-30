@@ -88,8 +88,8 @@ class DetectorMapQaConnections(
         return adjusted_inputs, adjusted_outputs
 
     detectorMaps = InputConnection(
-        name="detectorMap_calib",
-        doc="Mapping from fiberId,wavelength to x,y",
+        name="detectorMap",
+        doc="Adjusted detector mapping from fiberId,wavelength to x,y",
         storageClass="DetectorMap",
         dimensions=(
             "instrument",
