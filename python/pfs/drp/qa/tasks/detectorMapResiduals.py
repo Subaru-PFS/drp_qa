@@ -718,7 +718,7 @@ def plot_exposures(
     ax0.set_ylabel("Exposure")
     ax0.invert_yaxis()
 
-    fig.suptitle("RESERVED median and 1-sigma weighted errors")
+    fig.suptitle("RESERVED median and 1-sigma weighted errors", fontsize="small")
 
     return fig
 
@@ -749,11 +749,11 @@ def load_and_mask_data(
 
     Returns
     -------
-    arcData : `pandas.DataFrame`
+    arc_data : `pandas.DataFrame`
     """
 
     # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
-    arcData = scrub_data(arcLines, detectorMap, dropNaColumns=dropNaColumns, **kwargs)
+    arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=dropNaColumns, **kwargs)
 
     # Mark the sigma-clipped outliers for each relevant group.
     def maskOutliers(grp):
@@ -761,10 +761,11 @@ def load_and_mask_data(
         grp["yResidOutlier"] = sigma_clip(grp.yResid).mask
         return grp
 
+    # Ignore the warnings about NaNs and inf.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        arcData = arcData.groupby(["status_type", "isLine"]).apply(maskOutliers)
-        arcData.reset_index(drop=True, inplace=True)
+        arc_data = arc_data.groupby(["status_type", "isLine"]).apply(maskOutliers)
+        arc_data.reset_index(drop=True, inplace=True)
 
     if addFiberInfo is True:
         mtp_df = pd.DataFrame(
@@ -772,9 +773,9 @@ def load_and_mask_data(
         )
         mtp_df.index = detectorMap.fiberId
         mtp_df.index.name = "fiberId"
-        arcData = arcData.merge(mtp_df.reset_index(), on="fiberId")
+        arc_data = arc_data.merge(mtp_df.reset_index(), on="fiberId")
 
-    return arcData
+    return arc_data
 
 
 def scrub_data(
