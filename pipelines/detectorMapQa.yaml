@@ -1,4 +1,4 @@
 description: DetectorMap QA task
 tasks:
-  dm_qa:
+  detectorMapQa:
     class: pfs.drp.qa.detectorMapQa.DetectorMapQaTask
