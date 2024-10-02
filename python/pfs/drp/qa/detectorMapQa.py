@@ -77,9 +77,20 @@ class DetectorMapQaConnections(
         adjusted_inputs = inputs.copy()
         adjusted_outputs = outputs.copy()
 
-        # TODO determine if this is necessary.
+        self.log.info(f'{len(inputs["detectorMaps"])=}, {len(inputs["arcLines"])=}')
 
+        # If combined, only a single detectorMap is needed.
+        if self.config.combineVisits:
+            adjusted_inputs["detectorMaps"] = (
+                inputs["detectorMaps"][0],
+                inputs["detectorMaps"][1][0],
+            )
+            inputs["detectorMaps"] = adjusted_inputs["detectorMaps"]
+
+        # Replace the original input for the super call.
+        inputs["detectorMaps"] = adjusted_inputs["detectorMaps"]
         super().adjustQuantum(inputs, outputs, label, data_id)
+
         return adjusted_inputs, adjusted_outputs
 
     detectorMaps = InputConnection(
