@@ -777,6 +777,7 @@ def scrub_data(
     detectorMap: DetectorMap,
     dropNaColumns: bool = False,
     removeFlagged: bool = True,
+    removeOutliers: bool = True,
     onlyReservedAndUsed: bool = True,
 ) -> pd.DataFrame:
     """Gets a copy of the arcline data, with some columns added.
@@ -791,6 +792,8 @@ def scrub_data(
         Drop columns where all values are NaN. Default is True.
     removeFlagged : `bool`, optional
         Remove rows with ``flag=True``? Default is True.
+    removeOutliers : `bool`, optional
+        Remove rows with ``flag=False``? Default is True.
     onlyReservedAndUsed : `bool`, optional
         Only include rows with status RESERVED or USED? Default is True.
 
@@ -821,11 +824,14 @@ def scrub_data(
     arc_data = arcLines.data.copy()
     arc_data.rename(columns={"visit": "exposure"}, inplace=True)
 
-    # Convert nm to pixels.
-    arc_data["dispersion"] = detectorMap.getDispersion(arcLines.fiberId, arcLines.wavelength)
+    if removeOutliers is True:
+        arc_data = arc_data.query("xResidOutlier == False and yResidOutlier == False")
 
     if removeFlagged:
         arc_data = arc_data.query("flag == False").copy()
+
+    # Convert nm to pixels.
+    arc_data["dispersion"] = detectorMap.getDispersion(arcLines.fiberId, arcLines.wavelength)
 
     # Get USED and RESERVED status.
     is_reserved = (arc_data.status & ReferenceLineStatus.DETECTORMAP_RESERVED) != 0
@@ -958,7 +964,11 @@ def get_fit_stats(
 
 
 def get_residual_info(
-    arcLinesSet: Iterable[ArcLineSet], detectorMaps: Iterable[DetectorMap], dataIds: Iterable[dict]
+    arcLinesSet: Iterable[ArcLineSet],
+    detectorMaps: Iterable[DetectorMap],
+    dataIds: Iterable[dict],
+    *args,
+    **kwargs,
 ) -> tuple:
     """Get the stats for the residual between the arclines and the detectormap.
 
