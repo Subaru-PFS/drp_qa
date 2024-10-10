@@ -77,8 +77,6 @@ class DetectorMapQaConnections(
         adjusted_inputs = inputs.copy()
         adjusted_outputs = outputs.copy()
 
-        self.log.info(f'{len(inputs["detectorMaps"])=}, {len(inputs["arcLines"])=}')
-
         # If combined, only a single detectorMap is needed.
         if self.config.combineVisits:
             adjusted_inputs["detectorMaps"] = (
