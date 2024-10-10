@@ -831,7 +831,7 @@ def scrub_data(
         arc_data = arc_data.query("flag == False").copy()
 
     # Convert nm to pixels.
-    arc_data["dispersion"] = detectorMap.getDispersion(arcLines.fiberId, arcLines.wavelength)
+    arc_data["dispersion"] = detectorMap.getDispersion(arc_data.fiberId, arc_data.wavelength)
 
     # Get USED and RESERVED status.
     is_reserved = (arc_data.status & ReferenceLineStatus.DETECTORMAP_RESERVED) != 0
