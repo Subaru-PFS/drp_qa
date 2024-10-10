@@ -1,16 +1,13 @@
+import warnings
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
 from typing import Iterable, Optional
 
-import lsstDebug
 import numpy as np
 import pandas as pd
 import seaborn as sb
 from astropy.stats import sigma_clip
-from lsst.daf.persistence import NoResults
-from lsst.pex.config import Config, Field
-from lsst.pipe.base import Struct, Task
 from matplotlib import colors, pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
@@ -22,90 +19,6 @@ from scipy.optimize import bisect
 
 from pfs.drp.qa.utils.math import getChi2, getWeightedRMS
 from pfs.drp.qa.utils.plotting import description_palette, div_palette
-
-
-class PlotResidualConfig(Config):
-    """Configuration for PlotResidualTask"""
-
-    combineVisits = Field(dtype=bool, default=False, doc="Combine all visits for processing.")
-    makeResidualPlots = Field(dtype=bool, default=True, doc="Generate a residual plot for each dataId.")
-    useSigmaRange = Field(dtype=bool, default=False, doc="Use ±2.5 sigma as range")
-    xrange = Field(dtype=float, default=0.1, doc="Range of the residual (X center) in a plot in pix.")
-    wrange = Field(dtype=float, default=0.1, doc="Range of the residual (wavelength) in a plot in pix.")
-    binWavelength = Field(dtype=float, default=0.1, doc="Wavelength bin for residual plot.")
-
-
-class PlotResidualTask(Task):
-    """Task for QA of detectorMap."""
-
-    ConfigClass = PlotResidualConfig
-    _DefaultName = "plotResidual"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.debugInfo = lsstDebug.Info(__name__)
-
-    def run(self, groupName, arcLinesSet: ArcLineSet, detectorMaps: DetectorMap, dataIds) -> Struct:
-        """QA of adjustDetectorMap by plotting the fitting residual.
-
-        Parameters
-        ----------
-        groupName : `str`
-            Group name, either the visit or the detector.
-        arcLinesSet : `ArcLineSet`
-            Emission line measurements by adjustDetectorMap.
-        detectorMaps : `DetectorMap`
-            Mapping from fiberId,wavelength to x,y.
-        dataIds : `list`
-            List of dataIds.
-
-        Returns
-        -------
-        dmQaResidualPlot : `MultipagePdfFigure`
-            1D and 2D plots of the residual between the detectormap and the arclines for a given visit.
-        dmQaCombinedResidualPlot : `MultipagePdfFigure`
-            1D and 2D plots of the residual between the detectormap and the arclines for the entire detector.
-        dmQaResidualStats : `pd.DataFrame`
-            Statistics of the residual analysis.
-        dmQaDetectorStats : `pd.DataFrame`
-            Statistics of the residual analysis.
-        """
-
-        arc_data, visit_stats, detector_stats = get_residual_info(arcLinesSet, detectorMaps, dataIds)
-
-        results = Struct()
-        if arc_data is not None and len(arc_data) and visit_stats is not None and len(visit_stats):
-            if self.config.makeResidualPlots is True:
-                arm = str(groupName[-2])
-                spectrograph = int(groupName[-1])
-                residFig = plot_detectormap_residuals(
-                    arc_data,
-                    visit_stats,
-                    arm,
-                    spectrograph,
-                    useSigmaRange=self.config.useSigmaRange,
-                    xrange=self.config.xrange,
-                    wrange=self.config.wrange,
-                    binWavelength=self.config.binWavelength,
-                )
-
-                suptitle = f"DetectorMap Residuals\n{groupName}"
-                if self.config.combineVisits is True:
-                    suptitle = f"Combined {suptitle}"
-
-                residFig.suptitle(suptitle, weight="bold")
-                if self.config.combineVisits is True:
-                    results = Struct(
-                        dmQaCombinedResidualPlot=residFig,
-                        dmQaDetectorStats=detector_stats,
-                    )
-                else:
-                    results = Struct(
-                        dmQaResidualPlot=residFig,
-                        dmQaResidualStats=visit_stats,
-                    )
-
-        return results
 
 
 @dataclass
@@ -148,12 +61,12 @@ class FitStats:
 
 def plot_detectormap_residuals(
     arc_data: pd.DataFrame,
-    visit_stats: pd.DataFrame,
+    exposure_stats: pd.DataFrame,
     arm: str,
     spectrograph: int,
     useSigmaRange: bool = False,
-    xrange: float = 0.1,
-    wrange: float = 0.1,
+    spatialRange: float = 0.1,
+    wavelengthRange: float = 0.1,
     binWavelength: float = 0.1,
 ):
     """Make a plot of the residuals.
@@ -162,38 +75,40 @@ def plot_detectormap_residuals(
     ----------
     arc_data : `pandas.DataFrame`
         The arc data.
-    visit_stats : `pandas.DataFrame`
-        The visit statistics.
+    exposure_stats : `pandas.DataFrame`
+        The exposure statistics.
     arm : `str`
         The arm.
     spectrograph : `int`
         The spectrograph.
     useSigmaRange : `bool`
         Use the sigma range? Default is ``False``.
-    xrange : `float`, optional
+    spatialRange : `float`, optional
         The range for the spatial data. Default is 0.1.
-    wrange : `float`, optional
+    wavelengthRange : `float`, optional
         The range for the wavelength data. Default is 0.1.
     binWavelength : `float`, optional
         The value by which to bin the wavelength. If None, no binning.
     """
     if useSigmaRange is True:
-        xrange = None
-        wrange = None
+        spatialRange = None
+        wavelengthRange = None
 
     ccd = f"{arm}{spectrograph}"
 
-    # Get just the reserved visits for this ccd.
-    visit_stats = visit_stats.query('status_type == "RESERVED" and ccd == @ccd').sort_values("visit").copy()
+    # Get just the reserved exposures for this ccd.
+    exposure_stats = (
+        exposure_stats.query('status_type == "RESERVED" and ccd == @ccd').sort_values("exposure").copy()
+    )
 
     try:
-        visit_stat = visit_stats.iloc[0]
-        dmWidth = visit_stat.detector_width
-        dmHeight = visit_stat.detector_height
-        fiberIdMin = visit_stat.fiberId_min
-        fiberIdMax = visit_stat.fiberId_max
-        wavelengthMin = visit_stat.wavelength_min
-        wavelengthMax = visit_stat.wavelength_max
+        exp_stat = exposure_stats.iloc[0]
+        dmWidth = exp_stat.detector_width
+        dmHeight = exp_stat.detector_height
+        fiberIdMin = exp_stat.fiberId_min
+        fiberIdMax = exp_stat.fiberId_max
+        wavelengthMin = exp_stat.wavelength_min
+        wavelengthMax = exp_stat.wavelength_max
     except IndexError:
         dmWidth = None
         dmHeight = None
@@ -219,8 +134,7 @@ def plot_detectormap_residuals(
                 plot_residual(
                     pd0,
                     column=column,
-                    xrange=xrange,
-                    wrange=wrange,
+                    dataRange=spatialRange if column == "xResid" else wavelengthRange,
                     binWavelength=binWavelength,
                     sigmaLines=(1.0,),
                     dmWidth=dmWidth,
@@ -239,10 +153,18 @@ def plot_detectormap_residuals(
             except Exception as e:
                 print(f"Problem plotting residual {e}")
 
-        visit_fig = plot_visits(visit_stats, description_palette, fig=bottom_fig)
-        for ax in visit_fig.axes:
-            ax.set_xlim(-0.3, 0.3)
-        visit_fig.suptitle(f"RESERVED median and 1-sigma weighted error per visit {ccd=}")
+        exposure_fig = plot_exposures(
+            exposure_stats,
+            description_palette,
+            fig=bottom_fig,
+            spatialRange=spatialRange,
+            wavelengthRange=wavelengthRange,
+        )
+        if spatialRange is not None:
+            exposure_fig.axes[0].set_xlim(-spatialRange, spatialRange)
+        if wavelengthRange is not None:
+            exposure_fig.axes[1].set_xlim(-wavelengthRange, wavelengthRange)
+        exposure_fig.suptitle(f"RESERVED median and 1-sigma weighted error per exposure {ccd=}")
 
         return main_fig
     except ValueError as e:
@@ -253,8 +175,7 @@ def plot_detectormap_residuals(
 def plot_residual(
     data: pd.DataFrame,
     column: str = "xResid",
-    xrange: float = None,
-    wrange: float = None,
+    dataRange: float = None,
     sigmaRange: int = 2.5,
     sigmaLines: Optional[Iterable[float]] = None,
     goodRange: float = None,
@@ -276,10 +197,8 @@ def plot_residual(
         The data.
     column : `str`, optional
         The column to use. Default is ``'xResid'``.
-    xrange : `float`, optional
-        The range for the spatial data.
-    wrange : `float`, optional
-        The range for the wavelength data.
+    dataRange : `float`, optional
+        The range for the data. Default is ``None``.
     sigmaRange : `int`, optional
         The sigma range. Default is 2.5.
     sigmaLines : `tuple`, optional
@@ -399,8 +318,8 @@ def plot_residual(
     )
 
     # Use sigma range if no range given.
-    if xrange is None and sigmaRange is not None:
-        xrange = fit_stats.weightedRms * sigmaRange
+    if dataRange is None and sigmaRange is not None:
+        dataRange = fit_stats.weightedRms * sigmaRange
 
     # Scatterplot with outliers marked.
     ax0 = scatterplot_with_outliers(
@@ -408,8 +327,8 @@ def plot_residual(
         "fiberId",
         "median",
         hue="status",
-        ymin=-xrange,
-        ymax=xrange,
+        ymin=-dataRange,
+        ymax=dataRange,
         palette=pal,
         ax=ax0,
         refline=0,
@@ -527,7 +446,7 @@ def plot_residual(
 
     # Lower row
     # 2d residual
-    norm = colors.Normalize(vmin=-xrange, vmax=xrange)
+    norm = colors.Normalize(vmin=-dataRange, vmax=dataRange)
     if useDMLayout:
         X = "x"
         Y = "y"
@@ -535,14 +454,18 @@ def plot_residual(
         X = "fiberId"
         Y = "wavelength"
 
-    im = ax2.scatter(
-        reserved_data[X],
-        reserved_data[Y],
-        c=reserved_data[column],
-        norm=norm,
-        cmap=div_palette,
-        s=2,
-    )
+    for isLine, rows in reserved_data.groupby("isLine"):
+        im = ax2.scatter(
+            rows[X],
+            rows[Y],
+            c=rows[column],
+            norm=norm,
+            cmap=div_palette,
+            s=2,
+            marker="d" if isLine else ".",
+            zorder=100 if isLine else 0,
+        )
+
     fig.colorbar(
         im,
         ax=ax2,
@@ -559,10 +482,6 @@ def plot_residual(
     ax2.set_xlabel(X)
     ax2.set_title(f"2D residual of RESERVED {which_data} data", weight="bold", fontsize="small")
 
-    # Use sigma range if no range given.
-    if wrange is None and sigmaRange is not None:
-        wrange = fit_stats.weightedRms * sigmaRange
-
     if bin_wl is True:
         binned_data = plotData.dropna(subset=["wavelength", column]).groupby(["bin", "status", "isOutlier"])[
             ["wavelength", column]
@@ -574,8 +493,8 @@ def plot_residual(
         column,
         "wavelength",
         hue="status",
-        ymin=-wrange,
-        ymax=wrange,
+        ymin=-dataRange,
+        ymax=dataRange,
         palette=pal,
         ax=ax3,
         refline=0.0,
@@ -731,12 +650,14 @@ def scatterplot_with_outliers(
     return ax
 
 
-def plot_visits(
+def plot_exposures(
     plotData: pd.DataFrame,
     palette: Optional[dict] = None,
+    spatialRange: float = 0.1,
+    wavelengthRange: float = 0.1,
     fig: Optional[Figure] = None,
 ) -> Figure:
-    """Plot the visit statistics.
+    """Plot the exposure statistics.
 
     Parameters
     ----------
@@ -745,13 +666,17 @@ def plot_visits(
     palette : `dict`, optional
         The palette to use for the arcline descriptions. Keys are the descriptions
         and values are the colors. Default is ``None``.
+    spatialRange : `float`, optional
+        The range for the spatial data. Default is 0.1.
+    wavelengthRange : `float`, optional
+        The range for the wavelength data. Default is 0.1.
     fig : `Figure`, optional
         The figure. Default is ``None``.
 
     Returns
     -------
     fig : `Figure`
-        The visit statistics plot.
+        The exposure statistics plot.
 
     """
     plotData = plotData.copy()
@@ -759,12 +684,12 @@ def plot_visits(
     ax0 = fig.add_subplot(121)
     ax1 = fig.add_subplot(122, sharex=ax0, sharey=ax0)
 
-    plotData["visit_idx"] = plotData.visit.rank(method="first")
+    plotData["exposure_idx"] = plotData.exposure.rank(method="first")
 
     for ax, metric in zip([ax0, ax1], ["spatial", "wavelength"]):
         for desc, grp in plotData.groupby("description"):
             grp.plot.scatter(
-                y="visit_idx",
+                y="exposure_idx",
                 x=f"{metric}.median",
                 xerr=f"{metric}.weightedRms",
                 marker="o",
@@ -777,13 +702,17 @@ def plot_visits(
         ax.axvline(0, c="k", ls="--", alpha=0.5)
         ax.set_title(f"{metric}")
         ax.set_xlabel("pix")
+        if spatialRange is not None and metric == "spatial":
+            ax.set_xlim(-spatialRange, spatialRange)
+        if wavelengthRange is not None and metric == "wavelength":
+            ax.set_xlim(-wavelengthRange, wavelengthRange)
 
-    visit_label = [f"{row.visit}" for idx, row in plotData.iterrows()]
-    ax0.set_yticks(plotData.visit_idx, visit_label, fontsize="xx-small")
-    ax0.set_ylabel("Visit")
+    exposure_label = [f"{row.exposure}" for idx, row in plotData.iterrows()]
+    ax0.set_yticks(plotData.exposure_idx, exposure_label, fontsize="xx-small")
+    ax0.set_ylabel("Exposure")
     ax0.invert_yaxis()
 
-    fig.suptitle("RESERVED median and 1-sigma weighted errors")
+    fig.suptitle("RESERVED median and 1-sigma weighted errors", fontsize="small")
 
     return fig
 
@@ -792,6 +721,7 @@ def load_and_mask_data(
     arcLines: ArcLineSet,
     detectorMap: DetectorMap,
     dropNaColumns: bool = True,
+    removeOutliers: bool = True,
     addFiberInfo: bool = True,
     **kwargs,
 ) -> pd.DataFrame:
@@ -809,16 +739,18 @@ def load_and_mask_data(
         The detector map.
     dropNaColumns : `bool`, optional
         Drop columns where all values are NaN. Default is True.
+    removeOutliers : `bool`, optional
+        Remove rows with ``flag=False``? Default is True.
     addFiberInfo : `bool`, optional
         Add fiber information to the dataframe. Default is True.
 
     Returns
     -------
-    arcData : `pandas.DataFrame`
+    arc_data : `pandas.DataFrame`
     """
 
     # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
-    arcData = scrub_data(arcLines, detectorMap, dropNaColumns=dropNaColumns, **kwargs)
+    arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=dropNaColumns, **kwargs)
 
     # Mark the sigma-clipped outliers for each relevant group.
     def maskOutliers(grp):
@@ -826,8 +758,11 @@ def load_and_mask_data(
         grp["yResidOutlier"] = sigma_clip(grp.yResid).mask
         return grp
 
-    arcData = arcData.groupby(["status_type", "isLine"]).apply(maskOutliers)
-    arcData.reset_index(drop=True, inplace=True)
+    # Ignore the warnings about NaNs and inf.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        arc_data = arc_data.groupby(["status_type", "isLine"]).apply(maskOutliers)
+        arc_data.reset_index(drop=True, inplace=True)
 
     if addFiberInfo is True:
         mtp_df = pd.DataFrame(
@@ -835,9 +770,16 @@ def load_and_mask_data(
         )
         mtp_df.index = detectorMap.fiberId
         mtp_df.index.name = "fiberId"
-        arcData = arcData.merge(mtp_df.reset_index(), on="fiberId")
+        arc_data = arc_data.merge(mtp_df.reset_index(), on="fiberId")
 
-    return arcData
+    if removeOutliers is True:
+        arc_data = arc_data.query(
+            "(isLine == True and yResidOutlier == False and xResidOutlier == False)"
+            " or "
+            "(isTrace == True and xResidOutlier == False)"
+        )
+
+    return arc_data
 
 
 def scrub_data(
@@ -887,12 +829,15 @@ def scrub_data(
 
     # Copy the dataframe from the arcline set.
     arc_data = arcLines.data.copy()
-
-    # Convert nm to pixels.
-    arc_data["dispersion"] = detectorMap.getDispersion(arcLines.fiberId, arcLines.wavelength)
+    arc_data.rename(columns={"visit": "exposure"}, inplace=True)
 
     if removeFlagged:
         arc_data = arc_data.query("flag == False").copy()
+
+    # Convert nm to pixels.
+    arc_data["dispersion"] = detectorMap.getDispersion(
+        arc_data.fiberId.to_numpy(), arc_data.wavelength.to_numpy()
+    )
 
     # Get USED and RESERVED status.
     is_reserved = (arc_data.status & ReferenceLineStatus.DETECTORMAP_RESERVED) != 0
@@ -925,7 +870,7 @@ def scrub_data(
     arc_data = arc_data.replace([np.inf, -np.inf], np.nan)
 
     # Get full status names. (the .name attribute doesn't work properly so need the str instance)
-    arc_data["status_name"] = arc_data.status.map(lambda x: str(ReferenceLineStatus(x)).split(".")[-1])
+    arc_data["status_name"] = arc_data.status.map(lambda x: ReferenceLineStatus(x).name)
     arc_data["status_name"] = arc_data["status_name"].astype("category")
     arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
 
@@ -1025,7 +970,11 @@ def get_fit_stats(
 
 
 def get_residual_info(
-    arcLinesSet: Iterable[ArcLineSet], detectorMaps: Iterable[DetectorMap], dataIds: Iterable[dict]
+    arcLinesSet: Iterable[ArcLineSet],
+    detectorMaps: Iterable[DetectorMap],
+    dataIds: Iterable[dict],
+    *args,
+    **kwargs,
 ) -> tuple:
     """Get the stats for the residual between the arclines and the detectormap.
 
@@ -1041,15 +990,15 @@ def get_residual_info(
     Returns
     -------
     all_arc_data : `pandas.DataFrame`
-    all_visit_stats : `pandas.DataFrame`
+    all_exposure_stats : `pandas.DataFrame`
     all_detector_stats : `pandas.DataFrame`
     """
     all_data = list()
-    visit_stats = list()
+    exposure_stats = list()
     detector_stats = list()
 
     all_arc_data = None
-    all_visit_stats = None
+    all_exposure_stats = None
     all_detector_stats = None
 
     for arcLines, detectorMap, dataId in zip(arcLinesSet, detectorMaps, dataIds):
@@ -1060,11 +1009,11 @@ def get_residual_info(
                 print(f"No data for {dataId}")
                 continue
 
-            visit = dataId["visit"]
+            exposure = dataId["exposure"]
             arm = dataId["arm"]
             spectrograph = dataId["spectrograph"]
             ccd = f"{arm}{spectrograph}"
-            arc_data["visit"] = visit
+            arc_data["exposure"] = exposure
             arc_data["arm"] = arm
             arc_data["spectrograph"] = spectrograph
 
@@ -1082,27 +1031,26 @@ def get_residual_info(
             wavelengthMax = int(arcLines.wavelength.max())
 
             for idx, rows in arc_data.groupby("status_type"):
-                visit_stat = pd.json_normalize(get_fit_stats(rows).to_dict())
-                visit_stat["visit"] = visit
-                visit_stat["arm"] = arm
-                visit_stat["spectrograph"] = spectrograph
-                visit_stat["ccd"] = ccd
-                visit_stat["status_type"] = idx
-                visit_stat["description"] = ",".join(descriptions)
-                visit_stat["detector_width"] = dmap_bbox.width
-                visit_stat["detector_height"] = dmap_bbox.height
-                visit_stat["fiberId_min"] = fiberIdMin
-                visit_stat["fiberId_max"] = fiberIdMax
-                visit_stat["wavelength_min"] = wavelengthMin
-                visit_stat["wavelength_max"] = wavelengthMax
-                visit_stats.append(visit_stat)
-        except NoResults:
-            print(f"No results found for {dataId}")
+                exposure_stat = pd.json_normalize(get_fit_stats(rows).to_dict())
+                exposure_stat["exposure"] = exposure
+                exposure_stat["arm"] = arm
+                exposure_stat["spectrograph"] = spectrograph
+                exposure_stat["ccd"] = ccd
+                exposure_stat["status_type"] = idx
+                exposure_stat["description"] = ",".join(descriptions)
+                exposure_stat["detector_width"] = dmap_bbox.width
+                exposure_stat["detector_height"] = dmap_bbox.height
+                exposure_stat["fiberId_min"] = fiberIdMin
+                exposure_stat["fiberId_max"] = fiberIdMax
+                exposure_stat["wavelength_min"] = wavelengthMin
+                exposure_stat["wavelength_max"] = wavelengthMax
+                exposure_stats.append(exposure_stat)
         except Exception as e:
+            print(f"No results found for {dataId}")
             print(e)
 
-    if len(visit_stats):
-        all_visit_stats = pd.concat(visit_stats)
+    if len(exposure_stats):
+        all_exposure_stats = pd.concat(exposure_stats)
 
     if len(all_data):
         all_arc_data = pd.concat(all_data)
@@ -1137,4 +1085,4 @@ def get_residual_info(
 
         all_detector_stats = pd.concat(detector_stats)
 
-    return all_arc_data, all_visit_stats, all_detector_stats
+    return all_arc_data, all_exposure_stats, all_detector_stats
