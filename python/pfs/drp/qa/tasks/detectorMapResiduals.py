@@ -721,6 +721,7 @@ def load_and_mask_data(
     arcLines: ArcLineSet,
     detectorMap: DetectorMap,
     dropNaColumns: bool = True,
+    removeOutliers: bool = True,
     addFiberInfo: bool = True,
     **kwargs,
 ) -> pd.DataFrame:
@@ -738,6 +739,8 @@ def load_and_mask_data(
         The detector map.
     dropNaColumns : `bool`, optional
         Drop columns where all values are NaN. Default is True.
+    removeOutliers : `bool`, optional
+        Remove rows with ``flag=False``? Default is True.
     addFiberInfo : `bool`, optional
         Add fiber information to the dataframe. Default is True.
 
@@ -754,6 +757,9 @@ def load_and_mask_data(
         grp["xResidOutlier"] = sigma_clip(grp.xResid).mask
         grp["yResidOutlier"] = sigma_clip(grp.yResid).mask
         return grp
+
+    if removeOutliers is True:
+        arc_data = arc_data.query("xResidOutlier == False and yResidOutlier == False")
 
     # Ignore the warnings about NaNs and inf.
     with warnings.catch_warnings():
@@ -777,7 +783,6 @@ def scrub_data(
     detectorMap: DetectorMap,
     dropNaColumns: bool = False,
     removeFlagged: bool = True,
-    removeOutliers: bool = True,
     onlyReservedAndUsed: bool = True,
 ) -> pd.DataFrame:
     """Gets a copy of the arcline data, with some columns added.
@@ -792,8 +797,6 @@ def scrub_data(
         Drop columns where all values are NaN. Default is True.
     removeFlagged : `bool`, optional
         Remove rows with ``flag=True``? Default is True.
-    removeOutliers : `bool`, optional
-        Remove rows with ``flag=False``? Default is True.
     onlyReservedAndUsed : `bool`, optional
         Only include rows with status RESERVED or USED? Default is True.
 
@@ -823,9 +826,6 @@ def scrub_data(
     # Copy the dataframe from the arcline set.
     arc_data = arcLines.data.copy()
     arc_data.rename(columns={"visit": "exposure"}, inplace=True)
-
-    if removeOutliers is True:
-        arc_data = arc_data.query("xResidOutlier == False and yResidOutlier == False")
 
     if removeFlagged:
         arc_data = arc_data.query("flag == False").copy()
