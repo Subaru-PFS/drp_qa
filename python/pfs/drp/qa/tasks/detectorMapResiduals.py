@@ -758,13 +758,12 @@ def load_and_mask_data(
         grp["yResidOutlier"] = sigma_clip(grp.yResid).mask
         return grp
 
-    if removeOutliers is True:
-        arc_data = arc_data.query("xResidOutlier == False and yResidOutlier == False")
-
     # Ignore the warnings about NaNs and inf.
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         arc_data = arc_data.groupby(["status_type", "isLine"]).apply(maskOutliers)
+        if removeOutliers is True:
+            arc_data = arc_data.query("xResidOutlier == False and yResidOutlier == False")
         arc_data.reset_index(drop=True, inplace=True)
 
     if addFiberInfo is True:
