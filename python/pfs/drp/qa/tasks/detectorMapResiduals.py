@@ -773,7 +773,11 @@ def load_and_mask_data(
         arc_data = arc_data.merge(mtp_df.reset_index(), on="fiberId")
 
     if removeOutliers is True:
-        arc_data = arc_data.query("xResidOutlier == False and yResidOutlier == False")
+        arc_data = arc_data.query(
+            "(isLine == True and yResidOutlier == False and xResidOutlier == False)"
+            " or "
+            "(isTrace == True and xResidOutlier == False)"
+        )
 
     return arc_data
 
@@ -831,7 +835,9 @@ def scrub_data(
         arc_data = arc_data.query("flag == False").copy()
 
     # Convert nm to pixels.
-    arc_data["dispersion"] = detectorMap.getDispersion(arc_data.fiberId, arc_data.wavelength)
+    arc_data["dispersion"] = detectorMap.getDispersion(
+        arc_data.fiberId.to_numpy(), arc_data.wavelength.to_numpy()
+    )
 
     # Get USED and RESERVED status.
     is_reserved = (arc_data.status & ReferenceLineStatus.DETECTORMAP_RESERVED) != 0
