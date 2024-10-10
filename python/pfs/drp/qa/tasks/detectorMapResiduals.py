@@ -763,8 +763,6 @@ def load_and_mask_data(
         warnings.simplefilter("ignore")
         arc_data = arc_data.groupby(["status_type", "isLine"]).apply(maskOutliers)
         arc_data.reset_index(drop=True, inplace=True)
-        if removeOutliers is True:
-            arc_data = arc_data.query("xResidOutlier == False and yResidOutlier == False")
 
     if addFiberInfo is True:
         mtp_df = pd.DataFrame(
@@ -773,6 +771,9 @@ def load_and_mask_data(
         mtp_df.index = detectorMap.fiberId
         mtp_df.index.name = "fiberId"
         arc_data = arc_data.merge(mtp_df.reset_index(), on="fiberId")
+
+    if removeOutliers is True:
+        arc_data = arc_data.query("xResidOutlier == False and yResidOutlier == False")
 
     return arc_data
 
