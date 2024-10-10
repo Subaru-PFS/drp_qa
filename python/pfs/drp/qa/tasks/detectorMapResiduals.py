@@ -762,9 +762,9 @@ def load_and_mask_data(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         arc_data = arc_data.groupby(["status_type", "isLine"]).apply(maskOutliers)
+        arc_data.reset_index(drop=True, inplace=True)
         if removeOutliers is True:
             arc_data = arc_data.query("xResidOutlier == False and yResidOutlier == False")
-        arc_data.reset_index(drop=True, inplace=True)
 
     if addFiberInfo is True:
         mtp_df = pd.DataFrame(
