@@ -3,6 +3,7 @@ from contextlib import suppress
 
 import pandas as pd
 from astropy.stats import sigma_clip
+from lsst.pex.config import Field
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -21,6 +22,7 @@ from pfs.utils.fiberids import FiberIds
 
 from pfs.drp.qa.tasks.detectorMapResiduals import (
     get_fit_stats,
+    plot_detectormap_residuals,
     scrub_data,
 )
 
@@ -70,10 +72,32 @@ class DetectorMapQaConnections(
             "spectrograph",
         ),
     )
+    dmQaResidualPlot = OutputConnection(
+        name="dmQaResidualPlot",
+        doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
+        storageClass="Plot",
+        dimensions=(
+            "instrument",
+            "exposure",
+            "arm",
+            "spectrograph",
+        ),
+    )
 
 
 class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
     """Configuration for DetectorMapQaTask"""
+
+    useSigmaRange = Field(dtype=bool, default=False, doc="Use ±2.5 sigma as range")
+    spatialRange = Field(
+        dtype=float, default=0.1, doc="Spatial range for the residual plot, implies useSigmaRange is False."
+    )
+    wavelengthRange = Field(
+        dtype=float,
+        default=0.1,
+        doc="Wavelegnth range for the residual plot, implies useSigmaRange is False.",
+    )
+    binWavelength = Field(dtype=float, default=0.1, doc="Wavelength bin for residual plot.")
 
 
 class DetectorMapQaTask(PipelineTask):
@@ -185,11 +209,11 @@ class DetectorMapQaTask(PipelineTask):
         stats = list()
         for idx, rows in arc_data.groupby("status_type"):
             exposure_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
+            exposure_stats["status_type"] = idx
             exposure_stats["exposure"] = dataId["exposure"]
             exposure_stats["arm"] = dataId["arm"]
             exposure_stats["spectrograph"] = dataId["spectrograph"]
             exposure_stats["ccd"] = "{arm}{spectrograph}".format(**dataId)
-            exposure_stats["status_type"] = idx
             exposure_stats["description"] = ",".join(descriptions)
             exposure_stats["detector_width"] = dmap_bbox.width
             exposure_stats["detector_height"] = dmap_bbox.height
@@ -199,4 +223,25 @@ class DetectorMapQaTask(PipelineTask):
             exposure_stats["wavelength_max"] = wavelengthMax
             stats.append(exposure_stats)
 
-        return Struct(dmQaResidualStats=pd.concat(stats))
+        stats = pd.concat(stats)
+
+        self.log.debug("Making residual plots")
+        residFig = plot_detectormap_residuals(
+            arc_data,
+            stats,
+            dataId["arm"],
+            dataId["spectrograph"],
+            useSigmaRange=self.config.useSigmaRange,
+            spatialRange=self.config.spatialRange,
+            wavelengthRange=self.config.wavelengthRange,
+            binWavelength=self.config.binWavelength,
+        )
+
+        # Update the title with the detector name.
+        suptitle = "DetectorMap Residuals {arm}{spectrograph}\n{run}".format(**dataId)
+        residFig.suptitle(suptitle, weight="bold")
+
+        return Struct(
+            dmQaResidualStats=stats,
+            dmQaResidualPlot=residFig,
+        )
