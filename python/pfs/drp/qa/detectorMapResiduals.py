@@ -188,7 +188,7 @@ class DetectorMapQaTask(PipelineTask):
             exposure_stats["exposure"] = dataId["exposure"]
             exposure_stats["arm"] = dataId["arm"]
             exposure_stats["spectrograph"] = dataId["spectrograph"]
-            exposure_stats["ccd"] = dataId["ccd"]
+            exposure_stats["ccd"] = "{arm}{spectrograph}".format(**dataId)
             exposure_stats["status_type"] = idx
             exposure_stats["description"] = ",".join(descriptions)
             exposure_stats["detector_width"] = dmap_bbox.width
