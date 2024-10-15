@@ -1,4 +1,3 @@
-import warnings
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
@@ -7,14 +6,12 @@ from typing import Iterable, Optional
 import numpy as np
 import pandas as pd
 import seaborn as sb
-from astropy.stats import sigma_clip
 from matplotlib import colors, pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
 from pfs.drp.stella.utils.math import robustRms
-from pfs.utils.fiberids import FiberIds
 from scipy.optimize import bisect
 
 from pfs.drp.qa.utils.math import getChi2, getWeightedRMS
@@ -715,71 +712,6 @@ def plot_exposures(
     fig.suptitle("RESERVED median and 1-sigma weighted errors", fontsize="small")
 
     return fig
-
-
-def load_and_mask_data(
-    arcLines: ArcLineSet,
-    detectorMap: DetectorMap,
-    dropNaColumns: bool = True,
-    removeOutliers: bool = True,
-    addFiberInfo: bool = True,
-    **kwargs,
-) -> pd.DataFrame:
-    """Cleans and masks the data. Adds fiberInfo if requested.
-
-    The arcline data includes basic statistics, such as the median and sigma of the residuals.
-
-    This method is called on init.
-
-    Parameters
-    ----------
-    arcLines : `ArcLineSet`
-        The arc lines.
-    detectorMap : `DetectorMap`
-        The detector map.
-    dropNaColumns : `bool`, optional
-        Drop columns where all values are NaN. Default is True.
-    removeOutliers : `bool`, optional
-        Remove rows with ``flag=False``? Default is True.
-    addFiberInfo : `bool`, optional
-        Add fiber information to the dataframe. Default is True.
-
-    Returns
-    -------
-    arc_data : `pandas.DataFrame`
-    """
-
-    # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
-    arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=dropNaColumns, **kwargs)
-
-    # Mark the sigma-clipped outliers for each relevant group.
-    def maskOutliers(grp):
-        grp["xResidOutlier"] = sigma_clip(grp.xResid).mask
-        grp["yResidOutlier"] = sigma_clip(grp.yResid).mask
-        return grp
-
-    # Ignore the warnings about NaNs and inf.
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        arc_data = arc_data.groupby(["status_type", "isLine"]).apply(maskOutliers)
-        arc_data.reset_index(drop=True, inplace=True)
-
-    if addFiberInfo is True:
-        mtp_df = pd.DataFrame(
-            FiberIds().fiberIdToMTP(detectorMap.fiberId), columns=["mtpId", "mtpHoles", "cobraId"]
-        )
-        mtp_df.index = detectorMap.fiberId
-        mtp_df.index.name = "fiberId"
-        arc_data = arc_data.merge(mtp_df.reset_index(), on="fiberId")
-
-    if removeOutliers is True:
-        arc_data = arc_data.query(
-            "(isLine == True and yResidOutlier == False and xResidOutlier == False)"
-            " or "
-            "(isTrace == True and xResidOutlier == False)"
-        )
-
-    return arc_data
 
 
 def scrub_data(

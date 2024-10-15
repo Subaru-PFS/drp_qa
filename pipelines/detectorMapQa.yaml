@@ -1,4 +1,4 @@
 description: DetectorMap QA task
 tasks:
   detectorMapQa:
-    class: pfs.drp.qa.detectorMapQa.DetectorMapQaTask
+    class: pfs.drp.qa.detectorMapResiduals.DetectorMapQaTask
