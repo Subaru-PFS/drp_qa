@@ -193,7 +193,7 @@ class DetectorMapQaTask(PipelineTask):
                 "(isLine == True and yResidOutlier == False and xResidOutlier == False)"
                 " or "
                 "(isTrace == True and xResidOutlier == False)"
-            )
+            ).copy()
 
         descriptions = sorted(list(arc_data.description.unique()))
         with suppress(ValueError):
