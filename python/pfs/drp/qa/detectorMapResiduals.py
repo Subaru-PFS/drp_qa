@@ -5,6 +5,7 @@ import pandas as pd
 from astropy.stats import sigma_clip
 from lsst.pipe.base import (
     PipelineTask,
+    PipelineTaskConfig,
     PipelineTaskConnections,
     Struct,
 )
@@ -68,9 +69,14 @@ class DetectorMapQaConnections(
     )
 
 
+class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
+    """Configuration for DetectorMapQaTask"""
+
+
 class DetectorMapQaTask(PipelineTask):
     """Task for QA of detectorMap"""
 
+    ConfigClass = DetectorMapQaConfig
     _DefaultName = "detectorMapQa"
 
     def run(
