@@ -206,13 +206,17 @@ class DetectorMapQaTask(PipelineTask):
         wavelengthMin = int(arcLines.wavelength.min())
         wavelengthMax = int(arcLines.wavelength.max())
 
+        arc_data["arm"] = dataId["arm"]
+        arc_data["spectrograph"] = dataId["spectrograph"]
+        arc_data["exposure"] = dataId["exposure"]
+
         stats = list()
         for idx, rows in arc_data.groupby("status_type"):
             exposure_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
             exposure_stats["status_type"] = idx
-            exposure_stats["exposure"] = dataId["exposure"]
             exposure_stats["arm"] = dataId["arm"]
             exposure_stats["spectrograph"] = dataId["spectrograph"]
+            exposure_stats["exposure"] = dataId["exposure"]
             exposure_stats["ccd"] = "{arm}{spectrograph}".format(**dataId)
             exposure_stats["description"] = ",".join(descriptions)
             exposure_stats["detector_width"] = dmap_bbox.width
