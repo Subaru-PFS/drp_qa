@@ -4,9 +4,12 @@ from contextlib import suppress
 import pandas as pd
 from astropy.stats import sigma_clip
 from lsst.pipe.base import (
+    InputQuantizedConnection,
+    OutputQuantizedConnection,
     PipelineTask,
     PipelineTaskConfig,
     PipelineTaskConnections,
+    QuantumContext,
     Struct,
 )
 from lsst.pipe.base.connectionTypes import (
@@ -79,6 +82,25 @@ class DetectorMapQaTask(PipelineTask):
     ConfigClass = DetectorMapQaConfig
     _DefaultName = "detectorMapQa"
 
+    def runQuantum(
+        self,
+        butlerQC: QuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
+    ):
+        # Get the dataIds for help with plotting.
+        data_id = {k: v for k, v in inputRefs.arcLines.dataId.full.items()}
+        data_id["run"] = inputRefs.arcLines.run
+
+        inputs = butlerQC.get(inputRefs)
+        inputs["dataId"] = data_id
+
+        # Perform the actual processing.
+        outputs = self.run(**inputs)
+
+        # Store the results.
+        butlerQC.put(outputs, outputRefs)
+
     def run(
         self,
         arcLines: ArcLineSet,
@@ -86,6 +108,7 @@ class DetectorMapQaTask(PipelineTask):
         dropNaColumns: bool = True,
         removeOutliers: bool = True,
         addFiberInfo: bool = True,
+        dataId: dict = None,
         **kwargs,
     ) -> Struct:
         """Cleans and masks the data. Adds fiberInfo if requested.
@@ -106,6 +129,8 @@ class DetectorMapQaTask(PipelineTask):
             Remove rows with ``flag=False``? Default is True.
         addFiberInfo : `bool`, optional
             Add fiber information to the dataframe. Default is True.
+        dataId : dict, optional
+            Dictionary of the dataId.
 
         Returns
         -------
@@ -157,13 +182,13 @@ class DetectorMapQaTask(PipelineTask):
         wavelengthMin = int(arcLines.wavelength.min())
         wavelengthMax = int(arcLines.wavelength.max())
 
-        exposure_stats = pd.DataFrame()
+        stats = list()
         for idx, rows in arc_data.groupby("status_type"):
             exposure_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
-            # exposure_stats["exposure"] = exposure
-            # exposure_stats["arm"] = arm
-            # exposure_stats["spectrograph"] = spectrograph
-            # exposure_stats["ccd"] = ccd
+            exposure_stats["exposure"] = dataId["exposure"]
+            exposure_stats["arm"] = dataId["arm"]
+            exposure_stats["spectrograph"] = dataId["spectrograph"]
+            exposure_stats["ccd"] = dataId["ccd"]
             exposure_stats["status_type"] = idx
             exposure_stats["description"] = ",".join(descriptions)
             exposure_stats["detector_width"] = dmap_bbox.width
@@ -172,5 +197,6 @@ class DetectorMapQaTask(PipelineTask):
             exposure_stats["fiberId_max"] = fiberIdMax
             exposure_stats["wavelength_min"] = wavelengthMin
             exposure_stats["wavelength_max"] = wavelengthMax
+            stats.append(exposure_stats)
 
-        return Struct(dmQaResidualStats=exposure_stats)
+        return Struct(dmQaResidualStats=pd.concat(stats))
