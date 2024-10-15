@@ -210,6 +210,7 @@ class DetectorMapQaTask(PipelineTask):
         arc_data["spectrograph"] = dataId["spectrograph"]
         arc_data["exposure"] = dataId["exposure"]
 
+        self.log.info("Getting residual stats")
         stats = list()
         for idx, rows in arc_data.groupby("status_type"):
             exposure_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
@@ -229,7 +230,7 @@ class DetectorMapQaTask(PipelineTask):
 
         stats = pd.concat(stats)
 
-        self.log.debug("Making residual plots")
+        self.log.info("Making residual plots")
         residFig = plot_detectormap_residuals(
             arc_data,
             stats,
