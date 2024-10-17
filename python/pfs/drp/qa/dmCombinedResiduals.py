@@ -11,7 +11,6 @@ from lsst.pipe.base import (
 )
 from lsst.pipe.base.connectionTypes import (
     Input as InputConnection,
-    Output as OutputConnection,
 )
 from matplotlib import pyplot as plt
 from pandas import DataFrame
@@ -39,19 +38,19 @@ class DetectorMapCombinedQaConnections(
         multiple=True,
     )
 
-    dmQaCombinedResidualPlot = OutputConnection(
-        name="dmQaCombinedResidualPlot",
-        doc="The 1D and 2D residual plots of the detectormap with the arclines for all detectors.",
-        storageClass="MultipagePdfFigure",
-        dimensions=("instrument",),
-    )
-
-    dmQaDetectorStats = OutputConnection(
-        name="dmQaDetectorStats",
-        doc="Statistics of the residual analysis for all detectors.",
-        storageClass="DataFrame",
-        dimensions=("instrument",),
-    )
+    # dmQaCombinedResidualPlot = OutputConnection(
+    #     name="dmQaCombinedResidualPlot",
+    #     doc="The 1D and 2D residual plots of the detectormap with the arclines for all detectors.",
+    #     storageClass="MultipagePdfFigure",
+    #     dimensions=("instrument",),
+    # )
+    #
+    # dmQaDetectorStats = OutputConnection(
+    #     name="dmQaDetectorStats",
+    #     doc="Statistics of the residual analysis for all detectors.",
+    #     storageClass="DataFrame",
+    #     dimensions=("instrument",),
+    # )
 
 
 class DetectorMapCombinedQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapCombinedQaConnections):
@@ -88,7 +87,10 @@ class DetectorMapCombinedQaTask(PipelineTask):
         stats.ccd = stats.ccd.astype("category")
         stats.ccd = stats.ccd.cat.as_ordered()
 
+        self.log.info(stats.ccd.value_counts())
+
         pdf = MultipagePdfFigure()
+        # TODO add a title page.
 
         pdf.append(plot_detector_summary(stats))
         pdf.append(plot_detector_summary_per_desc(stats))
@@ -97,7 +99,8 @@ class DetectorMapCombinedQaTask(PipelineTask):
             fig = plot_detector_exposures(stats, ccd)
             pdf.append(fig)
 
-        return Struct(dmQaCombinedResidualPlot=pdf, dmQaDetectorStats=stats)
+        # return Struct(dmQaCombinedResidualPlot=pdf, dmQaDetectorStats=stats)
+        return Struct()
 
 
 def plot_detector_exposures(data, ccd):
