@@ -41,24 +41,16 @@ class DetectorMapCombinedQaConnections(
 
     dmQaCombinedResidualPlot = OutputConnection(
         name="dmQaCombinedResidualPlot",
-        doc="The 1D and 2D residual plots of the detectormap with the arclines for the entire detector.",
+        doc="The 1D and 2D residual plots of the detectormap with the arclines for all detectors.",
         storageClass="MultipagePdfFigure",
-        dimensions=(
-            "instrument",
-            "arm",
-            "spectrograph",
-        ),
+        dimensions=("instrument",),
     )
 
     dmQaDetectorStats = OutputConnection(
         name="dmQaDetectorStats",
-        doc="Statistics of the residual analysis for the entire detector.",
+        doc="Statistics of the residual analysis for all detectors.",
         storageClass="DataFrame",
-        dimensions=(
-            "instrument",
-            "arm",
-            "spectrograph",
-        ),
+        dimensions=("instrument",),
     )
 
 
