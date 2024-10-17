@@ -42,7 +42,7 @@ class DetectorMapCombinedQaConnections(
     dmQaCombinedResidualPlot = OutputConnection(
         name="dmQaCombinedResidualPlot",
         doc="The 1D and 2D residual plots of the detectormap with the arclines for the entire detector.",
-        storageClass="Plot",
+        storageClass="MultipagePdfFigure",
         dimensions=(
             "instrument",
             "arm",
@@ -90,7 +90,11 @@ class DetectorMapCombinedQaTask(PipelineTask):
         dmQaDetectorStats : `pd.DataFrame`
             Statistics of the residual analysis.
         """
-        stats = pd.concat(dmQaResidualStats)
+        stats = pd.concat(dmQaResidualStats).query('status_type == "RESERVED"')
+        stats.sort_values(by=["exposure", "arm", "spectrograph", "description"], inplace=True)
+
+        stats.ccd = stats.ccd.astype("category")
+        stats.ccd = stats.ccd.cat.as_ordered()
 
         pdf = MultipagePdfFigure()
 
