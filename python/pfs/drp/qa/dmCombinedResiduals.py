@@ -15,11 +15,11 @@ from lsst.pipe.base.connectionTypes import (
 from pandas import DataFrame
 
 
-class DetectorMapQaConnections(
+class DetectorMapCombinedQaConnections(
     PipelineTaskConnections,
     dimensions=("instrument", "arm", "spectrograph"),
 ):
-    """Connections for DetectorMapQaTask"""
+    """Connections for DetectorMapCombinedQaTask"""
 
     dmQaResidualStats = InputConnection(
         name="dmQaResidualStats",
@@ -57,16 +57,16 @@ class DetectorMapQaConnections(
     )
 
 
-class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
-    """Configuration for DetectorMapQaTask"""
+class DetectorMapCombinedQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapCombinedQaConnections):
+    """Configuration for DetectorMapCombinedQaTask"""
 
     useSigmaRange = Field(dtype=bool, default=False, doc="Use ±2.5 sigma as range")
 
 
-class DetectorMapQaTask(PipelineTask):
+class DetectorMapCombinedQaTask(PipelineTask):
     """Task for QA of detectorMap"""
 
-    ConfigClass = DetectorMapQaConfig
+    ConfigClass = DetectorMapCombinedQaConfig
     _DefaultName = "dmCombinedResiduals"
 
     def run(self, dmQaResidualStats: Iterable[DataFrame]) -> Struct:
