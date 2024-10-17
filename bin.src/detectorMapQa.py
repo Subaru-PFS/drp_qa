@@ -1,4 +1,4 @@
 #!/usr/bin/env python
-from pfs.drp.qa.detectorMapQa import DetectorMapQaTask
+from pfs.drp.qa.dmCombinedResiduals import DetectorMapQaTask
 
 DetectorMapQaTask.parseAndRun()

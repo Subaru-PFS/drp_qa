@@ -22,9 +22,9 @@ from pfs.utils.fiberids import FiberIds
 
 from pfs.drp.qa.tasks.detectorMapResiduals import (
     get_fit_stats,
-    plot_detectormap_residuals,
     scrub_data,
 )
+from pfs.drp.qa.utils.plotting import plot_detectormap_residuals
 
 
 class DetectorMapQaConnections(
@@ -104,7 +104,7 @@ class DetectorMapQaTask(PipelineTask):
     """Task for QA of detectorMap"""
 
     ConfigClass = DetectorMapQaConfig
-    _DefaultName = "detectorMapQa"
+    _DefaultName = "dmResiduals"
 
     def runQuantum(
         self,
