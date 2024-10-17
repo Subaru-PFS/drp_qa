@@ -3,6 +3,7 @@ from typing import Dict
 import lsstDebug
 import numpy as np
 import pandas as pd
+import seaborn as sb
 from astropy import units as u
 from lsst.pex.config import Config, Field
 from lsst.pipe.base import Struct, Task
@@ -10,8 +11,10 @@ from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from pfs.datamodel import PfsConfig, PfsSingle, TargetType
-from pfs.drp.qa.utils.plotting import plot_flux_cal_mag_diff
 from pfs.drp.stella.fitReference import FilterCurve, TransmissionCurve
+from pfs.drp.stella.utils.math import robustRms
+
+from pfs.drp.qa.utils.plotting import div_palette, spectrograph_plot_markers
 
 
 class FluxCalibrationConfig(Config):
