@@ -42,7 +42,7 @@ class DetectorMapCombinedQaConnections(
     dmQaCombinedResidualPlot = OutputConnection(
         name="dmQaCombinedResidualPlot",
         doc="The 1D and 2D residual plots of the detectormap with the arclines for the entire detector.",
-        storageClass="pfs.drp.qa.utils.MultipagePdfFigure",
+        storageClass="pfs.drp.qa.utils.storageClasses.MultipagePdfFigure",
         dimensions=(
             "instrument",
             "arm",
