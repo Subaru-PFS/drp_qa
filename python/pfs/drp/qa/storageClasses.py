@@ -1,6 +1,7 @@
 import io
 from typing import Union
 
+from lsst.daf.butler import StorageClass
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.figure import Figure
 
@@ -10,7 +11,7 @@ __all__ = [
 ]
 
 
-class MultipagePdfFigure:
+class MultipagePdfFigure(StorageClass):
     """Duck type for `matplotlib.figure.Figure`,
     to be passed to ``butler.put()``.
 
