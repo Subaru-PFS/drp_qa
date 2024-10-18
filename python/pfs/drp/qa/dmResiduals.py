@@ -126,10 +126,13 @@ class DetectorMapResidualsTask(PipelineTask):
         inputs["dataId"] = data_id
 
         # Perform the actual processing.
-        outputs = self.run(**inputs)
-
-        # Store the results.
-        butlerQC.put(outputs, outputRefs)
+        try:
+            outputs = self.run(**inputs)
+        except ValueError as e:
+            self.log.error(e)
+        else:
+            # Store the results if valid.
+            butlerQC.put(outputs, outputRefs)
 
     def run(
         self,
@@ -170,6 +173,8 @@ class DetectorMapResidualsTask(PipelineTask):
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
         self.log.info("Getting and scrubbing the data")
         arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=dropNaColumns, **kwargs)
+        if len(arc_data) == 0:
+            raise ValueError("After scrubbing the data, the data is empty, cannot proceed.")
 
         # Mark the sigma-clipped outliers for each relevant group.
         def maskOutliers(grp):
@@ -249,7 +254,7 @@ class DetectorMapResidualsTask(PipelineTask):
         )
 
         # Update the title with the detector name.
-        suptitle = "DetectorMap Residuals {arm}{spectrograph}\n{run}".format(**dataId)
+        suptitle = f"DetectorMap Residuals\n{dataId}"
         residFig.suptitle(suptitle, weight="bold")
 
         return Struct(
