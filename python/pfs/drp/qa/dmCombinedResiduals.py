@@ -76,7 +76,7 @@ class DetectorMapCombinedQaTask(PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ):
-        run_name = inputRefs.dmQaResidualStats.run
+        run_name = inputRefs.dmQaResidualStats[0].run
 
         inputs = butlerQC.get(inputRefs)
         inputs["run_name"] = run_name
@@ -122,7 +122,8 @@ class DetectorMapCombinedQaTask(PipelineTask):
             0.5,
             0.5,
             f"DetectorMap Residuals Summary\n{run_name}",
-            transform=ax.transAxes,
+            ha="center",
+            va="center",
             fontsize="xx-large",
         )
         pdf.append(fig)
