@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Iterable, Optional
 
 import pandas as pd
 import seaborn as sb
@@ -21,7 +21,7 @@ from matplotlib.figure import Figure
 from pandas import DataFrame
 
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
-from pfs.drp.qa.utils.plotting import description_palette, detector_palette, plot_exposures
+from pfs.drp.qa.utils.plotting import description_palette, detector_palette
 
 
 class DetectorMapCombinedResidualsConnections(
@@ -140,34 +140,25 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         return Struct(dmQaCombinedResidualPlot=pdf, dmQaDetectorStats=stats)
 
 
-def plot_detector_exposures(data, ccd):
+def plot_detector_exposures(data: DataFrame, ccd: str) -> Figure:
     plot_data = data.query("ccd == @ccd")
 
     summary_stats = plot_data.filter(regex="median|weighted").median().to_dict()
 
     fig = plot_exposures(plot_data, palette=description_palette)
 
-    fig.axes[0].axvline(summary_stats["spatial.median"], c="k", ls="--")
-    fig.axes[0].axvline(
-        summary_stats["spatial.median"] + summary_stats["spatial.weightedRms"], c="g", ls="--"
-    )
-    fig.axes[0].axvline(
-        summary_stats["spatial.median"] - summary_stats["spatial.weightedRms"], c="g", ls="--"
-    )
-    fig.axes[0].set_title(
-        f'Spatial: median={summary_stats["spatial.median"]:5.04f} rms={summary_stats["spatial.weightedRms"]:5.04f}'
-    )
+    for ax, dim in zip(fig.axes, ["spatial", "wavelength"]):
+        upper_range = summary_stats[f"{dim}.median"] + summary_stats[f"{dim}.weightedRms"]
+        lower_range = summary_stats[f"{dim}.median"] - summary_stats[f"{dim}.weightedRms"]
 
-    fig.axes[1].axvline(summary_stats["wavelength.median"], c="k", ls="--")
-    fig.axes[1].axvline(
-        summary_stats["wavelength.median"] + summary_stats["wavelength.weightedRms"], c="g", ls="--"
-    )
-    fig.axes[1].axvline(
-        summary_stats["wavelength.median"] - summary_stats["wavelength.weightedRms"], c="g", ls="--"
-    )
-    fig.axes[1].set_title(
-        f'Wavelength: median={summary_stats["wavelength.median"]:5.04f} rms={summary_stats["wavelength.weightedRms"]:5.04f}'
-    )
+        ax.axvline(summary_stats[f"{dim}.median"], c="k", ls="--")
+        ax.axvline(upper_range, c="g", ls="--")
+        ax.axvline(lower_range, c="g", ls="--")
+        ax.set_title(
+            f"{dim.upper()}: "
+            f'median={summary_stats[f"{dim}.median"]:5.04f} '
+            f'rms={summary_stats[f"{dim}.weightedRms"]:5.04f}'
+        )
 
     fig.set_size_inches(8, 8)
     fig.suptitle(f"{fig.get_suptitle()}\n{ccd}")
@@ -175,7 +166,7 @@ def plot_detector_exposures(data, ccd):
     return fig
 
 
-def plot_detector_summary(data):
+def plot_detector_summary(data: DataFrame) -> Figure:
     plot_data = data.filter(regex="ccd|median|weighted").groupby("ccd").median()
 
     fig, (ax0, ax1) = plt.subplots(ncols=2, layout="constrained", sharey=True)
@@ -208,7 +199,7 @@ def plot_detector_summary(data):
     return fig
 
 
-def plot_detector_summary_per_desc(data):
+def plot_detector_summary_per_desc(data: DataFrame) -> Figure:
     plot_data = (
         data.set_index(["ccd", "description"])
         .filter(regex="median|weighted")
@@ -232,3 +223,70 @@ def plot_detector_summary_per_desc(data):
     fg.fig.suptitle(f"DetectorMap Residuals by description", y=1)
 
     return fg.fig
+
+
+def plot_exposures(
+    plotData: pd.DataFrame,
+    palette: Optional[dict] = None,
+    spatialRange: float = 0.1,
+    wavelengthRange: float = 0.1,
+    fig: Optional[Figure] = None,
+) -> Figure:
+    """Plot the exposure statistics.
+
+    Parameters
+    ----------
+    plotData : `pandas.DataFrame`
+        The data.
+    palette : `dict`, optional
+        The palette to use for the arcline descriptions. Keys are the descriptions
+        and values are the colors. Default is ``None``.
+    spatialRange : `float`, optional
+        The range for the spatial data. Default is 0.1.
+    wavelengthRange : `float`, optional
+        The range for the wavelength data. Default is 0.1.
+    fig : `Figure`, optional
+        The figure. Default is ``None``.
+
+    Returns
+    -------
+    fig : `Figure`
+        The exposure statistics plot.
+
+    """
+    plotData = plotData.copy()
+    fig = fig or Figure(layout="constrained")
+    ax0 = fig.add_subplot(121)
+    ax1 = fig.add_subplot(122, sharex=ax0, sharey=ax0)
+
+    plotData["exposure_idx"] = plotData.exposure.rank(method="first")
+
+    for ax, metric in zip([ax0, ax1], ["spatial", "wavelength"]):
+        for desc, grp in plotData.groupby("description"):
+            grp.plot.scatter(
+                y="exposure_idx",
+                x=f"{metric}.median",
+                xerr=f"{metric}.weightedRms",
+                marker="o",
+                color=palette.get(desc, "red") if palette is not None else None,
+                label=desc,
+                ax=ax,
+            )
+
+        ax.grid(alpha=0.2)
+        ax.axvline(0, c="k", ls="--", alpha=0.5)
+        ax.set_title(f"{metric}")
+        ax.set_xlabel("pix")
+        if spatialRange is not None and metric == "spatial":
+            ax.set_xlim(-spatialRange, spatialRange)
+        if wavelengthRange is not None and metric == "wavelength":
+            ax.set_xlim(-wavelengthRange, wavelengthRange)
+
+    exposure_label = [f"{row.exposure}" for idx, row in plotData.iterrows()]
+    ax0.set_yticks(plotData.exposure_idx, exposure_label, fontsize="xx-small")
+    ax0.set_ylabel("Exposure")
+    ax0.invert_yaxis()
+
+    fig.suptitle("RESERVED median and 1-sigma weighted errors", fontsize="small")
+
+    return fig
