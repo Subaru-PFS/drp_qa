@@ -125,8 +125,8 @@ class DetectorMapResidualsTask(PipelineTask):
         inputs = butlerQC.get(inputRefs)
         inputs["dataId"] = data_id
 
-        # Perform the actual processing.
         try:
+            # Perform the actual processing.
             outputs = self.run(**inputs)
         except ValueError as e:
             self.log.error(e)
