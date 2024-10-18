@@ -24,7 +24,7 @@ from pfs.drp.qa.storageClasses import MultipagePdfFigure
 from pfs.drp.qa.utils.plotting import description_palette, detector_palette, plot_exposures
 
 
-class DetectorMapCombinedQaConnections(
+class DetectorMapCombinedResidualsConnections(
     PipelineTaskConnections,
     dimensions=("instrument",),
 ):
@@ -58,16 +58,18 @@ class DetectorMapCombinedQaConnections(
     )
 
 
-class DetectorMapCombinedQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapCombinedQaConnections):
+class DetectorMapCombinedResidualsConfig(
+    PipelineTaskConfig, pipelineConnections=DetectorMapCombinedResidualsConnections
+):
     """Configuration for DetectorMapCombinedQaTask"""
 
     useSigmaRange = Field(dtype=bool, default=False, doc="Use ±2.5 sigma as range")
 
 
-class DetectorMapCombinedQaTask(PipelineTask):
+class DetectorMapCombinedResidualsTask(PipelineTask):
     """Task for QA of detectorMap"""
 
-    ConfigClass = DetectorMapCombinedQaConfig
+    ConfigClass = DetectorMapCombinedResidualsConfig
     _DefaultName = "dmCombinedResiduals"
 
     def runQuantum(

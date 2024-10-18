@@ -29,7 +29,7 @@ from pfs.drp.qa.utils.math import getChi2, getWeightedRMS
 from pfs.drp.qa.utils.plotting import plot_detectormap_residuals
 
 
-class DetectorMapQaConnections(
+class DetectorMapResidualsConnections(
     PipelineTaskConnections,
     dimensions=(
         "instrument",
@@ -87,7 +87,7 @@ class DetectorMapQaConnections(
     )
 
 
-class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaConnections):
+class DetectorMapResidualsConfig(PipelineTaskConfig, pipelineConnections=DetectorMapResidualsConnections):
     """Configuration for DetectorMapQaTask"""
 
     useSigmaRange = Field(dtype=bool, default=False, doc="Use ±2.5 sigma as range")
@@ -102,10 +102,10 @@ class DetectorMapQaConfig(PipelineTaskConfig, pipelineConnections=DetectorMapQaC
     binWavelength = Field(dtype=float, default=0.1, doc="Wavelength bin for residual plot.")
 
 
-class DetectorMapQaTask(PipelineTask):
+class DetectorMapResidualsTask(PipelineTask):
     """Task for QA of detectorMap"""
 
-    ConfigClass = DetectorMapQaConfig
+    ConfigClass = DetectorMapResidualsConfig
     _DefaultName = "dmResiduals"
 
     def runQuantum(
