@@ -7,7 +7,7 @@ dynamic = ["version"]
 name = "pfs-drp-qa"
 description = "Quality assurance tools for the Subaru PFS DRP"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 
 [tool.setuptools.packages.find]
 where = ["python/"]
