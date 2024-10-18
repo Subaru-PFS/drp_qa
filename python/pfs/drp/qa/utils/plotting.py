@@ -9,7 +9,7 @@ from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from pfs.drp.stella.utils.math import robustRms
 
-from pfs.drp.qa.tasks.detectorMapResiduals import get_fit_stats
+from pfs.drp.qa.dmResiduals import get_fit_stats
 from pfs.drp.qa.utils.math import getWeightedRMS
 
 div_palette = plt.cm.RdBu_r.with_extremes(over="magenta", under="cyan", bad="lime")
