@@ -542,7 +542,7 @@ def plot_detectormap_residuals(
         wavelengthMax = None
 
     # One big fig.
-    main_fig = Figure(layout="constrained", figsize=(12, 10), dpi=150)
+    main_fig = Figure(layout="constrained", figsize=(10, 10), dpi=150)
 
     # Split top fig into wo columns.
     (x_fig, y_fig) = main_fig.subfigures(1, 2, wspace=0)
