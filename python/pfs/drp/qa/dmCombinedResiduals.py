@@ -4,9 +4,12 @@ import pandas as pd
 import seaborn as sb
 from lsst.pex.config import Field
 from lsst.pipe.base import (
+    InputQuantizedConnection,
+    OutputQuantizedConnection,
     PipelineTask,
     PipelineTaskConfig,
     PipelineTaskConnections,
+    QuantumContext,
     Struct,
 )
 from lsst.pipe.base.connectionTypes import (
@@ -14,6 +17,7 @@ from lsst.pipe.base.connectionTypes import (
     Output as OutputConnection,
 )
 from matplotlib import pyplot as plt
+from matplotlib.figure import Figure
 from pandas import DataFrame
 
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
@@ -66,7 +70,24 @@ class DetectorMapCombinedQaTask(PipelineTask):
     ConfigClass = DetectorMapCombinedQaConfig
     _DefaultName = "dmCombinedResiduals"
 
-    def run(self, dmQaResidualStats: Iterable[DataFrame]) -> Struct:
+    def runQuantum(
+        self,
+        butlerQC: QuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
+    ):
+        run_name = inputRefs.dmQaResidualStats.run
+
+        inputs = butlerQC.get(inputRefs)
+        inputs["run_name"] = run_name
+
+        # Perform the actual processing.
+        outputs = self.run(**inputs)
+
+        # Store the results.
+        butlerQC.put(outputs, outputRefs)
+
+    def run(self, dmQaResidualStats: Iterable[DataFrame], run_name: str) -> Struct:
         """Create detector level stats and plots.
 
         Parameters
@@ -74,6 +95,8 @@ class DetectorMapCombinedQaTask(PipelineTask):
         dmQaResidualStats : Iterable[DataFrame]
             A an iterable of DataFrames containing DM QA residual statistics. These
             are combined into a single DataFrame for processing.
+        run_name : str
+            The name of the collection that was used for the stats.
 
         Returns
         -------
@@ -91,7 +114,18 @@ class DetectorMapCombinedQaTask(PipelineTask):
         self.log.info(stats.ccd.value_counts())
 
         pdf = MultipagePdfFigure()
-        # TODO add a title page.
+
+        fig = Figure()
+        ax = fig.add_subplot(111)
+        ax.set_axis_off()
+        ax.text(
+            0.5,
+            0.5,
+            f"DetectorMap Residuals Summary\n{run_name}",
+            transform=ax.transAxes,
+            fontsize="xx-large",
+        )
+        pdf.append(fig)
 
         pdf.append(plot_detector_summary(stats))
         pdf.append(plot_detector_summary_per_desc(stats))
