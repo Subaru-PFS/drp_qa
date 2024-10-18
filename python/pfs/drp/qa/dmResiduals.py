@@ -254,7 +254,7 @@ class DetectorMapResidualsTask(PipelineTask):
         )
 
         # Update the title with the detector name.
-        suptitle = f"DetectorMap Residuals\n{dataId}"
+        suptitle = "DetectorMap Residuals\n{exposure} {arm}{spectrograph}\n{run}".format(**dataId)
         residFig.suptitle(suptitle, weight="bold")
 
         return Struct(
@@ -547,7 +547,7 @@ def plot_detectormap_residuals(
         wavelengthMax = None
 
     # One big fig.
-    main_fig = Figure(layout="constrained", figsize=(10, 10), dpi=150)
+    main_fig = Figure(layout="constrained", figsize=(8, 8), dpi=150)
 
     # Split top fig into wo columns.
     (x_fig, y_fig) = main_fig.subfigures(1, 2, wspace=0)
@@ -577,7 +577,7 @@ def plot_detectormap_residuals(
                     fontweight="bold",
                 )
             except Exception as e:
-                print(f"Problem plotting residual {e}")
+                continue
 
         return main_fig
     except ValueError as e:
