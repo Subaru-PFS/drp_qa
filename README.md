@@ -14,6 +14,8 @@ the quality of the data products.
 The following pipelines are available and can be used as the pipeline parameter
 option (i.e. `-p`) to the `pipetask` command.
 
+See the notebook in the `examples/` folder.
+
 ### `pipelines/detectorMapQa.yaml`
 
 Measures the residuals in the spatial and wavelength directions between the
