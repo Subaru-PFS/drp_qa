@@ -16,8 +16,8 @@ from lsst.pipe.base.connectionTypes import (
 from matplotlib import pyplot as plt
 from pandas import DataFrame
 
+from pfs.drp.qa.storageClasses import MultipagePdfFigure
 from pfs.drp.qa.utils.plotting import description_palette, detector_palette, plot_exposures
-from pfs.drp.qa.utils.storageClasses import MultipagePdfFigure
 
 
 class DetectorMapCombinedQaConnections(
