@@ -9,17 +9,19 @@ import matplotlib
 import numpy as np
 from lsst.afw.image import ExposureF, ImageF, MaskedImageF
 from lsst.pex.config import Field
-from lsst.pipe.base import Struct
-from lsst.pipe.base.connectionTypes import (
-    Input as InputConnection,
+from lsst.pipe.base import (
     InputQuantizedConnection,
-    Output as OutputConnection,
     OutputQuantizedConnection,
     PipelineTask,
     PipelineTaskConfig,
     PipelineTaskConnections,
-    PrerequisiteInput as PrerequisiteConnection,
     QuantumContext,
+    Struct,
+)
+from lsst.pipe.base.connectionTypes import (
+    Input as InputConnection,
+    Output as OutputConnection,
+    PrerequisiteInput as PrerequisiteConnection,
 )
 from matplotlib import pyplot as plt
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
