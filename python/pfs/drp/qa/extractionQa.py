@@ -82,8 +82,8 @@ class ExtractionQaConnections(
         storageClass="PfsArm",
         dimensions=("instrument", "exposure", "arm", "spectrograph"),
     )
-    calexp = InputConnection(
-        name="calexp",
+    postISRCCD = InputConnection(
+        name="postISRCCD",
         doc="Calibrated exposure, optionally sky-subtracted",
         storageClass="Exposure",
         dimensions=("instrument", "exposure", "arm", "spectrograph"),
@@ -96,7 +96,7 @@ class ExtractionQaConnections(
     )
     extQaImage = OutputConnection(
         name="extQaImage",
-        doc="Detail plots. Calexp, residual, and chi images and the comparison of the calexp"
+        doc="Detail plots. postISRCCD, residual, and chi images and the comparison of the postISRCCD"
         "profile and fiberProfiles are plotted for some fibers with bad extraction quality.",
         storageClass="MultipagePdfFigure",
         dimensions=("instrument", "exposure", "arm", "spectrograph"),
@@ -135,7 +135,7 @@ class ExtractionQaTask(PipelineTask):
 
     def run(
         self,
-        calexp: ExposureF,
+        postISRCCD: ExposureF,
         fiberProfiles: FiberProfileSet,
         detectorMap: DetectorMap,
         pfsArm: PfsArm,
@@ -145,7 +145,7 @@ class ExtractionQaTask(PipelineTask):
 
         Parameters
         ----------
-        calexp : `ExposureF`
+        postISRCCD : `ExposureF`
             Exposure data
         fiberProfiles : `FiberProfileSet`
             Profiles of each fiber.
@@ -163,7 +163,7 @@ class ExtractionQaTask(PipelineTask):
             Results of the residual analysis of extraction are plotted.
         extQaImage : `MultipagePdfFigure`
             Detail plots.
-            Calexp, residual, and chi images and the comparison of the calexp
+            postISRCCD, residual, and chi images and the comparison of the postISRCCD
             profile and fiberProfiles are plotted for some fibers with bad
             extraction quality.
         extQaImage_pickle : `QaDict`
@@ -182,14 +182,14 @@ class ExtractionQaTask(PipelineTask):
 
         spectra = SpectrumSet.fromPfsArm(pfsArm)
         traces = fiberProfiles.makeFiberTracesFromDetectorMap(detectorMap)
-        image = spectra.makeImage(calexp.getDimensions(), traces)
+        image = spectra.makeImage(postISRCCD.getDimensions(), traces)
 
-        subtracted = calexp.clone()
+        subtracted = postISRCCD.clone()
         subtracted.image -= image
         divided = subtracted.clone()
-        divided.image /= calexp.image
+        divided.image /= postISRCCD.image
         chiimage = subtracted.clone()
-        chiimage.image.array /= np.sqrt(calexp.variance.array)
+        chiimage.image.array /= np.sqrt(postISRCCD.variance.array)
 
         msk = (pfsConfig.spectrograph == dataId["spectrograph"]) * (pfsConfig.fiberStatus == FiberStatus.GOOD)
         fiberIds = pfsConfig[msk].fiberId
@@ -256,7 +256,7 @@ class ExtractionQaTask(PipelineTask):
                         pfsArmCutNarrow = image.array[
                             yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
                         ]
-                        calExpCutNarrow = calexp.image.array[
+                        calExpCutNarrow = postISRCCD.image.array[
                             yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
                         ]
                         fitresult = self.fitGaussiansToPfsArmCutAndCalExpCut(
@@ -284,7 +284,7 @@ class ExtractionQaTask(PipelineTask):
                             qaStatsPdf,
                             dataId,
                             image,
-                            calexp,
+                            postISRCCD,
                             subtracted,
                             chiimage,
                             fiberId,
@@ -340,7 +340,7 @@ class ExtractionQaTask(PipelineTask):
         qaStatsPdf: MultipagePdfFigure,
         dataId: dict,
         image: ImageF,
-        calexp: ExposureF,
+        postISRCCD: ExposureF,
         subtracted: ExposureF,
         chiimage: ExposureF,
         fiberId: int,
@@ -362,7 +362,7 @@ class ExtractionQaTask(PipelineTask):
             Data ID. Required keys are: "visit", "arm", "spectrograph".
         image : `ImageF`
             XXXXX
-        calexp : `ExposureF`
+        postISRCCD : `ExposureF`
             XXXXX
         subtracted : `ExposureF`
             XXXXX
@@ -394,12 +394,12 @@ class ExtractionQaTask(PipelineTask):
         disp = afwDisplay.Display(fig)
         disp.scale("asinh", "zscale", Q=1)
         disp.setMaskPlaneColor("REFLINE", afwDisplay.IGNORE)
-        disp.mtv(calexp[int(xa) - 10 : int(xa) + 11, :])
+        disp.mtv(postISRCCD[int(xa) - 10 : int(xa) + 11, :])
         ax[0].plot(xo, yo, "r", alpha=0.8)
         ax[0].set_xlim(xa - 10, xa + 10)
         ax[0].set_aspect("auto")
         ax[0].set_ylabel("Y (pix)")
-        ax[0].set_title("calexp")
+        ax[0].set_title("postISRCCD")
 
         plt.sca(ax[1])
         disp = afwDisplay.Display(fig)
@@ -473,7 +473,7 @@ class ExtractionQaTask(PipelineTask):
                 pfsArmCut = image.array[
                     yssub, xssub - self.config.plotWidth : xssub + self.config.plotWidth + 1
                 ]
-                calExpCut = calexp.image.array[
+                calExpCut = postISRCCD.image.array[
                     yssub, xssub - self.config.plotWidth : xssub + self.config.plotWidth + 1
                 ]
                 xcoordNarrow = np.arange(
@@ -483,7 +483,7 @@ class ExtractionQaTask(PipelineTask):
                 pfsArmCutNarrow = image.array[
                     yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
                 ]
-                calExpCutNarrow = calexp.image.array[
+                calExpCutNarrow = postISRCCD.image.array[
                     yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
                 ]
 
@@ -508,7 +508,7 @@ class ExtractionQaTask(PipelineTask):
                 ax[j][k].step(
                     xcoord,
                     calExpCut,
-                    label="calExp\n(x={:.2f}, $\\sigma$={:.2f})".format(calExpCenter, calExpWidth),
+                    label="postISRCCD\n(x={:.2f}, $\\sigma$={:.2f})".format(calExpCenter, calExpWidth),
                     color="k",
                 )
                 ax[j][k].step(
