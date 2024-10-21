@@ -4,7 +4,6 @@ import lsstDebug
 from lsst.daf.persistence import ButlerDataRef, NoResults
 from lsst.pex.config import ConfigurableField
 from lsst.pipe.base import (
-    CmdLineTask,
     PipelineTask,
     PipelineTaskConfig,
     PipelineTaskConnections,
@@ -16,6 +15,7 @@ from lsst.pipe.base.connectionTypes import (
     PrerequisiteInput as PrerequisiteConnection,
 )
 from pfs.datamodel import PfsConfig, PfsSingle, TargetType
+
 from pfs.drp.qa.tasks.fluxCalibration import FluxCalibrationTask
 
 
@@ -76,7 +76,7 @@ class FluxCalQaRunner(TaskRunner):
         return processGroups
 
 
-class FluxCalQaTask(CmdLineTask, PipelineTask):
+class FluxCalQaTask(PipelineTask):
     """Task for generating fluxCalibration QA plots."""
 
     ConfigClass = FluxCalQaConfig

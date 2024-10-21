@@ -1,0 +1,6 @@
+description: DetectorMap QA pipeline
+tasks:
+  dmResiduals:
+    class: pfs.drp.qa.dmResiduals.DetectorMapResidualsTask
+  dmCombinedResiduals:
+    class: pfs.drp.qa.dmCombinedResiduals.DetectorMapCombinedResidualsTask

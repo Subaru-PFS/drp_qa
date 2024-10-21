@@ -3,51 +3,63 @@ DRP QA
 
 ## Introduction
 
-This repository contains command line tasks for quality assurance (QA) of the
-Data Release Production (DRP) pipeline. The QA tasks are implemented as
-`CmdLineTask` classes in the LSST Science Pipelines. The tasks are run on the
-output of the DRP pipeline to assess the quality of the data products.
+This repository contains the pipeline and corresponding tasks for the quality
+assurance (QA) of the Prime Focus Spectrograph (PFS) Data Release Production (DRP)
+pipeline. The QA tasks are implementations of the `PipelineTask` class in the LSST
+Science Pipelines. The tasks are run on the output of the DRP pipeline to assess
+the quality of the data products.
 
-## Available Commands
+## Available Pipelines
 
-Each of the following commands are available on the command line.
+The following pipelines are available and can be used as the pipeline parameter
+option (i.e. `-p`) to the `pipetask` command.
 
-### DetectorMap QA
+See the notebook in the `examples/` folder.
+
+### `pipelines/detectorMapQa.yaml`
 
 Measures the residuals in the spatial and wavelength directions between the
 detector map and the arcline centroids. The residuals are measured for each
 visit and for the combined data from multiple visits.
 
-#### Command and Options
+The pipeline contains the following tasks:
 
-The command to run the `DetectorMapQA` task is:
+#### Tasks
 
-```bash
-detectorMapQA.py </PATH/TO/DATA/REPO> --rerun <RERUN_NAME> --id <ID_STR> 
-```
+##### dmResiduals
 
-Available config options are:
+Determines the residuals between `lines` and `detectorMaps` for a given exposure.
 
-- `--combineVisits`: Combine the data from multiple visits into a single plot. Default is `True`.
-- `--makeResidualPlots`: Make residual plots for each visit or combined visit, if `--combineVisits` is set. Default is
-  `True`.
-- `--useSigmaRange`: Use the sigma range to determine the range of the color scale in the residual plots. Default is
-  `False`.
-- `--xrange`: The range of the x-center (i.e. spatial) in the residual plots. Default is `0.1`.
-- `--wrange`: The range of the y-center (i.e. wavelength) in the residual plots. Default is `0.1`.
-- `--binWavelength`: The bin size in wavelength for the residual plots in nm. Default is `0.1`.
+###### Options
 
-#### Outputs
+- `dmResiduals:useSigmaRange`: Use the sigma range for the color scale in the residual plots. Default is `False`.
+- `dmResiduals:spatialRange`: The range of the x-center (i.e. spatial) in the residual plots. Default is `0.1`.
+- `dmResiduals:wavelengthRange`: The range of the y-center (i.e. wavelength) in the residual plots. Default is `0.1`.
+- `dmResiduals:binWavelength`: The bin size in wavelength for the residual plots in nm. Default is `0.1`.
 
-Outputs of the `DetectorMapQA` task are:
+###### Outputs
 
-- `dmQaResidualPlot` : 1D and 2D plots of the residual between the detectormap and the arclines for a given visit.
-- `dmQaCombinedResidualPlot` : 1D and 2D plots of the residual between the detectormap and the arclines for the entire
-  detector.
-- `dmQaResidualStats` : Statistics of the residual analysis per visit.
-- `dmQaDetectorStats` :  Statistics of the residual analysis per detector.
+| DataSet Type        | Description                               | Dimensions                                                                                  |
+|---------------------|-------------------------------------------|---------------------------------------------------------------------------------------------|
+| `dmQaResidualStats` | `instrument, exposure, arm, spectrograph` | Summary statistics for the given detector and exposure.                                     | 
+| `dmQaResidualPlot`  | `instrument, exposure, arm, spectrograph` | 1D and 2D plots of the residual between the detectormap and the arclines for a given visit. |
 
-### Flux Calibration QA
+##### dmCombinedResiduals
+
+Determines the aggregate statistics for all detectors across all given exposures.
+
+###### Options
+
+N/A
+
+###### Outputs
+
+| DataSet Type               | Description  | Dimensions                                                                                        |
+|----------------------------|--------------|---------------------------------------------------------------------------------------------------|
+| `dmQaCombinedResidualPlot` | `instrument` | 1D and 2D plots of the residual between the detectormap and the arclines for the entire detector. |
+| `dmQaDetectorStats`        | `instrument` | Statistics of the residual analysis per detector.                                                 |
+
+### `pipelines/fluxCalibration.yaml`
 
 Measures the residuals in the flux calibration between the standard star
 magnitudes and the instrumental magnitudes.
@@ -65,7 +77,6 @@ Available config options are:
 - `--filterSet`: The filter set to use for the flux calibration. Default is `ps1`.
 - `--includeFakeJ`: Include the fake J band in the flux calibration. Default is `False`.
 - `--diffFilter`: The filter to use for the differential flux calibration. Default is `g_ps1`.
-
 
 #### Outputs
 
