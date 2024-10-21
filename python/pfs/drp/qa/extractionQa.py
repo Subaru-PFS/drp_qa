@@ -1,7 +1,7 @@
 import dataclasses
 import itertools
 import math
-from typing import Dict, Union
+from typing import Dict
 
 import lsst.afw.display as afwDisplay
 import lsstDebug
@@ -155,10 +155,7 @@ class ExtractionQaTask(PipelineTask):
         except ValueError as e:
             self.log.error(e)
         else:
-            # Store the results if valid.
-            for datasetType, data in outputs.getDict().items():
-                if data is not None:
-                    butlerQC.put(data, datasetType=datasetType)
+            butlerQC.put(outputs, outputRefs)
 
     def run(
         self,
@@ -260,7 +257,7 @@ class ExtractionQaTask(PipelineTask):
         idarray = []
         dxarray = []
         dwarray = []
-        qaStatsPdf: Union[MultipagePdfFigure, None] = None
+        qaStatsPdf: MultipagePdfFigure | None = None
         if any(np.array(chiStd) > self.config.thresChi):
             qaStatsPdf = MultipagePdfFigure()
             for i, fiberId in enumerate(fiberIds):
@@ -355,6 +352,9 @@ class ExtractionQaTask(PipelineTask):
         )
 
         qaImagePdf = self.makeImagePdf(qaStats, dataId, detectorMap, chiimage)
+
+        if qaStatsPdf is None:
+            raise ValueError("qaStatsPdf is empty.")
 
         return Struct(
             extQaStats=qaStatsPdf,
