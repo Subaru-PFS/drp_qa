@@ -147,12 +147,7 @@ class ExtractionQaTask(PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ):
-        # Get the dataIds for help with plotting.
-        data_id = {k: v for k, v in inputRefs.arcLines.dataId.full.items()}
-        data_id["run"] = inputRefs.arcLines.run
-
         inputs = butlerQC.get(inputRefs)
-        inputs["dataId"] = data_id
 
         try:
             # Perform the actual processing.
