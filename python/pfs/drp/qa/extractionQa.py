@@ -9,11 +9,17 @@ import matplotlib
 import numpy as np
 from lsst.afw.image import ExposureF, ImageF, MaskedImageF
 from lsst.pex.config import Field
-from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, Struct
+from lsst.pipe.base import Struct
 from lsst.pipe.base.connectionTypes import (
     Input as InputConnection,
+    InputQuantizedConnection,
     Output as OutputConnection,
+    OutputQuantizedConnection,
+    PipelineTask,
+    PipelineTaskConfig,
+    PipelineTaskConnections,
     PrerequisiteInput as PrerequisiteConnection,
+    QuantumContext,
 )
 from matplotlib import pyplot as plt
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
@@ -132,6 +138,30 @@ class ExtractionQaTask(PipelineTask):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.debugInfo = lsstDebug.Info(__name__)
+
+    def runQuantum(
+        self,
+        butlerQC: QuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
+    ):
+        # Get the dataIds for help with plotting.
+        data_id = {k: v for k, v in inputRefs.arcLines.dataId.full.items()}
+        data_id["run"] = inputRefs.arcLines.run
+
+        inputs = butlerQC.get(inputRefs)
+        inputs["dataId"] = data_id
+
+        try:
+            # Perform the actual processing.
+            outputs = self.run(**inputs)
+        except ValueError as e:
+            self.log.error(e)
+        else:
+            # Store the results if valid.
+            for datasetType, data in outputs.getDict().items():
+                if data is not None:
+                    butlerQC.put(data, datasetType=datasetType)
 
     def run(
         self,
