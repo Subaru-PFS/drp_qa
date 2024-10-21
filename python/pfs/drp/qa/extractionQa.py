@@ -26,6 +26,31 @@ from pfs.drp.qa.storageClasses import MultipagePdfFigure, QaDict
 from pfs.drp.qa.utils.math import gaussianFixedWidth, gaussian_func
 
 
+@dataclasses.dataclass
+class StatsPerFiber:
+    """Statistics for a fiber.
+
+    Parameters
+    ----------
+    chi2 : `float`
+        XXXXX
+    im_ave : `float`
+        XXXXX
+    x_ave : `float`
+        XXXXX
+    chi_f : `np.ndarray` of `float`, shape ``(N, M)``
+        XXXXX
+    mask_f : `np.ndarray` of `int`, shape ``(N, M)``
+        XXXXX
+    """
+
+    chi2: float
+    im_ave: float
+    x_ave: float
+    chi_f: np.ndarray
+    mask_f: np.ndarray
+
+
 class ExtractionQaConnections(
     PipelineTaskConnections,
     dimensions=("instrument", "exposure", "arm", "spectrograph"),
@@ -1095,28 +1120,3 @@ class ExtractionQaTask(PipelineTask):
             "k",
         ]
         return dict(zip(TargetType, itertools.cycle(colors)))
-
-
-@dataclasses.dataclass
-class StatsPerFiber:
-    """Statistics for a fiber.
-
-    Parameters
-    ----------
-    chi2 : `float`
-        XXXXX
-    im_ave : `float`
-        XXXXX
-    x_ave : `float`
-        XXXXX
-    chi_f : `np.ndarray` of `float`, shape ``(N, M)``
-        XXXXX
-    mask_f : `np.ndarray` of `int`, shape ``(N, M)``
-        XXXXX
-    """
-
-    chi2: float
-    im_ave: float
-    x_ave: float
-    chi_f: np.ndarray
-    mask_f: np.ndarray
