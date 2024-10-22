@@ -37,7 +37,7 @@ class DetectorMapResidualsConnections(
     PipelineTaskConnections,
     dimensions=(
         "instrument",
-        "exposure",
+        "visit",
         "arm",
         "spectrograph",
     ),
@@ -50,7 +50,7 @@ class DetectorMapResidualsConnections(
         storageClass="DetectorMap",
         dimensions=(
             "instrument",
-            "exposure",
+            "visit",
             "arm",
             "spectrograph",
         ),
@@ -62,7 +62,7 @@ class DetectorMapResidualsConnections(
         storageClass="ArcLineSet",
         dimensions=(
             "instrument",
-            "exposure",
+            "visit",
             "arm",
             "spectrograph",
         ),
@@ -73,7 +73,7 @@ class DetectorMapResidualsConnections(
         storageClass="DataFrame",
         dimensions=(
             "instrument",
-            "exposure",
+            "visit",
             "arm",
             "spectrograph",
         ),
@@ -84,7 +84,7 @@ class DetectorMapResidualsConnections(
         storageClass="Plot",
         dimensions=(
             "instrument",
-            "exposure",
+            "visit",
             "arm",
             "spectrograph",
         ),
@@ -219,25 +219,25 @@ class DetectorMapResidualsTask(PipelineTask):
 
         arc_data["arm"] = dataId["arm"]
         arc_data["spectrograph"] = dataId["spectrograph"]
-        arc_data["exposure"] = dataId["exposure"]
+        arc_data["visit"] = dataId["visit"]
 
         self.log.info("Getting residual stats")
         stats = list()
         for idx, rows in arc_data.groupby("status_type"):
-            exposure_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
-            exposure_stats["status_type"] = idx
-            exposure_stats["arm"] = dataId["arm"]
-            exposure_stats["spectrograph"] = dataId["spectrograph"]
-            exposure_stats["exposure"] = dataId["exposure"]
-            exposure_stats["ccd"] = "{arm}{spectrograph}".format(**dataId)
-            exposure_stats["description"] = ",".join(descriptions)
-            exposure_stats["detector_width"] = dmap_bbox.width
-            exposure_stats["detector_height"] = dmap_bbox.height
-            exposure_stats["fiberId_min"] = fiberIdMin
-            exposure_stats["fiberId_max"] = fiberIdMax
-            exposure_stats["wavelength_min"] = wavelengthMin
-            exposure_stats["wavelength_max"] = wavelengthMax
-            stats.append(exposure_stats)
+            visit_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
+            visit_stats["status_type"] = idx
+            visit_stats["arm"] = dataId["arm"]
+            visit_stats["spectrograph"] = dataId["spectrograph"]
+            visit_stats["visit"] = dataId["visit"]
+            visit_stats["ccd"] = "{arm}{spectrograph}".format(**dataId)
+            visit_stats["description"] = ",".join(descriptions)
+            visit_stats["detector_width"] = dmap_bbox.width
+            visit_stats["detector_height"] = dmap_bbox.height
+            visit_stats["fiberId_min"] = fiberIdMin
+            visit_stats["fiberId_max"] = fiberIdMax
+            visit_stats["wavelength_min"] = wavelengthMin
+            visit_stats["wavelength_max"] = wavelengthMax
+            stats.append(visit_stats)
 
         stats = pd.concat(stats)
 
@@ -254,7 +254,7 @@ class DetectorMapResidualsTask(PipelineTask):
         )
 
         # Update the title with the detector name.
-        suptitle = "DetectorMap Residuals\n{exposure} {arm}{spectrograph}\n{run}".format(**dataId)
+        suptitle = "DetectorMap Residuals\n{visit} {arm}{spectrograph}\n{run}".format(**dataId)
         residFig.suptitle(suptitle, weight="bold")
 
         return Struct(
@@ -348,7 +348,6 @@ def scrub_data(
 
     # Copy the dataframe from the arcline set.
     arc_data = arcLines.data.copy()
-    arc_data.rename(columns={"visit": "exposure"}, inplace=True)
 
     if removeFlagged:
         arc_data = arc_data.query("flag == False").copy()
@@ -490,7 +489,7 @@ def get_fit_stats(
 
 def plot_detectormap_residuals(
     arc_data: pd.DataFrame,
-    exposure_stats: pd.DataFrame,
+    visit_stats: pd.DataFrame,
     arm: str,
     spectrograph: int,
     useSigmaRange: bool = False,
@@ -504,8 +503,8 @@ def plot_detectormap_residuals(
     ----------
     arc_data : `pandas.DataFrame`
         The arc data.
-    exposure_stats : `pandas.DataFrame`
-        The exposure statistics.
+    visit_stats : `pandas.DataFrame`
+        The visit statistics.
     arm : `str`
         The arm.
     spectrograph : `int`
@@ -525,13 +524,11 @@ def plot_detectormap_residuals(
 
     ccd = f"{arm}{spectrograph}"
 
-    # Get just the reserved exposures for this ccd.
-    exposure_stats = (
-        exposure_stats.query('status_type == "RESERVED" and ccd == @ccd').sort_values("exposure").copy()
-    )
+    # Get just the reserved visits for this ccd.
+    visit_stats = visit_stats.query('status_type == "RESERVED" and ccd == @ccd').sort_values("visit").copy()
 
     try:
-        exp_stat = exposure_stats.iloc[0]
+        exp_stat = visit_stats.iloc[0]
         dmWidth = exp_stat.detector_width
         dmHeight = exp_stat.detector_height
         fiberIdMin = exp_stat.fiberId_min

@@ -21,7 +21,7 @@ from pfs.drp.qa.tasks.fiberExtraction import ExtractionQaTask
 
 class ExtractionQaConnections(
     PipelineTaskConnections,
-    dimensions=("instrument", "exposure", "detector"),
+    dimensions=("instrument", "visit", "detector"),
 ):
     """Connections for ExtractionQaTask"""
 
@@ -29,7 +29,7 @@ class ExtractionQaConnections(
         name="pfsConfig",
         doc="Top-end fiber configuration",
         storageClass="PfsConfig",
-        dimensions=("instrument", "exposure"),
+        dimensions=("instrument", "visit"),
     )
     fiberProfiles = PrerequisiteConnection(
         name="fiberProfiles",
@@ -42,38 +42,38 @@ class ExtractionQaConnections(
         name="detectorMap_used",
         doc="Mapping from fiberId,wavelength to x,y",
         storageClass="DetectorMap",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "visit", "detector"),
     )
     pfsArm = InputConnection(
         name="pfsArm",
         doc="Extracted spectra from arm",
         storageClass="PfsArm",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "visit", "detector"),
     )
     calexp = InputConnection(
         name="calexp",
-        doc="Calibrated exposure, optionally sky-subtracted",
+        doc="Calibrated visit, optionally sky-subtracted",
         storageClass="Exposure",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "visit", "detector"),
     )
     extQaStats = OutputConnection(
         name="extQaStats",
         doc="Summary plots. Results of the residual analysis of extraction are plotted.",
         storageClass="MultipagePdfFigure",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "visit", "detector"),
     )
     extQaImage = OutputConnection(
         name="extQaImage",
         doc="Detail plots. Calexp, residual, and chi images and the comparison of the calexp"
         "profile and fiberProfiles are plotted for some fibers with bad extraction quality.",
         storageClass="MultipagePdfFigure",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "visit", "detector"),
     )
     extQaImage_pickle = OutputConnection(
         name="extQaImage_pickle",
         doc="Statistics of the residual analysis.",
         storageClass="QaDict",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "visit", "detector"),
     )
 
 
