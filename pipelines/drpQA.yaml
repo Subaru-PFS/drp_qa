@@ -6,5 +6,3 @@ tasks:
     class: pfs.drp.qa.dmCombinedResiduals.DetectorMapCombinedResidualsTask
   extractionQa:
     class: pfs.drp.qa.extractionQa.ExtractionQaTask
-  fluxCalQa:
-    class: pfs.drp.qa.fluxCalQa.FluxCalQaTask
