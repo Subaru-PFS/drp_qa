@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Iterable
 
 import lsstDebug
 import numpy as np
@@ -32,7 +32,7 @@ from pfs.drp.qa.utils.plotting import div_palette, spectrograph_plot_markers
 
 class FluxCalQaConnections(
     PipelineTaskConnections,
-    dimensions=("instrument", "combination", "cat_id", "exposure"),
+    dimensions=("instrument", "exposure"),
 ):
     """Connections for fluxCalQaTask"""
 
@@ -47,18 +47,21 @@ class FluxCalQaConnections(
         doc="Flux-calibrated, combined spectrum",
         storageClass="PfsObjectSpectra",
         dimensions=("instrument", "combination", "cat_id"),
+        multiple=True,
     )
     fluxCalStats = OutputConnection(
         name="fluxCalStats",
         doc="Statistics of the flux calibration analysis.",
         storageClass="DataFrame",
         dimensions=("instrument", "combination", "cat_id"),
+        multiple=True
     )
     fluxCalMagDiffPlot = OutputConnection(
         name="fluxCalMagDiffPlot",
         doc="Plot of the flux calibration magnitude difference.",
         storageClass="Plot",
         dimensions=("instrument", "combination", "cat_id"),
+        multiple=True
     )
 
 
@@ -102,9 +105,10 @@ class FluxCalQaTask(PipelineTask):
             self.log.error(e)
         else:
             # Store the results if valid.
+            self.log.info(f'Putting {outputs=}')
             butlerQC.put(outputs, outputRefs)
 
-    def run(self, pfsConfig: PfsConfig, pfsCoadd: PfsObjectSpectra) -> Struct:
+    def run(self, pfsConfig: PfsConfig, pfsCoadd: Iterable[PfsObjectSpectra]) -> Struct:
         """QA plots for flux calibration.
 
         Parameters
@@ -120,10 +124,11 @@ class FluxCalQaTask(PipelineTask):
             QA outputs.
         """
         self.log.info(f"Flux Calibration QA")
+        self.log.info(f"{pfsCoadd=}")
 
         pfsConfigFluxStd = pfsConfig.select(targetType=TargetType.FLUXSTD)
 
-        fluxstd_objs = {k.objId: v for k, v in pfsCoadd.items() if k.objId in pfsConfigFluxStd.objId}
+        fluxstd_objs = {k.objId: v for k, v in pfsCoadd[0].items() if k.objId in pfsConfigFluxStd.objId}
 
         pfsSingles = dict()
         for fiber_id, obj_id in zip(pfsConfigFluxStd.fiberId, pfsConfigFluxStd.objId):
