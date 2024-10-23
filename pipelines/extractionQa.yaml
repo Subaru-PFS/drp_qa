@@ -1,4 +1,0 @@
-description: Extraction QA task
-tasks:
-  qa:
-    class: pfs.drp.qa.extractionQa.ExtractionQaTask

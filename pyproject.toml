@@ -1,3 +1,21 @@
+[build-system]
+requires = ["setuptools >= 64.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+dynamic = ["version"]
+name = "pfs-drp-qa"
+description = "Quality assurance tools for the Subaru PFS DRP"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[tool.setuptools.packages.find]
+where = ["python/"]
+include = ["pfs.drp.qa"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pfs.drp.qa.version.__version__", file = "python/pfs/drp/qa/version.py"}
+
 [tool.black]
 line-length = 110
 target-version = ["py38"]

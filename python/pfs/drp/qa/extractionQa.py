@@ -1,48 +1,37 @@
 import dataclasses
 import itertools
 import math
-from typing import Dict, Union
+from typing import Dict
 
+import lsst.afw.display as afwDisplay
 import lsstDebug
+import matplotlib
+import numpy as np
+from lsst.afw.image import ExposureF, ImageF, MaskedImageF
+from lsst.pex.config import Field
 from lsst.pipe.base import (
-    ArgumentParser,
-    CmdLineTask,
+    InputQuantizedConnection,
+    OutputQuantizedConnection,
     PipelineTask,
     PipelineTaskConfig,
     PipelineTaskConnections,
+    QuantumContext,
     Struct,
 )
-from lsst.pipe.base.butlerQuantumContext import ButlerQuantumContext
-from lsst.pipe.base.connections import InputQuantizedConnection, OutputQuantizedConnection
-from lsst.pipe.base.connectionTypes import Input as InputConnection
-from lsst.pipe.base.connectionTypes import Output as OutputConnection
-from lsst.pipe.base.connectionTypes import PrerequisiteInput as PrerequisiteConnection
-from lsst.daf.persistence import ButlerDataRef
-from lsst.pex.config import Field
-import lsst.afw.display as afwDisplay
-from lsst.afw.image import ExposureF, MaskedImageF, ImageF
-from pfs.drp.qa.utils.math import gaussian_func, gaussianFixedWidth
-from pfs.drp.stella import (
-    DetectorMap,
-    FiberProfileSet,
-    PfsArm,
-    SpectrumSet,
+from lsst.pipe.base.connectionTypes import (
+    Input as InputConnection,
+    Output as OutputConnection,
+    PrerequisiteInput as PrerequisiteConnection,
 )
-from pfs.drp.stella.utils import addPfsCursor
+from matplotlib import pyplot as plt
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
-import matplotlib
-import matplotlib.pyplot as plt
-import numpy as np
-from scipy.stats import iqr
+from pfs.drp.stella import DetectorMap, FiberProfileSet, PfsArm, SpectrumSet
+from pfs.drp.stella.utils import addPfsCursor
 from scipy.optimize import curve_fit
+from scipy.stats import iqr
 
-from .storageClasses import MultipagePdfFigure, QaDict
-
-__all__ = [
-    "ExtractionQaConnections",
-    "ExtractionQaConfig",
-    "ExtractionQaTask",
-]
+from pfs.drp.qa.storageClasses import MultipagePdfFigure, QaDict
+from pfs.drp.qa.utils.math import gaussianFixedWidth, gaussian_func
 
 
 @dataclasses.dataclass
@@ -72,7 +61,7 @@ class StatsPerFiber:
 
 class ExtractionQaConnections(
     PipelineTaskConnections,
-    dimensions=("instrument", "exposure", "detector"),
+    dimensions=("instrument", "exposure", "arm", "spectrograph"),
 ):
     """Connections for ExtractionQaTask"""
 
@@ -86,45 +75,45 @@ class ExtractionQaConnections(
         name="fiberProfiles",
         doc="Position and shape of fibers",
         storageClass="FiberProfileSet",
-        dimensions=("instrument", "detector"),
+        dimensions=("instrument", "arm", "spectrograph"),
         isCalibration=True,
     )
     detectorMap = InputConnection(
-        name="detectorMap_used",
+        name="detectorMap",
         doc="Mapping from fiberId,wavelength to x,y",
         storageClass="DetectorMap",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "exposure", "arm", "spectrograph"),
     )
     pfsArm = InputConnection(
         name="pfsArm",
         doc="Extracted spectra from arm",
         storageClass="PfsArm",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "exposure", "arm", "spectrograph"),
     )
-    calexp = InputConnection(
-        name="calexp",
+    postISRCCD = InputConnection(
+        name="postISRCCD",
         doc="Calibrated exposure, optionally sky-subtracted",
         storageClass="Exposure",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "exposure", "arm", "spectrograph"),
     )
     extQaStats = OutputConnection(
         name="extQaStats",
         doc="Summary plots. Results of the residual analysis of extraction are plotted.",
         storageClass="MultipagePdfFigure",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "exposure", "arm", "spectrograph"),
     )
     extQaImage = OutputConnection(
         name="extQaImage",
-        doc="Detail plots. Calexp, residual, and chi images and the comparison of the calexp"
+        doc="Detail plots. postISRCCD, residual, and chi images and the comparison of the postISRCCD"
         "profile and fiberProfiles are plotted for some fibers with bad extraction quality.",
         storageClass="MultipagePdfFigure",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "exposure", "arm", "spectrograph"),
     )
     extQaImage_pickle = OutputConnection(
         name="extQaImage_pickle",
         doc="Statistics of the residual analysis.",
         storageClass="QaDict",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "exposure", "arm", "spectrograph"),
     )
 
 
@@ -142,7 +131,7 @@ class ExtractionQaConfig(PipelineTaskConfig, pipelineConnections=ExtractionQaCon
     figureDpi = Field(dtype=int, default=72, doc="resolution of plot for residual")
 
 
-class ExtractionQaTask(CmdLineTask, PipelineTask):
+class ExtractionQaTask(PipelineTask):
     """Task for QA of extraction"""
 
     ConfigClass = ExtractionQaConfig
@@ -154,49 +143,23 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
 
     def runQuantum(
         self,
-        butler: ButlerQuantumContext,
+        butlerQC: QuantumContext,
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
-    ) -> None:
-        """Entry point with butler I/O
+    ):
+        inputs = butlerQC.get(inputRefs)
 
-        Parameters
-        ----------
-        butler : `ButlerQuantumContext`
-            Data butler, specialised to operate in the context of a quantum.
-        inputRefs : `InputQuantizedConnection`
-            Container with attributes that are data references for the various
-            input connections.
-        outputRefs : `OutputQuantizedConnection`
-            Container with attributes that are data references for the various
-            output connections.
-        """
-        inputs = butler.get(inputRefs)
-        outputs = self.run(**inputs)
-        butler.put(outputs, outputRefs)
-
-    def runDataRef(self, dataRef: ButlerDataRef) -> None:
-        """Calls ``self.run()``
-
-        Parameters
-        ----------
-        dataRef : `ButlerDataRef`
-            Data reference for merged spectrum.
-        """
-        calexp = dataRef.get("calexp")
-        fiberProfiles = dataRef.get("fiberProfiles")
-        detectorMap = dataRef.get("detectorMap_used")
-        pfsArm = dataRef.get("pfsArm")
-        pfsConfig = dataRef.get("pfsConfig")
-
-        outputs = self.run(calexp, fiberProfiles, detectorMap, pfsArm, pfsConfig)
-        for datasetType, data in outputs.getDict().items():
-            if data is not None:
-                dataRef.put(data, datasetType=datasetType)
+        try:
+            # Perform the actual processing.
+            outputs = self.run(**inputs)
+        except ValueError as e:
+            self.log.error(e)
+        else:
+            butlerQC.put(outputs, outputRefs)
 
     def run(
         self,
-        calexp: ExposureF,
+        postISRCCD: ExposureF,
         fiberProfiles: FiberProfileSet,
         detectorMap: DetectorMap,
         pfsArm: PfsArm,
@@ -206,7 +169,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
 
         Parameters
         ----------
-        calexp : `ExposureF`
+        postISRCCD : `ExposureF`
             Exposure data
         fiberProfiles : `FiberProfileSet`
             Profiles of each fiber.
@@ -224,7 +187,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
             Results of the residual analysis of extraction are plotted.
         extQaImage : `MultipagePdfFigure`
             Detail plots.
-            Calexp, residual, and chi images and the comparison of the calexp
+            postISRCCD, residual, and chi images and the comparison of the postISRCCD
             profile and fiberProfiles are plotted for some fibers with bad
             extraction quality.
         extQaImage_pickle : `QaDict`
@@ -243,14 +206,14 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
 
         spectra = SpectrumSet.fromPfsArm(pfsArm)
         traces = fiberProfiles.makeFiberTracesFromDetectorMap(detectorMap)
-        image = spectra.makeImage(calexp.getDimensions(), traces)
+        image = spectra.makeImage(postISRCCD.getDimensions(), traces)
 
-        subtracted = calexp.clone()
+        subtracted = postISRCCD.clone()
         subtracted.image -= image
         divided = subtracted.clone()
-        divided.image /= calexp.image
+        divided.image /= postISRCCD.image
         chiimage = subtracted.clone()
-        chiimage.image.array /= np.sqrt(calexp.variance.array)
+        chiimage.image.array /= np.sqrt(postISRCCD.variance.array)
 
         msk = (pfsConfig.spectrograph == dataId["spectrograph"]) * (pfsConfig.fiberStatus == FiberStatus.GOOD)
         fiberIds = pfsConfig[msk].fiberId
@@ -294,7 +257,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         idarray = []
         dxarray = []
         dwarray = []
-        qaStatsPdf: Union[MultipagePdfFigure, None] = None
+        qaStatsPdf: MultipagePdfFigure | None = None
         if any(np.array(chiStd) > self.config.thresChi):
             qaStatsPdf = MultipagePdfFigure()
             for i, fiberId in enumerate(fiberIds):
@@ -317,7 +280,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                         pfsArmCutNarrow = image.array[
                             yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
                         ]
-                        calExpCutNarrow = calexp.image.array[
+                        calExpCutNarrow = postISRCCD.image.array[
                             yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
                         ]
                         fitresult = self.fitGaussiansToPfsArmCutAndCalExpCut(
@@ -345,7 +308,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                             qaStatsPdf,
                             dataId,
                             image,
-                            calexp,
+                            postISRCCD,
                             subtracted,
                             chiimage,
                             fiberId,
@@ -390,6 +353,9 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
 
         qaImagePdf = self.makeImagePdf(qaStats, dataId, detectorMap, chiimage)
 
+        if qaStatsPdf is None:
+            raise ValueError("qaStatsPdf is empty.")
+
         return Struct(
             extQaStats=qaStatsPdf,
             extQaImage=qaImagePdf,
@@ -401,7 +367,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         qaStatsPdf: MultipagePdfFigure,
         dataId: dict,
         image: ImageF,
-        calexp: ExposureF,
+        postISRCCD: ExposureF,
         subtracted: ExposureF,
         chiimage: ExposureF,
         fiberId: int,
@@ -423,7 +389,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
             Data ID. Required keys are: "visit", "arm", "spectrograph".
         image : `ImageF`
             XXXXX
-        calexp : `ExposureF`
+        postISRCCD : `ExposureF`
             XXXXX
         subtracted : `ExposureF`
             XXXXX
@@ -455,12 +421,12 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
         disp = afwDisplay.Display(fig)
         disp.scale("asinh", "zscale", Q=1)
         disp.setMaskPlaneColor("REFLINE", afwDisplay.IGNORE)
-        disp.mtv(calexp[int(xa) - 10 : int(xa) + 11, :])
+        disp.mtv(postISRCCD[int(xa) - 10 : int(xa) + 11, :])
         ax[0].plot(xo, yo, "r", alpha=0.8)
         ax[0].set_xlim(xa - 10, xa + 10)
         ax[0].set_aspect("auto")
         ax[0].set_ylabel("Y (pix)")
-        ax[0].set_title("calexp")
+        ax[0].set_title("postISRCCD")
 
         plt.sca(ax[1])
         disp = afwDisplay.Display(fig)
@@ -534,7 +500,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                 pfsArmCut = image.array[
                     yssub, xssub - self.config.plotWidth : xssub + self.config.plotWidth + 1
                 ]
-                calExpCut = calexp.image.array[
+                calExpCut = postISRCCD.image.array[
                     yssub, xssub - self.config.plotWidth : xssub + self.config.plotWidth + 1
                 ]
                 xcoordNarrow = np.arange(
@@ -544,7 +510,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                 pfsArmCutNarrow = image.array[
                     yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
                 ]
-                calExpCutNarrow = calexp.image.array[
+                calExpCutNarrow = postISRCCD.image.array[
                     yssub, xssub - self.config.fitWidth : xssub + self.config.fitWidth + 1
                 ]
 
@@ -569,7 +535,7 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
                 ax[j][k].step(
                     xcoord,
                     calExpCut,
-                    label="calExp\n(x={:.2f}, $\\sigma$={:.2f})".format(calExpCenter, calExpWidth),
+                    label="postISRCCD\n(x={:.2f}, $\\sigma$={:.2f})".format(calExpCenter, calExpWidth),
                     color="k",
                 )
                 ax[j][k].step(
@@ -1181,22 +1147,3 @@ class ExtractionQaTask(CmdLineTask, PipelineTask):
             "k",
         ]
         return dict(zip(TargetType, itertools.cycle(colors)))
-
-    @classmethod
-    def _makeArgumentParser(cls) -> ArgumentParser:
-        parser = ArgumentParser(name=cls._DefaultName)
-        parser.add_id_argument(
-            name="--id", datasetType="pfsArm", level="", help="data IDs, e.g. --id exp=12345"
-        )
-        return parser
-
-    def _getMetadataName(self):
-        """Get the name of the metadata dataset type, or `None` if metadata is
-        not to be persisted.
-
-        Notes
-        -----
-        The name may depend on the config; that is why this is not a class
-        method.
-        """
-        return None
