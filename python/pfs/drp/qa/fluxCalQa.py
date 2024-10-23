@@ -98,7 +98,7 @@ class FluxCalQaTask(PipelineTask):
         try:
             # Perform the actual processing.
             outputs = self.run(**inputs)
-        except ValueError as e:
+        except Exception as e:
             self.log.error(e)
         else:
             # Store the results if valid.
