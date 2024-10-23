@@ -7,9 +7,12 @@ import seaborn as sb
 from astropy import units as u
 from lsst.pex.config import Field
 from lsst.pipe.base import (
+    InputQuantizedConnection,
+    OutputQuantizedConnection,
     PipelineTask,
     PipelineTaskConfig,
     PipelineTaskConnections,
+    QuantumContext,
     Struct,
 )
 from lsst.pipe.base.connectionTypes import (
@@ -84,6 +87,23 @@ class FluxCalQaTask(PipelineTask):
         )
         self.log.info(f"Filter curves: {list(self.filter_curves.keys())}")
 
+    def runQuantum(
+        self,
+        butlerQC: QuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
+    ):
+        inputs = butlerQC.get(inputRefs)
+
+        try:
+            # Perform the actual processing.
+            outputs = self.run(**inputs)
+        except ValueError as e:
+            self.log.error(e)
+        else:
+            # Store the results if valid.
+            butlerQC.put(outputs, outputRefs)
+
     def run(self, pfsConfig: PfsConfig, pfsCoadd: PfsObjectSpectra) -> Struct:
         """QA plots for flux calibration.
 
@@ -110,7 +130,7 @@ class FluxCalQaTask(PipelineTask):
             try:
                 pfsSingles[fiber_id] = fluxstd_objs[obj_id]
             except KeyError:
-                self.log.info(f"Skipping {fiber_id=} for {obj_id=}")
+                self.log.debug(f"Skipping {fiber_id=} for {obj_id=}")
 
         # Get the flux information.
         if self.config.includeFakeJ:
