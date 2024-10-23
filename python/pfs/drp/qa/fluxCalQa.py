@@ -1,4 +1,4 @@
-from typing import Dict, Iterable
+from typing import Dict
 
 import lsstDebug
 import numpy as np
@@ -20,6 +20,7 @@ from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from pfs.datamodel import PfsConfig, PfsSingle, TargetType
+from pfs.drp.stella.datamodel.pfsTargetSpectra import PfsObjectSpectra
 from pfs.drp.stella.fitReference import FilterCurve, TransmissionCurve
 from pfs.drp.stella.utils.math import robustRms
 
@@ -38,12 +39,11 @@ class FluxCalQaConnections(
         storageClass="PfsConfig",
         dimensions=("instrument", "exposure"),
     )
-    pfsSingle = PrerequisiteConnection(
-        name="pfsSingle",
-        doc="Flux-calibrated, single epoch spectrum",
-        storageClass="PfsSingle",
-        dimensions=("instrument", "exposure", "arm", "spectrograph"),
-        multiple=True,
+    pfsCoadd = PrerequisiteConnection(
+        name="pfsCoadd",
+        doc="Flux-calibrated, combined spectrum",
+        storageClass="PfsObjectSpectra",
+        dimensions=("instrument", "combination", "cat_id"),
     )
     fluxCalStats = OutputConnection(
         name="fluxCalStats",
@@ -84,7 +84,7 @@ class FluxCalQaTask(PipelineTask):
         )
         self.log.info(f"Filter curves: {list(self.filter_curves.keys())}")
 
-    def run(self, pfsConfig: PfsConfig, pfsSingles: Iterable[PfsSingle]) -> Struct:
+    def run(self, pfsConfig: PfsConfig, pfsCoadd: PfsObjectSpectra) -> Struct:
         """QA plots for flux calibration.
 
         Parameters
@@ -99,14 +99,15 @@ class FluxCalQaTask(PipelineTask):
         outputs : `Struct`
             QA outputs.
         """
-        self.log.info(f"Flux Calibration QA for {pfsConfig}")
+        self.log.info(f"Flux Calibration QA")
 
         pfsConfigFluxStd = pfsConfig.select(targetType=TargetType.FLUXSTD)
 
-        # TODO FIXME
+        fluxstd_objs = {k.objId: v for k, v in pfsCoadd.items() if k.objId in pfsConfigFluxStd.objId}
+
         pfsSingles = dict()
-        for fiber_id in pfsConfigFluxStd.fiberId.unique():
-            pfsSingles[fiber_id] = pfsSingle.select()
+        for fiber_id, obj_id in zip(pfsConfigFluxStd.fiberId, pfsConfigFluxStd.objId):
+            pfsSingles[fiber_id] = fluxstd_objs[obj_id]
 
         # Get the flux information.
         if self.config.includeFakeJ:
