@@ -29,7 +29,7 @@ from pfs.drp.qa.utils.plotting import div_palette, spectrograph_plot_markers
 
 class FluxCalQaConnections(
     PipelineTaskConnections,
-    dimensions=("instrument", "exposure"),
+    dimensions=("instrument", "combination", "cat_id", "exposure"),
 ):
     """Connections for fluxCalQaTask"""
 
@@ -49,13 +49,13 @@ class FluxCalQaConnections(
         name="fluxCalStats",
         doc="Statistics of the flux calibration analysis.",
         storageClass="DataFrame",
-        dimensions=("instrument", "exposure", "arm", "spectrograph"),
+        dimensions=("instrument", "combination", "cat_id"),
     )
     fluxCalMagDiffPlot = OutputConnection(
         name="fluxCalMagDiffPlot",
         doc="Plot of the flux calibration magnitude difference.",
         storageClass="Plot",
-        dimensions=("instrument", "exposure", "arm", "spectrograph"),
+        dimensions=("instrument", "combination", "cat_id"),
     )
 
 
@@ -107,7 +107,10 @@ class FluxCalQaTask(PipelineTask):
 
         pfsSingles = dict()
         for fiber_id, obj_id in zip(pfsConfigFluxStd.fiberId, pfsConfigFluxStd.objId):
-            pfsSingles[fiber_id] = fluxstd_objs[obj_id]
+            try:
+                pfsSingles[fiber_id] = fluxstd_objs[obj_id]
+            except KeyError:
+                self.log.info(f"Skipping {fiber_id=} for {obj_id=}")
 
         # Get the flux information.
         if self.config.includeFakeJ:
