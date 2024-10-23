@@ -16,7 +16,8 @@ tasks.
 
 > Note: individual tasks can be specified by using the `pipelines/drpQA.yaml#extractionQA`
 > syntax.
-> See [documentation](https://pipelines.lsst.io/modules/lsst.pipe.base/creating-a-pipeline.html#command-line-options-for-running-pipelines)
+>
+See [documentation](https://pipelines.lsst.io/modules/lsst.pipe.base/creating-a-pipeline.html#command-line-options-for-running-pipelines)
 > for details.
 
 Also see the example notebook [`examples/QA Pipelines.ipynb`](examples/QA%20Pipelines.ipynb).
@@ -60,7 +61,6 @@ N/A
 | `dmQaCombinedResidualPlot` | `instrument` | 1D and 2D plots of the residual between the detectormap and the arclines for the entire detector. |
 | `dmQaDetectorStats`        | `instrument` | Statistics of the residual analysis per detector.                                                 |
 
-
 #### `extractionQa`
 
 Determines the quality of the fiber extraction.
@@ -72,18 +72,18 @@ Determines the quality of the fiber extraction.
 - `thresError`: Threshold of the fitting error.
 - `thresChi`: Threshold for chi standard deviation.
 - `fiberWidth`: Half width of a fiber region (pix).
-- `fitWidth`: Half width  of a fitting region (pix).
-- `plotWidth`: Half width  of plot (pix).
+- `fitWidth`: Half width of a fitting region (pix).
+- `plotWidth`: Half width of plot (pix).
 - `plotFiberNum`: Maximum fiber number of detailed plots.
 - `figureDpi`: resolution of plot for residual.
 
 ##### Outputs
 
-| DataSet Type        | Dimensions                                | Description                                                                                                                        |
-|---------------------|-------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
-| `extQaStats`        | `instrument, exposure, arm, spectrograph` | Summary plots. Results of the residual analysis of extraction are plotted.                                                         |
-| `extQaImage`        | `instrument, exposure, arm, spectrograph` | Residual, and chi comparisons of the postISRCCD profile and fiberProfiles are plotted for some fibers with bad extraction quality. |
-| `extQaImage_pickle` | `instrument, exposure, arm, spectrograph` | Statistics of the residual analysis.                                                                                               |
+| DataSet Type        | Dimensions                             | Description                                                                                                                        |
+|---------------------|----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
+| `extQaStats`        | `instrument, visit, arm, spectrograph` | Summary plots. Results of the residual analysis of extraction are plotted.                                                         |
+| `extQaImage`        | `instrument, visit, arm, spectrograph` | Residual, and chi comparisons of the postISRCCD profile and fiberProfiles are plotted for some fibers with bad extraction quality. |
+| `extQaImage_pickle` | `instrument, visit, arm, spectrograph` | Statistics of the residual analysis.                                                                                               |
 
 #### `fluxCalQa`
 
