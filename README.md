@@ -67,15 +67,15 @@ Determines the quality of the fiber extraction.
 
 ##### Options
 
-- `fixWidth`: Fix the widths during Gaussian fitting.
-- `rowNum`: Number of rows picked up for profile analysis.
-- `thresError`: Threshold of the fitting error.
-- `thresChi`: Threshold for chi standard deviation.
-- `fiberWidth`: Half width of a fiber region (pix).
-- `fitWidth`: Half width of a fitting region (pix).
-- `plotWidth`: Half width of plot (pix).
-- `plotFiberNum`: Maximum fiber number of detailed plots.
-- `figureDpi`: resolution of plot for residual.
+- `extractionQa:fixWidth`: Fix the widths during Gaussian fitting, default `False`.
+- `extractionQa:rowNum`: Number of rows picked up for profile analysis, default `200`.
+- `extractionQa:thresError`: Threshold of the fitting error, default `0.1`.
+- `extractionQa:thresChi`: Threshold for chi standard deviation, default `1.5`.
+- `extractionQa:fiberWidth`: Half width of a fiber region (pix), default `3`.
+- `extractionQa:fitWidth`: Half width of a fitting region (pix), default `3`.
+- `extractionQa:plotWidth`: Half width of plot (pix), default `15`.
+- `extractionQa:plotFiberNum`: Maximum fiber number of detailed plots, default `20`.
+- `extractionQa:figureDpi`: resolution of plot for residual, default `72`.
 
 ##### Outputs
 
