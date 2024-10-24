@@ -16,8 +16,7 @@ tasks.
 
 > Note: individual tasks can be specified by using the `pipelines/drpQA.yaml#extractionQA`
 > syntax.
->
-See [documentation](https://pipelines.lsst.io/modules/lsst.pipe.base/creating-a-pipeline.html#command-line-options-for-running-pipelines)
+> See [documentation](https://pipelines.lsst.io/modules/lsst.pipe.base/creating-a-pipeline.html#command-line-options-for-running-pipelines)
 > for details.
 
 Also see the example notebook [`examples/QA Pipelines.ipynb`](examples/QA%20Pipelines.ipynb).
