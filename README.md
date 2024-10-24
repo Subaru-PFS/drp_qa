@@ -84,22 +84,17 @@ Determines the quality of the fiber extraction.
 | `extQaImage`        | `instrument, visit, arm, spectrograph` | Residual, and chi comparisons of the postISRCCD profile and fiberProfiles are plotted for some fibers with bad extraction quality. |
 | `extQaImage_pickle` | `instrument, visit, arm, spectrograph` | Statistics of the residual analysis.                                                                                               |
 
-#### `fluxCalQa`
+#### `fiberNormsQa`
 
-> NOTE: This is not fully updated for `gen3`. In particular the `dimensions` in the output table will change.
-
-Determines the quality of the flux calibration.
+Plot the fiber normalization for the given detector and visit.
 
 ##### Options
 
-- `fluxCalQa:filterSet`: The filter set to use for the flux calibration. Default is `ps1`.
-- `fluxCalQa:includeFakeJ`: Include the fake J band in the flux calibration. Default is `False`.
-- `fluxCalQa:diffFilter`: The filter to use for the differential flux calibration. Default is `g_ps1`.
+- `fiberNormsQa:plotLower`: Lower bound for plot (standard deviations from median), default 2.5.
+- `fiberNormsQa:plotUpper`: Upper bound for plot (standard deviations from median), default 2.5.
 
 ##### Outputs
 
-| DataSet Type           | Dimensions   | Description                                                                                  |
-|------------------------|--------------|----------------------------------------------------------------------------------------------|
-| `fluxCalMagDiffPlot`   | `instrument` | Plot of the difference between the standard star magnitudes and the instrumental magnitudes. |
-| `fluxCalColorDiffPlot` | `instrument` | Plot of the difference between the instrumental magnitudes and a given filter.               |
-| `fluxCalStats`         | `instrument` | Statistics of the flux calibration analysis.                                                 |
+| DataSet Type     | Dimensions               | Description                                   |
+|------------------|--------------------------|-----------------------------------------------|
+| `fiberNormsPlot` | `instrument, visit, arm` | Plot of the fiber normalizations for a visit. |
