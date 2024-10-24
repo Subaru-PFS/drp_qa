@@ -36,7 +36,7 @@ class DetectorMapCombinedResidualsConnections(
         storageClass="DataFrame",
         dimensions=(
             "instrument",
-            "exposure",
+            "visit",
             "arm",
             "spectrograph",
         ),
@@ -108,7 +108,7 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
             Statistics of the residual analysis.
         """
         stats = pd.concat(dmQaResidualStats).query('status_type == "RESERVED"')
-        stats.sort_values(by=["exposure", "arm", "spectrograph", "description"], inplace=True)
+        stats.sort_values(by=["visit", "arm", "spectrograph", "description"], inplace=True)
 
         stats.ccd = stats.ccd.astype("category")
         stats.ccd = stats.ccd.cat.as_ordered()
@@ -134,18 +134,18 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         pdf.append(plot_detector_summary_per_desc(stats))
 
         for ccd in stats.ccd.unique():
-            fig = plot_detector_exposures(stats, ccd)
+            fig = plot_detector_visits(stats, ccd)
             pdf.append(fig)
 
         return Struct(dmQaCombinedResidualPlot=pdf, dmQaDetectorStats=stats)
 
 
-def plot_detector_exposures(data: DataFrame, ccd: str) -> Figure:
+def plot_detector_visits(data: DataFrame, ccd: str) -> Figure:
     plot_data = data.query("ccd == @ccd")
 
     summary_stats = plot_data.filter(regex="median|weighted").median().to_dict()
 
-    fig = plot_exposures(plot_data, palette=description_palette)
+    fig = plot_visits(plot_data, palette=description_palette)
 
     for ax, dim in zip(fig.axes, ["spatial", "wavelength"]):
         upper_range = summary_stats[f"{dim}.median"] + summary_stats[f"{dim}.weightedRms"]
@@ -225,14 +225,14 @@ def plot_detector_summary_per_desc(data: DataFrame) -> Figure:
     return fg.fig
 
 
-def plot_exposures(
+def plot_visits(
     plotData: pd.DataFrame,
     palette: Optional[dict] = None,
     spatialRange: float = 0.1,
     wavelengthRange: float = 0.1,
     fig: Optional[Figure] = None,
 ) -> Figure:
-    """Plot the exposure statistics.
+    """Plot the visit statistics.
 
     Parameters
     ----------
@@ -251,7 +251,7 @@ def plot_exposures(
     Returns
     -------
     fig : `Figure`
-        The exposure statistics plot.
+        The visit statistics plot.
 
     """
     plotData = plotData.copy()
@@ -259,12 +259,12 @@ def plot_exposures(
     ax0 = fig.add_subplot(121)
     ax1 = fig.add_subplot(122, sharex=ax0, sharey=ax0)
 
-    plotData["exposure_idx"] = plotData.exposure.rank(method="first")
+    plotData["visit_idx"] = plotData.visit.rank(method="first")
 
     for ax, metric in zip([ax0, ax1], ["spatial", "wavelength"]):
         for desc, grp in plotData.groupby("description"):
             grp.plot.scatter(
-                y="exposure_idx",
+                y="visit_idx",
                 x=f"{metric}.median",
                 xerr=f"{metric}.weightedRms",
                 marker="o",
@@ -282,9 +282,9 @@ def plot_exposures(
         if wavelengthRange is not None and metric == "wavelength":
             ax.set_xlim(-wavelengthRange, wavelengthRange)
 
-    exposure_label = [f"{row.exposure}" for idx, row in plotData.iterrows()]
-    ax0.set_yticks(plotData.exposure_idx, exposure_label, fontsize="xx-small")
-    ax0.set_ylabel("Exposure")
+    visit_label = [f"{row.visit}" for idx, row in plotData.iterrows()]
+    ax0.set_yticks(plotData.visit_idx, visit_label, fontsize="xx-small")
+    ax0.set_ylabel("Visit")
     ax0.invert_yaxis()
 
     fig.suptitle("RESERVED median and 1-sigma weighted errors", fontsize="small")

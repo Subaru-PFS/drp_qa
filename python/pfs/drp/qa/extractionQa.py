@@ -61,7 +61,7 @@ class StatsPerFiber:
 
 class ExtractionQaConnections(
     PipelineTaskConnections,
-    dimensions=("instrument", "exposure", "arm", "spectrograph"),
+    dimensions=("instrument", "visit", "arm", "spectrograph"),
 ):
     """Connections for ExtractionQaTask"""
 
@@ -69,7 +69,7 @@ class ExtractionQaConnections(
         name="pfsConfig",
         doc="Top-end fiber configuration",
         storageClass="PfsConfig",
-        dimensions=("instrument", "exposure"),
+        dimensions=("instrument", "visit"),
     )
     fiberProfiles = PrerequisiteConnection(
         name="fiberProfiles",
@@ -82,38 +82,38 @@ class ExtractionQaConnections(
         name="detectorMap",
         doc="Mapping from fiberId,wavelength to x,y",
         storageClass="DetectorMap",
-        dimensions=("instrument", "exposure", "arm", "spectrograph"),
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
     pfsArm = InputConnection(
         name="pfsArm",
         doc="Extracted spectra from arm",
         storageClass="PfsArm",
-        dimensions=("instrument", "exposure", "arm", "spectrograph"),
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
     postISRCCD = InputConnection(
         name="postISRCCD",
-        doc="Calibrated exposure, optionally sky-subtracted",
+        doc="Calibrated visit, optionally sky-subtracted",
         storageClass="Exposure",
-        dimensions=("instrument", "exposure", "arm", "spectrograph"),
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
     extQaStats = OutputConnection(
         name="extQaStats",
         doc="Summary plots. Results of the residual analysis of extraction are plotted.",
         storageClass="MultipagePdfFigure",
-        dimensions=("instrument", "exposure", "arm", "spectrograph"),
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
     extQaImage = OutputConnection(
         name="extQaImage",
         doc="Detail plots. postISRCCD, residual, and chi images and the comparison of the postISRCCD"
         "profile and fiberProfiles are plotted for some fibers with bad extraction quality.",
         storageClass="MultipagePdfFigure",
-        dimensions=("instrument", "exposure", "arm", "spectrograph"),
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
     extQaImage_pickle = OutputConnection(
         name="extQaImage_pickle",
         doc="Statistics of the residual analysis.",
         storageClass="QaDict",
-        dimensions=("instrument", "exposure", "arm", "spectrograph"),
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
 
 

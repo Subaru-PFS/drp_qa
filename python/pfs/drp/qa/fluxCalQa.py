@@ -21,7 +21,7 @@ from pfs.drp.qa.tasks.fluxCalibration import FluxCalibrationTask
 
 class FluxCalQaConnections(
     PipelineTaskConnections,
-    dimensions=("instrument", "exposure", "detector"),
+    dimensions=("instrument", "visit", "detector"),
 ):
     """Connections for fluxCalQaTask"""
 
@@ -29,25 +29,25 @@ class FluxCalQaConnections(
         name="pfsConfig",
         doc="Top-end fiber configuration",
         storageClass="PfsConfig",
-        dimensions=("instrument", "exposure"),
+        dimensions=("instrument", "visit"),
     )
     pfsSingle = PrerequisiteConnection(
         name="pfsSingle",
         doc="Flux-calibrated, single epoch spectrum",
         storageClass="PfsSingle",
-        dimensions=("instrument", "exposure"),
+        dimensions=("instrument", "visit"),
     )
     fluxCalStats = OutputConnection(
         name="fluxCalStats",
         doc="Statistics of the flux calibration analysis.",
         storageClass="pandas.core.frame.DataFrame",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "visit", "detector"),
     )
     fluxCalMagDiffPlot = OutputConnection(
         name="fluxCalMagDiffPlot",
         doc="Plot of the flux calibration magnitude difference.",
         storageClass="matplotlib.figure.Figure",
-        dimensions=("instrument", "exposure", "detector"),
+        dimensions=("instrument", "visit", "detector"),
     )
 
 
