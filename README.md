@@ -98,3 +98,19 @@ Plot the fiber normalization for the given detector and visit.
 | DataSet Type     | Dimensions               | Description                                   |
 |------------------|--------------------------|-----------------------------------------------|
 | `fiberNormsPlot` | `instrument, visit, arm` | Plot of the fiber normalizations for a visit. |
+
+#### `fluxCalQa`
+
+##### Options
+
+- `fluxCalQa:filterSet`: Filter set to use, default `ps1`.
+- `fluxCalQa:includeFakeJ`: Include the fake narrow J filter, default `True`.
+- `fluxCalQa:fakeJoffset`: Offset from the ps1 bands for the fake narrow J, default `0.054`.
+- `fluxCalQa:diffFilter`: Filter to use for the color magnitude difference, default `g_ps1`.
+
+##### Outputs
+
+| DataSet Type         | Dimensions          | Description                                        |
+|----------------------|---------------------|----------------------------------------------------|
+| `fluxCalStats`       | `instrument, visit` | Statistics of the flux calibration analysis.       |
+| `fluxCalMagDiffPlot` | `instrument, visit` | Plot of the flux calibration magnitude difference. |
