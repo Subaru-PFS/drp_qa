@@ -1,3 +1,5 @@
+import itertools
+from itertools import product
 from typing import Iterable, Optional
 
 import pandas as pd
@@ -110,40 +112,46 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         stats = pd.concat(dmQaResidualStats).query('status_type == "RESERVED"')
         stats.sort_values(by=["visit", "arm", "spectrograph", "description"], inplace=True)
 
+        # Put the CCD column in a wavelength sorted order.
         stats.ccd = stats.ccd.astype("category")
-        stats.ccd = stats.ccd.cat.as_ordered()
+        available_specs = sorted(stats.spectrograph.unique())
+        arm_order = ["b", "r", "m", "n"]
+        available_arms = sorted(stats.arm.unique(), key=arm_order.index)
+        detector_order = [f"{arm}{spec}" for arm, spec in itertools.product(available_arms, available_specs)]
+        stats.ccd = stats.ccd.cat.reorder_categories(detector_order)
 
         self.log.info(stats.ccd.value_counts())
 
-        pdf = MultipagePdfFigure()
-
-        fig = Figure()
-        ax = fig.add_subplot(111)
-        ax.set_axis_off()
-        ax.text(
-            0.5,
-            0.5,
-            f"DetectorMap Residuals Summary\n{run_name}",
-            ha="center",
-            va="center",
-            fontsize="xx-large",
-        )
-        pdf.append(fig)
-
-        pdf.append(plot_detector_summary(stats))
-        pdf.append(plot_detector_summary_per_desc(stats))
-
-        for ccd in stats.ccd.unique():
-            fig = plot_detector_visits(stats, ccd)
-            pdf.append(fig)
+        pdf = make_report(stats, run_name=run_name)
 
         return Struct(dmQaCombinedResidualPlot=pdf, dmQaDetectorStats=stats)
+
+
+def make_report(stats: DataFrame, run_name: str) -> MultipagePdfFigure:
+    pdf = MultipagePdfFigure()
+
+    # Add the title as a figure.
+    pdf.append(plot_title(run_name))
+
+    # Add the table data as a figure.
+    pdf.append(plot_dataframe(stats))
+
+    # Detector summaries.
+    pdf.append(plot_detector_summary(stats))
+    pdf.append(plot_detector_summary_per_desc(stats))
+
+    # Per visit descriptions.
+    for ccd in stats.ccd.unique():
+        fig = plot_detector_visits(stats, ccd)
+        pdf.append(fig)
+
+    return pdf
 
 
 def plot_detector_visits(data: DataFrame, ccd: str) -> Figure:
     plot_data = data.query("ccd == @ccd")
 
-    summary_stats = plot_data.filter(regex="median|weighted").median().to_dict()
+    summary_stats = plot_data.filter(regex="median|weighted").mean().to_dict()
 
     fig = plot_visits(plot_data, palette=description_palette)
 
@@ -166,35 +174,52 @@ def plot_detector_visits(data: DataFrame, ccd: str) -> Figure:
     return fig
 
 
-def plot_detector_summary(data: DataFrame) -> Figure:
-    plot_data = data.filter(regex="ccd|median|weighted").groupby("ccd").median()
+def plot_detector_summary(stats: DataFrame) -> Figure:
+    plot_data_spatial = (
+        stats.query("description == 'Trace'").filter(regex="ccd|median|weighted|soften").groupby("ccd").mean()
+    )
+    plot_data_wavelength = (
+        stats.query("description != 'Trace'").filter(regex="ccd|median|weighted|soften").groupby("ccd").mean()
+    )
 
-    fig, (ax0, ax1) = plt.subplots(ncols=2, layout="constrained", sharey=True)
-    fig.set_size_inches(12, 3)
+    fig, (ax0, ax1) = plt.subplots(ncols=2, sharey=True, layout="constrained")
+    fig.set_size_inches(12, 4)
 
-    for ccd, row in plot_data.iterrows():
+    for ccd, row in plot_data_spatial.iterrows():
         ax0.errorbar(
             x=ccd,
             y=row["spatial.median"],
             yerr=row["spatial.weightedRms"],
+            markersize=max(row["spatial.softenFit"].mean() * 100, 1),
             marker="o",
+            mec="k",
+            linewidth=2,
+            capsize=2,
             color=detector_palette[ccd[0]],
         )
+
+    for ccd, row in plot_data_wavelength.iterrows():
         ax1.errorbar(
             x=ccd,
             y=row["wavelength.median"],
             yerr=row["wavelength.weightedRms"],
+            markersize=max(row["wavelength.softenFit"].mean() * 100, 1),
             marker="o",
+            markeredgecolor="k",
+            linewidth=2,
+            capsize=2,
             color=detector_palette[ccd[0]],
         )
 
     ax0.axhline(0, c="k", ls="--", alpha=0.3)
-    ax0.set_title("Spatial median and weightedRms")
+    ax0.set_title("Spatial median and weightedRms error (quartz only)")
+    ax0.set_ylabel("Median (pixel)")
 
     ax1.axhline(0, c="k", ls="--", alpha=0.3)
     ax1.set_title("Wavelength median and weightedRms")
 
-    fig.suptitle(f"DetectorMap residuals summary")
+    ax0.grid(True, color="k", linestyle="--", alpha=0.15)
+    ax1.grid(True, color="k", linestyle="--", alpha=0.15)
 
     return fig
 
@@ -202,25 +227,61 @@ def plot_detector_summary(data: DataFrame) -> Figure:
 def plot_detector_summary_per_desc(data: DataFrame) -> Figure:
     plot_data = (
         data.set_index(["ccd", "description"])
-        .filter(regex="median|weighted")
+        .filter(regex="median|weighted|soften")
         .melt(ignore_index=False)
         .reset_index()
     )
+    plot_data.loc[
+        plot_data.query('description != "Trace" and variable.str.startswith("spatial")').index, "value"
+    ] = pd.NA
+
+    col_order = [
+        f"{b}.{a}" for a, b in product(["median", "weightedRms", "softenFit"], ["spatial", "wavelength"])
+    ]
 
     fg = sb.catplot(
-        data=plot_data,
+        data=plot_data.dropna(),
         x="ccd",
         y="value",
         col="variable",
         col_wrap=2,
+        col_order=col_order,
         hue="description",
+        palette=description_palette,
         kind="box",
         sharey=False,
         height=3,
-        aspect=2,
+        aspect=2.5,
         flierprops={"marker": ".", "ms": 2},
     )
     fg.fig.suptitle(f"DetectorMap Residuals by description", y=1)
+    for i, ax in enumerate(fg.figure.axes):
+        ax.set_ylabel("Median residual (pixel)")
+        if i == 0:
+            # Should be spatial median.
+            ax.set_ylim(-0.001, 0.001)
+        elif i == 1:
+            # Should be wavelength median.
+            ax.set_ylim(-0.05, 0.05)
+        else:
+            # Last plots are the rms and soften.
+            ax.set_ylim(0.0, 0.5)
+
+        ax.axhline(0, c="k", ls="--", alpha=0.3)
+
+        # Get the x-axis tick labels and their positions
+        xticks = ax.get_xticks()
+
+        # Shade alternate backgrounds
+        for j in range(0, len(xticks), 2):
+            ax.fill_between(
+                [xticks[j] - 0.5, xticks[j] + 0.5],
+                0,
+                1,
+                transform=ax.get_xaxis_transform(),
+                color="lightgray",
+                alpha=0.5,
+            )
 
     return fg.fig
 
@@ -289,4 +350,51 @@ def plot_visits(
 
     fig.suptitle("RESERVED median and 1-sigma weighted errors", fontsize="small")
 
+    return fig
+
+
+def plot_dataframe(stats: DataFrame) -> Figure:
+    """Plot the residual data frame."""
+    plot_data_spatial = (
+        stats.query("description == 'Trace'")
+        .filter(regex="ccd|spatial.(median|weighted|soften)")
+        .groupby("ccd")
+        .mean()
+    )
+    plot_data_spatial.columns = [c.replace("spatial.", "") for c in plot_data_spatial.columns]
+    plot_data_wavelength = (
+        stats.query("description != 'Trace'")
+        .filter(regex="ccd|wavelength.(median|weighted|soften)")
+        .groupby("ccd")
+        .mean()
+    )
+    plot_data_wavelength.columns = [c.replace("wavelength.", "") for c in plot_data_wavelength.columns]
+
+    formatter = "{:5.04f}".format
+
+    fig = Figure(layout="constrained")
+    ax0 = fig.add_subplot(211)
+    ax1 = fig.add_subplot(212)
+    ax0.set_axis_off()
+    ax1.set_axis_off()
+    t0 = pd.plotting.table(ax0, plot_data_spatial.applymap(formatter), loc="center")
+    t0.set_fontsize(16)
+    t1 = pd.plotting.table(ax1, plot_data_wavelength.applymap(formatter), loc="center")
+    t1.set_fontsize(16)
+
+    ax0.set_title("Spatial (quartz only)", y=1.12)
+    ax1.set_title("Wavelength", y=1.12)
+
+    fig.suptitle("Residuals summary", y=1.15)
+
+    return fig
+
+
+def plot_title(run_name: str) -> Figure:
+    """Plot a title page for the combined report."""
+    fig = Figure()
+    ax = fig.add_subplot(111)
+    ax.set_axis_off()
+    ax.text(0.5, 0.5, f"DetectorMap Residuals Summary", ha="center", va="center", fontsize="large")
+    ax.text(0.5, 0.35, f"{run_name}", ha="center", va="center")
     return fig
