@@ -214,6 +214,7 @@ def plot_detector_summary_per_desc(data: DataFrame) -> Figure:
         col="variable",
         col_wrap=2,
         hue="description",
+        palette=description_palette,
         kind="box",
         sharey=False,
         height=3,
@@ -221,6 +222,8 @@ def plot_detector_summary_per_desc(data: DataFrame) -> Figure:
         flierprops={"marker": ".", "ms": 2},
     )
     fg.fig.suptitle(f"DetectorMap Residuals by description", y=1)
+    for ax in fg.axes:
+        ax.axhline(0, c="k", ls="--", alpha=0.3)
 
     return fg.fig
 

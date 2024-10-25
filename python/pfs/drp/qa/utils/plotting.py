@@ -8,16 +8,20 @@ from matplotlib.figure import Figure
 
 div_palette = plt.cm.RdBu_r.with_extremes(over="magenta", under="cyan", bad="lime")
 detector_palette = {"b": "tab:blue", "r": "tab:red", "n": "tab:orange", "m": "tab:pink"}
-spectrograph_plot_markers = {1: "s", 2: "o", 3: "X", 4: "P"}
 description_palette = {
-    "ArI": "tab:green",
+    "Trace": "#F664AF",
+    "ArI": "tab:orange",
     "CdI,HgI": "tab:purple",
+    "HgI": "tab:purple",
     "KrI": "tab:brown",
     "NeI": "tab:pink",
-    "Trace": "tab:cyan",
     "XeI": "tab:olive",
     "O2,OH": "tab:blue",
+    "OH": "tab:blue",
+    "OI": "tab:blue",
+    "NaI,OI": "tab:blue",
 }
+spectrograph_plot_markers = {1: "s", 2: "o", 3: "X", 4: "P"}
 
 
 def plot_detector_soften(detector_stats: pd.DataFrame) -> Figure:
