@@ -10,3 +10,18 @@ tasks:
     class: pfs.drp.qa.fluxCalQa.FluxCalQaTask
   fiberNormsQa:
     class: pfs.drp.qa.fiberNormsQa.FiberNormQaTask
+subsets:
+  perVisit:
+    - dmResiduals
+    - extractionQa
+  perBand:
+    - fiberNormsQa
+  perInstrument:
+    - dmCombinedResiduals
+steps:
+  - label: perVisit
+    sharding_dimensions: instrument, visit, arm, spectrograph
+  - label: perBand
+    sharding_dimensions: instrument, visit, arm
+  - label: perInstrument
+    sharding_dimensions: instrument
