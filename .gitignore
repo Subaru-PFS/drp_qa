@@ -9,3 +9,10 @@ python/pfs/drp/qa/version.py
 __pycache__
 .coverage
 bin
+
+# Ignore everything in examples except our example notebook.
+examples
+!examples/QA Pipelines.ipynb
+
+.sconf_temp
+tests/.tests
