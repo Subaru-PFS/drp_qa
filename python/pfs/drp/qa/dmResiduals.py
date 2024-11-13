@@ -451,8 +451,8 @@ def get_fit_stats(
     chi2X = getChi2(traces.xResid, traces.xErr, xSoften)
     chi2Y = getChi2(lines.yResid, lines.yErr, ySoften)
 
-    xDof = xNum - numParams / 2
-    yDof = yNum - numParams / 2
+    xDof = (xNum - numParams) / 2
+    yDof = (yNum - numParams) / 2
     totalDof = xDof + yDof
 
     def getSoften(resid, err, dof, soften=0):
