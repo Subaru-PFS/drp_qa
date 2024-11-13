@@ -675,6 +675,8 @@ def plot_residual(
     if column.startswith("y"):
         plotData = plotData.query("isTrace == False").copy()
         which_data = "wavelength"
+    else:
+        plotData = plotData.query("isTrace == True").copy()
 
     reserved_data = plotData.query('status == "isReserved" and isOutlier == False')
     if len(reserved_data) == 0:
