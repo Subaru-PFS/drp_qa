@@ -430,13 +430,13 @@ def get_fit_stats(
     traces = arc_data.query("isTrace == True").copy()
     lines = arc_data.query("isLine == True").dropna(subset=["yResid"]).copy()
 
-    xNum = len(arc_data)
+    xNum = len(traces)
     try:
         yNum = lines.isLine.value_counts()[True]
     except KeyError:
         yNum = 0
 
-    xWeightedRms = getWeightedRMS(arc_data.xResid, arc_data.xErr, soften=xSoften)
+    xWeightedRms = getWeightedRMS(traces.xResid, traces.xErr, soften=xSoften)
     yWeightedRms = getWeightedRMS(lines.yResid, lines.yErr, soften=ySoften)
 
     def doRobust(x):
@@ -445,15 +445,15 @@ def get_fit_stats(
         except (IndexError, ValueError):
             return np.nan
 
-    xRobustRms = doRobust(arc_data.xResid)
+    xRobustRms = doRobust(traces.xResid)
     yRobustRms = doRobust(lines.yResid)
 
-    chi2X = getChi2(arc_data.xResid, arc_data.xErr, xSoften)
+    chi2X = getChi2(traces.xResid, traces.xErr, xSoften)
     chi2Y = getChi2(lines.yResid, lines.yErr, ySoften)
 
     xDof = xNum - numParams / 2
     yDof = yNum - numParams / 2
-    dof = xDof + yDof
+    totalDof = xDof + yDof
 
     def getSoften(resid, err, dof, soften=0):
         if len(resid) == 0:
@@ -461,7 +461,7 @@ def get_fit_stats(
         with np.errstate(invalid="ignore"):
             return (getChi2(resid, err, soften) / dof) - 1
 
-    f_x = partial(getSoften, arc_data.xResid, arc_data.xErr, xDof)
+    f_x = partial(getSoften, traces.xResid, traces.xErr, xDof)
     f_y = partial(getSoften, lines.yResid, lines.yErr, yDof)
 
     if f_x(0) < 0:
@@ -481,10 +481,10 @@ def get_fit_stats(
     xFibers = len(traces.fiberId.unique())
     yFibers = len(lines.fiberId.unique())
 
-    xFitStat = FitStat(arc_data.xResid.median(), xRobustRms, xWeightedRms, xSoftFit, xDof, xFibers, xNum)
+    xFitStat = FitStat(traces.xResid.median(), xRobustRms, xWeightedRms, xSoftFit, xDof, xFibers, xNum)
     yFitStat = FitStat(lines.yResid.median(), yRobustRms, yWeightedRms, ySoftFit, yDof, yFibers, yNum)
 
-    return FitStats(dof, chi2X, chi2Y, xFitStat, yFitStat)
+    return FitStats(totalDof, chi2X, chi2Y, xFitStat, yFitStat)
 
 
 def plot_detectormap_residuals(
