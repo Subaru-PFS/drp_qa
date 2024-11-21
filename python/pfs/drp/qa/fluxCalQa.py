@@ -126,7 +126,7 @@ class FluxCalQaTask(PipelineTask):
         outputs : `Struct`
             QA outputs.
         """
-        self.log.info(f"Flux Calibration QA")
+        self.log.info("Flux Calibration QA")
 
         pfsConfigFluxStd = pfsConfig.select(targetType=TargetType.FLUXSTD)
 

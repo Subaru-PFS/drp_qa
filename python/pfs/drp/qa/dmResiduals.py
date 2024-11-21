@@ -568,12 +568,8 @@ def plot_detectormap_residuals(
                     wavelengthMax=wavelengthMax,
                     fig=sub_fig,
                 )
-                sub_fig.suptitle(
-                    f"{arm}{spectrograph}\n{column}",
-                    fontsize="small",
-                    fontweight="bold",
-                )
-            except Exception as e:
+                sub_fig.suptitle(f"{ccd}\n{column}", fontsize="small", fontweight="bold")
+            except Exception:
                 continue
 
         return main_fig

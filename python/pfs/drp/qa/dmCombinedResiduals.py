@@ -254,7 +254,7 @@ def plot_detector_summary_per_desc(data: DataFrame) -> Figure:
         aspect=2.5,
         flierprops={"marker": ".", "ms": 2},
     )
-    fg.fig.suptitle(f"DetectorMap Residuals by description", y=1)
+    fg.fig.suptitle("DetectorMap Residuals by description", y=1)
     for i, ax in enumerate(fg.figure.axes):
         ax.set_ylabel("Median residual (pixel)")
         if i == 0:
@@ -395,6 +395,6 @@ def plot_title(run_name: str) -> Figure:
     fig = Figure()
     ax = fig.add_subplot(111)
     ax.set_axis_off()
-    ax.text(0.5, 0.5, f"DetectorMap Residuals Summary", ha="center", va="center", fontsize="large")
+    ax.text(0.5, 0.5, "DetectorMap Residuals Summary", ha="center", va="center", fontsize="large")
     ax.text(0.5, 0.35, f"{run_name}", ha="center", va="center")
     return fig
