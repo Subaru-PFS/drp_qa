@@ -114,13 +114,11 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
 
         # Put the CCD column in a wavelength sorted order.
         stats.ccd = stats.ccd.astype("category")
-        available_specs = sorted(stats.spectrograph.unique())
+        spec_order = [1, 2, 3, 4]
         arm_order = ["b", "r", "m", "n"]
-        available_arms = sorted(stats.arm.unique(), key=arm_order.index)
-        detector_order = [f"{arm}{spec}" for arm, spec in itertools.product(available_arms, available_specs)]
-        stats.ccd = stats.ccd.cat.reorder_categories(detector_order)
-
-        self.log.info(stats.ccd.value_counts())
+        detector_order = [f"{arm}{spec}" for arm, spec in itertools.product(arm_order, spec_order)]
+        detector_order = [d for d in detector_order if d in stats.ccd.cat.categories]
+        stats.ccd = stats.ccd.cat.reorder_categories(detector_order, ordered=True)
 
         pdf = make_report(stats, run_name=run_name)
 
