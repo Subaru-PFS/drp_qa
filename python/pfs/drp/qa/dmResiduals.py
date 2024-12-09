@@ -415,7 +415,6 @@ def scrub_data(
     -------
     arc_data : `pandas.DataFrame`
     """
-    print(f"Scrubbing data")
     isTrace = arcLines.description == "Trace"
     isLine = ~isTrace
 
