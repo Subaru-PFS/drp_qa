@@ -25,6 +25,7 @@ from matplotlib import colors, pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
+from pfs.drp.stella.reduceExposure import ReduceExposureConfig
 from pfs.drp.stella.utils.math import robustRms
 from pfs.utils.fiberids import FiberIds
 from scipy.optimize import bisect
@@ -60,6 +61,17 @@ class DetectorMapResidualsConnections(
         name="lines",
         doc="Emission line measurements",
         storageClass="ArcLineSet",
+        dimensions=(
+            "instrument",
+            "visit",
+            "arm",
+            "spectrograph",
+        ),
+    )
+    reduceExposure_config = InputConnection(
+        name="reduceExposure_config",
+        doc="Configuration for reduceExposure",
+        storageClass="ReduceExposureConfig",
         dimensions=(
             "instrument",
             "visit",
@@ -142,6 +154,7 @@ class DetectorMapResidualsTask(PipelineTask):
         removeOutliers: bool = True,
         addFiberInfo: bool = True,
         dataId: dict = None,
+        reduceExpConfig: ReduceExposureConfig = None,
         **kwargs,
     ) -> Struct:
         """Cleans and masks the data. Adds fiberInfo if requested.
@@ -164,6 +177,8 @@ class DetectorMapResidualsTask(PipelineTask):
             Add fiber information to the dataframe. Default is True.
         dataId : dict, optional
             Dictionary of the dataId.
+        reduceExpConfig : `ReduceExposureConfig`, optional
+            Configuration for reduceExposure.
 
         Returns
         -------
@@ -172,7 +187,13 @@ class DetectorMapResidualsTask(PipelineTask):
 
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
         self.log.info("Getting and scrubbing the data")
-        arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=dropNaColumns, **kwargs)
+        arc_data = scrub_data(
+            arcLines,
+            detectorMap,
+            dropNaColumns=dropNaColumns,
+            config=reduceExpConfig.adjustDetectorMap.toDict(),
+            **kwargs,
+        )
         if len(arc_data) == 0:
             raise ValueError("After scrubbing the data, the data is empty, cannot proceed.")
 
@@ -307,6 +328,7 @@ def scrub_data(
     dropNaColumns: bool = False,
     removeFlagged: bool = True,
     onlyReservedAndUsed: bool = True,
+    config: dict = None,
 ) -> pd.DataFrame:
     """Gets a copy of the arcline data, with some columns added.
 
@@ -322,11 +344,14 @@ def scrub_data(
         Remove rows with ``flag=True``? Default is True.
     onlyReservedAndUsed : `bool`, optional
         Only include rows with status RESERVED or USED? Default is True.
+    config : `dict`, optional
+        Configuration from the reduceExposure task.
 
     Returns
     -------
     arc_data : `pandas.DataFrame`
     """
+    print(f"Scrubbing data {config=}")
     isTrace = arcLines.description == "Trace"
     isLine = ~isTrace
 
