@@ -344,7 +344,7 @@ def getGoodLines(lines: ArcLineSet, dispersion: float | None, adjustDMConfig: Co
 
     def getCounts():
         """Provide a list of counts of different species"""
-        print(getDescriptionCounts(lines.description, good))
+        return getDescriptionCounts(lines.description, good)
 
     isTrace = lines.description == "Trace"
     print(f"{len(lines)} lines in list")
