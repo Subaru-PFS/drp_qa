@@ -183,9 +183,7 @@ class DetectorMapResidualsTask(PipelineTask):
 
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
         self.log.info("Getting and scrubbing the data")
-        used_dm_config = (
-            dict() if reduceExposure_config is None else reduceExposure_config.adjustDetectorMap.toDict()
-        )
+        used_dm_config = dict() if reduceExposure_config is None else reduceExposure_config.adjustDetectorMap
 
         good_lines_idx = getGoodLines(arcLines, detectorMap.getDispersionAtCenter(), used_dm_config)
         arcLines = arcLines[good_lines_idx]
