@@ -183,9 +183,11 @@ class DetectorMapResidualsTask(PipelineTask):
 
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
         self.log.info("Getting and scrubbing the data")
-        used_dm_config = dict() if reduceExposure_config is None else reduceExposure_config.adjustDetectorMap
+        adjustDM_config = dict() if reduceExposure_config is None else reduceExposure_config.adjustDetectorMap
 
-        good_lines_idx = getGoodLines(arcLines, detectorMap.getDispersionAtCenter(), used_dm_config)
+        good_lines_idx = getGoodLines(
+            arcLines, detectorMap.getDispersionAtCenter(), adjustDM_config, self.log
+        )
         arcLines = arcLines[good_lines_idx].copy()
 
         arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=dropNaColumns, **kwargs)
@@ -317,7 +319,9 @@ class FitStats:
         )
 
 
-def getGoodLines(lines: ArcLineSet, dispersion: float | None, adjustDMConfig: Config):
+def getGoodLines(
+    lines: ArcLineSet, dispersion: float | None, adjustDMConfig: Config, log: Logger | None = None
+) -> np.ndarray:
     """Get the good lines.
 
     Parameters
@@ -329,6 +333,8 @@ def getGoodLines(lines: ArcLineSet, dispersion: float | None, adjustDMConfig: Co
         The dispersion. Default is None.
     adjustDMConfig : `Config`
         Configuration used for the detector map adjustment.
+    log : `Logger`, optional
+        The logger for the class object. Default is None.
 
     Returns
     -------
@@ -341,35 +347,35 @@ def getGoodLines(lines: ArcLineSet, dispersion: float | None, adjustDMConfig: Co
         return getDescriptionCounts(lines.description, good)
 
     isTrace = lines.description == "Trace"
-    print(f"{len(lines)} lines in list")
+    log.debug(f"{len(lines)} lines in list")
 
     good = lines.flag == 0
-    print(f"{good.sum()} good lines after initial flags ({getCounts()})")
+    log.debug(f"{good.sum()} good lines after initial flags ({getCounts()})")
 
     good &= (lines.status & ReferenceLineStatus.fromNames(*adjustDMConfig.lineFlags)) == 0
-    print(f"{good.sum()} good lines after line flags ({getCounts()})")
+    log.debug(f"{good.sum()} good lines after line flags ({getCounts()})")
 
     good &= np.isfinite(lines.x) & np.isfinite(lines.y)
     good &= np.isfinite(lines.xErr) & np.isfinite(lines.yErr)
 
     if hasattr(lines, "slope"):
         good &= np.isfinite(lines.slope) | ~isTrace
-    print(f"{good.sum()} good lines after finite positions ({getCounts()})")
+    log.debug(f"{good.sum()} good lines after finite positions ({getCounts()})")
 
     if adjustDMConfig.minSignalToNoise > 0:
         good &= np.isfinite(lines.flux) & np.isfinite(lines.fluxErr)
-        print(f"{good.sum()} good lines after finite intensities ({getCounts()})")
+        log.debug(f"{good.sum()} good lines after finite intensities ({getCounts()})")
 
         with np.errstate(invalid="ignore", divide="ignore"):
             good &= (lines.flux / lines.fluxErr) > adjustDMConfig.minSignalToNoise
 
-        print(f"{good.sum()} good lines after signal-to-noise ({getCounts()})")
+        log.debug(f"{good.sum()} good lines after signal-to-noise ({getCounts()})")
 
     if adjustDMConfig.maxCentroidError > 0:
         maxCentroidError = adjustDMConfig.maxCentroidError
         good &= (lines.xErr > 0) & (lines.xErr < maxCentroidError)
         good &= ((lines.yErr > 0) & (lines.yErr < maxCentroidError)) | isTrace
-        print(f"{good.sum()} good lines after centroid errors ({getCounts()})")
+        log.debug(f"{good.sum()} good lines after centroid errors ({getCounts()})")
 
     if dispersion is not None and adjustDMConfig.exclusionRadius > 0 and not np.all(isTrace):
         wavelength = np.unique(lines.wavelength[~isTrace])
@@ -377,7 +383,7 @@ def getGoodLines(lines: ArcLineSet, dispersion: float | None, adjustDMConfig: Co
         exclusionRadius = dispersion * adjustDMConfig.exclusionRadius
         exclude = getExclusionZone(wavelength, exclusionRadius, np.array(status))
         good &= np.isin(lines.wavelength, wavelength[exclude], invert=True) | isTrace
-        print(f"{good.sum()} good lines after exclusion zone ({getCounts()})")
+        log.debug(f"{good.sum()} good lines after exclusion zone ({getCounts()})")
 
     return good
 
