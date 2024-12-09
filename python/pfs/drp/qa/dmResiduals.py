@@ -25,6 +25,8 @@ from matplotlib import colors, pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
+from pfs.drp.stella.applyExclusionZone import getExclusionZone
+from pfs.drp.stella.fitDistortedDetectorMap import getDescriptionCounts
 from pfs.drp.stella.utils.math import robustRms
 from pfs.utils.fiberids import FiberIds
 from scipy.optimize import bisect
@@ -184,6 +186,10 @@ class DetectorMapResidualsTask(PipelineTask):
         used_dm_config = (
             dict() if reduceExposure_config is None else reduceExposure_config.adjustDetectorMap.toDict()
         )
+
+        good_lines_idx = getGoodLines(arcLines, detectorMap.getDispersionAtCenter(), used_dm_config)
+        arcLines = arcLines[good_lines_idx]
+
         arc_data = scrub_data(
             arcLines,
             detectorMap,
@@ -319,6 +325,71 @@ class FitStats:
         )
 
 
+def getGoodLines(lines: ArcLineSet, dispersion: float | None, adjustDMConfig: Config):
+    """Get the good lines.
+
+    Parameters
+    ----------
+
+    lines : `ArcLineSet`
+        The arc lines.
+    dispersion : `float`, optional
+        The dispersion. Default is None.
+    adjustDMConfig : `Config`
+        Configuration used for the detector map adjustment.
+
+    Returns
+    -------
+    good : `np.ndarray`
+        The index of the good lines.
+    """
+
+    def getCounts():
+        """Provide a list of counts of different species"""
+        print(getDescriptionCounts(lines.description, good))
+
+    isTrace = lines.description == "Trace"
+    print("%d lines in list", len(lines))
+
+    good = lines.flag == 0
+    print(f"{good.sum()} good lines after initial flags ({getCounts()})")
+
+    good &= (lines.status & ReferenceLineStatus.fromNames(*adjustDMConfig.lineFlags)) == 0
+    print(f"{good.sum()} good lines after line flags ({getCounts()})")
+
+    good &= np.isfinite(lines.x) & np.isfinite(lines.y)
+    good &= np.isfinite(lines.xErr) & np.isfinite(lines.yErr)
+
+    if hasattr(lines, "slope"):
+        good &= np.isfinite(lines.slope) | ~isTrace
+    print(f"{good.sum()} good lines after finite positions ({getCounts()})")
+
+    if adjustDMConfig.minSignalToNoise > 0:
+        good &= np.isfinite(lines.flux) & np.isfinite(lines.fluxErr)
+        print(f"{good.sum()} good lines after finite intensities ({getCounts()})")
+
+        with np.errstate(invalid="ignore", divide="ignore"):
+            good &= (lines.flux / lines.fluxErr) > adjustDMConfig.minSignalToNoise
+
+        print(f"{good.sum()} good lines after signal-to-noise ({getCounts()})")
+
+    if adjustDMConfig.maxCentroidError > 0:
+        maxCentroidError = adjustDMConfig.maxCentroidError
+        good &= (lines.xErr > 0) & (lines.xErr < maxCentroidError)
+        good &= ((lines.yErr > 0) & (lines.yErr < maxCentroidError)) | isTrace
+        print(f"{good.sum()} good lines after centroid errors ({getCounts()})")
+
+    if dispersion is not None and adjustDMConfig.exclusionRadius > 0 and not np.all(isTrace):
+        wavelength = np.unique(lines.wavelength[~isTrace])
+        status = [np.bitwise_or.reduce(lines.status[lines.wavelength == wl]) for wl in wavelength]
+        exclusionRadius = dispersion * adjustDMConfig.exclusionRadius
+        exclude = getExclusionZone(wavelength, exclusionRadius, np.array(status))
+        good &= np.isin(lines.wavelength, wavelength[exclude], invert=True) | isTrace
+        print(f"{good.sum()} good lines after exclusion zone ({getCounts()})")
+
+    return good
+
+
 def scrub_data(
     arcLines: ArcLineSet,
     detectorMap: DetectorMap,
@@ -348,7 +419,7 @@ def scrub_data(
     -------
     arc_data : `pandas.DataFrame`
     """
-    print(f"Scrubbing data {config=}")
+    print(f"Scrubbing data with {config=}")
     isTrace = arcLines.description == "Trace"
     isLine = ~isTrace
 
@@ -409,7 +480,7 @@ def scrub_data(
     # Replace inf with nans.
     arc_data = arc_data.replace([np.inf, -np.inf], np.nan)
 
-    # Get full status names. (the .name attribute doesn't work properly so need the str instance)
+    # Get full status names.
     arc_data["status_name"] = arc_data.status.map(lambda x: ReferenceLineStatus(x).name)
     arc_data["status_name"] = arc_data["status_name"].astype("category")
     arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
