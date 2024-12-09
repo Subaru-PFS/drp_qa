@@ -186,7 +186,7 @@ class DetectorMapResidualsTask(PipelineTask):
         used_dm_config = dict() if reduceExposure_config is None else reduceExposure_config.adjustDetectorMap
 
         good_lines_idx = getGoodLines(arcLines, detectorMap.getDispersionAtCenter(), used_dm_config)
-        arcLines = arcLines[good_lines_idx]
+        arcLines = arcLines[good_lines_idx].copy()
 
         arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=dropNaColumns, **kwargs)
         if len(arc_data) == 0:
