@@ -347,7 +347,7 @@ def getGoodLines(lines: ArcLineSet, dispersion: float | None, adjustDMConfig: Co
         print(getDescriptionCounts(lines.description, good))
 
     isTrace = lines.description == "Trace"
-    print("%d lines in list", len(lines))
+    print(f"{len(lines)} lines in list")
 
     good = lines.flag == 0
     print(f"{good.sum()} good lines after initial flags ({getCounts()})")
