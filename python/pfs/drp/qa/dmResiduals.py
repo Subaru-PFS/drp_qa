@@ -2,6 +2,7 @@ import warnings
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
+from logging import Logger
 from typing import Iterable, Optional
 
 import numpy as np
