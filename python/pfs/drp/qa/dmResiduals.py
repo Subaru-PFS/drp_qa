@@ -7,7 +7,7 @@ from typing import Iterable, Optional
 import numpy as np
 import pandas as pd
 from astropy.stats import sigma_clip
-from lsst.pex.config import Field
+from lsst.pex.config import Config, Field
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -25,7 +25,6 @@ from matplotlib import colors, pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
-from pfs.drp.stella.reduceExposure import ReduceExposureConfig
 from pfs.drp.stella.utils.math import robustRms
 from pfs.utils.fiberids import FiberIds
 from scipy.optimize import bisect
@@ -71,13 +70,8 @@ class DetectorMapResidualsConnections(
     reduceExposure_config = InputConnection(
         name="reduceExposure_config",
         doc="Configuration for reduceExposure",
-        storageClass="ReduceExposureConfig",
-        dimensions=(
-            "instrument",
-            "visit",
-            "arm",
-            "spectrograph",
-        ),
+        storageClass="Config",
+        dimensions=(),
     )
     dmQaResidualStats = OutputConnection(
         name="dmQaResidualStats",
@@ -154,7 +148,7 @@ class DetectorMapResidualsTask(PipelineTask):
         removeOutliers: bool = True,
         addFiberInfo: bool = True,
         dataId: dict = None,
-        reduceExpConfig: ReduceExposureConfig = None,
+        reduceExposure_config: Config = None,
         **kwargs,
     ) -> Struct:
         """Cleans and masks the data. Adds fiberInfo if requested.
@@ -177,7 +171,7 @@ class DetectorMapResidualsTask(PipelineTask):
             Add fiber information to the dataframe. Default is True.
         dataId : dict, optional
             Dictionary of the dataId.
-        reduceExpConfig : `ReduceExposureConfig`, optional
+        reduceExposure_config : `Config`, optional
             Configuration for reduceExposure.
 
         Returns
@@ -187,11 +181,14 @@ class DetectorMapResidualsTask(PipelineTask):
 
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
         self.log.info("Getting and scrubbing the data")
+        used_dm_config = (
+            dict() if reduceExposure_config is None else reduceExposure_config.adjustDetectorMap.toDict()
+        )
         arc_data = scrub_data(
             arcLines,
             detectorMap,
             dropNaColumns=dropNaColumns,
-            config=reduceExpConfig.adjustDetectorMap.toDict(),
+            config=used_dm_config,
             **kwargs,
         )
         if len(arc_data) == 0:
