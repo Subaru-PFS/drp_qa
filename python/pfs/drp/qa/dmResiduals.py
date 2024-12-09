@@ -188,13 +188,7 @@ class DetectorMapResidualsTask(PipelineTask):
         good_lines_idx = getGoodLines(arcLines, detectorMap.getDispersionAtCenter(), used_dm_config)
         arcLines = arcLines[good_lines_idx]
 
-        arc_data = scrub_data(
-            arcLines,
-            detectorMap,
-            dropNaColumns=dropNaColumns,
-            config=used_dm_config,
-            **kwargs,
-        )
+        arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=dropNaColumns, **kwargs)
         if len(arc_data) == 0:
             raise ValueError("After scrubbing the data, the data is empty, cannot proceed.")
 
@@ -394,7 +388,6 @@ def scrub_data(
     dropNaColumns: bool = False,
     removeFlagged: bool = True,
     onlyReservedAndUsed: bool = True,
-    config: dict = None,
 ) -> pd.DataFrame:
     """Gets a copy of the arcline data, with some columns added.
 
@@ -410,14 +403,12 @@ def scrub_data(
         Remove rows with ``flag=True``? Default is True.
     onlyReservedAndUsed : `bool`, optional
         Only include rows with status RESERVED or USED? Default is True.
-    config : `dict`, optional
-        Configuration from the reduceExposure task.
 
     Returns
     -------
     arc_data : `pandas.DataFrame`
     """
-    print(f"Scrubbing data with {config=}")
+    print(f"Scrubbing data")
     isTrace = arcLines.description == "Trace"
     isLine = ~isTrace
 
