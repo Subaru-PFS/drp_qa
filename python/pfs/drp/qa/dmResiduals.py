@@ -186,18 +186,6 @@ class DetectorMapResidualsTask(PipelineTask):
         self.log.info("Getting and scrubbing the data")
         adjustDM_config = dict() if reduceExposure_config is None else reduceExposure_config.adjustDetectorMap
 
-        isTrace = arcLines.description == "Trace"
-        isLine = ~isTrace
-        numTraceLines = len(set(arcLines[isTrace].fiberId))
-        numArcLines = len(set(arcLines[isLine].fiberId))
-
-        self.log.debug(f"{isTrace.sum()} trace lines for {numTraceLines} fibers")
-        self.log.debug(f"{isLine.sum()} arc lines for {numArcLines} fibers")
-
-        if numArcLines > 0:
-            self.log.debug("Removing trace lines from arc line list")
-            arcLines = arcLines[isLine].copy()
-
         good_lines_idx = getGoodLines(
             arcLines, detectorMap.getDispersionAtCenter(), adjustDM_config, self.log
         )
@@ -355,6 +343,12 @@ def getGoodLines(
         The index of the good lines.
     """
     isTrace = lines.description == "Trace"
+    isLine = ~isTrace
+    numTraceLines = len(set(lines[isTrace].fiberId))
+    numArcLines = len(set(lines[isLine].fiberId))
+
+    log.debug(f"{isTrace.sum()} centroids for {numTraceLines} traces")
+    log.debug(f"{isLine.sum()} centroids for {numArcLines} arc lines")
 
     def getCounts():
         """Provide a list of counts of different species"""
