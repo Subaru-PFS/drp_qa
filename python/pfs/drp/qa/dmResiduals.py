@@ -354,6 +354,7 @@ def getGoodLines(
     good : `np.ndarray`
         The index of the good lines.
     """
+    isTrace = lines.description == "Trace"
 
     def getCounts():
         """Provide a list of counts of different species"""
