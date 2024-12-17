@@ -2,12 +2,13 @@ import warnings
 from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
+from logging import Logger
 from typing import Iterable, Optional
 
 import numpy as np
 import pandas as pd
 from astropy.stats import sigma_clip
-from lsst.pex.config import Field
+from lsst.pex.config import Config, Field
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -25,6 +26,8 @@ from matplotlib import colors, pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
+from pfs.drp.stella.applyExclusionZone import getExclusionZone
+from pfs.drp.stella.fitDistortedDetectorMap import getDescriptionCounts
 from pfs.drp.stella.utils.math import robustRms
 from pfs.utils.fiberids import FiberIds
 from scipy.optimize import bisect
@@ -66,6 +69,12 @@ class DetectorMapResidualsConnections(
             "arm",
             "spectrograph",
         ),
+    )
+    reduceExposure_config = InputConnection(
+        name="reduceExposure_config",
+        doc="Configuration for reduceExposure",
+        storageClass="Config",
+        dimensions=(),
     )
     dmQaResidualStats = OutputConnection(
         name="dmQaResidualStats",
@@ -142,6 +151,7 @@ class DetectorMapResidualsTask(PipelineTask):
         removeOutliers: bool = True,
         addFiberInfo: bool = True,
         dataId: dict = None,
+        reduceExposure_config: Config = None,
         **kwargs,
     ) -> Struct:
         """Cleans and masks the data. Adds fiberInfo if requested.
@@ -164,6 +174,8 @@ class DetectorMapResidualsTask(PipelineTask):
             Add fiber information to the dataframe. Default is True.
         dataId : dict, optional
             Dictionary of the dataId.
+        reduceExposure_config : `Config`, optional
+            Configuration for reduceExposure.
 
         Returns
         -------
@@ -172,7 +184,14 @@ class DetectorMapResidualsTask(PipelineTask):
 
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
         self.log.info("Getting and scrubbing the data")
-        arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=dropNaColumns, **kwargs)
+        adjustDM_config = dict() if reduceExposure_config is None else reduceExposure_config.adjustDetectorMap
+
+        good_lines_idx = getGoodLines(
+            arcLines, detectorMap.getDispersionAtCenter(), adjustDM_config, self.log
+        )
+        arcLines = arcLines[good_lines_idx].copy()
+
+        arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=dropNaColumns, log=self.log, **kwargs)
         if len(arc_data) == 0:
             raise ValueError("After scrubbing the data, the data is empty, cannot proceed.")
 
@@ -301,12 +320,95 @@ class FitStats:
         )
 
 
+def getGoodLines(
+    lines: ArcLineSet, dispersion: float | None, adjustDMConfig: Config, log: Logger | None = None
+) -> np.ndarray:
+    """Get the good lines.
+
+    Parameters
+    ----------
+
+    lines : `ArcLineSet`
+        The arc lines.
+    dispersion : `float`, optional
+        The dispersion. Default is None.
+    adjustDMConfig : `Config`
+        Configuration used for the detector map adjustment.
+    log : `Logger`, optional
+        The logger for the class object. Default is None.
+
+    Returns
+    -------
+    good : `np.ndarray`
+        The index of the good lines.
+    """
+    log.debug(f"Scrubbing data using config={adjustDMConfig.toDict()}")
+    isTrace = lines.description == "Trace"
+    isLine = ~isTrace
+    numTraceLines = len(set(lines[isTrace].fiberId))
+    numArcLines = len(set(lines[isLine].fiberId))
+
+    log.debug(f"{isTrace.sum()} line centroids for {numTraceLines} traces")
+    log.debug(f"{isLine.sum() + isTrace.sum()} lines in list")
+
+    def getCounts():
+        """Provide a list of counts of different species"""
+        return getDescriptionCounts(lines.description, good)
+
+    good = lines.flag == 0
+    log.debug(f"{good.sum()} good lines after initial flags ({getCounts()})")
+
+    if isLine.sum() > 0:
+        log.info("Found lamp species, ignoring traces.")
+        good &= isLine
+        log.debug(f"{good.sum()} good lines after ignoring traces ({getCounts()})")
+
+    good &= (lines.status & ReferenceLineStatus.fromNames(*adjustDMConfig.lineFlags)) == 0
+    log.debug(f"{good.sum()} good lines after line flags ({getCounts()})")
+
+    good &= np.isfinite(lines.x) & np.isfinite(lines.y)
+    good &= np.isfinite(lines.xErr) & np.isfinite(lines.yErr)
+
+    if hasattr(lines, "slope"):
+        good &= np.isfinite(lines.slope) | ~isTrace
+    log.debug(f"{good.sum()} good lines after finite positions ({getCounts()})")
+
+    if adjustDMConfig.minSignalToNoise > 0:
+        good &= np.isfinite(lines.flux) & np.isfinite(lines.fluxErr)
+        log.debug(f"{good.sum()} good lines after finite intensities ({getCounts()})")
+
+        with np.errstate(invalid="ignore", divide="ignore"):
+            sn = lines.flux / lines.fluxErr
+            mean_sn = np.nanmean(sn[good])
+            log.debug(f"Using mean SN={mean_sn:.02f} instead of config {adjustDMConfig.minSignalToNoise}")
+            good &= sn > mean_sn
+
+        log.debug(f"{good.sum()} good lines after min SN={mean_sn:.02f} ({getCounts()})")
+
+    if adjustDMConfig.maxCentroidError > 0:
+        maxCentroidError = adjustDMConfig.maxCentroidError
+        good &= (lines.xErr > 0) & (lines.xErr < maxCentroidError)
+        good &= ((lines.yErr > 0) & (lines.yErr < maxCentroidError)) | isTrace
+        log.debug(f"{good.sum()} good lines after {maxCentroidError=} centroid errors ({getCounts()})")
+
+    if dispersion is not None and adjustDMConfig.exclusionRadius > 0 and not np.all(isTrace):
+        wavelength = np.unique(lines.wavelength[~isTrace])
+        status = [np.bitwise_or.reduce(lines.status[lines.wavelength == wl]) for wl in wavelength]
+        exclusionRadius = dispersion * adjustDMConfig.exclusionRadius
+        exclude = getExclusionZone(wavelength, exclusionRadius, np.array(status))
+        good &= np.isin(lines.wavelength, wavelength[exclude], invert=True) | isTrace
+        log.debug(f"{good.sum()} good lines after {exclusionRadius=:.03f} exclusion zone ({getCounts()})")
+
+    return good
+
+
 def scrub_data(
     arcLines: ArcLineSet,
     detectorMap: DetectorMap,
     dropNaColumns: bool = False,
     removeFlagged: bool = True,
     onlyReservedAndUsed: bool = True,
+    log: Logger | None = None,
 ) -> pd.DataFrame:
     """Gets a copy of the arcline data, with some columns added.
 
@@ -322,6 +424,8 @@ def scrub_data(
         Remove rows with ``flag=True``? Default is True.
     onlyReservedAndUsed : `bool`, optional
         Only include rows with status RESERVED or USED? Default is True.
+    log : `Logger`, optional
+        The logger for the class object. Default is None.
 
     Returns
     -------
@@ -387,7 +491,7 @@ def scrub_data(
     # Replace inf with nans.
     arc_data = arc_data.replace([np.inf, -np.inf], np.nan)
 
-    # Get full status names. (the .name attribute doesn't work properly so need the str instance)
+    # Get full status names.
     arc_data["status_name"] = arc_data.status.map(lambda x: ReferenceLineStatus(x).name)
     arc_data["status_name"] = arc_data["status_name"].astype("category")
     arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
