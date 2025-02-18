@@ -128,7 +128,7 @@ class DetectorMapResidualsTask(PipelineTask):
         outputRefs: OutputQuantizedConnection,
     ):
         # Get the dataIds for help with plotting.
-        data_id = {k: v for k, v in inputRefs.arcLines.dataId.full.items()}
+        data_id = dict(**inputRefs.arcLines.dataId.mapping)
         data_id["run"] = inputRefs.arcLines.run
 
         inputs = butlerQC.get(inputRefs)
@@ -381,10 +381,13 @@ def getGoodLines(
         with np.errstate(invalid="ignore", divide="ignore"):
             sn = lines.flux / lines.fluxErr
             mean_sn = np.nanmean(sn[good])
-            log.debug(f"Using mean SN={mean_sn:.02f} instead of config {adjustDMConfig.minSignalToNoise}")
-            good &= sn > mean_sn
+            std_sn = np.nanstd(sn[good])
+            # Use the minimum of the mean - std and the config value.
+            sn_cut = min(mean_sn - std_sn, adjustDMConfig.minSignalToNoise)
+            log.debug(f"Filtering SN < {sn_cut=:.02f}")
+            good &= sn >= sn_cut
 
-        log.debug(f"{good.sum()} good lines after min SN={mean_sn:.02f} ({getCounts()})")
+        log.debug(f"{good.sum()} good lines after SN filtering ({getCounts()})")
 
     if adjustDMConfig.maxCentroidError > 0:
         maxCentroidError = adjustDMConfig.maxCentroidError
