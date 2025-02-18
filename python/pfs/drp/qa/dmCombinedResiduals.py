@@ -174,10 +174,16 @@ def plot_detector_visits(data: DataFrame, ccd: str) -> Figure:
 
 def plot_detector_summary(stats: DataFrame) -> Figure:
     plot_data_spatial = (
-        stats.query("description == 'Trace'").filter(regex="ccd|median|weighted|soften").groupby("ccd").mean()
+        stats.query("description == 'Trace'")
+        .filter(regex="ccd|median|weighted|soften")
+        .groupby("ccd", observed=False)
+        .mean()
     )
     plot_data_wavelength = (
-        stats.query("description != 'Trace'").filter(regex="ccd|median|weighted|soften").groupby("ccd").mean()
+        stats.query("description != 'Trace'")
+        .filter(regex="ccd|median|weighted|soften")
+        .groupby("ccd", observed=False)
+        .mean()
     )
 
     fig, (ax0, ax1) = plt.subplots(ncols=2, sharey=True, layout="constrained")
@@ -356,14 +362,14 @@ def plot_dataframe(stats: DataFrame) -> Figure:
     plot_data_spatial = (
         stats.query("description == 'Trace'")
         .filter(regex="ccd|spatial.(median|weighted|soften)")
-        .groupby("ccd")
+        .groupby("ccd", observed=False)
         .mean()
     )
     plot_data_spatial.columns = [c.replace("spatial.", "") for c in plot_data_spatial.columns]
     plot_data_wavelength = (
         stats.query("description != 'Trace'")
         .filter(regex="ccd|wavelength.(median|weighted|soften)")
-        .groupby("ccd")
+        .groupby("ccd", observed=False)
         .mean()
     )
     plot_data_wavelength.columns = [c.replace("wavelength.", "") for c in plot_data_wavelength.columns]
@@ -375,9 +381,9 @@ def plot_dataframe(stats: DataFrame) -> Figure:
     ax1 = fig.add_subplot(212)
     ax0.set_axis_off()
     ax1.set_axis_off()
-    t0 = pd.plotting.table(ax0, plot_data_spatial.applymap(formatter), loc="center")
+    t0 = pd.plotting.table(ax0, plot_data_spatial.map(formatter), loc="center")
     t0.set_fontsize(16)
-    t1 = pd.plotting.table(ax1, plot_data_wavelength.applymap(formatter), loc="center")
+    t1 = pd.plotting.table(ax1, plot_data_wavelength.map(formatter), loc="center")
     t1.set_fontsize(16)
 
     ax0.set_title("Spatial (quartz only)", y=1.12)

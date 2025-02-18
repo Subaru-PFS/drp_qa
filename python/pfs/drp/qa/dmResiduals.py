@@ -466,8 +466,8 @@ def scrub_data(
     )
 
     # Get USED and RESERVED status.
-    is_reserved = (arc_data.status & ReferenceLineStatus.DETECTORMAP_RESERVED) != 0
-    is_used = (arc_data.status & ReferenceLineStatus.DETECTORMAP_USED) != 0
+    is_reserved = (arc_data.status & ReferenceLineStatus.DETECTORMAP_RESERVED.value) != 0
+    is_used = (arc_data.status & ReferenceLineStatus.DETECTORMAP_USED.value) != 0
 
     # Make one-hot columns for status_names.
     arc_data.loc[:, "isUsed"] = is_used
@@ -970,7 +970,7 @@ def plot_residual(
         X = "fiberId"
         Y = "wavelength"
 
-    for isLine, rows in reserved_data.groupby("isLine"):
+    for isLine, rows in reserved_data.groupby("isLine", observed=False):
         im = ax2.scatter(
             rows[X],
             rows[Y],
@@ -999,9 +999,9 @@ def plot_residual(
     ax2.set_title(f"2D residual of RESERVED {which_data} data", weight="bold", fontsize="small")
 
     if bin_wl is True:
-        binned_data = plotData.dropna(subset=["wavelength", column]).groupby(["bin", "status", "isOutlier"])[
-            ["wavelength", column]
-        ]
+        binned_data = plotData.dropna(subset=["wavelength", column]).groupby(
+            ["bin", "status", "isOutlier"], observed=False
+        )[["wavelength", column]]
         plotData = binned_data.agg("median", robustRms).reset_index().sort_values("status")
 
     ax3 = scatterplot_with_outliers(
