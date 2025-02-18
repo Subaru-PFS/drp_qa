@@ -349,6 +349,7 @@ def getGoodLines(
     numArcLines = len(set(lines[isLine].fiberId))
 
     log.debug(f"{isTrace.sum()} line centroids for {numTraceLines} traces")
+    log.debug(f"{isLine.sum()} line centroids for {numArcLines} traces")
     log.debug(f"{isLine.sum() + isTrace.sum()} lines in list")
 
     def getCounts():
