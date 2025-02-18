@@ -9,4 +9,4 @@ class PdfMatplotlibFormatter(MatplotlibFormatter):
     in PDF format instead of PNG format.
     """
 
-    extension = ".pdf"
+    default_extension = ".pdf"
