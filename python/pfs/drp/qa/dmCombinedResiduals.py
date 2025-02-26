@@ -187,6 +187,24 @@ def make_report(
     pdf.append(plot_detector_summary(stats))
     pdf.append(plot_detector_summary_per_desc(stats))
 
+    plot_cols = [
+        "fiberId",
+        "wavelength",
+        "x",
+        "xErr",
+        "y",
+        "yErr",
+        "isTrace",
+        "isLine",
+        "xResid",
+        "yResid",
+        "xResidOutlier",
+        "yResidOutlier",
+        "isUsed",
+        "isReserved",
+        "status",
+    ]
+
     # Per visit descriptions.
     for ccd in stats.ccd.unique():
         log.info(f"Making plots for {ccd}")
@@ -195,6 +213,10 @@ def make_report(
             arm = ccd[0]
             spec = int(ccd[1])
             data = arc_data.query(f"arm == '{arm}' and spectrograph == {spec}")
+
+            # If we are doing a combined report we want to get the mean across visits.
+            data = data[plot_cols].groupby(["status", "isLine", "fiberId", "y"]).mean().reset_index()
+
             residFig = plot_detectormap_residuals(data, detectorMaps[ccd])
             residFig.suptitle(f"DetectorMap Residuals - {ccd}", weight="bold")
             pdf.append(residFig)

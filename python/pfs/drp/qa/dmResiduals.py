@@ -850,7 +850,7 @@ def plot_residual(
         ymax=dataRange,
         palette=pal,
         ax=ax0,
-        refline=0,
+        refline=[0],
     )
 
     def drawRefLines(ax, goodRange, sigmaRange, isVertical=False):
@@ -1016,7 +1016,7 @@ def plot_residual(
         ymax=dataRange,
         palette=pal,
         ax=ax3,
-        refline=0.0,
+        refline=[0.0],
         vertical=True,
         rasterized=True if not bin_wl else False,
     )
