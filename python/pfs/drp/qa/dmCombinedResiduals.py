@@ -149,7 +149,7 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
             Statistics of the residual analysis.
         """
         # Put the DetectorMaps in a dict by CCD.
-        self.log.debug(f"Visits: {[dm.getVisitInfo().id for dm in detectorMaps.values()]}")
+        self.log.debug(f"Visits: {[dm.getVisitInfo().id for dm in detectorMaps]}")
         detectorMaps = {detectorMap.metadata["DETECTOR"]: detectorMap for detectorMap in detectorMaps}
         self.log.debug(f"DetectorMap CCDs: {detectorMaps.keys()}")
 
