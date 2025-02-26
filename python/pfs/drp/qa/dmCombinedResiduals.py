@@ -149,11 +149,16 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
             Statistics of the residual analysis.
         """
         # Put the DetectorMaps in a dict by CCD.
-        detectorMaps = {detectorMap.metadata["DETECTOR"]: detectorMap for detectorMap in detectorMaps}
-        self.log.debug(f"Visits: {[dm.getVisitInfo().id for dm in detectorMaps.values()]}")
-        self.log.debug(f"DetectorMaps: {detectorMaps.keys()}")
+        self.log.debug(f"Visits: {set([dm.getVisitInfo().id for dm in detectorMaps])}")
 
-        arc_data = pd.concat(dmQaResidualData).query('status_type == "RESERVED"')
+        # Small helper to use while https://pfspipe.ipmu.jp/jira/browse/PIPE2D-1423
+        def get_ccd(dm: DetectorMap) -> str:
+            return "".join([x.split("=")[1] for x in dm.metadata["CALIB_ID"].split(" ")[:2]])
+
+        detectorMaps = {get_ccd(detectorMap): detectorMap for detectorMap in detectorMaps}
+        self.log.debug(f"DetectorMap CCDs: {detectorMaps.keys()}")
+
+        arc_data = pd.concat(dmQaResidualData)
         stats = pd.concat(dmQaResidualStats).query('status_type == "RESERVED"')
         stats.sort_values(by=["visit", "arm", "spectrograph", "description"], inplace=True)
 
@@ -187,17 +192,45 @@ def make_report(
     pdf.append(plot_detector_summary(stats))
     pdf.append(plot_detector_summary_per_desc(stats))
 
+    plot_cols = [
+        "fiberId",
+        "wavelength",
+        "x",
+        "xErr",
+        "y",
+        "yErr",
+        "isTrace",
+        "isLine",
+        "xResid",
+        "yResid",
+        "xResidOutlier",
+        "yResidOutlier",
+        "isUsed",
+        "isReserved",
+        "status",
+        "visit",
+    ]
+
     # Per visit descriptions.
     for ccd in stats.ccd.unique():
         log.info(f"Making plots for {ccd}")
         try:
+            # Add the 2D residual plot.
+            arm = ccd[0]
+            spec = int(ccd[1])
+            data = arc_data.query(f"arm == '{arm}' and spectrograph == {spec}")
+
+            # If we are doing a combined report we want to get the mean across visits.
+            grouped = data[plot_cols].groupby(["status", "isLine", "fiberId", "y"])
+            data = grouped.mean().reset_index()
+
+            residFig = plot_detectormap_residuals(data, detectorMaps[ccd])
+            residFig.suptitle(f"DetectorMap Residuals - Median of all visits - {ccd}", weight="bold")
+            pdf.append(residFig, dpi=150)
+
+            # Add the description per visit breakdown.
             fig = plot_detector_visits(stats, ccd)
             pdf.append(fig)
-
-            detectorMap = detectorMaps[ccd]
-            residFig = plot_detectormap_residuals(arc_data, detectorMap)
-            residFig.suptitle("DetectorMap Residuals - {ccd}", weight="bold")
-            pdf.append(residFig)
         except KeyError:
             log.warning(f"DetectorMap not found for {ccd}. Skipping.")
         except Exception as e:
