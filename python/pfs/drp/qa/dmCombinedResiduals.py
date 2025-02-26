@@ -163,13 +163,13 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         detector_order = [d for d in detector_order if d in stats.ccd.cat.categories]
         stats.ccd = stats.ccd.cat.reorder_categories(detector_order, ordered=True)
 
-        pdf = make_report(stats, arc_data, detectorMaps, run_name=run_name)
+        pdf = make_report(stats, arc_data, detectorMaps, run_name=run_name, log=self.log)
 
         return Struct(dmQaCombinedResidualPlot=pdf, dmQaDetectorStats=stats)
 
 
 def make_report(
-    stats: DataFrame, arc_data: DataFrame, detectorMaps: Iterable[DetectorMap], run_name: str
+    stats: DataFrame, arc_data: DataFrame, detectorMaps: Iterable[DetectorMap], run_name: str, log: object
 ) -> MultipagePdfFigure:
     pdf = MultipagePdfFigure()
 
@@ -185,13 +185,19 @@ def make_report(
 
     # Per visit descriptions.
     for ccd in stats.ccd.unique():
-        fig = plot_detector_visits(stats, ccd)
-        pdf.append(fig)
+        try:
+            fig = plot_detector_visits(stats, ccd)
+            pdf.append(fig)
 
-        detectorMap = detectorMaps[ccd]
-        residFig = plot_detectormap_residuals(arc_data, detectorMap)
-        residFig.suptitle("DetectorMap Residuals - {ccd}", weight="bold")
-        pdf.append(residFig)
+            detectorMap = detectorMaps[ccd]
+            residFig = plot_detectormap_residuals(arc_data, detectorMap)
+            residFig.suptitle("DetectorMap Residuals - {ccd}", weight="bold")
+            pdf.append(residFig)
+        except KeyError:
+            log.warning(f"DetectorMap not found for {ccd}. Skipping.")
+        except Exception as e:
+            log.warning(f"Error plotting for {ccd}: {e}")
+            continue
 
     return pdf
 
