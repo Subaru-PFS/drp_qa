@@ -150,6 +150,7 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         """
         # Put the DetectorMaps in a dict by CCD.
         detectorMaps = {detectorMap.metadata["DETECTOR"]: detectorMap for detectorMap in detectorMaps}
+        self.log.debug(f"Visits: {[dm.getVisitInfo().id for dm in detectorMaps.values()]}")
         self.log.debug(f"DetectorMaps: {detectorMaps.keys()}")
 
         arc_data = pd.concat(dmQaResidualData).query('status_type == "RESERVED"')
