@@ -191,15 +191,17 @@ def make_report(
     for ccd in stats.ccd.unique():
         log.info(f"Making plots for {ccd}")
         try:
-            fig = plot_detector_visits(stats, ccd)
-            pdf.append(fig)
-
+            # Add the 2D residual plot.
             arm = ccd[0]
             spec = int(ccd[1])
-            data = arc_data.query("arm == @arm and spectrograph == @spec")
+            data = arc_data.query(f"arm == '{arm}' and spectrograph == {spec}")
             residFig = plot_detectormap_residuals(data, detectorMaps[ccd])
             residFig.suptitle(f"DetectorMap Residuals - {ccd}", weight="bold")
             pdf.append(residFig)
+
+            # Add the description per visit breakdown.
+            fig = plot_detector_visits(stats, ccd)
+            pdf.append(fig)
         except KeyError:
             log.warning(f"DetectorMap not found for {ccd}. Skipping.")
         except Exception as e:
