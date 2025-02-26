@@ -150,6 +150,7 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         """
         # Put the DetectorMaps in a dict by CCD.
         detectorMaps = {detectorMap.metadata["DETECTOR"]: detectorMap for detectorMap in detectorMaps}
+        self.log.debug(f"DetectorMaps: {detectorMaps.keys()}")
 
         arc_data = pd.concat(dmQaResidualData).query('status_type == "RESERVED"')
         stats = pd.concat(dmQaResidualStats).query('status_type == "RESERVED"')
@@ -163,6 +164,7 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         detector_order = [d for d in detector_order if d in stats.ccd.cat.categories]
         stats.ccd = stats.ccd.cat.reorder_categories(detector_order, ordered=True)
 
+        self.log.info("Making combined report")
         pdf = make_report(stats, arc_data, detectorMaps, run_name=run_name, log=self.log)
 
         return Struct(dmQaCombinedResidualPlot=pdf, dmQaDetectorStats=stats)
@@ -180,11 +182,13 @@ def make_report(
     pdf.append(plot_dataframe(stats))
 
     # Detector summaries.
+    log.info("Making detector summary plots")
     pdf.append(plot_detector_summary(stats))
     pdf.append(plot_detector_summary_per_desc(stats))
 
     # Per visit descriptions.
     for ccd in stats.ccd.unique():
+        log.info(f"Making plots for {ccd}")
         try:
             fig = plot_detector_visits(stats, ccd)
             pdf.append(fig)
