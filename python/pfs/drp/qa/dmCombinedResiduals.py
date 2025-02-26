@@ -149,11 +149,11 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
             Statistics of the residual analysis.
         """
         # Put the DetectorMaps in a dict by CCD.
-        detectorMaps = {detectorMap.metadata["DETECTOR"]: detectorMap for detectorMap in detectorMaps}
         self.log.debug(f"Visits: {[dm.getVisitInfo().id for dm in detectorMaps.values()]}")
-        self.log.debug(f"DetectorMaps: {detectorMaps.keys()}")
+        detectorMaps = {detectorMap.metadata["DETECTOR"]: detectorMap for detectorMap in detectorMaps}
+        self.log.debug(f"DetectorMap CCDs: {detectorMaps.keys()}")
 
-        arc_data = pd.concat(dmQaResidualData).query('status_type == "RESERVED"')
+        arc_data = pd.concat(dmQaResidualData)
         stats = pd.concat(dmQaResidualStats).query('status_type == "RESERVED"')
         stats.sort_values(by=["visit", "arm", "spectrograph", "description"], inplace=True)
 
@@ -194,9 +194,11 @@ def make_report(
             fig = plot_detector_visits(stats, ccd)
             pdf.append(fig)
 
-            detectorMap = detectorMaps[ccd]
-            residFig = plot_detectormap_residuals(arc_data, detectorMap)
-            residFig.suptitle("DetectorMap Residuals - {ccd}", weight="bold")
+            arm = ccd[0]
+            spec = int(ccd[1])
+            data = arc_data.query("arm == @arm and spectrograph == @spec")
+            residFig = plot_detectormap_residuals(data, detectorMaps[ccd])
+            residFig.suptitle(f"DetectorMap Residuals - {ccd}", weight="bold")
             pdf.append(residFig)
         except KeyError:
             log.warning(f"DetectorMap not found for {ccd}. Skipping.")
