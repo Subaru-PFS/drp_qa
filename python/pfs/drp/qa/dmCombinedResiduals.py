@@ -150,7 +150,12 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         """
         # Put the DetectorMaps in a dict by CCD.
         self.log.debug(f"Visits: {set([dm.getVisitInfo().id for dm in detectorMaps])}")
-        detectorMaps = {detectorMap.metadata["DETECTOR"]: detectorMap for detectorMap in detectorMaps}
+
+        # Small helper to use while https://pfspipe.ipmu.jp/jira/browse/PIPE2D-1423
+        def get_ccd(dm: DetectorMap) -> str:
+            return "".join([x.split("=")[1] for x in dm.metadata["CALIB_ID"].split(" ")[:2]])
+
+        detectorMaps = {get_ccd(detectorMap): detectorMap for detectorMap in detectorMaps}
         self.log.debug(f"DetectorMap CCDs: {detectorMaps.keys()}")
 
         arc_data = pd.concat(dmQaResidualData)
@@ -219,7 +224,7 @@ def make_report(
 
             residFig = plot_detectormap_residuals(data, detectorMaps[ccd])
             residFig.suptitle(f"DetectorMap Residuals - {ccd}", weight="bold")
-            pdf.append(residFig, dpi=70)
+            pdf.append(residFig, dpi=150)
 
             # Add the description per visit breakdown.
             fig = plot_detector_visits(stats, ccd)
