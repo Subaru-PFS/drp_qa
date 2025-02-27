@@ -21,7 +21,9 @@ from lsst.pipe.base.connectionTypes import (
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from pandas import DataFrame
+from pfs.drp.stella import DetectorMap
 
+from pfs.drp.qa.dmResiduals import plot_detectormap_residuals
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
 from pfs.drp.qa.utils.plotting import description_palette, detector_palette
 
@@ -31,6 +33,32 @@ class DetectorMapCombinedResidualsConnections(
     dimensions=("instrument",),
 ):
     """Connections for DetectorMapCombinedQaTask"""
+
+    detectorMaps = InputConnection(
+        name="detectorMap",
+        doc="Adjusted detector mapping from fiberId,wavelength to x,y",
+        storageClass="DetectorMap",
+        dimensions=(
+            "instrument",
+            "visit",
+            "arm",
+            "spectrograph",
+        ),
+        multiple=True,
+    )
+
+    dmQaResidualData = InputConnection(
+        name="dmQaResidualData",
+        doc="DM QA residual data for plotting",
+        storageClass="DataFrame",
+        dimensions=(
+            "instrument",
+            "visit",
+            "arm",
+            "spectrograph",
+        ),
+        multiple=True,
+    )
 
     dmQaResidualStats = InputConnection(
         name="dmQaResidualStats",
@@ -91,13 +119,24 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         # Store the results.
         butlerQC.put(outputs, outputRefs)
 
-    def run(self, dmQaResidualStats: Iterable[DataFrame], run_name: str) -> Struct:
+    def run(
+        self,
+        detectorMaps: Iterable[DetectorMap],
+        dmQaResidualData: Iterable[DataFrame],
+        dmQaResidualStats: Iterable[DataFrame],
+        run_name: str,
+    ) -> Struct:
         """Create detector level stats and plots.
 
         Parameters
         ----------
+        detectorMaps : Iterable[DetectorMap]
+            An iterable of detector maps. Used for plotting metadata.
+        dmQaResidualData : Iterable[DataFrame]
+            An iterable of DataFrames containing DM QA residual data. These
+            are combined into a single DataFrame for processing.
         dmQaResidualStats : Iterable[DataFrame]
-            A an iterable of DataFrames containing DM QA residual statistics. These
+            An iterable of DataFrames containing DM QA residual statistics. These
             are combined into a single DataFrame for processing.
         run_name : str
             The name of the collection that was used for the stats.
@@ -109,6 +148,17 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         dmQaDetectorStats : `pd.DataFrame`
             Statistics of the residual analysis.
         """
+        # Put the DetectorMaps in a dict by CCD.
+        self.log.debug(f"Visits: {set([dm.getVisitInfo().id for dm in detectorMaps])}")
+
+        # Small helper to use while https://pfspipe.ipmu.jp/jira/browse/PIPE2D-1423
+        def get_ccd(dm: DetectorMap) -> str:
+            return "".join([x.split("=")[1] for x in dm.metadata["CALIB_ID"].split(" ")[:2]])
+
+        detectorMaps = {get_ccd(detectorMap): detectorMap for detectorMap in detectorMaps}
+        self.log.debug(f"DetectorMap CCDs: {detectorMaps.keys()}")
+
+        arc_data = pd.concat(dmQaResidualData)
         stats = pd.concat(dmQaResidualStats).query('status_type == "RESERVED"')
         stats.sort_values(by=["visit", "arm", "spectrograph", "description"], inplace=True)
 
@@ -120,12 +170,15 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         detector_order = [d for d in detector_order if d in stats.ccd.cat.categories]
         stats.ccd = stats.ccd.cat.reorder_categories(detector_order, ordered=True)
 
-        pdf = make_report(stats, run_name=run_name)
+        self.log.info("Making combined report")
+        pdf = make_report(stats, arc_data, detectorMaps, run_name=run_name, log=self.log)
 
         return Struct(dmQaCombinedResidualPlot=pdf, dmQaDetectorStats=stats)
 
 
-def make_report(stats: DataFrame, run_name: str) -> MultipagePdfFigure:
+def make_report(
+    stats: DataFrame, arc_data: DataFrame, detectorMaps: Iterable[DetectorMap], run_name: str, log: object
+) -> MultipagePdfFigure:
     pdf = MultipagePdfFigure()
 
     # Add the title as a figure.
@@ -135,13 +188,54 @@ def make_report(stats: DataFrame, run_name: str) -> MultipagePdfFigure:
     pdf.append(plot_dataframe(stats))
 
     # Detector summaries.
+    log.info("Making detector summary plots")
     pdf.append(plot_detector_summary(stats))
     pdf.append(plot_detector_summary_per_desc(stats))
 
+    plot_cols = [
+        "fiberId",
+        "wavelength",
+        "x",
+        "xErr",
+        "y",
+        "yErr",
+        "isTrace",
+        "isLine",
+        "xResid",
+        "yResid",
+        "xResidOutlier",
+        "yResidOutlier",
+        "isUsed",
+        "isReserved",
+        "status",
+        "visit",
+    ]
+
     # Per visit descriptions.
     for ccd in stats.ccd.unique():
-        fig = plot_detector_visits(stats, ccd)
-        pdf.append(fig)
+        log.info(f"Making plots for {ccd}")
+        try:
+            # Add the 2D residual plot.
+            arm = ccd[0]
+            spec = int(ccd[1])
+            data = arc_data.query(f"arm == '{arm}' and spectrograph == {spec}")
+
+            # If we are doing a combined report we want to get the mean across visits.
+            grouped = data[plot_cols].groupby(["status", "isLine", "fiberId", "y"])
+            data = grouped.mean().reset_index()
+
+            residFig = plot_detectormap_residuals(data, detectorMaps[ccd])
+            residFig.suptitle(f"DetectorMap Residuals - Median of all visits - {ccd}", weight="bold")
+            pdf.append(residFig, dpi=150)
+
+            # Add the description per visit breakdown.
+            fig = plot_detector_visits(stats, ccd)
+            pdf.append(fig)
+        except KeyError:
+            log.warning(f"DetectorMap not found for {ccd}. Skipping.")
+        except Exception as e:
+            log.warning(f"Error plotting for {ccd}: {e}")
+            continue
 
     return pdf
 
