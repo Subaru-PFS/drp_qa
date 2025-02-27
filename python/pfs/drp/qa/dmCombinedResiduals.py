@@ -149,7 +149,7 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
             Statistics of the residual analysis.
         """
         # Put the DetectorMaps in a dict by CCD.
-        self.log.debug(f"Visits: {[dm.getVisitInfo().id for dm in detectorMaps]}")
+        self.log.debug(f"Visits: {set([dm.getVisitInfo().id for dm in detectorMaps])}")
         detectorMaps = {detectorMap.metadata["DETECTOR"]: detectorMap for detectorMap in detectorMaps}
         self.log.debug(f"DetectorMap CCDs: {detectorMaps.keys()}")
 
@@ -219,7 +219,7 @@ def make_report(
 
             residFig = plot_detectormap_residuals(data, detectorMaps[ccd])
             residFig.suptitle(f"DetectorMap Residuals - {ccd}", weight="bold")
-            pdf.append(residFig)
+            pdf.append(residFig, dpi=70)
 
             # Add the description per visit breakdown.
             fig = plot_detector_visits(stats, ccd)

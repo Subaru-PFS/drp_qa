@@ -851,6 +851,7 @@ def plot_residual(
         palette=pal,
         ax=ax0,
         refline=[0],
+        rasterized=True,
     )
 
     def drawRefLines(ax, goodRange, sigmaRange, isVertical=False):
@@ -983,6 +984,7 @@ def plot_residual(
             s=2,
             marker="d" if isLine else ".",
             zorder=100 if isLine else 0,
+            rasterized=True,
         )
 
     fig.colorbar(
@@ -1018,7 +1020,7 @@ def plot_residual(
         ax=ax3,
         refline=[0.0],
         vertical=True,
-        rasterized=True if not bin_wl else False,
+        rasterized=True,
     )
     try:
         ax3.get_legend().set_visible(False)
