@@ -208,6 +208,7 @@ def make_report(
         "isUsed",
         "isReserved",
         "status",
+        "visit",
     ]
 
     # Per visit descriptions.
@@ -218,12 +219,14 @@ def make_report(
             arm = ccd[0]
             spec = int(ccd[1])
             data = arc_data.query(f"arm == '{arm}' and spectrograph == {spec}")
+            visits = sorted(set(data.visit.unique()))
 
             # If we are doing a combined report we want to get the mean across visits.
-            data = data[plot_cols].groupby(["status", "isLine", "fiberId", "y"]).mean().reset_index()
+            grouped = data[plot_cols].groupby(["status", "isLine", "fiberId", "y"])
+            data = grouped.mean().reset_index()
 
             residFig = plot_detectormap_residuals(data, detectorMaps[ccd])
-            residFig.suptitle(f"DetectorMap Residuals - {ccd}", weight="bold")
+            residFig.suptitle(f"DetectorMap Residuals - {ccd}\nMedian of {visits=}", weight="bold")
             pdf.append(residFig, dpi=150)
 
             # Add the description per visit breakdown.
