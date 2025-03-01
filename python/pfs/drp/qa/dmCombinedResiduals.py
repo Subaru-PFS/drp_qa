@@ -1,6 +1,6 @@
 import itertools
 from itertools import product
-from typing import Iterable, Optional
+from typing import Dict, Iterable, Optional
 
 import pandas as pd
 import seaborn as sb
@@ -126,7 +126,7 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         dmQaResidualStats: Iterable[DataFrame],
         run_name: str,
     ) -> Struct:
-        """Create detector level stats and plots.
+        """Create detector level residual_stats and plots.
 
         Parameters
         ----------
@@ -139,7 +139,7 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
             An iterable of DataFrames containing DM QA residual statistics. These
             are combined into a single DataFrame for processing.
         run_name : str
-            The name of the collection that was used for the stats.
+            The name of the collection that was used for the residual_stats.
 
         Returns
         -------
@@ -158,39 +158,45 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         detectorMaps = {get_ccd(detectorMap): detectorMap for detectorMap in detectorMaps}
         self.log.debug(f"DetectorMap CCDs: {detectorMaps.keys()}")
 
-        arc_data = pd.concat(dmQaResidualData)
-        stats = pd.concat(dmQaResidualStats).query('status_type == "RESERVED"')
-        stats.sort_values(by=["visit", "arm", "spectrograph", "description"], inplace=True)
+        residual_data = pd.concat(dmQaResidualData)
+        residual_stats = pd.concat(dmQaResidualStats)
+        residual_stats.sort_values(by=["visit", "arm", "spectrograph", "description"], inplace=True)
 
         # Put the CCD column in a wavelength sorted order.
-        stats.ccd = stats.ccd.astype("category")
+        residual_stats.ccd = residual_stats.ccd.astype("category")
         spec_order = [1, 2, 3, 4]
         arm_order = ["b", "r", "m", "n"]
         detector_order = [f"{arm}{spec}" for arm, spec in itertools.product(arm_order, spec_order)]
-        detector_order = [d for d in detector_order if d in stats.ccd.cat.categories]
-        stats.ccd = stats.ccd.cat.reorder_categories(detector_order, ordered=True)
+        detector_order = [d for d in detector_order if d in residual_stats.ccd.cat.categories]
+        residual_stats.ccd = residual_stats.ccd.cat.reorder_categories(detector_order, ordered=True)
 
         self.log.info("Making combined report")
-        pdf = make_report(stats, arc_data, detectorMaps, run_name=run_name, log=self.log)
+        pdf = make_report(residual_stats, residual_data, detectorMaps, run_name=run_name, log=self.log)
 
-        return Struct(dmQaCombinedResidualPlot=pdf, dmQaDetectorStats=stats)
+        return Struct(dmQaCombinedResidualPlot=pdf, dmQaDetectorStats=residual_stats)
 
 
 def make_report(
-    stats: DataFrame, arc_data: DataFrame, detectorMaps: Iterable[DetectorMap], run_name: str, log: object
+    residual_stats: DataFrame,
+    arc_data: DataFrame,
+    detectorMaps: Dict[str, DetectorMap],
+    run_name: str,
+    log: object,
 ) -> MultipagePdfFigure:
     pdf = MultipagePdfFigure()
+
+    reserved_stats = residual_stats.query("status_type == 'RESERVED'").copy()
 
     # Add the title as a figure.
     pdf.append(plot_title(run_name))
 
     # Add the table data as a figure.
-    pdf.append(plot_dataframe(stats))
+    pdf.append(plot_dataframe(reserved_stats))
 
     # Detector summaries.
     log.info("Making detector summary plots")
-    pdf.append(plot_detector_summary(stats))
-    pdf.append(plot_detector_summary_per_desc(stats))
+    pdf.append(plot_detector_summary(reserved_stats))
+    pdf.append(plot_detector_summary_per_desc(reserved_stats))
 
     plot_cols = [
         "fiberId",
@@ -212,7 +218,7 @@ def make_report(
     ]
 
     # Per visit descriptions.
-    for ccd in stats.ccd.unique():
+    for ccd, visit_stats in residual_stats.groupby("ccd", observed=False):
         log.info(f"Making plots for {ccd}")
         try:
             # Add the 2D residual plot.
@@ -224,12 +230,13 @@ def make_report(
             grouped = data[plot_cols].groupby(["status", "isLine", "fiberId", "y"])
             data = grouped.mean().reset_index()
 
-            residFig = plot_detectormap_residuals(data, detectorMaps[ccd])
+            residFig = plot_detectormap_residuals(data, visit_stats, detectorMaps[str(ccd)])
             residFig.suptitle(f"DetectorMap Residuals - Median of all visits - {ccd}", weight="bold")
             pdf.append(residFig, dpi=150)
 
             # Add the description per visit breakdown.
-            fig = plot_detector_visits(stats, ccd)
+            fig = plot_detector_visits(visit_stats)
+            fig.suptitle(f"{fig.get_suptitle()}\n{ccd}")
             pdf.append(fig)
         except KeyError:
             log.warning(f"DetectorMap not found for {ccd}. Skipping.")
@@ -240,9 +247,7 @@ def make_report(
     return pdf
 
 
-def plot_detector_visits(data: DataFrame, ccd: str) -> Figure:
-    plot_data = data.query("ccd == @ccd")
-
+def plot_detector_visits(plot_data: DataFrame) -> Figure:
     summary_stats = plot_data.filter(regex="median|weighted").mean().to_dict()
 
     fig = plot_visits(plot_data, palette=description_palette)
@@ -261,7 +266,6 @@ def plot_detector_visits(data: DataFrame, ccd: str) -> Figure:
         )
 
     fig.set_size_inches(8, 8)
-    fig.suptitle(f"{fig.get_suptitle()}\n{ccd}")
 
     return fig
 
@@ -322,9 +326,9 @@ def plot_detector_summary(stats: DataFrame) -> Figure:
     return fig
 
 
-def plot_detector_summary_per_desc(data: DataFrame) -> Figure:
+def plot_detector_summary_per_desc(stats: DataFrame) -> Figure:
     plot_data = (
-        data.set_index(["ccd", "description"])
+        stats.set_index(["ccd", "description"])
         .filter(regex="median|weighted|soften")
         .melt(ignore_index=False)
         .reset_index()
@@ -452,7 +456,18 @@ def plot_visits(
 
 
 def plot_dataframe(stats: DataFrame) -> Figure:
-    """Plot the residual data frame."""
+    """Plot the residual data frame.
+
+    Parameters
+    ----------
+    stats : `pandas.DataFrame`
+        The data frame to plot.
+
+    Returns
+    -------
+    fig : `Figure`
+        The figure.
+    """
     plot_data_spatial = (
         stats.query("description == 'Trace'")
         .filter(regex="ccd|spatial.(median|weighted|soften)")
@@ -476,9 +491,9 @@ def plot_dataframe(stats: DataFrame) -> Figure:
     ax0.set_axis_off()
     ax1.set_axis_off()
     t0 = pd.plotting.table(ax0, plot_data_spatial.map(formatter), loc="center")
-    t0.set_fontsize(16)
+    t0.set_fontsize(11)
     t1 = pd.plotting.table(ax1, plot_data_wavelength.map(formatter), loc="center")
-    t1.set_fontsize(16)
+    t1.set_fontsize(11)
 
     ax0.set_title("Spatial (quartz only)", y=1.12)
     ax1.set_title("Wavelength", y=1.12)

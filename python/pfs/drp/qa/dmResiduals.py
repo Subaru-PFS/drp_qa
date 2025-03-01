@@ -209,6 +209,7 @@ class DetectorMapResidualsTask(PipelineTask):
         self.log.info("Making residual plots")
         residFig = plot_detectormap_residuals(
             arc_data,
+            stats,
             detectorMap,
             spatialRange=self.config.spatialRange,
             wavelengthRange=self.config.wavelengthRange,
@@ -239,8 +240,8 @@ class FitStat:
         return f"""median  = {self.median:> 7.05f}
 rms     = {self.weightedRms:> 7.05f}
 soften  = {self.softenFit:> 7.05f}
-fibers  = {self.num_fibers:>8d}
-lines   = {self.num_lines:>8d}
+fibers  = {int(self.num_fibers):>8d}
+lines   = {int(self.num_lines):>8d}
 """
 
 
@@ -260,6 +261,24 @@ class FitStats:
             chi2Y=self.chi2Y,
             spatial=self.spatial.__dict__,
             wavelength=self.wavelength.__dict__,
+        )
+
+    @classmethod
+    def from_dataframe(cls, df: pd.DataFrame):
+        """Convert from dataframe to FitStats."""
+        reserved_wl = df.filter(like="wavelength.").copy()
+        reserved_spatial = df.filter(like="spatial.").copy()
+
+        reserved_wl.columns = reserved_wl.columns.str.rsplit(".", n=1).str[-1]
+        reserved_spatial.columns = reserved_spatial.columns.str.rsplit(".", n=1).str[-1]
+
+        rec = df.iloc[0]
+        return cls(
+            dof=rec.dof,
+            chi2X=rec.chi2X,
+            chi2Y=rec.chi2Y,
+            spatial=FitStat(*reserved_spatial.iloc[0].to_list()),
+            wavelength=FitStat(*reserved_wl.iloc[0].to_list()),
         )
 
 
@@ -606,6 +625,7 @@ def get_fit_stats(
 
 def plot_detectormap_residuals(
     arc_data: pd.DataFrame,
+    visit_stats: pd.DataFrame,
     detectorMap: DetectorMap,
     useSigmaRange: bool = False,
     spatialRange: float = 0.1,
@@ -618,6 +638,8 @@ def plot_detectormap_residuals(
     ----------
     arc_data : `pandas.DataFrame`
         The arc data.
+    visit_stats : `pandas.DataFrame`
+        The visit statistics.
     detectorMap : `DetectorMap`
         The detector map, used for getting valid shape and wavelength range.
     useSigmaRange : `bool`
@@ -653,6 +675,7 @@ def plot_detectormap_residuals(
             try:
                 plot_residual(
                     arc_data,
+                    visit_stats,
                     column=column,
                     dataRange=spatialRange if column == "xResid" else wavelengthRange,
                     binWavelength=binWavelength,
@@ -677,6 +700,7 @@ def plot_detectormap_residuals(
 
 def plot_residual(
     data: pd.DataFrame,
+    visit_stats: pd.DataFrame,
     column: str = "xResid",
     dataRange: float = None,
     sigmaRange: int = 2.5,
@@ -698,6 +722,8 @@ def plot_residual(
     ----------
     data : `pandas.DataFrame`
         The data.
+    visit_stats : `pandas.DataFrame`
+        The visit statistics.
     column : `str`, optional
         The column to use. Default is ``'xResid'``.
     dataRange : `float`, optional
@@ -775,11 +801,6 @@ def plot_residual(
     if len(reserved_data) == 0:
         raise ValueError("No data")
 
-    # Get summary statistics.
-    fit_stats_all = get_fit_stats(data.query(f"isReserved == True and {column}Outlier == False"))
-    fit_stats = getattr(fit_stats_all, which_data)
-    fit_stats_used = getattr(get_fit_stats(data.query("isUsed == True")), which_data)
-
     fig = fig or Figure(layout="constrained")
 
     gs = GridSpec(2, 2, width_ratios=[4, 1], height_ratios=[1, 4], figure=fig)
@@ -822,9 +843,20 @@ def plot_residual(
         alpha=0.5,
     )
 
+    # Get the reserved and used stats.
+    fit_stats_reserved = FitStats.from_dataframe(visit_stats.query("status_type == 'RESERVED'"))
+    fit_stats_used = FitStats.from_dataframe(visit_stats.query("status_type == 'USED'"))
+
+    which_data = "spatial" if column.startswith("x") else "wavelength"
+    fit_stats_reserved = getattr(fit_stats_reserved, which_data)
+    fit_stats_used = getattr(fit_stats_used, which_data)
+
+    weightedRms = fit_stats_reserved.weightedRms
+    numFibers = fit_stats_reserved.num_fibers
+
     # Use sigma range if no range given.
     if dataRange is None and sigmaRange is not None:
-        dataRange = fit_stats.weightedRms * sigmaRange
+        dataRange = weightedRms * sigmaRange
 
     # Scatterplot with outliers marked.
     ax0 = scatterplot_with_outliers(
@@ -863,7 +895,7 @@ def plot_residual(
         if sigmaLines is not None:
             for sigmaLine in sigmaLines:
                 for i, sigmaMultiplier in enumerate([sigmaLine, -1 * sigmaLine]):
-                    lim = sigmaMultiplier * fit_stats.weightedRms
+                    lim = sigmaMultiplier * weightedRms
                     refLine(
                         lim,
                         c=pal["isReserved"],
@@ -893,14 +925,14 @@ def plot_residual(
         bbox_to_anchor=(1.2, 0),
     )
 
-    fiber_outliers = goodFibersAvg.query(f'status=="isReserved" and abs(median) >= {fit_stats.weightedRms}')
+    fiber_outliers = goodFibersAvg.query(f'status=="isReserved" and abs(median) >= {weightedRms}')
     num_sig_outliers = fiber_outliers.fiberId.count()
-    fiber_big_outliers = fiber_outliers.query(f"abs(median) >= {sigmaRange * fit_stats.weightedRms}")
+    fiber_big_outliers = fiber_outliers.query(f"abs(median) >= {sigmaRange * weightedRms}")
     num_siglimit_outliers = fiber_big_outliers.fiberId.count()
     ax0.text(
         0.01,
         0.0,
-        f"Number of fibers: {fit_stats.num_fibers} "
+        f"Number of fibers: {numFibers} "
         f"Number of outliers: "
         f"1σ: {num_sig_outliers} "
         f"{sigmaRange}σ: {num_siglimit_outliers}",
@@ -930,11 +962,10 @@ def plot_residual(
     legend.set_title("")
     legend.set_visible(False)
 
-    # Summary stats area is blank.
     ax1.text(
         -0.01,
         0.0,
-        f"RESERVED:\n{fit_stats}\nUSED:\n{fit_stats_used}",
+        f"RESERVED:\n{fit_stats_reserved}\nUSED:\n{fit_stats_used}",
         transform=ax1.transAxes,
         fontfamily="monospace",
         fontsize="small",
