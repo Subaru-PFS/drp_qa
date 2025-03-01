@@ -300,21 +300,13 @@ def get_data_and_stats(
 
     log.info("Removing outliers")
     arc_data = arc_data.query(
-        "(isLine == True and yResidOutlier == False and xResidOutlier == False)"
-        " or "
-        "(isTrace == True and xResidOutlier == False)"
+        "(isLine == True and yResidOutlier == False) or (isTrace == True and xResidOutlier == False)"
     ).copy()
 
     descriptions = sorted(list(arc_data.description.unique()))
     with suppress(ValueError):
         if len(descriptions) > 1:
             descriptions.remove("Trace")
-
-    dmap_bbox = detectorMap.getBBox()
-    fiberIdMin = detectorMap.fiberId.min()
-    fiberIdMax = detectorMap.fiberId.max()
-    wavelengthMin = int(arcLines.wavelength.min())
-    wavelengthMax = int(arcLines.wavelength.max())
 
     arc_data["arm"] = dataId["arm"]
     arc_data["spectrograph"] = dataId["spectrograph"]
@@ -330,12 +322,6 @@ def get_data_and_stats(
         visit_stats["visit"] = dataId["visit"]
         visit_stats["ccd"] = "{arm}{spectrograph}".format(**dataId)
         visit_stats["description"] = ",".join(descriptions)
-        visit_stats["detector_width"] = dmap_bbox.width
-        visit_stats["detector_height"] = dmap_bbox.height
-        visit_stats["fiberId_min"] = fiberIdMin
-        visit_stats["fiberId_max"] = fiberIdMax
-        visit_stats["wavelength_min"] = wavelengthMin
-        visit_stats["wavelength_max"] = wavelengthMax
         stats.append(visit_stats)
 
     stats = pd.concat(stats)
