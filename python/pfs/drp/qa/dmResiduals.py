@@ -76,6 +76,17 @@ class DetectorMapResidualsConnections(
         storageClass="Config",
         dimensions=(),
     )
+    dmQaResidualData = OutputConnection(
+        name="dmQaResidualData",
+        doc="The dataframe of the detectormap residuals.",
+        storageClass="DataFrame",
+        dimensions=(
+            "instrument",
+            "visit",
+            "arm",
+            "spectrograph",
+        ),
+    )
     dmQaResidualStats = OutputConnection(
         name="dmQaResidualStats",
         doc="Statistics of the DM residual analysis.",
@@ -103,6 +114,7 @@ class DetectorMapResidualsConnections(
 class DetectorMapResidualsConfig(PipelineTaskConfig, pipelineConnections=DetectorMapResidualsConnections):
     """Configuration for DetectorMapQaTask"""
 
+    generatePlot = Field(dtype=bool, default=False, doc="Generate 2D residual plot for visit, default False.")
     useSigmaRange = Field(dtype=bool, default=False, doc="Use ±2.5 sigma as range")
     spatialRange = Field(
         dtype=float, default=0.1, doc="Spatial range for the residual plot, implies useSigmaRange is False."
@@ -186,90 +198,20 @@ class DetectorMapResidualsTask(PipelineTask):
         self.log.info("Getting and scrubbing the data")
         adjustDM_config = dict() if reduceExposure_config is None else reduceExposure_config.adjustDetectorMap
 
-        good_lines_idx = getGoodLines(
-            arcLines, detectorMap.getDispersionAtCenter(), adjustDM_config, self.log
+        arc_data, stats = get_data_and_stats(
+            dataId,
+            arcLines,
+            detectorMap,
+            adjustDM_config=adjustDM_config,
+            log=self.log,
         )
-        arcLines = arcLines[good_lines_idx].copy()
-
-        arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=dropNaColumns, log=self.log, **kwargs)
-        if len(arc_data) == 0:
-            raise ValueError("After scrubbing the data, the data is empty, cannot proceed.")
-
-        # Mark the sigma-clipped outliers for each relevant group.
-        def maskOutliers(grp):
-            grp["xResidOutlier"] = sigma_clip(grp.xResid).mask
-            grp["yResidOutlier"] = sigma_clip(grp.yResid).mask
-            return grp
-
-        # Ignore the warnings about NaNs and inf.
-        self.log.info("Masking outliers")
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            arc_data = arc_data.groupby(["status_type", "isLine"]).apply(maskOutliers)
-            arc_data.reset_index(drop=True, inplace=True)
-
-        if addFiberInfo is True:
-            self.log.info("Adding fiber information")
-            mtp_df = pd.DataFrame(
-                FiberIds().fiberIdToMTP(detectorMap.fiberId), columns=["mtpId", "mtpHoles", "cobraId"]
-            )
-            mtp_df.index = detectorMap.fiberId
-            mtp_df.index.name = "fiberId"
-            arc_data = arc_data.merge(mtp_df.reset_index(), on="fiberId")
-
-        if removeOutliers is True:
-            self.log.info("Removing outliers")
-            arc_data = arc_data.query(
-                "(isLine == True and yResidOutlier == False and xResidOutlier == False)"
-                " or "
-                "(isTrace == True and xResidOutlier == False)"
-            ).copy()
-
-        descriptions = sorted(list(arc_data.description.unique()))
-        with suppress(ValueError):
-            if len(descriptions) > 1:
-                descriptions.remove("Trace")
-
-        dmap_bbox = detectorMap.getBBox()
-        fiberIdMin = detectorMap.fiberId.min()
-        fiberIdMax = detectorMap.fiberId.max()
-        wavelengthMin = int(arcLines.wavelength.min())
-        wavelengthMax = int(arcLines.wavelength.max())
-
-        arc_data["arm"] = dataId["arm"]
-        arc_data["spectrograph"] = dataId["spectrograph"]
-        arc_data["visit"] = dataId["visit"]
-
-        self.log.info("Getting residual stats")
-        stats = list()
-        for idx, rows in arc_data.groupby("status_type"):
-            visit_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
-            visit_stats["status_type"] = idx
-            visit_stats["arm"] = dataId["arm"]
-            visit_stats["spectrograph"] = dataId["spectrograph"]
-            visit_stats["visit"] = dataId["visit"]
-            visit_stats["ccd"] = "{arm}{spectrograph}".format(**dataId)
-            visit_stats["description"] = ",".join(descriptions)
-            visit_stats["detector_width"] = dmap_bbox.width
-            visit_stats["detector_height"] = dmap_bbox.height
-            visit_stats["fiberId_min"] = fiberIdMin
-            visit_stats["fiberId_max"] = fiberIdMax
-            visit_stats["wavelength_min"] = wavelengthMin
-            visit_stats["wavelength_max"] = wavelengthMax
-            stats.append(visit_stats)
-
-        stats = pd.concat(stats)
 
         self.log.info("Making residual plots")
         residFig = plot_detectormap_residuals(
             arc_data,
-            stats,
-            dataId["arm"],
-            dataId["spectrograph"],
-            useSigmaRange=self.config.useSigmaRange,
+            detectorMap,
             spatialRange=self.config.spatialRange,
             wavelengthRange=self.config.wavelengthRange,
-            binWavelength=self.config.binWavelength,
         )
 
         # Update the title with the detector name.
@@ -277,6 +219,7 @@ class DetectorMapResidualsTask(PipelineTask):
         residFig.suptitle(suptitle, weight="bold")
 
         return Struct(
+            dmQaResidualData=arc_data,
             dmQaResidualStats=stats,
             dmQaResidualPlot=residFig,
         )
@@ -318,6 +261,72 @@ class FitStats:
             spatial=self.spatial.__dict__,
             wavelength=self.wavelength.__dict__,
         )
+
+
+def get_data_and_stats(
+    dataId: dict,
+    arcLines: ArcLineSet,
+    detectorMap: DetectorMap,
+    adjustDM_config=None,
+    log=None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    good_lines_idx = getGoodLines(arcLines, detectorMap.getDispersionAtCenter(), adjustDM_config, log)
+    arcLines = arcLines[good_lines_idx].copy()
+
+    arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=True, log=log)
+    if len(arc_data) == 0:
+        raise ValueError("After scrubbing the data, the data is empty, cannot proceed.")
+
+    # Mark the sigma-clipped outliers for each relevant group.
+    def maskOutliers(grp):
+        grp["xResidOutlier"] = sigma_clip(grp.xResid).mask
+        grp["yResidOutlier"] = sigma_clip(grp.yResid).mask
+        return grp
+
+    # Ignore the warnings about NaNs and inf.
+    log.info("Masking outliers")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        arc_data = arc_data.groupby(["status_type", "isLine"]).apply(maskOutliers)
+        arc_data.reset_index(drop=True, inplace=True)
+
+    log.info("Adding fiber information")
+    mtp_df = pd.DataFrame(
+        FiberIds().fiberIdToMTP(detectorMap.fiberId), columns=["mtpId", "mtpHoles", "cobraId"]
+    )
+    mtp_df.index = detectorMap.fiberId
+    mtp_df.index.name = "fiberId"
+    arc_data = arc_data.merge(mtp_df.reset_index(), on="fiberId")
+
+    log.info("Removing outliers")
+    arc_data = arc_data.query(
+        "(isLine == True and yResidOutlier == False) or (isTrace == True and xResidOutlier == False)"
+    ).copy()
+
+    descriptions = sorted(list(arc_data.description.unique()))
+    with suppress(ValueError):
+        if len(descriptions) > 1:
+            descriptions.remove("Trace")
+
+    arc_data["arm"] = dataId["arm"]
+    arc_data["spectrograph"] = dataId["spectrograph"]
+    arc_data["visit"] = dataId["visit"]
+
+    log.info("Getting residual stats")
+    stats = list()
+    for idx, rows in arc_data.groupby("status_type"):
+        visit_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
+        visit_stats["status_type"] = idx
+        visit_stats["arm"] = dataId["arm"]
+        visit_stats["spectrograph"] = dataId["spectrograph"]
+        visit_stats["visit"] = dataId["visit"]
+        visit_stats["ccd"] = "{arm}{spectrograph}".format(**dataId)
+        visit_stats["description"] = ",".join(descriptions)
+        stats.append(visit_stats)
+
+    stats = pd.concat(stats)
+
+    return arc_data, stats
 
 
 def getGoodLines(
@@ -597,9 +606,7 @@ def get_fit_stats(
 
 def plot_detectormap_residuals(
     arc_data: pd.DataFrame,
-    visit_stats: pd.DataFrame,
-    arm: str,
-    spectrograph: int,
+    detectorMap: DetectorMap,
     useSigmaRange: bool = False,
     spatialRange: float = 0.1,
     wavelengthRange: float = 0.1,
@@ -611,12 +618,8 @@ def plot_detectormap_residuals(
     ----------
     arc_data : `pandas.DataFrame`
         The arc data.
-    visit_stats : `pandas.DataFrame`
-        The visit statistics.
-    arm : `str`
-        The arm.
-    spectrograph : `int`
-        The spectrograph.
+    detectorMap : `DetectorMap`
+        The detector map, used for getting valid shape and wavelength range.
     useSigmaRange : `bool`
         Use the sigma range? Default is ``False``.
     spatialRange : `float`, optional
@@ -630,26 +633,14 @@ def plot_detectormap_residuals(
         spatialRange = None
         wavelengthRange = None
 
-    ccd = f"{arm}{spectrograph}"
-
     # Get just the reserved visits for this ccd.
-    visit_stats = visit_stats.query('status_type == "RESERVED" and ccd == @ccd').sort_values("visit").copy()
-
-    try:
-        exp_stat = visit_stats.iloc[0]
-        dmWidth = exp_stat.detector_width
-        dmHeight = exp_stat.detector_height
-        fiberIdMin = exp_stat.fiberId_min
-        fiberIdMax = exp_stat.fiberId_max
-        wavelengthMin = exp_stat.wavelength_min
-        wavelengthMax = exp_stat.wavelength_max
-    except IndexError:
-        dmWidth = None
-        dmHeight = None
-        fiberIdMin = None
-        fiberIdMax = None
-        wavelengthMin = None
-        wavelengthMax = None
+    bbox = detectorMap.getBBox()
+    dmWidth = bbox.width
+    dmHeight = bbox.height
+    fiberIdMin = detectorMap.fiberId.min()
+    fiberIdMax = detectorMap.fiberId.max()
+    wavelengthMin = detectorMap.metadata["WAV-MIN"]
+    wavelengthMax = detectorMap.metadata["WAV-MAX"]
 
     # One big fig.
     main_fig = Figure(layout="constrained", figsize=(12, 8), dpi=150)
@@ -658,12 +649,10 @@ def plot_detectormap_residuals(
     (x_fig, y_fig) = main_fig.subfigures(1, 2, wspace=0)
 
     try:
-        pd0 = arc_data.query(f'arm == "{arm}" and spectrograph == {spectrograph}').copy()
-
         for sub_fig, column in zip([x_fig, y_fig], ["xResid", "yResid"]):
             try:
                 plot_residual(
-                    pd0,
+                    arc_data,
                     column=column,
                     dataRange=spatialRange if column == "xResid" else wavelengthRange,
                     binWavelength=binWavelength,
@@ -676,7 +665,7 @@ def plot_detectormap_residuals(
                     wavelengthMax=wavelengthMax,
                     fig=sub_fig,
                 )
-                sub_fig.suptitle(f"{ccd}\n{column}", fontsize="small", fontweight="bold")
+                sub_fig.suptitle(f"{column}", fontsize="small", fontweight="bold")
             except Exception:
                 continue
 
@@ -847,7 +836,8 @@ def plot_residual(
         ymax=dataRange,
         palette=pal,
         ax=ax0,
-        refline=0,
+        refline=[0],
+        rasterized=True,
     )
 
     def drawRefLines(ax, goodRange, sigmaRange, isVertical=False):
@@ -980,6 +970,7 @@ def plot_residual(
             s=2,
             marker="d" if isLine else ".",
             zorder=100 if isLine else 0,
+            rasterized=True,
         )
 
     fig.colorbar(
@@ -1013,9 +1004,9 @@ def plot_residual(
         ymax=dataRange,
         palette=pal,
         ax=ax3,
-        refline=0.0,
+        refline=[0.0],
         vertical=True,
-        rasterized=True if not bin_wl else False,
+        rasterized=True,
     )
     try:
         ax3.get_legend().set_visible(False)

@@ -42,6 +42,7 @@ visit.
 
 | DataSet Type        | Dimensions                             | Description                                                                                 |
 |---------------------|----------------------------------------|---------------------------------------------------------------------------------------------|
+| `dmQaResidualData`  | `instrument, visit, arm, spectrograph` | Residual data for the given detector and visit.                                             | 
 | `dmQaResidualStats` | `instrument, visit, arm, spectrograph` | Summary statistics for the given detector and visit.                                        | 
 | `dmQaResidualPlot`  | `instrument, visit, arm, spectrograph` | 1D and 2D plots of the residual between the detectormap and the arclines for a given visit. |
 
