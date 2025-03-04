@@ -1,5 +1,4 @@
 import warnings
-from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
 from logging import Logger
@@ -8,6 +7,7 @@ from typing import Iterable, Optional
 import numpy as np
 import pandas as pd
 from astropy.stats import sigma_clip
+from lsst.afw.image import VisitInfo
 from lsst.pex.config import Config, Field
 from lsst.pipe.base import (
     InputQuantizedConnection,
@@ -38,37 +38,29 @@ from pfs.drp.qa.utils.plotting import div_palette, scatterplot_with_outliers
 
 class DetectorMapResidualsConnections(
     PipelineTaskConnections,
-    dimensions=(
-        "instrument",
-        "visit",
-        "arm",
-        "spectrograph",
-    ),
+    dimensions=("instrument", "visit", "arm", "spectrograph"),
 ):
     """Connections for DetectorMapQaTask"""
+
+    visitInfo = InputConnection(
+        name="raw.visitInfo",
+        doc="Visit info from the raw exposure",
+        storageClass="VisitInfo",
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
+    )
 
     detectorMap = InputConnection(
         name="detectorMap",
         doc="Adjusted detector mapping from fiberId,wavelength to x,y",
         storageClass="DetectorMap",
-        dimensions=(
-            "instrument",
-            "visit",
-            "arm",
-            "spectrograph",
-        ),
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
 
     arcLines = InputConnection(
         name="lines",
         doc="Emission line measurements",
         storageClass="ArcLineSet",
-        dimensions=(
-            "instrument",
-            "visit",
-            "arm",
-            "spectrograph",
-        ),
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
     reduceExposure_config = InputConnection(
         name="reduceExposure_config",
@@ -76,38 +68,24 @@ class DetectorMapResidualsConnections(
         storageClass="Config",
         dimensions=(),
     )
+
     dmQaResidualData = OutputConnection(
         name="dmQaResidualData",
         doc="The dataframe of the detectormap residuals.",
         storageClass="DataFrame",
-        dimensions=(
-            "instrument",
-            "visit",
-            "arm",
-            "spectrograph",
-        ),
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
     dmQaResidualStats = OutputConnection(
         name="dmQaResidualStats",
         doc="Statistics of the DM residual analysis.",
         storageClass="DataFrame",
-        dimensions=(
-            "instrument",
-            "visit",
-            "arm",
-            "spectrograph",
-        ),
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
     dmQaResidualPlot = OutputConnection(
         name="dmQaResidualPlot",
         doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
         storageClass="Plot",
-        dimensions=(
-            "instrument",
-            "visit",
-            "arm",
-            "spectrograph",
-        ),
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
 
 
@@ -159,10 +137,11 @@ class DetectorMapResidualsTask(PipelineTask):
         self,
         arcLines: ArcLineSet,
         detectorMap: DetectorMap,
+        visitInfo: VisitInfo,
+        dataId: dict,
         dropNaColumns: bool = True,
         removeOutliers: bool = True,
         addFiberInfo: bool = True,
-        dataId: dict = None,
         reduceExposure_config: Config = None,
         **kwargs,
     ) -> Struct:
@@ -178,14 +157,17 @@ class DetectorMapResidualsTask(PipelineTask):
             The arc lines.
         detectorMap : `DetectorMap`
             The detector map.
+        visitInfo : `VisitInfo`
+            The visit info containing the observationReason, which determines
+            some plotting parameters.
+        dataId : `dict`
+            The dataId for the visit.
         dropNaColumns : `bool`, optional
             Drop columns where all values are NaN. Default is True.
         removeOutliers : `bool`, optional
             Remove rows with ``flag=False``? Default is True.
         addFiberInfo : `bool`, optional
             Add fiber information to the dataframe. Default is True.
-        dataId : dict, optional
-            Dictionary of the dataId.
         reduceExposure_config : `Config`, optional
             Configuration for reduceExposure.
 
@@ -202,6 +184,7 @@ class DetectorMapResidualsTask(PipelineTask):
             dataId,
             arcLines,
             detectorMap,
+            visitInfo,
             adjustDM_config=adjustDM_config,
             log=self.log,
         )
@@ -266,30 +249,47 @@ class FitStats:
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame):
         """Convert from dataframe to FitStats."""
-        reserved_wl = df.filter(like="wavelength.").copy()
-        reserved_spatial = df.filter(like="spatial.").copy()
+        try:
+            df = df.select_dtypes(include="number").median().to_frame().T
 
-        reserved_wl.columns = reserved_wl.columns.str.rsplit(".", n=1).str[-1]
-        reserved_spatial.columns = reserved_spatial.columns.str.rsplit(".", n=1).str[-1]
+            reserved_wl = df.filter(like="wavelength.").copy()
+            reserved_spatial = df.filter(like="spatial.").copy()
 
-        rec = df.iloc[0]
-        return cls(
-            dof=rec.dof,
-            chi2X=rec.chi2X,
-            chi2Y=rec.chi2Y,
-            spatial=FitStat(*reserved_spatial.iloc[0].to_list()),
-            wavelength=FitStat(*reserved_wl.iloc[0].to_list()),
-        )
+            reserved_wl.columns = reserved_wl.columns.str.rsplit(".", n=1).str[-1]
+            reserved_spatial.columns = reserved_spatial.columns.str.rsplit(".", n=1).str[-1]
+
+            rec = df.iloc[0]
+            fs = cls(
+                dof=rec.dof,
+                chi2X=rec.chi2X,
+                chi2Y=rec.chi2Y,
+                spatial=FitStat(*reserved_spatial.iloc[0].to_list()),
+                wavelength=FitStat(*reserved_wl.iloc[0].to_list()),
+            )
+        except Exception as e:
+            print(f"Error: {e!r}")
+        else:
+            return fs
 
 
 def get_data_and_stats(
     dataId: dict,
     arcLines: ArcLineSet,
     detectorMap: DetectorMap,
+    visitInfo: VisitInfo,
     adjustDM_config=None,
     log=None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    good_lines_idx = getGoodLines(arcLines, detectorMap.getDispersionAtCenter(), adjustDM_config, log)
+
+    is_science = visitInfo.observationReason == "science"
+
+    good_lines_idx = getGoodLines(
+        arcLines,
+        dispersion=detectorMap.getDispersionAtCenter(),
+        isScience=is_science,
+        adjustDMConfig=adjustDM_config,
+        log=log,
+    )
     arcLines = arcLines[good_lines_idx].copy()
 
     arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=True, log=log)
@@ -306,7 +306,7 @@ def get_data_and_stats(
     log.info("Masking outliers")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        arc_data = arc_data.groupby(["status_type", "isLine"]).apply(maskOutliers)
+        arc_data = arc_data.groupby(["status_type", "description"]).apply(maskOutliers)
         arc_data.reset_index(drop=True, inplace=True)
 
     log.info("Adding fiber information")
@@ -322,25 +322,21 @@ def get_data_and_stats(
         "(isLine == True and yResidOutlier == False) or (isTrace == True and xResidOutlier == False)"
     ).copy()
 
-    descriptions = sorted(list(arc_data.description.unique()))
-    with suppress(ValueError):
-        if len(descriptions) > 1:
-            descriptions.remove("Trace")
-
     arc_data["arm"] = dataId["arm"]
     arc_data["spectrograph"] = dataId["spectrograph"]
     arc_data["visit"] = dataId["visit"]
 
     log.info("Getting residual stats")
     stats = list()
-    for idx, rows in arc_data.groupby("status_type"):
+    for (status_type, description), rows in arc_data.groupby(["status_type", "description"]):
         visit_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
-        visit_stats["status_type"] = idx
+        visit_stats["status_type"] = status_type
+        visit_stats["description"] = description
         visit_stats["arm"] = dataId["arm"]
         visit_stats["spectrograph"] = dataId["spectrograph"]
         visit_stats["visit"] = dataId["visit"]
         visit_stats["ccd"] = "{arm}{spectrograph}".format(**dataId)
-        visit_stats["description"] = ",".join(descriptions)
+        visit_stats["observationReason"] = visitInfo.observationReason
         stats.append(visit_stats)
 
     stats = pd.concat(stats)
@@ -349,7 +345,11 @@ def get_data_and_stats(
 
 
 def getGoodLines(
-    lines: ArcLineSet, dispersion: float | None, adjustDMConfig: Config, log: Logger | None = None
+    lines: ArcLineSet,
+    dispersion: float | None,
+    adjustDMConfig: Config,
+    isScience: bool = False,
+    log: Logger | None = None,
 ) -> np.ndarray:
     """Get the good lines.
 
@@ -362,6 +362,8 @@ def getGoodLines(
         The dispersion. Default is None.
     adjustDMConfig : `Config`
         Configuration used for the detector map adjustment.
+    isScience : `bool`, optional
+        Is this a science visit? Default is False.
     log : `Logger`, optional
         The logger for the class object. Default is None.
 
@@ -371,14 +373,17 @@ def getGoodLines(
         The index of the good lines.
     """
     log.debug(f"Scrubbing data using config={adjustDMConfig.toDict()}")
-    isTrace = lines.description == "Trace"
-    isLine = ~isTrace
-    numTraceLines = len(set(lines[isTrace].fiberId))
-    numArcLines = len(set(lines[isLine].fiberId))
+    traceIndex = lines.description == "Trace"
+    lineIndex = ~traceIndex
+    numTraceLines = len(set(lines[traceIndex].fiberId))
+    numArcLines = len(set(lines[lineIndex].fiberId))
 
-    log.debug(f"{isTrace.sum()} line centroids for {numTraceLines} traces")
-    log.debug(f"{isLine.sum()} line centroids for {numArcLines} traces")
-    log.debug(f"{isLine.sum() + isTrace.sum()} lines in list")
+    isTrace = lineIndex.sum() == 0
+    isArc = isTrace == False
+
+    log.debug(f"{traceIndex.sum()} line centroids for {numTraceLines} traces")
+    log.debug(f"{lineIndex.sum()} line centroids for {numArcLines} traces")
+    log.debug(f"{lineIndex.sum() + traceIndex.sum()} lines in list")
 
     def getCounts():
         """Provide a list of counts of different species"""
@@ -387,9 +392,9 @@ def getGoodLines(
     good = lines.flag == 0
     log.debug(f"{good.sum()} good lines after initial flags ({getCounts()})")
 
-    if isLine.sum() > 0:
+    if not isScience and isArc:
         log.info("Found lamp species, ignoring traces.")
-        good &= isLine
+        good &= lineIndex
         log.debug(f"{good.sum()} good lines after ignoring traces ({getCounts()})")
 
     good &= (lines.status & ReferenceLineStatus.fromNames(*adjustDMConfig.lineFlags)) == 0
@@ -399,7 +404,7 @@ def getGoodLines(
     good &= np.isfinite(lines.xErr) & np.isfinite(lines.yErr)
 
     if hasattr(lines, "slope"):
-        good &= np.isfinite(lines.slope) | ~isTrace
+        good &= np.isfinite(lines.slope) | ~traceIndex
     log.debug(f"{good.sum()} good lines after finite positions ({getCounts()})")
 
     if adjustDMConfig.minSignalToNoise > 0:
@@ -420,15 +425,15 @@ def getGoodLines(
     if adjustDMConfig.maxCentroidError > 0:
         maxCentroidError = adjustDMConfig.maxCentroidError
         good &= (lines.xErr > 0) & (lines.xErr < maxCentroidError)
-        good &= ((lines.yErr > 0) & (lines.yErr < maxCentroidError)) | isTrace
+        good &= ((lines.yErr > 0) & (lines.yErr < maxCentroidError)) | traceIndex
         log.debug(f"{good.sum()} good lines after {maxCentroidError=} centroid errors ({getCounts()})")
 
-    if dispersion is not None and adjustDMConfig.exclusionRadius > 0 and not np.all(isTrace):
-        wavelength = np.unique(lines.wavelength[~isTrace])
+    if dispersion is not None and adjustDMConfig.exclusionRadius > 0 and not np.all(traceIndex):
+        wavelength = np.unique(lines.wavelength[~traceIndex])
         status = [np.bitwise_or.reduce(lines.status[lines.wavelength == wl]) for wl in wavelength]
         exclusionRadius = dispersion * adjustDMConfig.exclusionRadius
         exclude = getExclusionZone(wavelength, exclusionRadius, np.array(status))
-        good &= np.isin(lines.wavelength, wavelength[exclude], invert=True) | isTrace
+        good &= np.isin(lines.wavelength, wavelength[exclude], invert=True) | traceIndex
         log.debug(f"{good.sum()} good lines after {exclusionRadius=:.03f} exclusion zone ({getCounts()})")
 
     return good
@@ -567,10 +572,13 @@ def get_fit_stats(
     lines = arc_data.query("isLine == True").dropna(subset=["yResid"]).copy()
 
     xNum = len(arc_data)
+    numTraces = traces.fiberId.nunique()
     try:
         yNum = lines.isLine.value_counts()[True]
+        numLines = lines.wavelength.nunique()
     except KeyError:
         yNum = 0
+        numLines = 0
 
     xWeightedRms = getWeightedRMS(arc_data.xResid, arc_data.xErr, soften=xSoften)
     yWeightedRms = getWeightedRMS(lines.yResid, lines.yErr, soften=ySoften)
@@ -617,8 +625,8 @@ def get_fit_stats(
     xFibers = len(traces.fiberId.unique())
     yFibers = len(lines.fiberId.unique())
 
-    xFitStat = FitStat(arc_data.xResid.median(), xRobustRms, xWeightedRms, xSoftFit, xDof, xFibers, xNum)
-    yFitStat = FitStat(lines.yResid.median(), yRobustRms, yWeightedRms, ySoftFit, yDof, yFibers, yNum)
+    xFitStat = FitStat(arc_data.xResid.median(), xRobustRms, xWeightedRms, xSoftFit, xDof, xFibers, numTraces)
+    yFitStat = FitStat(lines.yResid.median(), yRobustRms, yWeightedRms, ySoftFit, yDof, yFibers, numLines)
 
     return FitStats(dof, chi2X, chi2Y, xFitStat, yFitStat)
 
@@ -672,10 +680,15 @@ def plot_detectormap_residuals(
 
     try:
         for sub_fig, column in zip([x_fig, y_fig], ["xResid", "yResid"]):
+            if column == "xResid":
+                plot_stats = visit_stats.query("description == 'Trace'")
+            else:
+                plot_stats = visit_stats.query("description != 'Trace'")
+
             try:
                 plot_residual(
                     arc_data,
-                    visit_stats,
+                    plot_stats,
                     column=column,
                     dataRange=spatialRange if column == "xResid" else wavelengthRange,
                     binWavelength=binWavelength,
@@ -790,10 +803,8 @@ def plot_residual(
     plotData.rename(columns={f"{column}Outlier": "isOutlier"}, inplace=True)
 
     units = "pix"
-    which_data = "spatial"
     if column.startswith("y"):
         plotData = plotData.query("isTrace == False").copy()
-        which_data = "wavelength"
     else:
         plotData = plotData.query("isTrace == True").copy()
 
