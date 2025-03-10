@@ -218,7 +218,7 @@ def make_report(
     ]
 
     # Per visit descriptions.
-    for ccd, visit_stats in residual_stats.groupby("ccd", observed=False):
+    for ccd, visit_stats in reserved_stats.groupby("ccd", observed=False):
         log.info(f"Making plots for {ccd}")
         try:
             # Add the 2D residual plot.
@@ -248,8 +248,9 @@ def make_report(
 
 
 def plot_detector_visits(plot_data: DataFrame) -> Figure:
-    summary_stats = plot_data.filter(regex="median|weighted").mean().to_dict()
     fig = plot_visits(plot_data, palette=description_palette)
+
+    summary_stats = plot_data.filter(regex="median|weighted").mean().to_dict()
 
     for ax, dim in zip(fig.axes, ["spatial", "wavelength"]):
         upper_range = summary_stats[f"{dim}.median"] + summary_stats[f"{dim}.weightedRms"]
