@@ -138,7 +138,8 @@ def runLeaveOneOutSkyResiduals(butler, dataId, fitSkyModelConfig):
 
     # Perform sky subtraction for each excluded fiber
     for excludeFiberId in skyFiberIds:
-        spectras.append(subtractSkyWithExclusion(butler, dataId, excludeFiberId, fitSkyModelConfig=fitSkyModelConfig))
+        spectras.append(subtractSkyWithExclusion(butler, dataId, excludeFiberId,
+                                                 fitSkyModelConfig=fitSkyModelConfig))
 
     # Merge the individual residual spectra into a single `PfsArm` object
     return PfsArm.fromMerge(spectras)
@@ -148,7 +149,7 @@ def extractFiber(spectra, fiberId, finite=True):
     """
     Extract relevant spectral data for a specific fiber.
 
-    This function retrieves wavelength, flux, sky background, variance, and 
+    This function retrieves wavelength, flux, sky background, variance, and
     computes standard deviation and chi values for the given fiber.
 
     Parameters
@@ -214,8 +215,7 @@ def extractFiber(spectra, fiberId, finite=True):
 def buildReference(spectra, func=np.mean, model='residuals'):
     """
     Build a reference spectrum by aggregating spectral data from multiple fibers.
-
-    The reference spectrum is constructed by applying a specified aggregation function 
+    The reference spectrum is constructed by applying a specified aggregation function
     (e.g., mean, median) to the selected model across all fibers.
 
     Parameters
@@ -382,7 +382,7 @@ def convertToDict(hold, finite=True):
     Convert spectral data into a structured dictionary format.
 
     This function processes PFS spectral data and organizes it into a nested dictionary,
-    where each entry corresponds to a spectrograph arm and fiber ID, storing relevant spectral 
+    where each entry corresponds to a spectrograph arm and fiber ID, storing relevant spectral
     properties such as wavelength, flux, standard deviation, sky background, and chi values.
 
     Parameters

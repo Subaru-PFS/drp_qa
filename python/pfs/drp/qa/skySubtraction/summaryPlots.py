@@ -1,7 +1,8 @@
-import pfs.drp.qa.skySubtraction.plot as skySubtractionQaPlot
 import numpy as np
+import pfs.drp.qa.skySubtraction.plot as skySubtractionQaPlot
 import scipy.stats
-from pfs.drp.qa.skySubtraction.skySubtractionQa import arm_colors, getStdev, buildReference, rolling, splitSpectraIntoReferenceAndTest
+from pfs.drp.qa.skySubtraction.skySubtractionQa import arm_colors, getStdev, buildReference, rolling
+from pfs.drp.qa.skySubtraction.skySubtractionQa import splitSpectraIntoReferenceAndTest
 
 
 def summarizeSpectrograph(hold,
@@ -67,11 +68,11 @@ def summarizeSpectrograph(hold,
         # Process each fiber
         for fib in h.keys():
             chi = h[fib]['chi']
-            std = h[fib]['std']
+            # std = h[fib]['std']
 
             # Add histogram layer for each fiber
             layers.append(
-                skySubtractionQaPlot.layer('hist', chi, color=color, alpha=alpha,
+                skySubtractionQaPlot.Layer('hist', chi, color=color, alpha=alpha,
                                            linewidth=2, density=True, rnge=xlim, bins=30)
             )
 
@@ -86,7 +87,7 @@ def summarizeSpectrograph(hold,
 
         # Add combined chi distribution (all fibers) with a distinctive color
         layers.append(
-            skySubtractionQaPlot.layer('hist', big_chi, color='magenta',
+            skySubtractionQaPlot.Layer('hist', big_chi, color='magenta',
                                        alpha=1, linewidth=6, density=True, rnge=xlim, bins=30)
         )
 
@@ -103,11 +104,11 @@ def summarizeSpectrograph(hold,
 
         # Iterate over mean/median and stdev/IQR plots
         for j, x, ax, rnge in zip(range(2), [means, stdev], axs[1:], rnge_options):
-            other = [skySubtractionQaPlot.layer('vert', 0 if j == 0 else 1, linestyle='--', zorder=10)]
+            other = [skySubtractionQaPlot.Layer('vert', 0 if j == 0 else 1, linestyle='--', zorder=10)]
 
             # Generate the histogram layers for statistical metrics
             hist_layers = [
-                skySubtractionQaPlot.layer('hist', x[:, i], color=color,
+                skySubtractionQaPlot.Layer('hist', x[:, i], color=color,
                                            alpha=[1, 0.5][i], density=True,
                                            rnge=rnge, bins=30, linewidth=4,
                                            histtype=['step', 'stepfilled'][i],
@@ -240,7 +241,7 @@ def plot_2d_spectrograph(hold, plotId, arms, binsize=10):
 
         # Build reference spectra
         references = buildReference(skySpectra, func=None, model='chi')
-        references_none = buildReference(skySpectra, func=None, model='sky_chi')
+        # references_none = buildReference(skySpectra, func=None, model='sky_chi')
 
         # Extract data
         x, y = references
@@ -332,7 +333,7 @@ def plot_outlier_summary(hold, holdAsDict, plotId, arms):
 
         # Loop over fibers and plot outliers
         for fiberId, fiber in fibers.items():
-            wve, flux, chi = fiber['wave'], fiber['flux'], fiber['chi']
+            wve, _, chi = fiber['wave'], fiber['flux'], fiber['chi']
             absChi = np.abs(chi)
 
             # Define outlier conditions
@@ -417,7 +418,7 @@ def plot_vs_sky_brightness(hold, plotId, arms):
         # Compute reference and test statistics
         references_sky = buildReference(referenceSpectra, func=np.nanmedian, model='none')
         references_flx = buildReference(testSpectra, func=np.median, model='residuals')
-        references_err = buildReference(testSpectra, func='quadrature', model='variance')
+        # references_err = buildReference(testSpectra, func='quadrature', model='variance')
         references_chi_median = buildReference(testSpectra, func=np.median, model='chi')
 
         color = arm_colors[i]
@@ -453,7 +454,7 @@ def plot_vs_sky_brightness(hold, plotId, arms):
         ax_dict[col[0]].set_xlabel('Wavelength [nm]')
         ax_dict[col[0]].set_ylabel('Median Counts')
 
-        ax_dict[col[1]].set_xlabel('Median $\chi$')
+        ax_dict[col[1]].set_xlabel(r'Median $\chi$')
         ax_dict[col[1]].set_ylabel('Sky Counts Percentile')
 
         # Add reference lines

@@ -1,4 +1,5 @@
 import matplotlib
+import matplotlib as mpl
 import matplotlib.pylab as plt
 import numpy as np
 
@@ -11,8 +12,6 @@ matplotlib.rcParams['font.family'] = "serif"
 matplotlib.rcParams['axes.linewidth'] = 2
 
 matplotlib.rcParams["mathtext.fontset"] = "dejavuserif"
-
-import matplotlib as mpl
 
 mpl.rcParams['xtick.major.size'] = 9
 mpl.rcParams['xtick.major.width'] = 1.2
@@ -54,7 +53,7 @@ def get_mosaic(mosaic='''A''', figsize=(10, 10)):
     return fig, ax_dict
 
 
-class layer:
+class Layer:
     def __init__(self,
                  version='scatter',
                  X=None, Y=None, Z=None,
@@ -115,7 +114,7 @@ def add_layer(ax, layer):
             rnge = [None, None]
         else:
             rnge = layer.rnge
-        if (type(layer.Z) == np.ndarray) or (type(layer.Z) == np.array) or (type(layer.Z) == list):
+        if isinstance(layer.Z, (np.ndarray, list)):
 
             if layer.bold:
                 p1 = ax.scatter(layer.X, layer.Y, c=layer.Z,
@@ -205,19 +204,19 @@ def add_layer(ax, layer):
         H, xbins, ybins = np.histogram2d(layer.X, layer.Y,
                                          weights=layer.W, bins=layer.bins, range=rnge)
 
-        H = np.rot90(H);
-        H = np.flipud(H);
+        H = np.rot90(H)
+        H = np.flipud(H)
 
         X, Y = np.meshgrid(xbins[:-1], ybins[:-1])
 
-        if layer.smooth != None:
+        if layer.smooth is None:
             from scipy.signal import wiener
             H = wiener(H, mysize=layer.smooth)
 
         H = H / np.sum(H)
         Hmask = np.ma.masked_where(H == 0, H)
 
-        cmin = 1e-4;
+        cmin = 1e-4
         cmax = 1.0
         if not layer.vmin:
             vmin = cmin * np.max(Hmask)
@@ -229,7 +228,8 @@ def add_layer(ax, layer):
         else:
             vmax = layer.vmax
 
-        p1 = ax.pcolormesh(X, Y, (Hmask), cmap=layer.color, vmin=vmin, vmax=vmax,  # norm = LogNorm(vmin,vmax),
+        # norm = LogNorm(vmin,vmax),
+        p1 = ax.pcolormesh(X, Y, (Hmask), cmap=layer.color, vmin=vmin, vmax=vmax,
                            linewidth=0., shading='auto', alpha=layer.alpha, edgecolors=None)
         p1.set_edgecolor('none')
 
@@ -256,7 +256,7 @@ def make_plot(
         xrotation=None, yrotation=None,
         xlog=False, ylog=False,
         loc="best", stack=False, ncol=1, dpi=100):
-    if ax == None:
+    if ax is None:
         fig, ((ax)) = plt.subplots(nrows=1, ncols=1)
         fig.set_size_inches(figsize)
     # add layers
@@ -315,7 +315,7 @@ def make_plot(
     if xreverse:
         ax.invert_xaxis()
 
-    if type(ax) == None:
+    if type(ax) is None:
         fig.tight_layout()
 
     if square:
@@ -325,5 +325,3 @@ def make_plot(
     if savename:
         fig.tight_layout()
         fig.savefig(savename, dpi=dpi)
-
-

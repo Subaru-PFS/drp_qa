@@ -3,8 +3,8 @@ import argparse
 import os
 
 from pfs.drp.qa.skySubtraction.prepare import prepareDataset
-from pfs.drp.qa.skySubtraction.summaryPlots import plot_1d_spectrograph, plot_2d_spectrograph, plot_outlier_summary, \
-    plot_vs_sky_brightness
+from pfs.drp.qa.skySubtraction.summaryPlots import plot_1d_spectrograph, plot_2d_spectrograph
+from pfs.drp.qa.skySubtraction.summaryPlots import plot_outlier_summary, plot_vs_sky_brightness
 from pfs.drp.stella.fitFocalPlane import FitBlockedOversampledSplineConfig
 
 
@@ -98,9 +98,12 @@ if __name__ == "__main__":
     parser.add_argument("--rejThreshold", type=float, default=4.0, help="Rejection threshold")
     parser.add_argument("--mask", nargs="+", default=["NO_DATA", "BAD_FLAT", "BAD_FIBERNORMS", "SUSPECT"],
                         help="Mask types")
-    parser.add_argument("--no_1d", action="store_false", dest="plot_1d", help="Disable 1D spectrograph plot")
-    parser.add_argument("--no_2d", action="store_false", dest="plot_2d", help="Disable 2D spectrograph plot")
-    parser.add_argument("--no_outlier", action="store_false", dest="plot_outlier", help="Disable outlier summary plot")
+    parser.add_argument("--no_1d", action="store_false", dest="plot_1d",
+                        help="Disable 1D spectrograph plot")
+    parser.add_argument("--no_2d", action="store_false", dest="plot_2d",
+                        help="Disable 2D spectrograph plot")
+    parser.add_argument("--no_outlier", action="store_false", dest="plot_outlier",
+                        help="Disable outlier summary plot")
     parser.add_argument("--no_sky", action="store_false", dest="plot_sky_brightness",
                         help="Disable sky brightness plot")
 
