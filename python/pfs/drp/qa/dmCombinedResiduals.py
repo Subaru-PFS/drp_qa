@@ -25,7 +25,7 @@ from pfs.drp.stella import DetectorMap
 
 from pfs.drp.qa.dmResiduals import plot_detectormap_residuals
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
-from pfs.drp.qa.utils.plotting import description_palette, detector_palette
+from pfs.drp.qa.utils.plotting import description_palette, detector_palette, hide_duplicate_y_ticks
 
 
 class DetectorMapCombinedResidualsConnections(
@@ -437,6 +437,7 @@ def plot_visits(
                 ax=ax,
             )
 
+        hide_duplicate_y_ticks(ax)
         ax.grid(alpha=0.2)
         ax.axvline(0, c="k", ls="--", alpha=0.5)
         ax.set_title(f"{metric}")
