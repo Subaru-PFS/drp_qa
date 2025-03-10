@@ -249,11 +249,7 @@ def make_report(
 
 def plot_detector_visits(plot_data: DataFrame) -> Figure:
     summary_stats = plot_data.filter(regex="median|weighted").mean().to_dict()
-
-    # Apply the custom function to create a color list
-    colors = [description_palette.get(desc, "black") for desc in plot_data["description"]]
-
-    fig = plot_visits(plot_data, palette=colors)
+    fig = plot_visits(plot_data, palette=description_palette)
 
     for ax, dim in zip(fig.axes, ["spatial", "wavelength"]):
         upper_range = summary_stats[f"{dim}.median"] + summary_stats[f"{dim}.weightedRms"]
@@ -427,6 +423,8 @@ def plot_visits(
 
     plotData["visit_idx"] = plotData.visit.rank(method="first")
 
+    palette = palette or description_palette
+
     for ax, metric in zip([ax0, ax1], ["spatial", "wavelength"]):
         for desc, grp in plotData.groupby("description"):
             grp.plot.scatter(
@@ -434,7 +432,7 @@ def plot_visits(
                 x=f"{metric}.median",
                 xerr=f"{metric}.weightedRms",
                 marker="o",
-                color=palette.get(desc, "red") if palette is not None else None,
+                color=palette.get(desc, "black"),
                 label=desc,
                 ax=ax,
             )
