@@ -25,7 +25,7 @@ from pfs.drp.stella import DetectorMap
 
 from pfs.drp.qa.dmResiduals import plot_detectormap_residuals
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
-from pfs.drp.qa.utils.plotting import description_palette, detector_palette, hide_duplicate_y_ticks
+from pfs.drp.qa.utils.plotting import description_palette, detector_palette
 
 
 class DetectorMapCombinedResidualsConnections(
@@ -437,7 +437,6 @@ def plot_visits(
                 ax=ax,
             )
 
-        hide_duplicate_y_ticks(ax)
         ax.grid(alpha=0.2)
         ax.axvline(0, c="k", ls="--", alpha=0.5)
         ax.set_title(f"{metric}")
@@ -447,8 +446,16 @@ def plot_visits(
         if wavelengthRange is not None and metric == "wavelength":
             ax.set_xlim(-wavelengthRange, wavelengthRange)
 
-    visit_label = [f"{row.visit}" for idx, row in plotData.iterrows()]
-    ax0.set_yticks(plotData.visit_idx, visit_label, fontsize="xx-small")
+    already_labeled = set()
+    visit_labels = list()
+    for idx, row in plotData.iterrows():
+        if row.visit not in already_labeled:
+            visit_labels.append(f"{row.visit}")
+            already_labeled.add(row.visit)
+        else:
+            visit_labels.append("")
+
+    ax0.set_yticks(plotData.visit_idx, visit_labels, fontsize="xx-small")
     ax0.set_ylabel("Visit")
     ax0.invert_yaxis()
 

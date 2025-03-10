@@ -23,25 +23,6 @@ description_palette = {
 spectrograph_plot_markers = {1: "s", 2: "o", 3: "X", 4: "P"}
 
 
-
-def hide_duplicate_y_ticks(ax):
-    """Hides duplicate y-axis tick labels."""
-    yticks = ax.get_yticks()
-    yticklabels = ax.get_yticklabels()
-
-    unique_yticks = []
-    unique_yticklabels = []
-
-    seen = set()
-    for tick, label in zip(yticks, yticklabels):
-        if tick not in seen:
-            unique_yticks.append(tick)
-            unique_yticklabels.append(label)
-            seen.add(tick)
-
-    ax.set_yticks(unique_yticks)
-    ax.set_yticklabels(unique_yticklabels)
-
 def scatterplot_with_outliers(
     data: pd.DataFrame,
     X: str,
