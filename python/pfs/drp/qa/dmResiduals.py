@@ -1,5 +1,4 @@
 import warnings
-from contextlib import suppress
 from dataclasses import dataclass
 from functools import partial
 from logging import Logger
@@ -316,25 +315,20 @@ def get_data_and_stats(
         "(isLine == True and yResidOutlier == False) or (isTrace == True and xResidOutlier == False)"
     ).copy()
 
-    descriptions = sorted(list(arc_data.description.unique()))
-    with suppress(ValueError):
-        if len(descriptions) > 1:
-            descriptions.remove("Trace")
-
     arc_data["arm"] = dataId["arm"]
     arc_data["spectrograph"] = dataId["spectrograph"]
     arc_data["visit"] = dataId["visit"]
 
     log.info("Getting residual stats")
     stats = list()
-    for idx, rows in arc_data.groupby("status_type"):
+    for (status_type, description), rows in arc_data.groupby(["status_type", "description"]):
         visit_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
-        visit_stats["status_type"] = idx
+        visit_stats["status_type"] = status_type
         visit_stats["arm"] = dataId["arm"]
         visit_stats["spectrograph"] = dataId["spectrograph"]
         visit_stats["visit"] = dataId["visit"]
         visit_stats["ccd"] = "{arm}{spectrograph}".format(**dataId)
-        visit_stats["description"] = ",".join(descriptions)
+        visit_stats["description"] = description
         stats.append(visit_stats)
 
     stats = pd.concat(stats)
