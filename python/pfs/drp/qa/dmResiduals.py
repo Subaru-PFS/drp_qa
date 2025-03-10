@@ -139,10 +139,10 @@ class DetectorMapResidualsTask(PipelineTask):
         arcLines: ArcLineSet,
         detectorMap: DetectorMap,
         visitInfo: VisitInfo,
+        dataId: dict,
         dropNaColumns: bool = True,
         removeOutliers: bool = True,
         addFiberInfo: bool = True,
-        dataId: dict = None,
         reduceExposure_config: Config = None,
         **kwargs,
     ) -> Struct:
@@ -161,14 +161,14 @@ class DetectorMapResidualsTask(PipelineTask):
         visitInfo : `VisitInfo`
             The visit info containing the observationReason, which determines
             some plotting parameters.
+        dataId : `dict`
+            The dataId for the visit.
         dropNaColumns : `bool`, optional
             Drop columns where all values are NaN. Default is True.
         removeOutliers : `bool`, optional
             Remove rows with ``flag=False``? Default is True.
         addFiberInfo : `bool`, optional
             Add fiber information to the dataframe. Default is True.
-        dataId : dict, optional
-            Dictionary of the dataId.
         reduceExposure_config : `Config`, optional
             Configuration for reduceExposure.
 
