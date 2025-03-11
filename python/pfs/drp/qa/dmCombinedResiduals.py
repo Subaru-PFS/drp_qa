@@ -335,6 +335,8 @@ def plot_detector_summary(stats: pd.DataFrame) -> Figure:
 
     spatial_plot_ax.grid(True, color="k", linestyle="--", alpha=0.15)
     wavelength_plot_ax.grid(True, color="k", linestyle="--", alpha=0.15)
+    spatial_table_ax.set_axis_off()
+    wavelength_table_ax.set_axis_off()
 
     fig.suptitle("DetectorMap Residuals Summary", y=1.05)
 
