@@ -455,7 +455,7 @@ def plot_visits(
         if row.visit not in labeled_ticks:
             all_ticks.append(f"{row.visit}")
             labeled_ticks.add(row.visit)
-            visit_idx.append(idx)
+            visit_idx.append(idx + 1)
 
     ax0.set_yticks(visit_idx, labeled_ticks, fontsize="xx-small")
     for i, (y0, y1) in enumerate(itertools.pairwise(visit_idx)):
