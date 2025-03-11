@@ -267,16 +267,18 @@ def plot_detector_visits(plot_data: pd.DataFrame) -> Figure:
 def plot_detector_summary(stats: pd.DataFrame) -> Figure:
     plot_data_spatial = (
         stats.query("description == 'Trace'")
-        .filter(regex="ccd|median|weighted|soften")
+        .filter(regex="ccd|spatial.(median|weighted|soften)")
         .groupby("ccd", observed=False)
         .mean()
     )
+    plot_data_spatial.columns = [c.replace("spatial.", "") for c in plot_data_spatial.columns]
     plot_data_wavelength = (
         stats.query("description != 'Trace'")
-        .filter(regex="ccd|median|weighted|soften")
+        .filter(regex="ccd|wavelength.(median|weighted|soften)")
         .groupby("ccd", observed=False)
         .mean()
     )
+    plot_data_wavelength.columns = [c.replace("wavelength.", "") for c in plot_data_wavelength.columns]
 
     fig = Figure(figsize=(11, 8), layout="constrained")
     spatial_plot_ax = fig.add_subplot(221)
@@ -290,9 +292,9 @@ def plot_detector_summary(stats: pd.DataFrame) -> Figure:
     for ccd, row in plot_data_spatial.iterrows():
         spatial_plot_ax.errorbar(
             x=ccd,
-            y=row["spatial.median"],
-            yerr=row["spatial.weightedRms"],
-            markersize=max(row["spatial.softenFit"].mean() * 100, 1),
+            y=row["median"],
+            yerr=row["weightedRms"],
+            markersize=max(row["softenFit"].mean() * 100, 1),
             marker="o",
             mec="k",
             linewidth=2,
@@ -300,7 +302,6 @@ def plot_detector_summary(stats: pd.DataFrame) -> Figure:
             color=detector_palette[ccd[0]],
         )
 
-    plot_data_spatial.columns = [c.replace("spatial.", "") for c in plot_data_spatial.columns]
     spatial_table = pd.plotting.table(spatial_table_ax, plot_data_spatial.map(formatter), loc="center")
     spatial_table.set_fontsize(11)
     spatial_table_ax.set_title("Spatial median and weightedRms error (quartz only)")
@@ -308,9 +309,9 @@ def plot_detector_summary(stats: pd.DataFrame) -> Figure:
     for ccd, row in plot_data_wavelength.iterrows():
         wavelength_plot_ax.errorbar(
             x=ccd,
-            y=row["wavelength.median"],
-            yerr=row["wavelength.weightedRms"],
-            markersize=max(row["wavelength.softenFit"].mean() * 100, 1),
+            y=row["median"],
+            yerr=row["weightedRms"],
+            markersize=max(row["softenFit"].mean() * 100, 1),
             marker="o",
             markeredgecolor="k",
             linewidth=2,
@@ -318,7 +319,6 @@ def plot_detector_summary(stats: pd.DataFrame) -> Figure:
             color=detector_palette[ccd[0]],
         )
 
-    plot_data_wavelength.columns = [c.replace("wavelength.", "") for c in plot_data_wavelength.columns]
     wavelength_table = pd.plotting.table(
         wavelength_table_ax, plot_data_wavelength.map(formatter), loc="center"
     )
