@@ -487,54 +487,6 @@ def plot_visits(
     return fig
 
 
-def plot_dataframe(stats: pd.DataFrame) -> Figure:
-    """Plot the residual data frame.
-
-    Parameters
-    ----------
-    stats : `pandas.DataFrame`
-        The data frame to plot.
-
-    Returns
-    -------
-    fig : `Figure`
-        The figure.
-    """
-    plot_data_spatial = (
-        stats.query("description == 'Trace'")
-        .filter(regex="ccd|spatial.(median|weighted|soften)")
-        .groupby("ccd", observed=False)
-        .mean()
-    )
-    plot_data_spatial.columns = [c.replace("spatial.", "") for c in plot_data_spatial.columns]
-    plot_data_wavelength = (
-        stats.query("description != 'Trace'")
-        .filter(regex="ccd|wavelength.(median|weighted|soften)")
-        .groupby("ccd", observed=False)
-        .mean()
-    )
-    plot_data_wavelength.columns = [c.replace("wavelength.", "") for c in plot_data_wavelength.columns]
-
-    formatter = "{:5.04f}".format
-
-    fig = Figure(figsize=(11, 8), layout="constrained")
-    ax0 = fig.add_subplot(211)
-    ax1 = fig.add_subplot(212)
-    ax0.set_axis_off()
-    ax1.set_axis_off()
-    t0 = pd.plotting.table(ax0, plot_data_spatial.map(formatter), loc="center")
-    t0.set_fontsize(11)
-    t1 = pd.plotting.table(ax1, plot_data_wavelength.map(formatter), loc="center")
-    t1.set_fontsize(11)
-
-    ax0.set_title("Spatial (quartz only)", y=1.12)
-    ax1.set_title("Wavelength", y=1.12)
-
-    fig.suptitle("Residuals summary", y=1.15)
-
-    return fig
-
-
 def plot_title(run_name: str) -> Figure:
     """Plot a title page for the combined report."""
     fig = Figure(figsize=(11, 8))
