@@ -265,7 +265,7 @@ def plot_detector_visits(plot_data: DataFrame) -> Figure:
             f'rms={summary_stats[f"{dim}.weightedRms"]:5.04f}'
         )
 
-    fig.set_size_inches(8, 8)
+    fig.set_size_inches(12, 8)
 
     return fig
 
