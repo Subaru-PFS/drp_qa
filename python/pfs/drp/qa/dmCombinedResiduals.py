@@ -235,7 +235,7 @@ def make_report(
             pdf.append(residFig, dpi=150)
 
             # Add the description per visit breakdown.
-            fig = plot_detector_visits(visit_stats)
+            fig = plot_detector_visits(visit_stats.query('status_type == "RESERVED"'))
             fig.suptitle(f"{fig.get_suptitle()} - {ccd}")
             pdf.append(fig)
         except KeyError:
