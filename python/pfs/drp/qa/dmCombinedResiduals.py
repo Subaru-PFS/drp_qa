@@ -2,7 +2,6 @@ import itertools
 from itertools import product
 from typing import Dict, Iterable, Optional
 
-import matplotlib as mpl
 import pandas as pd
 import seaborn as sb
 from lsst.pex.config import Field
@@ -19,15 +18,12 @@ from lsst.pipe.base.connectionTypes import (
     Input as InputConnection,
     Output as OutputConnection,
 )
-from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from pfs.drp.stella import DetectorMap
 
 from pfs.drp.qa.dmResiduals import plot_detectormap_residuals
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
 from pfs.drp.qa.utils.plotting import description_palette, detector_palette
-
-mpl.rcParams["figure.figsize"] = (10, 8)
 
 
 class DetectorMapCombinedResidualsConnections(
@@ -192,9 +188,6 @@ def make_report(
     # Add the title as a figure.
     pdf.append(plot_title(run_name))
 
-    # Add the table data as a figure.
-    pdf.append(plot_dataframe(reserved_stats))
-
     # Detector summaries.
     log.info("Making detector summary plots")
     pdf.append(plot_detector_summary(reserved_stats))
@@ -250,7 +243,8 @@ def make_report(
 
 
 def plot_detector_visits(plot_data: pd.DataFrame) -> Figure:
-    fig = plot_visits(plot_data, palette=description_palette)
+    fig = Figure(figsize=(11, 8))
+    plot_visits(plot_data, palette=description_palette, fig=fig)
 
     summary_stats = plot_data.filter(regex="median|weighted").mean().to_dict()
 
@@ -258,9 +252,9 @@ def plot_detector_visits(plot_data: pd.DataFrame) -> Figure:
         upper_range = summary_stats[f"{dim}.median"] + summary_stats[f"{dim}.weightedRms"]
         lower_range = summary_stats[f"{dim}.median"] - summary_stats[f"{dim}.weightedRms"]
 
-        ax.axvline(summary_stats[f"{dim}.median"], c="k", ls="--", zorder=-100)
-        ax.axvline(upper_range, c="g", ls="--", zorder=-100)
-        ax.axvline(lower_range, c="g", ls="--", zorder=-100)
+        ax.axvline(summary_stats[f"{dim}.median"], c="k", ls="--", zorder=101)
+        ax.axvline(upper_range, c="g", ls="--", zorder=101)
+        ax.axvline(lower_range, c="g", ls="--", zorder=101)
         ax.set_title(
             f"{dim.upper()}: "
             f'median={summary_stats[f"{dim}.median"]:5.04f} '
@@ -284,10 +278,17 @@ def plot_detector_summary(stats: pd.DataFrame) -> Figure:
         .mean()
     )
 
-    fig, (ax0, ax1) = plt.subplots(ncols=2, sharey=True, layout="constrained")
+    fig = Figure(figsize=(11, 8), layout="constrained")
+    spatial_plot_ax = fig.add_subplot(221)
+    wavelength_plot_ax = fig.add_subplot(222, sharey=spatial_plot_ax)
+    spatial_table_ax = fig.add_subplot(223, sharex=spatial_plot_ax)
+    wavelength_table_ax = fig.add_subplot(224, sharex=wavelength_plot_ax, sharey=spatial_table_ax)
 
+    formatter = "{:5.04f}".format
+
+    # Plot the spatial median and weightedRms and show table below.
     for ccd, row in plot_data_spatial.iterrows():
-        ax0.errorbar(
+        spatial_plot_ax.errorbar(
             x=ccd,
             y=row["spatial.median"],
             yerr=row["spatial.weightedRms"],
@@ -299,8 +300,13 @@ def plot_detector_summary(stats: pd.DataFrame) -> Figure:
             color=detector_palette[ccd[0]],
         )
 
+    plot_data_spatial.columns = [c.replace("spatial.", "") for c in plot_data_spatial.columns]
+    spatial_table = pd.plotting.table(spatial_table_ax, plot_data_spatial.map(formatter), loc="center")
+    spatial_table.set_fontsize(11)
+    spatial_table_ax.set_title("Spatial median and weightedRms error (quartz only)")
+
     for ccd, row in plot_data_wavelength.iterrows():
-        ax1.errorbar(
+        wavelength_plot_ax.errorbar(
             x=ccd,
             y=row["wavelength.median"],
             yerr=row["wavelength.weightedRms"],
@@ -312,15 +318,25 @@ def plot_detector_summary(stats: pd.DataFrame) -> Figure:
             color=detector_palette[ccd[0]],
         )
 
-    ax0.axhline(0, c="k", ls="--", alpha=0.3)
-    ax0.set_title("Spatial median and weightedRms error (quartz only)")
-    ax0.set_ylabel("Median (pixel)")
+    plot_data_wavelength.columns = [c.replace("wavelength.", "") for c in plot_data_wavelength.columns]
+    wavelength_table = pd.plotting.table(
+        wavelength_table_ax, plot_data_wavelength.map(formatter), loc="center"
+    )
+    wavelength_table.set_fontsize(11)
+    wavelength_table_ax.set_title("Wavelength median and weightedRms")
 
-    ax1.axhline(0, c="k", ls="--", alpha=0.3)
-    ax1.set_title("Wavelength median and weightedRms")
+    # Set the titles and labels
+    spatial_plot_ax.axhline(0, c="k", ls="--", alpha=0.3)
+    spatial_plot_ax.set_title("Spatial median and weightedRms error (quartz only)")
+    spatial_plot_ax.set_ylabel("Median (pixel)")
 
-    ax0.grid(True, color="k", linestyle="--", alpha=0.15)
-    ax1.grid(True, color="k", linestyle="--", alpha=0.15)
+    wavelength_plot_ax.axhline(0, c="k", ls="--", alpha=0.3)
+    wavelength_plot_ax.set_title("Wavelength median and weightedRms")
+
+    spatial_plot_ax.grid(True, color="k", linestyle="--", alpha=0.15)
+    wavelength_plot_ax.grid(True, color="k", linestyle="--", alpha=0.15)
+
+    fig.suptitle("DetectorMap Residuals Summary", y=1.05)
 
     return fig
 
@@ -499,7 +515,7 @@ def plot_dataframe(stats: pd.DataFrame) -> Figure:
 
     formatter = "{:5.04f}".format
 
-    fig = Figure(layout="constrained")
+    fig = Figure(figsize=(11, 8), layout="constrained")
     ax0 = fig.add_subplot(211)
     ax1 = fig.add_subplot(212)
     ax0.set_axis_off()
@@ -519,7 +535,7 @@ def plot_dataframe(stats: pd.DataFrame) -> Figure:
 
 def plot_title(run_name: str) -> Figure:
     """Plot a title page for the combined report."""
-    fig = Figure()
+    fig = Figure(figsize=(11, 8))
     ax = fig.add_subplot(111)
     ax.set_axis_off()
     ax.text(0.5, 0.5, "DetectorMap Residuals Summary", ha="center", va="center", fontsize="large")
