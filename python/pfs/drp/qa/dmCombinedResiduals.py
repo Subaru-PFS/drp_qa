@@ -236,7 +236,7 @@ def make_report(
 
             # Add the description per visit breakdown.
             fig = plot_detector_visits(visit_stats)
-            fig.suptitle(f"{fig.get_suptitle()}\n{ccd}")
+            fig.suptitle(f"{fig.get_suptitle()} - {ccd}")
             pdf.append(fig)
         except KeyError:
             log.warning(f"DetectorMap not found for {ccd}. Skipping.")
@@ -256,9 +256,9 @@ def plot_detector_visits(plot_data: DataFrame) -> Figure:
         upper_range = summary_stats[f"{dim}.median"] + summary_stats[f"{dim}.weightedRms"]
         lower_range = summary_stats[f"{dim}.median"] - summary_stats[f"{dim}.weightedRms"]
 
-        ax.axvline(summary_stats[f"{dim}.median"], c="k", ls="--")
-        ax.axvline(upper_range, c="g", ls="--")
-        ax.axvline(lower_range, c="g", ls="--")
+        ax.axvline(summary_stats[f"{dim}.median"], c="k", ls="--", zorder=-100)
+        ax.axvline(upper_range, c="g", ls="--", zorder=-100)
+        ax.axvline(lower_range, c="g", ls="--", zorder=-100)
         ax.set_title(
             f"{dim.upper()}: "
             f'median={summary_stats[f"{dim}.median"]:5.04f} '
@@ -438,7 +438,7 @@ def plot_visits(
                 ax=ax,
             )
 
-        ax.grid(alpha=0.2)
+        ax.grid(which="major", color="k", axis="y")
         ax.axvline(0, c="k", ls="--", alpha=0.5)
         ax.set_title(f"{metric}")
         ax.set_xlabel("pix")
@@ -447,16 +447,20 @@ def plot_visits(
         if wavelengthRange is not None and metric == "wavelength":
             ax.set_xlim(-wavelengthRange, wavelengthRange)
 
-    already_labeled = set()
-    visit_labels = list()
-    for idx, row in plotData.iterrows():
-        if row.visit not in already_labeled:
-            visit_labels.append(f"{row.visit}")
-            already_labeled.add(row.visit)
-        else:
-            visit_labels.append("")
+    labeled_ticks = list()
+    all_ticks = list()
+    visit_idx = list()
+    for idx, row in plotData.reset_index().iterrows():
+        if row.visit not in labeled_ticks:
+            all_ticks.append(f"{row.visit}")
+            labeled_ticks.add(row.visit)
+            visit_idx.append(idx)
 
-    ax0.set_yticks(plotData.visit_idx, visit_labels, fontsize="xx-small")
+    ax0.set_yticks(visit_idx, labeled_ticks, fontsize="xx-small")
+    for i, (y0, y1) in enumerate(itertools.pairwise(visit_idx)):
+        ax0.axhspan(y0, y1, color="whitesmoke" if i % 2 == 0 else "ivory", alpha=0.5)
+        ax1.axhspan(y0, y1, color="whitesmoke" if i % 2 == 0 else "ivory", alpha=0.5)
+
     ax0.set_ylabel("Visit")
     ax0.invert_yaxis()
 
