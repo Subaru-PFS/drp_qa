@@ -447,7 +447,7 @@ def plot_visits(
         if wavelengthRange is not None and metric == "wavelength":
             ax.set_xlim(-wavelengthRange, wavelengthRange)
 
-    labeled_ticks = list()
+    labeled_ticks = set()
     all_ticks = list()
     visit_idx = list()
     for idx, row in plotData.reset_index().iterrows():
