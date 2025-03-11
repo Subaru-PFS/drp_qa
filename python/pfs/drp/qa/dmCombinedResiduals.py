@@ -218,7 +218,7 @@ def make_report(
     ]
 
     # Per visit descriptions.
-    for ccd, visit_stats in reserved_stats.groupby("ccd", observed=False):
+    for ccd, visit_stats in residual_stats.groupby("ccd", observed=False):
         log.info(f"Making plots for {ccd}")
         try:
             # Add the 2D residual plot.
