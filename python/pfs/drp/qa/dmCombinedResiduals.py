@@ -436,10 +436,11 @@ def plot_visits(
                 color=palette.get(desc, "black"),
                 label=desc,
                 ax=ax,
+                zorder=100,
             )
 
-        ax.grid(which="major", color="k", axis="y")
-        ax.axvline(0, c="k", ls="--", alpha=0.5)
+        ax.grid(which="major", color="k", axis="y", zorder=-100)
+        ax.axvline(0, c="k", ls="-", alpha=0.25)
         ax.set_title(f"{metric}")
         ax.set_xlabel("pix")
         if spatialRange is not None and metric == "spatial":
