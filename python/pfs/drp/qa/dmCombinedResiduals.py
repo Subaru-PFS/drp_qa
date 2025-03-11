@@ -2,6 +2,7 @@ import itertools
 from itertools import product
 from typing import Dict, Iterable, Optional
 
+import matplotlib as mpl
 import pandas as pd
 import seaborn as sb
 from lsst.pex.config import Field
@@ -20,12 +21,13 @@ from lsst.pipe.base.connectionTypes import (
 )
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
-from pandas import DataFrame
 from pfs.drp.stella import DetectorMap
 
 from pfs.drp.qa.dmResiduals import plot_detectormap_residuals
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
 from pfs.drp.qa.utils.plotting import description_palette, detector_palette
+
+mpl.rcParams["figure.figsize"] = (10, 8)
 
 
 class DetectorMapCombinedResidualsConnections(
@@ -122,8 +124,8 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
     def run(
         self,
         detectorMaps: Iterable[DetectorMap],
-        dmQaResidualData: Iterable[DataFrame],
-        dmQaResidualStats: Iterable[DataFrame],
+        dmQaResidualData: Iterable[pd.DataFrame],
+        dmQaResidualStats: Iterable[pd.DataFrame],
         run_name: str,
     ) -> Struct:
         """Create detector level residual_stats and plots.
@@ -177,8 +179,8 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
 
 
 def make_report(
-    residual_stats: DataFrame,
-    arc_data: DataFrame,
+    residual_stats: pd.DataFrame,
+    arc_data: pd.DataFrame,
     detectorMaps: Dict[str, DetectorMap],
     run_name: str,
     log: object,
@@ -247,7 +249,7 @@ def make_report(
     return pdf
 
 
-def plot_detector_visits(plot_data: DataFrame) -> Figure:
+def plot_detector_visits(plot_data: pd.DataFrame) -> Figure:
     fig = plot_visits(plot_data, palette=description_palette)
 
     summary_stats = plot_data.filter(regex="median|weighted").mean().to_dict()
@@ -265,12 +267,10 @@ def plot_detector_visits(plot_data: DataFrame) -> Figure:
             f'rms={summary_stats[f"{dim}.weightedRms"]:5.04f}'
         )
 
-    fig.set_size_inches(12, 8)
-
     return fig
 
 
-def plot_detector_summary(stats: DataFrame) -> Figure:
+def plot_detector_summary(stats: pd.DataFrame) -> Figure:
     plot_data_spatial = (
         stats.query("description == 'Trace'")
         .filter(regex="ccd|median|weighted|soften")
@@ -285,7 +285,6 @@ def plot_detector_summary(stats: DataFrame) -> Figure:
     )
 
     fig, (ax0, ax1) = plt.subplots(ncols=2, sharey=True, layout="constrained")
-    fig.set_size_inches(12, 4)
 
     for ccd, row in plot_data_spatial.iterrows():
         ax0.errorbar(
@@ -326,7 +325,7 @@ def plot_detector_summary(stats: DataFrame) -> Figure:
     return fig
 
 
-def plot_detector_summary_per_desc(stats: DataFrame) -> Figure:
+def plot_detector_summary_per_desc(stats: pd.DataFrame) -> Figure:
     plot_data = (
         stats.set_index(["ccd", "description"])
         .filter(regex="median|weighted|soften")
@@ -470,7 +469,7 @@ def plot_visits(
     return fig
 
 
-def plot_dataframe(stats: DataFrame) -> Figure:
+def plot_dataframe(stats: pd.DataFrame) -> Figure:
     """Plot the residual data frame.
 
     Parameters
