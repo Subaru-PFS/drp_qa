@@ -402,7 +402,7 @@ def plot_vs_sky_brightness(hold, plotId, arms):
     panel_labels = [''.join([a[i] for a in axt.split('\n')]) for i in range(len(arms))]
 
     # Create figure layout
-    fig, ax_dict = skySubtractionQaPlot.get_mosaic(axt, figsize=(7, 7))
+    fig, ax_dict = skySubtractionQaPlot.get_mosaic(axt, figsize=(int(5 * len(arms)), 10))
 
     # Copy and remove pfsConfig to avoid unnecessary data
     specs = hold.copy()
@@ -432,7 +432,7 @@ def plot_vs_sky_brightness(hold, plotId, arms):
         chi = references_chi_median[1]
 
         # Compute ranked percentile of sky brightness
-        ranked = np.arange(len(sky))[np.argsort(sky)]
+        ranked = np.argsort(np.argsort(sky))
         ranked = 100 * ranked / len(ranked)
 
         # Bin residuals based on sky brightness percentiles
@@ -448,7 +448,7 @@ def plot_vs_sky_brightness(hold, plotId, arms):
 
         # Set axis limits
         ax_dict[col[0]].set_ylim([-100, 100])
-        ax_dict[col[1]].set_xlim([-2, 2])
+        ax_dict[col[1]].set_xlim([-0.5, 0.5])
 
         # Set axis labels
         ax_dict[col[0]].set_xlabel('Wavelength [nm]')
