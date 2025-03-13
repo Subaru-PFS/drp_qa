@@ -230,7 +230,7 @@ def make_report(
             pdf.append(residFig, dpi=150)
 
             # Add the description per visit breakdown.
-            fig = plot_detector_visits(visit_stats.query('status_type == "RESERVED"'))
+            fig = plot_visits(visit_stats.query('status_type == "RESERVED"'), palette=description_palette)
             fig.suptitle(f"{fig.get_suptitle()} - {ccd}")
             pdf.append(fig)
         except KeyError:
@@ -240,28 +240,6 @@ def make_report(
             continue
 
     return pdf
-
-
-def plot_detector_visits(plot_data: pd.DataFrame) -> Figure:
-    fig = Figure(figsize=(11, 8))
-    plot_visits(plot_data, palette=description_palette, fig=fig)
-
-    summary_stats = plot_data.filter(regex="median|weighted").mean().to_dict()
-
-    for ax, dim in zip(fig.axes, ["spatial", "wavelength"]):
-        upper_range = summary_stats[f"{dim}.median"] + summary_stats[f"{dim}.weightedRms"]
-        lower_range = summary_stats[f"{dim}.median"] - summary_stats[f"{dim}.weightedRms"]
-
-        ax.axvline(summary_stats[f"{dim}.median"], c="k", ls="--", zorder=101)
-        ax.axvline(upper_range, c="g", ls="--", zorder=101)
-        ax.axvline(lower_range, c="g", ls="--", zorder=101)
-        ax.set_title(
-            f"{dim.upper()}: "
-            f'median={summary_stats[f"{dim}.median"]:5.04f} '
-            f'rms={summary_stats[f"{dim}.weightedRms"]:5.04f}'
-        )
-
-    return fig
 
 
 def plot_detector_summary(stats: pd.DataFrame) -> Figure:
@@ -444,11 +422,12 @@ def plot_visits(
     palette = palette or description_palette
 
     for ax, metric in zip([ax0, ax1], ["spatial", "wavelength"]):
-        for desc, grp in plotData.groupby("description"):
-            grpPlotData = grp.copy()
-            if metric == "spatial":
-                grpPlotData = grpPlotData.query("description == 'Trace'")
+        metricData = plotData.copy()
+        if metric == "spatial":
+            metricData = metricData.query("description == 'Trace'")
 
+        for desc, grp in metricData.groupby("description"):
+            grpPlotData = grp.copy()
             ax.errorbar(
                 y=grpPlotData["visit_idx"],
                 x=grpPlotData[f"{metric}.median"],
@@ -464,6 +443,20 @@ def plot_visits(
                 zorder=110,
             )
 
+        # Mark the median and 1-sigma range across the visits.
+        summary_stats = metricData.filter(regex="median|weighted").median().to_dict()
+        upper_range = summary_stats[f"{metric}.median"] + summary_stats[f"{metric}.weightedRms"]
+        lower_range = summary_stats[f"{metric}.median"] - summary_stats[f"{metric}.weightedRms"]
+
+        ax.axvline(summary_stats[f"{metric}.median"], c="k", ls="--", zorder=101)
+        ax.axvline(upper_range, c="g", ls="--", zorder=101)
+        ax.axvline(lower_range, c="g", ls="--", zorder=101)
+        ax.set_title(
+            f"{metric.upper()}: "
+            f'median={summary_stats[f"{metric}.median"]:5.04f} '
+            f'rms={summary_stats[f"{metric}.weightedRms"]:5.04f}'
+        )
+
         ax.grid(which="major", color="k", axis="y", zorder=-100)
         ax.axvline(0, c="k", ls="-", alpha=0.75)
         ax.set_title(f"{metric}")
@@ -473,6 +466,7 @@ def plot_visits(
         if wavelengthRange is not None and metric == "wavelength":
             ax.set_xlim(-wavelengthRange, wavelengthRange)
 
+    # Only label a visit the first time it's seen.
     labeled_ticks = set()
     all_ticks = list()
     visit_idx = list()
@@ -482,6 +476,7 @@ def plot_visits(
             labeled_ticks.add(row.visit)
             visit_idx.append(idx + 1)
 
+    # Create a striped background to offset the visits.
     ax0.set_yticks(visit_idx, labeled_ticks, fontsize="xx-small")
     for i, (y0, y1) in enumerate(itertools.pairwise(visit_idx)):
         ax0.axhspan(y0, y1, color="whitesmoke" if i % 2 == 0 else "ivory", alpha=0.5)
@@ -491,6 +486,7 @@ def plot_visits(
     ax0.invert_yaxis()
 
     fig.suptitle("RESERVED median and 1-sigma weighted errors", fontsize="small")
+    fig.legend()
 
     return fig
 
