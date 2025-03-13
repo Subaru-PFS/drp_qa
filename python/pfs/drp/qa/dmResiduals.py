@@ -248,20 +248,23 @@ class FitStats:
 
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame):
-        """Convert from dataframe to FitStats."""
-        reserved_wl = df.filter(like="wavelength.").copy()
-        reserved_spatial = df.filter(like="spatial.").copy()
+        """Convert from dataframe to FitStats.
 
-        reserved_wl.columns = reserved_wl.columns.str.rsplit(".", n=1).str[-1]
-        reserved_spatial.columns = reserved_spatial.columns.str.rsplit(".", n=1).str[-1]
+        If df is more than one row, it will take the median.
+        """
+        df = df.select_dtypes(include="number")
+        df.columns = df.columns.str.rsplit(".", n=1).str[-1]
+        rec = df.median()
 
-        rec = df.iloc[0]
+        reserved_wl = rec.filter(like="wavelength.")
+        reserved_spatial = rec.filter(like="spatial.")
+
         return cls(
             dof=rec.dof,
             chi2X=rec.chi2X,
             chi2Y=rec.chi2Y,
-            spatial=FitStat(*reserved_spatial.iloc[0].to_list()),
-            wavelength=FitStat(*reserved_wl.iloc[0].to_list()),
+            spatial=FitStat(*reserved_spatial.to_list()),
+            wavelength=FitStat(*reserved_wl.to_list()),
         )
 
 
@@ -329,6 +332,7 @@ def get_data_and_stats(
         visit_stats["visit"] = dataId["visit"]
         visit_stats["ccd"] = "{arm}{spectrograph}".format(**dataId)
         visit_stats["description"] = description
+        visit_stats["observationReason"] = visitInfo.observationReason
         stats.append(visit_stats)
 
     stats = pd.concat(stats)
@@ -672,7 +676,7 @@ def plot_detectormap_residuals(
             try:
                 plot_residual(
                     arc_data,
-                    visit_stats,
+                    visit_stats.query(f'description {"==" if column == "xResid" else "!="} "Trace"'),
                     column=column,
                     dataRange=spatialRange if column == "xResid" else wavelengthRange,
                     binWavelength=binWavelength,
@@ -787,10 +791,8 @@ def plot_residual(
     plotData.rename(columns={f"{column}Outlier": "isOutlier"}, inplace=True)
 
     units = "pix"
-    which_data = "spatial"
     if column.startswith("y"):
         plotData = plotData.query("isTrace == False").copy()
-        which_data = "wavelength"
     else:
         plotData = plotData.query("isTrace == True").copy()
 
