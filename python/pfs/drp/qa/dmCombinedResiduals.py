@@ -450,7 +450,7 @@ def plot_visits(
                 grpPlotData = grpPlotData.query("description == 'Trace'")
 
             ax.errorbar(
-                y=grp["visit_idx"],
+                y=grpPlotData["visit_idx"],
                 x=grpPlotData[f"{metric}.median"],
                 xerr=grpPlotData[f"{metric}.weightedRms"],
                 marker="o",
