@@ -445,15 +445,23 @@ def plot_visits(
 
     for ax, metric in zip([ax0, ax1], ["spatial", "wavelength"]):
         for desc, grp in plotData.groupby("description"):
-            grp.plot.scatter(
-                y="visit_idx",
-                x=f"{metric}.median",
-                xerr=f"{metric}.weightedRms",
+            grpPlotData = grp.copy()
+            if metric == "spatial":
+                grpPlotData = grpPlotData.query("description == 'Trace'")
+
+            ax.errorbar(
+                y=grp["visit_idx"],
+                x=grpPlotData[f"{metric}.median"],
+                xerr=grpPlotData[f"{metric}.weightedRms"],
                 marker="o",
+                ms=10,
+                elinewidth=2,
+                capsize=4,
+                mec="w",
+                ls="",
                 color=palette.get(desc, "black"),
                 label=desc,
-                ax=ax,
-                zorder=100,
+                zorder=110,
             )
 
         ax.grid(which="major", color="k", axis="y", zorder=-100)
