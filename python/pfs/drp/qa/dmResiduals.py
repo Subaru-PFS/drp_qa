@@ -571,9 +571,9 @@ def get_fit_stats(
     traces = arc_data.query("isTrace == True").copy()
     lines = arc_data.query("isLine == True").dropna(subset=["yResid"]).copy()
 
-    xNum = len(arc_data)
+    xNum = traces.fiberId.nunique()
     try:
-        yNum = lines.isLine.value_counts()[True]
+        yNum = lines.isLine.value_counts()[True] // xNum
     except KeyError:
         yNum = 0
 
