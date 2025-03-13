@@ -248,24 +248,28 @@ class FitStats:
 
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame):
-        """Convert from dataframe to FitStats.
+        """Convert from dataframe to FitStats."""
+        try:
+            df = df.select_dtypes(include="number").median().to_frame().T
 
-        If df is more than one row, it will take the median.
-        """
-        df = df.select_dtypes(include="number")
-        df.columns = df.columns.str.rsplit(".", n=1).str[-1]
-        rec = df.median()
+            reserved_wl = df.filter(like="wavelength.").copy()
+            reserved_spatial = df.filter(like="spatial.").copy()
 
-        reserved_wl = rec.filter(like="wavelength.")
-        reserved_spatial = rec.filter(like="spatial.")
+            reserved_wl.columns = reserved_wl.columns.str.rsplit(".", n=1).str[-1]
+            reserved_spatial.columns = reserved_spatial.columns.str.rsplit(".", n=1).str[-1]
 
-        return cls(
-            dof=rec.dof,
-            chi2X=rec.chi2X,
-            chi2Y=rec.chi2Y,
-            spatial=FitStat(*reserved_spatial.to_list()),
-            wavelength=FitStat(*reserved_wl.to_list()),
-        )
+            rec = df.iloc[0]
+            fs = cls(
+                dof=rec.dof,
+                chi2X=rec.chi2X,
+                chi2Y=rec.chi2Y,
+                spatial=FitStat(*reserved_spatial.iloc[0].to_list()),
+                wavelength=FitStat(*reserved_wl.iloc[0].to_list()),
+            )
+        except Exception as e:
+            print(f"Error: {e!r}")
+        else:
+            return fs
 
 
 def get_data_and_stats(
