@@ -414,6 +414,7 @@ def plot_visits(
     """
     plotData = plotData.copy()
     fig = fig or Figure(layout="constrained")
+    fig.set_size_inches(11, 8)
     ax0 = fig.add_subplot(121)
     ax1 = fig.add_subplot(122, sharex=ax0, sharey=ax0)
 
