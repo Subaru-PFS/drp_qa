@@ -8,7 +8,7 @@ from matplotlib.axes import Axes
 div_palette = plt.cm.RdBu_r.with_extremes(over="magenta", under="cyan", bad="lime")
 detector_palette = {"b": "tab:blue", "r": "tab:red", "n": "tab:orange", "m": "tab:pink"}
 description_palette = {
-    "Trace": "tab:red",
+    "Trace": "black",
     "ArI": "tab:blue",
     "CdI": "tab:orange",
     "HgI": "tab:green",
