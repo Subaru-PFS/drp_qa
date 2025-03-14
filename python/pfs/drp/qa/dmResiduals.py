@@ -571,11 +571,14 @@ def get_fit_stats(
     traces = arc_data.query("isTrace == True").copy()
     lines = arc_data.query("isLine == True").dropna(subset=["yResid"]).copy()
 
-    xNum = traces.fiberId.nunique()
+    xNum = len(arc_data)
+    numTraces = traces.fiberId.nunique()
     try:
-        yNum = lines.isLine.value_counts()[True] // xNum
+        yNum = lines.isLine.value_counts()[True]
+        numLines = lines.isLine.value_counts()[True] // numTraces
     except KeyError:
         yNum = 0
+        numLines = 0
 
     xWeightedRms = getWeightedRMS(arc_data.xResid, arc_data.xErr, soften=xSoften)
     yWeightedRms = getWeightedRMS(lines.yResid, lines.yErr, soften=ySoften)
@@ -622,8 +625,8 @@ def get_fit_stats(
     xFibers = len(traces.fiberId.unique())
     yFibers = len(lines.fiberId.unique())
 
-    xFitStat = FitStat(arc_data.xResid.median(), xRobustRms, xWeightedRms, xSoftFit, xDof, xFibers, xNum)
-    yFitStat = FitStat(lines.yResid.median(), yRobustRms, yWeightedRms, ySoftFit, yDof, yFibers, yNum)
+    xFitStat = FitStat(arc_data.xResid.median(), xRobustRms, xWeightedRms, xSoftFit, xDof, xFibers, numTraces)
+    yFitStat = FitStat(lines.yResid.median(), yRobustRms, yWeightedRms, ySoftFit, yDof, yFibers, numLines)
 
     return FitStats(dof, chi2X, chi2Y, xFitStat, yFitStat)
 
