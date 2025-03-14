@@ -328,14 +328,15 @@ def get_data_and_stats(
 
     log.info("Getting residual stats")
     stats = list()
-    for status_type, rows in arc_data.groupby(["status_type"]):
+    for (status_type, isTrace), rows in arc_data.groupby(["status_type", "isTrace"]):
         visit_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
         visit_stats["status_type"] = status_type
+        visit_stats["isTrace"] = isTrace
         visit_stats["arm"] = dataId["arm"]
         visit_stats["spectrograph"] = dataId["spectrograph"]
         visit_stats["visit"] = dataId["visit"]
         visit_stats["ccd"] = "{arm}{spectrograph}".format(**dataId)
-        visit_stats["description"] = rows.description.unique().tolist()
+        visit_stats["description"] = ",".join(rows.description.unique().tolist())
         visit_stats["observationReason"] = visitInfo.observationReason
         stats.append(visit_stats)
 
