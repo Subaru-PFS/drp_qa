@@ -681,9 +681,9 @@ def plot_detectormap_residuals(
     try:
         for sub_fig, column in zip([x_fig, y_fig], ["xResid", "yResid"]):
             if column == "xResid":
-                plot_stats = visit_stats.query("isTrace == True")
+                plot_stats = visit_stats.query("description == 'Trace'")
             else:
-                plot_stats = visit_stats.query("isLine == True")
+                plot_stats = visit_stats.query("description != 'Trace'")
 
             try:
                 plot_residual(
