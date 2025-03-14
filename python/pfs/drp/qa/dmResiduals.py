@@ -328,7 +328,7 @@ def get_data_and_stats(
 
     log.info("Getting residual stats")
     stats = list()
-    for (status_type, description), rows in arc_data.groupby(["status_type", "isTrace"]):
+    for (status_type, description), rows in arc_data.groupby(["status_type", "description"]):
         visit_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
         visit_stats["status_type"] = status_type
         visit_stats["arm"] = dataId["arm"]
