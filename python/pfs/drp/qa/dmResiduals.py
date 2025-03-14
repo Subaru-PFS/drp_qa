@@ -575,7 +575,7 @@ def get_fit_stats(
     numTraces = traces.fiberId.nunique()
     try:
         yNum = lines.isLine.value_counts()[True]
-        numLines = lines.waveLength.nunique()
+        numLines = lines.wavelength.nunique()
     except KeyError:
         yNum = 0
         numLines = 0
