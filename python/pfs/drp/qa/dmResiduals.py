@@ -328,14 +328,14 @@ def get_data_and_stats(
 
     log.info("Getting residual stats")
     stats = list()
-    for (status_type, description), rows in arc_data.groupby(["status_type", "description"]):
+    for status_type, rows in arc_data.groupby(["status_type"]):
         visit_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
         visit_stats["status_type"] = status_type
         visit_stats["arm"] = dataId["arm"]
         visit_stats["spectrograph"] = dataId["spectrograph"]
         visit_stats["visit"] = dataId["visit"]
         visit_stats["ccd"] = "{arm}{spectrograph}".format(**dataId)
-        visit_stats["description"] = description
+        visit_stats["description"] = rows.description.unique().tolist()
         visit_stats["observationReason"] = visitInfo.observationReason
         stats.append(visit_stats)
 
@@ -575,7 +575,7 @@ def get_fit_stats(
     numTraces = traces.fiberId.nunique()
     try:
         yNum = lines.isLine.value_counts()[True]
-        numLines = lines.isLine.value_counts()[True] // numTraces
+        numLines = lines.waveLength.nunique()
     except KeyError:
         yNum = 0
         numLines = 0
@@ -680,10 +680,15 @@ def plot_detectormap_residuals(
 
     try:
         for sub_fig, column in zip([x_fig, y_fig], ["xResid", "yResid"]):
+            if column == "xResid":
+                plot_stats = visit_stats.query("isTrace == True")
+            else:
+                plot_stats = visit_stats.query("isLine == True")
+
             try:
                 plot_residual(
                     arc_data,
-                    visit_stats.query(f'description {"==" if column == "xResid" else "!="} "Trace"'),
+                    plot_stats,
                     column=column,
                     dataRange=spatialRange if column == "xResid" else wavelengthRange,
                     binWavelength=binWavelength,
