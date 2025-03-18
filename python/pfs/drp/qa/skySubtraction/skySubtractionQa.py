@@ -196,20 +196,27 @@ def extractFiber(spectra, fiberId, finite=True):
     C = np.logical_and(C, spectra.mask[j][0] == 0)
 
     # Compute standard deviation (sqrt of variance), setting invalid values to NaN
-    std = np.ones_like(var)
+    std = np.ones_like(var) * np.nan
     std[C] = np.sqrt(var[C])
-    std[~C] = np.nan
 
     # Compute chi (flux divided by standard deviation), handling invalid cases
-    chi = np.ones_like(var)
-    chi[C] = flux[C] / np.sqrt(var)[C]
-    chi[~C] = np.nan
+    chi = np.ones_like(var) * np.nan
+    chi[C] = flux[C] / std[C]
+
+    # calculating poisson error only.
+    stdPoisson = np.ones_like(var) * np.nan
+    stdPoisson[C] = np.sqrt(np.abs(flux[C] + sky[C]))
+
+    # calculating chi using poisson error only.
+    chiPoisson = np.ones_like(var) * np.nan
+    chiPoisson[C] = flux[C] / stdPoisson[C]
 
     # Return only finite values if requested
     if finite:
         wave, flux, std, sky, chi = wave[C], flux[C], std[C], sky[C], chi[C]
+        stdPoisson, chiPoisson = stdPoisson[C], chiPoisson[C]
 
-    return wave, flux, std, sky, chi, C
+    return wave, flux, std, sky, chi, stdPoisson, chiPoisson, C
 
 
 def buildReference(spectra, func=np.mean, model='residuals'):
@@ -254,7 +261,8 @@ def buildReference(spectra, func=np.mean, model='residuals'):
 
     # Process each fiber
     for fiberId in spectra.fiberId:
-        wave, flux, std, sky, chi, C = extractFiber(spectra, fiberId=fiberId, finite=True)
+        wave, flux, std, sky, chi, stdPoisson, chiPoisson, C = extractFiber(spectra,
+                                                                            fiberId=fiberId, finite=True)
 
         # Select model to build reference spectrum
         if model == 'none':
@@ -264,7 +272,7 @@ def buildReference(spectra, func=np.mean, model='residuals'):
         elif model == 'chi':
             y.append(chi)
         elif model == 'chi_poisson':
-            y.append(flux / np.sqrt(sky + flux))
+            y.append(chiPoisson)
         elif model == 'residuals':
             y.append(flux)
         elif model == 'variance':
@@ -434,7 +442,9 @@ def convertToDict(hold, finite=True):
         # Process each fiber
         for iFib, fiberId in enumerate(spectra.fiberId):
             # Extract spectral data
-            wave, flux, std, sky, chi, _ = extractFiber(spectra, fiberId=fiberId, finite=finite)
+            wave, flux, std, sky, chi, stdPoisson, chiPoisson, C = extractFiber(spectra,
+                                                                                fiberId=fiberId,
+                                                                                finite=finite)
 
             # Initialize fiber entry
             ret[(spectrograph, arm)][fiberId] = {
@@ -442,7 +452,9 @@ def convertToDict(hold, finite=True):
                 'flux': flux,
                 'std': std,
                 'sky': sky,
-                'chi': chi
+                'chi': chi,
+                'stdPoisson': stdPoisson,
+                'chiPoisson': chiPoisson,
             }
 
             # Add positional metadata if `pfsConfig` is available

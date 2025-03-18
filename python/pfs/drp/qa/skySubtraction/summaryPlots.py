@@ -68,11 +68,18 @@ def summarizeSpectrograph(hold,
         # Process each fiber
         for fib in h.keys():
             chi = h[fib]['chi']
+            chiPoisson = h[fib]['chiPoisson']
             # std = h[fib]['std']
 
             # Add histogram layer for each fiber
             layers.append(
                 skySubtractionQaPlot.Layer('hist', chi, color=color, alpha=alpha,
+                                           linewidth=2, density=True, rnge=xlim, bins=30)
+            )
+
+            # Add histogram layer for each fiber
+            layers.append(
+                skySubtractionQaPlot.Layer('hist', chiPoisson, color='k', alpha=0.1,
                                            linewidth=2, density=True, rnge=xlim, bins=30)
             )
 
@@ -188,6 +195,8 @@ def plot_1d_spectrograph(holdAsDict, plotId, arms, fontsize=22, xlim=(-5, 5)):
     # Add legend
     ax_dict['A'].plot([], [], color=arm_colors[0], label='DRP')
     ax_dict['A'].plot([], [], color='magenta', label='Combined DRP')
+    ax_dict['A'].plot([], [], color='k', label='Using Poisson errors')
+
     ax_dict['A'].legend(fontsize=fontsize * 0.6, loc='upper left')
 
     return fig, ax_dict
