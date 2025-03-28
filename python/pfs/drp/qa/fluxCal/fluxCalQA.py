@@ -23,7 +23,7 @@ class fluxCalQA:
     def __init__(self, butler, verbose=False, isGen3=True, doAnonymize=True):
         self.butler = butler
         self.isGen3 = isGen3
-        self.doAnonymize = anonymize
+        self.doAnonymize = doAnonymize
 
         # there must be a better way to do this
         if isGen3:
