@@ -20,9 +20,10 @@ class fluxCalQA:
     "A summary class to make flux calibration QA plots"
     
     #-------------------------------------------------------------
-    def __init__(self, butler, verbose=False, isGen3=True):
+    def __init__(self, butler, verbose=False, isGen3=True, doAnonymize=True):
         self.butler = butler
         self.isGen3 = isGen3
+        self.doAnonymize = anonymize
 
         # there must be a better way to do this
         if isGen3:
@@ -41,7 +42,7 @@ class fluxCalQA:
         self.stellarMags = np.load(os.path.join(os.path.dirname(__file__), 'stellarMags.npy')).transpose()  # columns are g_ps1, r_ps1, i_ps1, z_ps1, y_ps1, G, Bp, Rp
         self.flagNoColor = False # temporary flag to indicate that not all filters are available in pfsConfig
         
-        self.__version__ = '2.7'
+        self.__version__ = '2.9'
 
         
     #-------------------------------------------------------------
@@ -101,6 +102,19 @@ class fluxCalQA:
             # this is gen2
             path = self.butler.getUri('pfsMerged', visit=visit)
         info = self.getHeaderInfo(path, visit, ['OBJECT', 'PROP-ID', 'HIERARCH VERSION_DRP_STELLA', 'HIERARCH VERSION_OBS_PFS', 'HIERARCH VERSION_DATAMODEL', 'W_PFDSNM'])
+
+        # anonymize the plot:
+        if self.doAnonymize:
+            info['PROP-ID'] = '---'
+            info['OBJECT'] = '---'
+            info['W_PFDSNM'] = '---'
+            data = list(data) #original datatype is tuple
+            data[3] = -99.000  #altitude
+            data[4] = -99.000  #azimuth
+            data[6] = '-99.000'  #ra
+            data[7] = '-99.000'  #dec
+            
+        
         ax.text(0.0, 0.90, f'visit={visit}, object={info["OBJECT"]}, prop-id={info["PROP-ID"]}', fontsize=15)
         ax.text(0.99, 0.90, f'fluxCalQA ver. {self.__version__}', fontsize=8, ha='right')
         ax.text(0.0, 0.90 - dy * 1, 'pfsDesignId=%x, pfsDesignName=%s' % (pfsConfig.pfsDesignId, info['W_PFDSNM']), color='#777777')
@@ -110,8 +124,9 @@ class fluxCalQA:
         ax.text(0.0, 0.90 - dy * 5, f'collection={self.butlerRoot.replace("file:///work/datastore/","")}, calibRoot={self.butlerCalibRoot}, arms={pfsConfig.arms}', color='#AAAAAA')
         ax.text(0.0, 0.90 - dy * 6, f'DRP_STELLA={info["HIERARCH VERSION_DRP_STELLA"]}, OBS_PFS={info["HIERARCH VERSION_OBS_PFS"]}, DATAMODEL={info["HIERARCH VERSION_DATAMODEL"]}', color='#AAAAAA')
         
-        # store insrot for other methods
+        # store insrot and exptime for other methods
         self.insrot = float(data[5])
+        self.exptime = float(data[2])
 
         self.results['collection'].append(self.butlerRoot.replace('file:///work/datastore/',''))
 
@@ -207,11 +222,11 @@ class fluxCalQA:
             good = ~bad
                        
             # compute synthetic mags and difference from reference mags
-            mag[i] = self.synthmag.getMag(merged.wavelength[index][good] * 10, merged.flux[index][good] / merged.norm[index][good],
+            mag[i] = self.synthmag.getMag(merged.wavelength[index][good] * 10, merged.flux[index][good] / merged.norm[index][good] / self.exptime,
                                           filterName=self.refFilterFile, verbose=False, fnu=True, midres=midres) - (-2.5*np.log10(pfsConfig.psfFlux[i][self.psfFluxIndex]) + 31.4 )
-            tmp1 = self.synthmag.getMag(merged.wavelength[index][good] * 10, merged.flux[index][good] / merged.norm[index][good],
+            tmp1 = self.synthmag.getMag(merged.wavelength[index][good] * 10, merged.flux[index][good] / merged.norm[index][good] / self.exptime,
                                           filterName=self.synthmag.filters[self.psfColorIndex[0]], verbose=False, fnu=True, midres=midres) - (-2.5*np.log10(pfsConfig.psfFlux[i][self.psfColorIndex[0]]) + 31.4 )
-            tmp2 = self.synthmag.getMag(merged.wavelength[index][good] * 10, merged.flux[index][good] / merged.norm[index][good],
+            tmp2 = self.synthmag.getMag(merged.wavelength[index][good] * 10, merged.flux[index][good] / merged.norm[index][good] / self.exptime,
                                           filterName=self.synthmag.filters[self.psfColorIndex[1]], verbose=False, fnu=True, midres=midres) - (-2.5*np.log10(pfsConfig.psfFlux[i][self.psfColorIndex[1]]) + 31.4 )
             color[i] = tmp1 - tmp2
             
@@ -841,6 +856,15 @@ class fluxCalQA:
 
         
     #-------------------------------------------------------------
+    # anonymize pfsConfig
+    def anonymizePfsConfig(self, pfsConfig):
+        pfsConfig.ra = (pfsConfig.ra - pfsConfig.raBoresight) * np.cos(np.deg2rad(pfsConfig.decBoresight))
+        pfsConfig.dec -= pfsConfig.decBoresight
+        pfsConfig.raBoresight = 0
+        pfsConfig.decBoresight = 0
+        
+        
+    #-------------------------------------------------------------
     # main function to draw QA plots
     def plot(self, visits, saveFigDir = None, skipFluxCal = False):
 
@@ -868,7 +892,10 @@ class fluxCalQA:
             ### ZZZ --- it is way better to change the filter sets in pfsConfig rather than indexing filters
             ### ZZZ --- make sure to always have grizy in pfsConfig in this order for PS1, G,Bp,Rp for Gaia, etc.
             ### ZZZ --- many of the plots assume the grizy order
-            
+
+            # anonymize pfsConfig
+            if self.doAnonymize:
+                self.anonymizePfsConfig(pfsConfig)
             
             # observing info and AG info in the top two panels
             if self.verbose:
@@ -1009,6 +1036,7 @@ def main():
     parser.add_argument('visit')
     parser.add_argument('--datastore', default = '/work/datastore')
     parser.add_argument('--saveFigDir', default = '.')
+    parser.add_argument('--doAnonymize', default = True)
     args=parser.parse_args()
 
     # gen2
@@ -1019,7 +1047,7 @@ def main():
     from lsst.daf.butler import Butler
     butler = Butler(args.datastore, collections=args.collections)
     
-    fluxcalqa = fluxCalQA(butler, verbose = True)
+    fluxcalqa = fluxCalQA(butler, verbose = True, doAnonymize = args.doAnonymize)
     fluxcalqa.plot([int(args.visit)], saveFigDir = args.saveFigDir)
     
         
