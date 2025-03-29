@@ -108,6 +108,7 @@ Plot the fiber normalization for the given detector and visit.
 - `fluxCalQa:includeFakeJ`: Include the fake narrow J filter, default `True`.
 - `fluxCalQa:fakeJoffset`: Offset from the ps1 bands for the fake narrow J, default `0.054`.
 - `fluxCalQa:diffFilter`: Filter to use for the color magnitude difference, default `g_ps1`.
+- `fluxCalQa:doAnonymize`: Mask sensitive information in the plot, default `True`.
 
 ##### Outputs
 
