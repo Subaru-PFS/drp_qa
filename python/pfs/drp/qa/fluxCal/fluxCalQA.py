@@ -1023,8 +1023,19 @@ class fluxCalQA:
             if self.verbose:
                 print('all done')
             
-            
-    
+
+#-------------------------------------------------------------
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.') 
+
+
 #-------------------------------------------------------------
 def main():
     parser=argparse.ArgumentParser()
@@ -1036,7 +1047,7 @@ def main():
     parser.add_argument('visit')
     parser.add_argument('--datastore', default = '/work/datastore')
     parser.add_argument('--saveFigDir', default = '.')
-    parser.add_argument('--doAnonymize', default = True)
+    parser.add_argument('--doAnonymize', default = True, type=str2bool)
     args=parser.parse_args()
 
     # gen2
@@ -1046,7 +1057,7 @@ def main():
     # gen3
     from lsst.daf.butler import Butler
     butler = Butler(args.datastore, collections=args.collections)
-    
+
     fluxcalqa = fluxCalQA(butler, verbose = True, doAnonymize = args.doAnonymize)
     fluxcalqa.plot([int(args.visit)], saveFigDir = args.saveFigDir)
     
