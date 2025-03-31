@@ -279,6 +279,7 @@ def get_data_and_stats(
     visitInfo: VisitInfo,
     adjustDM_config=None,
     log=None,
+    **kwargs,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     is_science = visitInfo.observationReason == "science"
@@ -289,6 +290,7 @@ def get_data_and_stats(
         isScience=is_science,
         adjustDMConfig=adjustDM_config,
         log=log,
+        **kwargs,
     )
     arcLines = arcLines[good_lines_idx].copy()
 
@@ -349,6 +351,10 @@ def getGoodLines(
     dispersion: float | None,
     adjustDMConfig: Config,
     isScience: bool = False,
+    lineFlags: int | None = None,
+    minSignalToNoise: float | None = 0,
+    maxCentroidError: float | None = 0,
+    exclusionRadius: float | None = 0,
     log: Logger | None = None,
 ) -> np.ndarray:
     """Get the good lines.
@@ -364,6 +370,14 @@ def getGoodLines(
         Configuration used for the detector map adjustment.
     isScience : `bool`, optional
         Is this a science visit? Default is False.
+    lineFlags : `int`, optional
+        The line flags. Default is None, which uses the lineFlags from the adjustDMConfig.
+    minSignalToNoise : `float`, optional
+        The minimum signal to noise ratio. Default is 0, which turns of the check.
+    maxCentroidError : `float`, optional
+        The maximum centroid error. Default is 0, which turns of the check.
+    exclusionRadius : `float`, optional
+        The exclusion radius. Default is 0, which turns of the check.
     log : `Logger`, optional
         The logger for the class object. Default is None.
 
@@ -397,8 +411,11 @@ def getGoodLines(
         good &= lineIndex
         log.debug(f"{good.sum()} good lines after ignoring traces ({getCounts()})")
 
-    good &= (lines.status & ReferenceLineStatus.fromNames(*adjustDMConfig.lineFlags)) == 0
-    log.debug(f"{good.sum()} good lines after line flags ({getCounts()})")
+    if lineFlags is None:
+        lineFlags = adjustDMConfig.lineFlags
+    if lineFlags is not None:
+        good &= (lines.status & ReferenceLineStatus.fromNames(*lineFlags)) == 0
+        log.debug(f"{good.sum()} good lines after line flags ({getCounts()})")
 
     good &= np.isfinite(lines.x) & np.isfinite(lines.y)
     good &= np.isfinite(lines.xErr) & np.isfinite(lines.yErr)
@@ -407,7 +424,9 @@ def getGoodLines(
         good &= np.isfinite(lines.slope) | ~traceIndex
     log.debug(f"{good.sum()} good lines after finite positions ({getCounts()})")
 
-    if adjustDMConfig.minSignalToNoise > 0:
+    if minSignalToNoise is None:
+        minSignalToNoise = adjustDMConfig.minSignalToNoise
+    if minSignalToNoise > 0:
         good &= np.isfinite(lines.flux) & np.isfinite(lines.fluxErr)
         log.debug(f"{good.sum()} good lines after finite intensities ({getCounts()})")
 
@@ -416,22 +435,25 @@ def getGoodLines(
             mean_sn = np.nanmean(sn[good])
             std_sn = np.nanstd(sn[good])
             # Use the minimum of the mean - std and the config value.
-            sn_cut = min(mean_sn - std_sn, adjustDMConfig.minSignalToNoise)
+            sn_cut = min(mean_sn - std_sn, minSignalToNoise)
             log.debug(f"Filtering SN < {sn_cut=:.02f}")
             good &= sn >= sn_cut
 
         log.debug(f"{good.sum()} good lines after SN filtering ({getCounts()})")
 
-    if adjustDMConfig.maxCentroidError > 0:
+    if maxCentroidError is None:
         maxCentroidError = adjustDMConfig.maxCentroidError
+    if maxCentroidError > 0:
         good &= (lines.xErr > 0) & (lines.xErr < maxCentroidError)
         good &= ((lines.yErr > 0) & (lines.yErr < maxCentroidError)) | traceIndex
         log.debug(f"{good.sum()} good lines after {maxCentroidError=} centroid errors ({getCounts()})")
 
-    if dispersion is not None and adjustDMConfig.exclusionRadius > 0 and not np.all(traceIndex):
+    if exclusionRadius is None:
+        exclusionRadius = adjustDMConfig.exclusionRadius
+    if dispersion is not None and exclusionRadius > 0 and not np.all(traceIndex):
         wavelength = np.unique(lines.wavelength[~traceIndex])
         status = [np.bitwise_or.reduce(lines.status[lines.wavelength == wl]) for wl in wavelength]
-        exclusionRadius = dispersion * adjustDMConfig.exclusionRadius
+        exclusionRadius = dispersion * exclusionRadius
         exclude = getExclusionZone(wavelength, exclusionRadius, np.array(status))
         good &= np.isin(lines.wavelength, wavelength[exclude], invert=True) | traceIndex
         log.debug(f"{good.sum()} good lines after {exclusionRadius=:.03f} exclusion zone ({getCounts()})")
