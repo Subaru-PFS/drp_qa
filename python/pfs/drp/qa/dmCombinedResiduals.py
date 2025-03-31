@@ -412,7 +412,7 @@ def plot_visits(
         The visit statistics plot.
 
     """
-    plotData = plotData.copy()
+    plotData = plotData.sort_values(by=["visit"]).copy()
     fig = fig or Figure(layout="constrained")
     fig.set_size_inches(11, 8)
     ax0 = fig.add_subplot(121)
@@ -474,18 +474,16 @@ def plot_visits(
             ax.set_xlim(-wavelengthRange, wavelengthRange)
 
     # Only label a visit the first time it's seen.
-    labeled_ticks = set()
+    labeled_ticks = dict()
     all_ticks = list()
-    visit_idx = list()
     for idx, row in plotData.reset_index().iterrows():
-        if row.visit not in labeled_ticks:
+        if row.visit not in labeled_ticks.values():
             all_ticks.append(f"{row.visit}")
-            labeled_ticks.add(row.visit)
-            visit_idx.append(idx + 1)
+            labeled_ticks[row.visit_idx] = row.visit
 
     # Create a striped background to offset the visits.
-    ax0.set_yticks(visit_idx, labeled_ticks, fontsize="xx-small")
-    for i, (y0, y1) in enumerate(itertools.pairwise(visit_idx)):
+    ax0.set_yticks(list(labeled_ticks.keys()), list(labeled_ticks.values()), fontsize="xx-small")
+    for i, (y0, y1) in enumerate(itertools.pairwise(list(labeled_ticks.keys()))):
         ax0.axhspan(y0, y1, color="whitesmoke" if i % 2 == 0 else "ivory", alpha=0.5)
         ax1.axhspan(y0, y1, color="whitesmoke" if i % 2 == 0 else "ivory", alpha=0.5)
 
