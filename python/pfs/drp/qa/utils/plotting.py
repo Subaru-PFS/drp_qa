@@ -8,20 +8,17 @@ from matplotlib.axes import Axes
 div_palette = plt.cm.RdBu_r.with_extremes(over="magenta", under="cyan", bad="lime")
 detector_palette = {"b": "tab:blue", "r": "tab:red", "n": "tab:orange", "m": "tab:pink"}
 description_palette = {
-    "Trace": "#ED0A3F",
-    "ArI": "tab:orange",
-    "CdI,HgI": "tab:purple",
-    "HgI": "tab:purple",
-    "KrI": "tab:brown",
-    "NeI": "tab:pink",
-    "XeI": "tab:olive",
-    "O2,OH": "tab:blue",
-    "O2,OH,OI": "tab:blue",
-    "OH,OI": "tab:blue",
-    "OH": "tab:blue",
-    "OI": "tab:blue",
-    "NaI,OI": "tab:blue",
-    "NaI,OH,OI": "tab:blue",
+    "Trace": "black",
+    "ArI": "tab:blue",
+    "CdI": "tab:orange",
+    "HgI": "tab:green",
+    "KrI": "tab:red",
+    "NeI": "tab:purple",
+    "XeI": "tab:brown",
+    "O2": "tab:pink",
+    "OH": "tab:gray",
+    "OI": "tab:olive",
+    "NaI": "tab:cyan",
 }
 spectrograph_plot_markers = {1: "s", 2: "o", 3: "X", 4: "P"}
 
