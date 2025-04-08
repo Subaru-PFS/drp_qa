@@ -1,3 +1,4 @@
+import eups
 from lsst.daf.butler import Butler
 import pandas as pd
 import numpy as np
@@ -33,11 +34,7 @@ import random
 #from ..utils.math import robustRms
 from datetime import datetime, timedelta, time
 from matplotlib.colors import Normalize
-out_sys = ! eups list -s pfs_pipe2d
-pfspipe2d = out_sys[0][0:24]
-import re
-text = pfspipe2d
-pfspipe2d = re.sub(r'\s+','', text).strip()
+pfspipe2d = eups.getSetupVersion("pfs_pipe2d")
 datastore = '/work/datastore'
 collections = 'PFS/calib/pipe2d-1675/run21/verifyCalib.uniformity.20250322a'#'PFS/calib/pipe2d-1675/run21/calib.20250328a', (old) 'PFS/calib/pipe2d-1675/run21/verifyCalib.uniformity.20250322a'
 butler = Butler(datastore, collections=collections)
