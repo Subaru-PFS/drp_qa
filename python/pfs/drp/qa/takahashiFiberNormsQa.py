@@ -32,7 +32,12 @@ from typing import Final, Literal, TypeVar
 
 SpectrographId = Literal[1, 2, 3, 4]
 """
-List of spectrographs in PFS.
+Spectrograph ID in PFS.
+"""
+
+ArmId = Literal["b", "r", "m", "n"]
+"""
+Arm ID in PFS
 """
 
 
@@ -65,7 +70,7 @@ def main() -> None:
         "--input",
         metavar="COLLECTION[,...]",
         required=True,
-        type=argtype_comma_separated(str),
+        type=argtype_comma_separated(str, nargs="+"),
         help="""
         Input collections.
         """,
@@ -118,7 +123,9 @@ def main() -> None:
 T = TypeVar("T")
 
 
-def argtype_comma_separated(type: Callable[[str], T]) -> Callable[[str], list[T]]:
+def argtype_comma_separated(
+    type: Callable[[str], T], *, nargs: int | Literal["*", "+"]
+) -> Callable[[str], list[T]]:
     """
     Comma-separated list
 
@@ -129,6 +136,9 @@ def argtype_comma_separated(type: Callable[[str], T]) -> Callable[[str], list[T]
     ----------
     type : `Callable` [[`str`], `T`]
         Type of elements, or converter to the type.
+    nargs : `int` | `Literal` ["*", "+"]
+        Number of elements.
+        Special values are accepted: "*" (zero or more), "+" (one or more).
 
     Returns
     -------
@@ -169,12 +179,19 @@ def argtype_comma_separated(type: Callable[[str], T]) -> Callable[[str], list[T]
 
             elements.append(t)
 
+        if isinstance(nargs, str) and nargs == "*":
+            pass
+        if isinstance(nargs, str) and nargs == "+" and not elements:
+            raise argparse.ArgumentTypeError("one or more values required.") from None
+        if isinstance(nargs, int) and nargs != len(elements):
+            raise argparse.ArgumentTypeError(f"number of values must be {nargs}") from None
+
         return elements
 
     return _argtype_comma_separated
 
 
-def argtype_armlist(s: str) -> list[str]:
+def argtype_armlist(s: str) -> list[ArmId]:
     """
     List of arms
 
@@ -188,21 +205,22 @@ def argtype_armlist(s: str) -> list[str]:
 
     Returns
     -------
-    elements : `list`
+    elements : `list` [`ArmId`]
         List of elements.
     """
     ignored_chars = {",", " "}
-    orders = {
+    orders: dict[ArmId, int] = {
         "b": 0,
         "r": 1,
         "m": 2,
         "n": 3,
     }
     elements = {c for c in s if c not in ignored_chars}
-    tagged_elements = []
+    tagged_elements: list[tuple[int, ArmId]] = []
     for c in elements:
         try:
-            tagged_elements.append((orders[c], c))
+            arm = typing.cast(ArmId, c)
+            tagged_elements.append((orders[arm], arm))
         except KeyError:
             raise argparse.ArgumentTypeError(f"invalid arm name '{c}'.") from None
 
@@ -234,19 +252,6 @@ def layout_paragraphs(text: str) -> str:
     )
 
 
-vmin: Final[float] = 0.97
-vmax: Final[float] = 1.03
-vmin2: Final[float] = 0.0
-vmax2: Final[float] = 0.05
-
-wavelength_ranges: Final[dict[str, tuple[float, float]]] = {
-    "b": (450, 650),
-    "r": (650, 950),
-    "m": (650, 950),
-    "n": (950, 1250),
-}
-
-
 @dataclasses.dataclass
 class TakahashiFiberNormsQaStat:
     hst: str
@@ -261,25 +266,58 @@ class TakahashiFiberNormsQaStat:
 
 
 @dataclasses.dataclass
-class TakahashiFiberNormsQaPlotConfig:
+class TakahashiFiberNormsQaConfig:
     fontsize: float = 20
     figsize: tuple[float, float] = (30, 55)
 
-    @property
+    vmin: float = 0.97
+    vmax: float = 1.03
+    vmin2: float = 0.0
+    vmax2: float = 0.05
+
+    wavelength_range_b: tuple[float, float] = (450, 650)
+    wavelength_range_r: tuple[float, float] = (650, 950)
+    wavelength_range_m: tuple[float, float] = (650, 950)
+    wavelength_range_n: tuple[float, float] = (950, 1250)
+
+    sigma_flag_threshold_b: float = 0.01090
+    sigma_flag_threshold_r: float = 0.00799
+    sigma_flag_threshold_m: float = 0.00799
+    sigma_flag_threshold_n: float = 0.00799
+
+    @functools.cached_property
     def fontsize_large(self) -> float:
         return self.fontsize * 1.25
 
-    @property
+    @functools.cached_property
     def fontsize_small(self) -> float:
         return self.fontsize * 0.85
 
-    @property
+    @functools.cached_property
     def fontsize_x_small(self) -> float:
         return self.fontsize * 0.75
 
-    @property
+    @functools.cached_property
     def fontsize_xx_small(self) -> float:
         return self.fontsize * 0.7
+
+    @functools.cached_property
+    def wavelength_ranges(self) -> dict[ArmId, tuple[float, float]]:
+        return {
+            "b": self.wavelength_range_b,
+            "r": self.wavelength_range_r,
+            "m": self.wavelength_range_m,
+            "n": self.wavelength_range_n,
+        }
+
+    @functools.cached_property
+    def sigma_flag_thresholds(self) -> dict[ArmId, float]:
+        return {
+            "b": self.sigma_flag_threshold_b,
+            "r": self.sigma_flag_threshold_r,
+            "m": self.sigma_flag_threshold_m,
+            "n": self.sigma_flag_threshold_n,
+        }
 
 
 class TakahashiFiberNormsQa:
@@ -288,14 +326,14 @@ class TakahashiFiberNormsQa:
         butler: Butler,
         ref_visit: int,
         visit: int,
-        arm: str,
+        arm: ArmId,
         *,
-        plot_config=TakahashiFiberNormsQaPlotConfig(),
+        config=TakahashiFiberNormsQaConfig(),
     ) -> None:
         self.ref_visit = ref_visit
         self.visit = visit
         self.arm = arm
-        self.plot_config = plot_config
+        self.config = config
 
         self.pfsConfig = butler.get("pfsConfig", visit=visit)
         self.fiberNorms = butler.get("fiberNorms", visit=visit, arm=arm)
@@ -310,13 +348,10 @@ class TakahashiFiberNormsQa:
             for spec in typing.get_args(SpectrographId)
         }
 
+        self.wavelength_range = self.config.wavelength_ranges[arm]
+
         # Threshold for odd fiber
-        self.sigma_flag_entire = {
-            "b": 0.01090,
-            "r": 0.00799,
-            "m": 0.00799,
-            "n": 0.00799,
-        }[arm]
+        self.sigma_flag_entire = self.config.sigma_flag_thresholds[arm]
 
         # These two are used in captions of figures.
         self.datastore = str(butler._config.configDir)
@@ -406,7 +441,7 @@ class TakahashiFiberNormsQa:
         pfsArmRatio = self._cache_pfsArmRatio.get(spec)
         if pfsArmRatio is None:
             pfsArmRatio = self._cache_pfsArmRatio[spec] = PfsArmRatio(
-                self.pfsArmRefDict[spec], self.pfsArmDict[spec], self.pfsConfig
+                self.pfsArmRefDict[spec], self.pfsArmDict[spec], self.pfsConfig, self.wavelength_range
             )
 
         return pfsArmRatio
@@ -423,7 +458,7 @@ class TakahashiFiberNormsQa:
         if cache is not None:
             return cache
 
-        wmin, wmax = wavelength_ranges[self.arm]
+        wmin, wmax = self.wavelength_range
         pfsConfig = self.pfsConfig.select(fiberStatus=FiberStatus.GOOD)
 
         fiberNorms = self.fiberNorms
@@ -445,7 +480,7 @@ class TakahashiFiberNormsQa:
         azi = np.round(stat.azimuth, 2)
 
         fig = plt.figure(
-            num="fiberNormsQA", figsize=self.plot_config.figsize, clear=True, facecolor="w", edgecolor="k"
+            num="fiberNormsQA", figsize=self.config.figsize, clear=True, facecolor="w", edgecolor="k"
         )
 
         arr = np.array(df.sigma)
@@ -497,14 +532,14 @@ class TakahashiFiberNormsQa:
         self._make_plot_quartz_ratio_by_wavelength(ax13, df)
 
         # [1] PFI IMAGES (pfsArm.flux/pfsArm.norm)
-        fig.text(0.15, 0.78, "[1] Quartz ratio measured from pfsArm", fontsize=self.plot_config.fontsize)
+        fig.text(0.15, 0.78, "[1] Quartz ratio measured from pfsArm", fontsize=self.config.fontsize)
         self._make_plot_quartz_ratio_by_position_n_sigma(ax5, df, n=2)
         self._make_plot_quartz_ratio_by_position_median(ax6, df)
         self._make_plot_quartz_ratio_by_position_at_pixel(ax7, df, pixel_index=1500)
         self._make_plot_quartz_ratio_by_position_at_pixel(ax8, df, pixel_index=3500)
 
         # [4] PFI IMAGES (fiberNorms)
-        fig.text(0.15, 0.59, "[4] fiberNorms.values of target quartz", fontsize=self.plot_config.fontsize)
+        fig.text(0.15, 0.59, "[4] fiberNorms.values of target quartz", fontsize=self.config.fontsize)
         self._make_plot_fiberNorms_by_position(ax9)
         self._make_plot_fiberNorms_by_wavelength(ax10)
 
@@ -517,7 +552,7 @@ class TakahashiFiberNormsQa:
                 0.35,
                 0.49,
                 f"[6] Example spectra for flagged fibers with large flux scatters (red marked in [2])",
-                fontsize=self.plot_config.fontsize,
+                fontsize=self.config.fontsize,
             )
             for i in range(n_odd):
                 axs = fig.add_subplot(gs_spec[i // ncols_odd, i % ncols_odd])
@@ -531,7 +566,7 @@ class TakahashiFiberNormsQa:
                 0.35,
                 0.19,
                 f"[7] Randomly selected spectra obtained by fiberNorms.values",
-                fontsize=self.plot_config.fontsize,
+                fontsize=self.config.fontsize,
             )
             # extract fiberIds for plotting example spectra
             list_ex_fibernorms = random.sample(list(df.fiberId), ncols_odd)
@@ -552,13 +587,13 @@ class TakahashiFiberNormsQa:
 
         obsdate = utc2hst(self.fiberNorms.metadata["DATEOBS"])
 
-        fig.text(0.1, 0.85, f"fiberNormsQA ver. 1.0", fontsize=self.plot_config.fontsize_x_small)
+        fig.text(0.1, 0.85, f"fiberNormsQA ver. 1.0", fontsize=self.config.fontsize_x_small)
         fig.text(
             0.7,
             0.85,
             f"Flag for fiber throughput variation={flag}",
             color=strcolor,
-            fontsize=self.plot_config.fontsize_large,
+            fontsize=self.config.fontsize_large,
             bbox=dict(facecolor="yellow", alpha=1.0),
         )
         fig.text(
@@ -566,20 +601,20 @@ class TakahashiFiberNormsQa:
             0.83,
             f"visit_target={self.visit}",
             fontweight="bold",
-            fontsize=self.plot_config.fontsize_large,
+            fontsize=self.config.fontsize_large,
         )
         fig.text(
             0.1,
             0.82,
             f"visit_reference={self.ref_visit}, arm={self.arm}, obsdate={obsdate} ,insrot={ins}deg, azimuth={azi}deg",
-            fontsize=self.plot_config.fontsize_large,
+            fontsize=self.config.fontsize_large,
         )
         pfs_pipe2d = eups.getSetupVersion("pfs_pipe2d")
         fig.text(
             0.1,
             0.81,
             f"datastore={self.datastore}, collections={self.collections}, pfs_pipe2d={pfs_pipe2d}",
-            fontsize=self.plot_config.fontsize_large,
+            fontsize=self.config.fontsize_large,
         )
 
         if (self.visit == self.ref_visit) or (len(df_odd) == 0):
@@ -600,7 +635,7 @@ class TakahashiFiberNormsQa:
                 + "[5] Measured sigma for each fibers. The median values in all MTP groups represent in blue dashed line and 4 sigma \nrepresent in red dashed line. This figure is to check flux variation with MTP unit. "
                 + "MTP groups above the red dashed line, \n indicating that the MTP group has a large flux variation. \n",
                 (-95, -1.5),
-                fontsize=self.plot_config.fontsize_large,
+                fontsize=self.config.fontsize_large,
                 xycoords="axes fraction",
             )
         else:
@@ -624,7 +659,7 @@ class TakahashiFiberNormsQa:
                 + "\nFiberId are shown in upper left. Mesured sigma per fiber are shown in upper right. Red dashed lines represent 2sigma lines of median filtered spectra.\n"
                 + "[7] Randomly selected spectra obtained from fiberNorms.values of target quartz",
                 (-5.5, -2.5),
-                fontsize=self.plot_config.fontsize_large,
+                fontsize=self.config.fontsize_large,
                 xycoords="axes fraction",
             )
 
@@ -632,7 +667,7 @@ class TakahashiFiberNormsQa:
         return fig
 
     def _make_plot_sigma_per_fiber(self, ax: matplotlib.axes.Axes, df: pd.DataFrame) -> None:
-        ax.set_title("[5] Sigma per fiber", fontsize=self.plot_config.fontsize)
+        ax.set_title("[5] Sigma per fiber", fontsize=self.config.fontsize)
         ax.scatter(df.mtpGroup, df.sigma, c="black")
 
         sigma_median = np.nanmedian(df.sigma)
@@ -641,22 +676,20 @@ class TakahashiFiberNormsQa:
             "median",
             (0.9, 0.1),
             c="blue",
-            fontsize=self.plot_config.fontsize_xx_small,
+            fontsize=self.config.fontsize_xx_small,
             xycoords="axes fraction",
         )
         clip = 4
         sigma_of_sigma = sigma_median + clip * np.std(df.sigma)
         ax.axhline(sigma_of_sigma, ls="dashed", c="red", zorder=0)
-        ax.text(
-            "D2-1-4", 1.2 * sigma_of_sigma, "4 sigma", c="red", fontsize=self.plot_config.fontsize_xx_small
-        )
+        ax.text("D2-1-4", 1.2 * sigma_of_sigma, "4 sigma", c="red", fontsize=self.config.fontsize_xx_small)
         ax.text(
             0.85,
             0.9,
             f"${clip}\sigma$ = {sigma_of_sigma:.4f}",
             color="red",
             transform=ax.transAxes,
-            fontsize=self.plot_config.fontsize_small,
+            fontsize=self.config.fontsize_small,
             bbox=dict(facecolor="white", alpha=0.5),
         )
         ax.text(
@@ -665,17 +698,17 @@ class TakahashiFiberNormsQa:
             f"median = {sigma_median:.4f}",
             color="blue",
             transform=ax.transAxes,
-            fontsize=self.plot_config.fontsize_small,
+            fontsize=self.config.fontsize_small,
             bbox=dict(facecolor="white", alpha=0.5),
         )
 
         ax.grid(axis="both", which="both", linestyle="--", linewidth=0.5)
-        ax.set_xlabel("MTP group", self.plot_config.fontsize_x_small)
-        ax.set_ylabel("$\sigma$ (0.741*(Q75-Q25))", self.plot_config.fontsize_x_small)
+        ax.set_xlabel("MTP group", self.config.fontsize_x_small)
+        ax.set_ylabel("$\sigma$ (0.741*(Q75-Q25))", self.config.fontsize_x_small)
         ax.tick_params("x", labelrotation=90)
 
     def _make_plot_used_mtps(self, ax: matplotlib.axes.Axes, df: pd.DataFrame) -> None:
-        ax.set_title("[3] Used MTPs", fontsize=self.plot_config.fontsize)
+        ax.set_title("[3] Used MTPs", fontsize=self.config.fontsize)
         xdata, ydata = df.SM[df.SM != 0.0], df.mtpGroup[df.SM != 0.0]
         ax.scatter(xdata, ydata, c="olivedrab")
         ## The following MTPs had not been estimated sigma due to some error (e.g., could not read butler)
@@ -684,18 +717,18 @@ class TakahashiFiberNormsQa:
 
         ax.grid(axis="both", which="both", linestyle="--", linewidth=0.5)
         ax.set_xticks([0, 1, 2, 3, 4])
-        ax.set_xlabel("spectrograph ID", fontsize=self.plot_config.fontsize)
-        ax.set_ylabel("MTP group", fontsize=self.plot_config.fontsize_x_small)
+        ax.set_xlabel("spectrograph ID", fontsize=self.config.fontsize)
+        ax.set_ylabel("MTP group", fontsize=self.config.fontsize_x_small)
 
     def _make_plot_quartz_ratio_by_wavelength(self, ax: matplotlib.axes.Axes, df: pd.DataFrame) -> None:
         # [2] 2D spec of quartz ratio
         ax.set_title(
-            f"[2] 2D spectrum of quartz ratio measured from pfsArm.flux", fontsize=self.plot_config.fontsize
+            f"[2] 2D spectrum of quartz ratio measured from pfsArm.flux", fontsize=self.config.fontsize
         )
-        ax.set_xlabel("wavelength [nm]", fontsize=self.plot_config.fontsize_large)
-        ax.set_ylabel("fiberId", fontsize=self.plot_config.fontsize_large)
+        ax.set_xlabel("wavelength [nm]", fontsize=self.config.fontsize_large)
+        ax.set_ylabel("fiberId", fontsize=self.config.fontsize_large)
 
-        wmin, wmax = wavelength_ranges[self.arm]
+        wmin, wmax = self.wavelength_range
 
         for spec in typing.get_args(SpectrographId):
             pfsArmRatio = self._get_pfsArmRatio(spec)
@@ -710,7 +743,14 @@ class TakahashiFiberNormsQa:
 
             # plot quartz ratio as contour (fiberId vs wavelength)
             sc = ax.scatter(
-                pfsArm.wavelength, fibs, c=ratio, vmin=vmin, vmax=vmax, s=0.6, alpha=1.0, label="quartz"
+                pfsArm.wavelength,
+                fibs,
+                c=ratio,
+                vmin=self.config.vmin,
+                vmax=self.config.vmax,
+                s=0.6,
+                alpha=1.0,
+                label="quartz",
             )
 
             oddfib = df.fiberId[(df.SM == spec) & (df.sigma > self.sigma_flag_entire)].values
@@ -733,8 +773,8 @@ class TakahashiFiberNormsQa:
                 pfsconfig.pfiCenter[:, 0],
                 pfsconfig.pfiCenter[:, 1],
                 c=np.array(df.sigma[df["SM"] == spec]) * n,
-                vmin=vmin2,
-                vmax=vmax2,
+                vmin=self.config.vmin2,
+                vmax=self.config.vmax2,
                 s=30.0,
                 alpha=1.0,
                 label=f"{n}sigma",
@@ -742,9 +782,9 @@ class TakahashiFiberNormsQa:
             ax.set_xlim(xmin=-250, xmax=250)
             ax.set_ylim(ymin=-250, ymax=250)
             ax.yaxis.set_ticks_position("left")
-            ax.set_title(f"{n}sigma", fontsize=self.plot_config.fontsize)
-            ax.set_xlabel("X(PFI) [mm]", fontsize=self.plot_config.fontsize)
-            ax.set_ylabel("Y(PFI) [mm]", fontsize=self.plot_config.fontsize)
+            ax.set_title(f"{n}sigma", fontsize=self.config.fontsize)
+            ax.set_xlabel("X(PFI) [mm]", fontsize=self.config.fontsize)
+            ax.set_ylabel("Y(PFI) [mm]", fontsize=self.config.fontsize)
 
         fig = ax.figure
         if fig is not None:
@@ -762,8 +802,8 @@ class TakahashiFiberNormsQa:
                 pfsconfig.pfiCenter[:, 0],
                 pfsconfig.pfiCenter[:, 1],
                 c=median_array,
-                vmin=vmin,
-                vmax=vmax,
+                vmin=self.config.vmin,
+                vmax=self.config.vmax,
                 s=30.0,
                 alpha=1.0,
                 label=f"median per fiber",
@@ -771,9 +811,9 @@ class TakahashiFiberNormsQa:
             ax.set_xlim(xmin=-250, xmax=250)
             ax.set_ylim(ymin=-250, ymax=250)
             ax.yaxis.set_ticks_position("left")
-            ax.set_title(f"median per fiber", fontsize=self.plot_config.fontsize)
-            ax.set_xlabel("X(PFI) [mm]", fontsize=self.plot_config.fontsize)
-            ax.set_ylabel("Y(PFI) [mm]", fontsize=self.plot_config.fontsize)
+            ax.set_title(f"median per fiber", fontsize=self.config.fontsize)
+            ax.set_xlabel("X(PFI) [mm]", fontsize=self.config.fontsize)
+            ax.set_ylabel("Y(PFI) [mm]", fontsize=self.config.fontsize)
 
         fig = ax.figure
         if fig is not None:
@@ -793,8 +833,8 @@ class TakahashiFiberNormsQa:
                 pfsconfig.pfiCenter[:, 0],
                 pfsconfig.pfiCenter[:, 1],
                 c=ratio_lam,
-                vmin=vmin,
-                vmax=vmax,
+                vmin=self.config.vmin,
+                vmax=self.config.vmax,
                 s=30.0,
                 alpha=1.0,
             )
@@ -802,9 +842,9 @@ class TakahashiFiberNormsQa:
             ax.set_ylim(ymin=-250, ymax=250)
             ax.yaxis.set_ticks_position("left")
             lam_point = np.round(pfsArm.wavelength[0][pixel_index], 3)
-            ax.set_title(f"at {lam_point} [nm]", fontsize=self.plot_config.fontsize)
-            ax.set_xlabel("X(PFI) [mm]", fontsize=self.plot_config.fontsize)
-            ax.set_ylabel("Y(PFI) [mm]", fontsize=self.plot_config.fontsize)
+            ax.set_title(f"at {lam_point} [nm]", fontsize=self.config.fontsize)
+            ax.set_xlabel("X(PFI) [mm]", fontsize=self.config.fontsize)
+            ax.set_ylabel("Y(PFI) [mm]", fontsize=self.config.fontsize)
 
         fig = ax.figure
         if fig is not None:
@@ -815,9 +855,9 @@ class TakahashiFiberNormsQa:
         fiberNorms = self._get_cleaned_fiberNorms()
         fiberNorms.plot(pfsConfig, axes=ax, lower=2.5, upper=2.5)
 
-        ax.set_title(f"median per fiber", fontsize=self.plot_config.fontsize)
-        ax.set_xlabel("X(PFI) [mm]", fontsize=self.plot_config.fontsize)
-        ax.set_ylabel("Y(PFI) [mm]", fontsize=self.plot_config.fontsize)
+        ax.set_title(f"median per fiber", fontsize=self.config.fontsize)
+        ax.set_xlabel("X(PFI) [mm]", fontsize=self.config.fontsize)
+        ax.set_ylabel("Y(PFI) [mm]", fontsize=self.config.fontsize)
 
     def _make_plot_fiberNorms_by_wavelength(self, ax: matplotlib.axes.Axes) -> None:
         # [4] 2D image of fiberNorms.values
@@ -849,9 +889,9 @@ class TakahashiFiberNormsQa:
         divider = make_axes_locatable(ax)  # AxesDivider related to ax
         cax = divider.append_axes("right", size="5%", pad=0.1)  # create new axes
 
-        ax.set_ylabel("fiber index", fontsize=self.plot_config.fontsize_small)
-        ax.set_xlabel("wavelength", fontsize=self.plot_config.fontsize_small)
-        ax.set_title(f"2D spectrum", fontsize=self.plot_config.fontsize)
+        ax.set_ylabel("fiber index", fontsize=self.config.fontsize_small)
+        ax.set_xlabel("wavelength", fontsize=self.config.fontsize_small)
+        ax.set_title(f"2D spectrum", fontsize=self.config.fontsize)
 
         fig = ax.figure
         if fig is not None:
@@ -884,7 +924,7 @@ class TakahashiFiberNormsQa:
             0.9,
             f"$\sigma$ =" + f"{df_odd.sigma.iloc[i_odd]:.4f}",
             transform=ax.transAxes,
-            fontsize=self.plot_config.fontsize_small,
+            fontsize=self.config.fontsize_small,
             bbox=dict(facecolor="yellow", alpha=1.0),
         )
         ax.axhline(
@@ -904,10 +944,10 @@ class TakahashiFiberNormsQa:
             ymin=np.nanmedian(ydata_m) - (n_sigma + 6) * std,
             ymax=np.nanmedian(ydata_m) + (n_sigma + 6) * std,
         )
-        ax.legend(loc="upper left", fontsize=self.plot_config.fontsize_x_small)
+        ax.legend(loc="upper left", fontsize=self.config.fontsize_x_small)
         ax.grid(axis="y", which="both", linestyle="--", linewidth=0.5)
 
-        ax.set_title(f"{df_odd.mtp_A[i_odd]}", fontsize=self.plot_config.fontsize)
+        ax.set_title(f"{df_odd.mtp_A[i_odd]}", fontsize=self.config.fontsize)
 
     def _make_plot_example_spectra(self, ax: matplotlib.axes.Axes, df: pd.DataFrame, fiber_id: int) -> None:
         fiberNorms = self._get_cleaned_fiberNorms()
@@ -940,12 +980,12 @@ class TakahashiFiberNormsQa:
             ymin=np.nanmedian(ydata_m) - (n_sigma + 2) * std,
             ymax=np.nanmedian(ydata_m) + (n_sigma + 2) * std,
         )
-        ax.legend(loc="upper left", fontsize=self.plot_config.fontsize_x_small)
+        ax.legend(loc="upper left", fontsize=self.config.fontsize_x_small)
         ax.grid(axis="y", which="both", linestyle="--", linewidth=0.5)
 
         ax.set_title(
             f"{df.mtp_A[df.fiberId==fiber_id].to_string(index=False)}",
-            fontsize=self.plot_config.fontsize,
+            fontsize=self.config.fontsize,
         )
 
 
@@ -963,14 +1003,16 @@ def func_sigma_iqr(Q3, Q1, data, coff):
 
 
 class PfsArmRatio:
-    def __init__(self, pfsArmRef: PfsArm, pfsArm: PfsArm, pfsConfig: PfsConfig) -> None:
+    def __init__(
+        self, pfsArmRef: PfsArm, pfsArm: PfsArm, pfsConfig: PfsConfig, wavelength_range: tuple[float, float]
+    ) -> None:
         pfsConfig = pfsConfig.select(targetType=~TargetType.ENGINEERING)
         pfsConfig = pfsConfig.select(fiberStatus=FiberStatus.GOOD)
 
         pfsArmRef = pfsArmRef[np.isin(pfsArmRef.fiberId, pfsConfig.fiberId)]
         pfsArm = pfsArm[np.isin(pfsArm.fiberId, pfsConfig.fiberId)]
 
-        wmin, wmax = wavelength_ranges[pfsArm.identity.arm]
+        wmin, wmax = wavelength_range
 
         self.pfsConfig = pfsConfig
         self.pfsArmRef = pfsArmRef
