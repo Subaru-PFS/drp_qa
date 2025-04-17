@@ -94,7 +94,7 @@ class SkySubtractionConfig(PipelineTaskConfig, pipelineConnections=SkySubtractio
     oversample = Field(dtype=float, default=1.2, doc="Oversampling factor.")
 
 
-class SkySubtractionTask(PipelineTask):
+class SkySubtractionQaTask(PipelineTask):
     """Task for QA of skySubtraction"""
 
     ConfigClass = SkySubtractionConfig
