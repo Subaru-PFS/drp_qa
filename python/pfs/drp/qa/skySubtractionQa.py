@@ -182,7 +182,7 @@ class SkySubtractionTask(PipelineTask):
 
                 spectras.append(pfsArm[pfsArm.fiberId == excludeFiberId])
 
-           hold[(spectrograph, arm)] = PfsArm.fromMerge(spectras)
+            hold[(spectrograph, arm)] = PfsArm.fromMerge(spectras)
 
         holdAsDict = convertToDict(hold)
         plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block=self.config.blockSize)
@@ -190,10 +190,13 @@ class SkySubtractionTask(PipelineTask):
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
         fig_1d, _ = plot_1d_spectrograph(holdAsDict, plotId, arms)
+
         self.log.info(f"Plotting 2D spectra for arms {arms}.")
         fig_2d, _ = plot_2d_spectrograph(hold, plotId, arms)
+
         self.log.info(f"Plotting outlier summary for arms {arms}.")
         fig_outlier, ax_dicts = plot_outlier_summary(hold, holdAsDict, plotId, arms)
+
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
         fig_sky_brightness, _ = plot_vs_sky_brightness(hold, plotId, arms)
 
