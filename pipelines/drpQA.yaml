@@ -10,3 +10,5 @@ tasks:
     class: pfs.drp.qa.fluxCalQa.FluxCalQaTask
   fiberNormsQa:
     class: pfs.drp.qa.fiberNormsQa.FiberNormQaTask
+  skySubtractionQa:
+    class: pfs.drp.qa.skySubtractionQa.SkySubtractionQaTask

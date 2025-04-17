@@ -1,17 +1,20 @@
 import numpy as np
-import pfs.drp.qa.skySubtraction.plot as skySubtractionQaPlot
 import scipy.stats
-from pfs.drp.qa.skySubtraction.skySubtractionQa import arm_colors, getStdev, buildReference, rolling
-from pfs.drp.qa.skySubtraction.skySubtractionQa import splitSpectraIntoReferenceAndTest
+from matplotlib.figure import Figure
+
+import pfs.drp.qa.skySubtraction.plot as skySubtractionQaPlot
+from pfs.drp.qa.skySubtraction.skySubtractionQa import (
+    arm_colors,
+    buildReference,
+    getStdev,
+    rolling,
+    splitSpectraIntoReferenceAndTest,
+)
 
 
-def summarizeSpectrograph(hold,
-                          spectrograph,
-                          arms=('b', 'r', 'n'),
-                          colors=None,
-                          fontsize=25,
-                          xlim=(-10, 10),
-                          alpha=0.2):
+def summarizeSpectrograph(
+    hold, spectrograph, arms=("b", "r", "n"), colors=None, fontsize=25, xlim=(-10, 10), alpha=0.2
+):
     """
     Summarize spectrograph sky subtraction residuals using chi distributions.
 
@@ -53,8 +56,8 @@ def summarizeSpectrograph(hold,
     if colors is None:
         colors = arm_colors  # Default to predefined colors
 
-    all_axs = ['ABC', 'DEF', 'GHI'][:len(arms)]
-    axt = '\n'.join(all_axs)
+    all_axs = ["ABC", "DEF", "GHI"][: len(arms)]
+    axt = "\n".join(all_axs)
     fig, ax_dict = skySubtractionQaPlot.get_mosaic(axt, figsize=(20, 10))
 
     # Iterate over arms and generate histograms
@@ -67,20 +70,22 @@ def summarizeSpectrograph(hold,
 
         # Process each fiber
         for fib in h.keys():
-            chi = h[fib]['chi']
-            chiPoisson = h[fib]['chiPoisson']
+            chi = h[fib]["chi"]
+            chiPoisson = h[fib]["chiPoisson"]
             # std = h[fib]['std']
 
             # Add histogram layer for each fiber
             layers.append(
-                skySubtractionQaPlot.Layer('hist', chi, color=color, alpha=alpha,
-                                           linewidth=2, density=True, rnge=xlim, bins=30)
+                skySubtractionQaPlot.Layer(
+                    "hist", chi, color=color, alpha=alpha, linewidth=2, density=True, rnge=xlim, bins=30
+                )
             )
 
             # Add histogram layer for each fiber
             layers.append(
-                skySubtractionQaPlot.Layer('hist', chiPoisson, color='k', alpha=0.1,
-                                           linewidth=2, density=True, rnge=xlim, bins=30)
+                skySubtractionQaPlot.Layer(
+                    "hist", chiPoisson, color="k", alpha=0.1, linewidth=2, density=True, rnge=xlim, bins=30
+                )
             )
 
             # Compute statistical metrics
@@ -94,42 +99,60 @@ def summarizeSpectrograph(hold,
 
         # Add combined chi distribution (all fibers) with a distinctive color
         layers.append(
-            skySubtractionQaPlot.Layer('hist', big_chi, color='magenta',
-                                       alpha=1, linewidth=6, density=True, rnge=xlim, bins=30)
+            skySubtractionQaPlot.Layer(
+                "hist", big_chi, color="magenta", alpha=1, linewidth=6, density=True, rnge=xlim, bins=30
+            )
         )
 
         # Plot chi distribution
         skySubtractionQaPlot.make_plot(
-            layers, ax_dict[axs[0]], xlim=xlim,
-            xlabel=r'$\chi$' if arm == arms[-1] else None,
-            ylabel=f'Arm: {arm}\nPDF', fontsize=fontsize
+            layers,
+            ax_dict[axs[0]],
+            xlim=xlim,
+            xlabel=r"$\chi$" if arm == arms[-1] else None,
+            ylabel=f"Arm: {arm}\nPDF",
+            fontsize=fontsize,
         )
 
         # Labels for statistics
-        labels = [['Mean', 'Median'], ['Stdev', 'IQR Stdev']]
+        labels = [["Mean", "Median"], ["Stdev", "IQR Stdev"]]
         rnge_options = [(-3, 3), (0, 3)]  # Range for mean/median and stdev/IQR plots
 
         # Iterate over mean/median and stdev/IQR plots
         for j, x, ax, rnge in zip(range(2), [means, stdev], axs[1:], rnge_options):
-            other = [skySubtractionQaPlot.Layer('vert', 0 if j == 0 else 1, linestyle='--', zorder=10)]
+            other = [skySubtractionQaPlot.Layer("vert", 0 if j == 0 else 1, linestyle="--", zorder=10)]
 
             # Generate the histogram layers for statistical metrics
             hist_layers = [
-                skySubtractionQaPlot.Layer('hist', x[:, i], color=color,
-                                           alpha=[1, 0.5][i], density=True,
-                                           rnge=rnge, bins=30, linewidth=4,
-                                           histtype=['step', 'stepfilled'][i],
-                                           label=labels[j][i]
-                                           ) for i in range(2)
+                skySubtractionQaPlot.Layer(
+                    "hist",
+                    x[:, i],
+                    color=color,
+                    alpha=[1, 0.5][i],
+                    density=True,
+                    rnge=rnge,
+                    bins=30,
+                    linewidth=4,
+                    histtype=["step", "stepfilled"][i],
+                    label=labels[j][i],
+                )
+                for i in range(2)
             ]
 
             # Plot statistical metrics
             skySubtractionQaPlot.make_plot(
-                other + hist_layers, ax_dict[ax], xlim=rnge, legend='A' in axs,
-                loc='upper right', fontsize=fontsize,
-                title=f'Spectrograph: {spectrograph}' if ((arm == arms[0]) and (j == 0)) else None,
-                xlabel=[r'Mean/Median $\chi$', r'Stdev/$\sigma_\mathrm{IQR}$ $\chi$'][j]
-                if arm == arms[-1] else None
+                other + hist_layers,
+                ax_dict[ax],
+                xlim=rnge,
+                legend="A" in axs,
+                loc="upper right",
+                fontsize=fontsize,
+                title=f"Spectrograph: {spectrograph}" if ((arm == arms[0]) and (j == 0)) else None,
+                xlabel=(
+                    [r"Mean/Median $\chi$", r"Stdev/$\sigma_\mathrm{IQR}$ $\chi$"][j]
+                    if arm == arms[-1]
+                    else None
+                ),
             )
 
         # Remove x-axis labels for non-bottom plots
@@ -164,21 +187,18 @@ def plot_1d_spectrograph(holdAsDict, plotId, arms, fontsize=22, xlim=(-5, 5)):
     ax_dict : `dict`
         Dictionary of axes corresponding to the plotted elements.
     """
-    visit, spectrograph, block = plotId['visit'], plotId['spectrograph'], plotId['block']
+    visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
 
     fontsize = 22
     xlim = [-5, 5]
-    all_axs = ['ABC', 'DEF', 'GHI'][:len(arms)]
-    all_labels = ['Blue arm\n', 'Red arm\n', 'NIR arm\n'][:len(arms)]
+    all_axs = ["ABC", "DEF", "GHI"][: len(arms)]
+    all_labels = ["Blue arm\n", "Red arm\n", "NIR arm\n"][: len(arms)]
     ax0 = [ax[0] for ax in all_axs]
 
     # Generate spectrograph summary plots
-    fig, ax_dict = summarizeSpectrograph(holdAsDict,
-                                         spectrograph=spectrograph,
-                                         arms=arms,
-                                         fontsize=fontsize,
-                                         xlim=xlim,
-                                         alpha=0.5)
+    fig, ax_dict = summarizeSpectrograph(
+        holdAsDict, spectrograph=spectrograph, arms=arms, fontsize=fontsize, xlim=xlim, alpha=0.5
+    )
 
     # Generate Gaussian distribution
     xp = np.linspace(-6, 6, 1000)
@@ -187,17 +207,17 @@ def plot_1d_spectrograph(holdAsDict, plotId, arms, fontsize=22, xlim=(-5, 5)):
     # Update axis labels and add Gaussian reference
     for ax, arm in zip(ax0, all_labels):
         ax_dict[ax].set_ylabel(arm, fontsize=fontsize)
-        ax_dict[ax].plot(xp, yp, color='k', linewidth=4, linestyle='--')
+        ax_dict[ax].plot(xp, yp, color="k", linewidth=4, linestyle="--")
 
     # Set title
-    ax_dict['B'].set_title(f'visit={visit}; SM{spectrograph}; blocksize={block}', fontsize=fontsize)
+    ax_dict["B"].set_title(f"visit={visit}; SM{spectrograph}; blocksize={block}", fontsize=fontsize)
 
     # Add legend
-    ax_dict['A'].plot([], [], color=arm_colors[0], label='DRP')
-    ax_dict['A'].plot([], [], color='magenta', label='Combined DRP')
-    ax_dict['A'].plot([], [], color='k', label='Using Poisson errors')
+    ax_dict["A"].plot([], [], color=arm_colors[0], label="DRP")
+    ax_dict["A"].plot([], [], color="magenta", label="Combined DRP")
+    ax_dict["A"].plot([], [], color="k", label="Using Poisson errors")
 
-    ax_dict['A'].legend(fontsize=fontsize * 0.6, loc='upper left')
+    ax_dict["A"].legend(fontsize=fontsize * 0.6, loc="upper left")
 
     return fig, ax_dict
 
@@ -233,14 +253,14 @@ def plot_2d_spectrograph(hold, plotId, arms, binsize=10):
     - Uses `rolling` to smooth data along the wavelength axis.
     - Uses `pcolormesh` to create a 2D heatmap for visualization.
     """
-    visit, spectrograph, block = plotId['visit'], plotId['spectrograph'], plotId['block']
+    visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
 
     # Copy and remove pfsConfig to avoid unnecessary data
     specs = hold.copy()
-    specs.pop('pfsConfig', None)
+    specs.pop("pfsConfig", None)
 
     # Define axis layout for the number of arms
-    axt = 'ABC'[:len(arms)]
+    axt = "ABC"[: len(arms)]
     fig, ax_dict = skySubtractionQaPlot.get_mosaic(axt, figsize=(15, 5))
 
     # Loop through each spectral arm
@@ -249,7 +269,7 @@ def plot_2d_spectrograph(hold, plotId, arms, binsize=10):
         skySpectra = specs[(spectrograph, arm)]
 
         # Build reference spectra
-        references = buildReference(skySpectra, func=None, model='chi')
+        references = buildReference(skySpectra, func=None, model="chi")
         # references_none = buildReference(skySpectra, func=None, model='sky_chi')
 
         # Extract data
@@ -268,18 +288,20 @@ def plot_2d_spectrograph(hold, plotId, arms, binsize=10):
         X, Y = np.meshgrid(np.arange(len(y)), xb)
 
         # Plot 2D colormap of residuals
-        sc = ax_dict[ax].pcolormesh(X, Y, z, vmin=-1, vmax=1, cmap='bwr')
+        sc = ax_dict[ax].pcolormesh(X, Y, z, vmin=-1, vmax=1, cmap="bwr")
 
         # Configure plot labels
-        skySubtractionQaPlot.make_plot([],
-                                       ax_dict[ax],
-                                       xlabel='Fiber Index',
-                                       ylabel='Wavelength [nm]' if ax == 'A' else None,
-                                       title=f'Arm: {arm}')
+        skySubtractionQaPlot.make_plot(
+            [],
+            ax_dict[ax],
+            xlabel="Fiber Index",
+            ylabel="Wavelength [nm]" if ax == "A" else None,
+            title=f"Arm: {arm}",
+        )
 
     # Add colorbar and overall title
-    fig.colorbar(sc, ax=ax_dict['A'], location='left')
-    fig.suptitle(f'visit={visit}; SM{spectrograph}; blocksize={block}', fontsize=22)
+    fig.colorbar(sc, ax=ax_dict["A"], location="left")
+    fig.suptitle(f"visit={visit}; SM{spectrograph}; blocksize={block}", fontsize=22)
 
     return fig, ax_dict
 
@@ -304,74 +326,91 @@ def plot_outlier_summary(hold, holdAsDict, plotId, arms):
 
     Returns
     -------
-    figs : `list` of `matplotlib.figure.Figure`
-        List of generated figures for each arm.
+    fig : `matplotlib.figure.Figure`
+        A single figure containing subfigures for each arm.
     ax_dicts : `list` of `dict`
-        List of dictionaries containing axis handles for each figure.
+        List of dictionaries containing axis handles for each subfigure.
 
     Notes
     -----
     - Uses `buildReference` to generate a median sky spectrum.
     - Highlights outlier chi values with thresholds at 5 and 15.
     - Uses `scatter` to visualize outliers in wavelength space.
+    - Uses subfigures to organize plots by arm.
     """
-    visit, spectrograph, block = plotId['visit'], plotId['spectrograph'], plotId['block']
+    visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
 
     # Copy and remove pfsConfig to avoid unnecessary data
     specs = hold.copy()
-    specs.pop('pfsConfig', None)
+    specs.pop("pfsConfig", None)
 
-    figs, ax_dicts = [], []
+    # Create a single figure to hold all subfigures
+    fig = Figure(figsize=(6 * len(arms), 4))
+
+    # Set overall title
+    fig.suptitle(f"visit={visit}; SM{spectrograph}; blocksize={block}", fontsize=14)
+
+    ax_dicts = []
 
     # Loop through each spectral arm
     for i, arm in enumerate(arms):
+        # Create a subfigure for each arm
+        subfig = fig.add_subfigure(1, len(arms), i + 1)
+        subfig.suptitle(f"Arm {arm}", fontsize=12)
+
         skySpectra = specs[(spectrograph, arm)]
 
-        # Create figure layout
-        fig, ax_dict = skySubtractionQaPlot.get_mosaic(
+        # Create layout within the subfigure
+        ax_dict = subfig.subplot_mosaic(
             """
             AAB
             AAB
-            """, figsize=(6, 4))
+            """
+        )
 
         # Retrieve fiber data
         fibers = holdAsDict[(spectrograph, arm)]
 
         # Compute sky reference spectrum
-        wve_sky, flx_sky = buildReference(skySpectra, func=np.nanmedian, model='sky')
+        wve_sky, flx_sky = buildReference(skySpectra, func=np.nanmedian, model="sky")
 
         # Loop over fibers and plot outliers
         for fiberId, fiber in fibers.items():
-            wve, _, chi = fiber['wave'], fiber['flux'], fiber['chi']
+            wve, _, chi = fiber["wave"], fiber["flux"], fiber["chi"]
             absChi = np.abs(chi)
 
             # Define outlier conditions
             C1 = (absChi > 5) & (absChi < 15)
-            C2 = (absChi > 15)
+            C2 = absChi > 15
 
             # Plot scatter points for outliers
-            for C, color in zip([C1, C2], ['steelblue', 'navy']):
-                sc = ax_dict['A'].scatter(
-                    [fiberId] * len(wve[C]), wve[C], c=absChi[C], vmin=5, vmax=15, cmap='viridis'
+            for C, color in zip([C1, C2], ["steelblue", "navy"]):
+                sc = ax_dict["A"].scatter(
+                    [fiberId] * len(wve[C]), wve[C], c=absChi[C], vmin=5, vmax=15, cmap="viridis"
                 )
 
         # Adjust plot limits
-        ax_dict['A'].set_xlim(min(fibers.keys()) - 10, max(fibers.keys()) + 10)
+        ax_dict["A"].set_xlim(min(fibers.keys()) - 10, max(fibers.keys()) + 10)
 
         # Plot the sky spectrum
-        ax_dict['B'].plot(flx_sky, wve_sky)
+        ax_dict["B"].plot(flx_sky, wve_sky)
 
         # Add colorbar
-        fig.colorbar(sc, ax=ax_dict['A'], location='top')
+        subfig.colorbar(sc, ax=ax_dict["A"], location="top")
 
-        # Add title
-        fig.suptitle(f'visit={visit}; SM{spectrograph}; Arm {arm}; blocksize={block}')
+        # Add labels
+        ax_dict["A"].set_xlabel("Fiber ID")
+        ax_dict["A"].set_ylabel("Wavelength [nm]")
+        ax_dict["B"].set_xlabel("Flux")
+        ax_dict["B"].set_ylabel("Wavelength [nm]")
 
-        # Store figure and axis dictionary
-        figs.append(fig)
+        # Store axis dictionary
         ax_dicts.append(ax_dict)
 
-    return figs, ax_dicts
+    # Adjust layout
+    fig.tight_layout()
+
+    return fig, ax_dicts
 
 
 def plot_vs_sky_brightness(hold, plotId, arms):
@@ -403,19 +442,19 @@ def plot_vs_sky_brightness(hold, plotId, arms):
     - Compares sky brightness and residuals across different wavelengths.
     - Uses `rolling` to compute binned statistics of residuals versus sky brightness percentile.
     """
-    visit, spectrograph, block = plotId['visit'], plotId['spectrograph'], plotId['block']
+    visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
 
     # Define panel layout dynamically based on arms
-    axt = [t[:len(arms)] for t in ['ABC', 'DEF']]
-    axt = '\n'.join(axt)
-    panel_labels = [''.join([a[i] for a in axt.split('\n')]) for i in range(len(arms))]
+    axt = [t[: len(arms)] for t in ["ABC", "DEF"]]
+    axt = "\n".join(axt)
+    panel_labels = ["".join([a[i] for a in axt.split("\n")]) for i in range(len(arms))]
 
     # Create figure layout
     fig, ax_dict = skySubtractionQaPlot.get_mosaic(axt, figsize=(int(5 * len(arms)), 10))
 
     # Copy and remove pfsConfig to avoid unnecessary data
     specs = hold.copy()
-    specs.pop('pfsConfig', None)
+    specs.pop("pfsConfig", None)
 
     # Loop through each spectral arm
     for i, arm in enumerate(arms):
@@ -425,10 +464,10 @@ def plot_vs_sky_brightness(hold, plotId, arms):
         referenceSpectra, testSpectra = splitSpectraIntoReferenceAndTest(skySpectra)
 
         # Compute reference and test statistics
-        references_sky = buildReference(referenceSpectra, func=np.nanmedian, model='none')
-        references_flx = buildReference(testSpectra, func=np.median, model='residuals')
+        references_sky = buildReference(referenceSpectra, func=np.nanmedian, model="none")
+        references_flx = buildReference(testSpectra, func=np.median, model="residuals")
         # references_err = buildReference(testSpectra, func='quadrature', model='variance')
-        references_chi_median = buildReference(testSpectra, func=np.median, model='chi')
+        references_chi_median = buildReference(testSpectra, func=np.median, model="chi")
 
         color = arm_colors[i]
         col = panel_labels[i]
@@ -449,29 +488,29 @@ def plot_vs_sky_brightness(hold, plotId, arms):
 
         # Scatter plot of residual flux vs wavelength
         ax_dict[col[0]].scatter(wve, flx, s=1, color=color, rasterized=True, alpha=0.7)
-        ax_dict[col[0]].plot(wve, sky / 100, color='k', linewidth=1, alpha=0.6, label='1% sky')
+        ax_dict[col[0]].plot(wve, sky / 100, color="k", linewidth=1, alpha=0.6, label="1% sky")
 
         # Scatter plot of residuals vs sky brightness percentile
         ax_dict[col[1]].scatter(chi, ranked, s=1, color=color, rasterized=True, alpha=0.7)
-        ax_dict[col[1]].errorbar(xb, yb, xerr=eb, color='k', linewidth=3)
+        ax_dict[col[1]].errorbar(xb, yb, xerr=eb, color="k", linewidth=3)
 
         # Set axis limits
         ax_dict[col[0]].set_ylim([-100, 100])
         ax_dict[col[1]].set_xlim([-0.5, 0.5])
 
         # Set axis labels
-        ax_dict[col[0]].set_xlabel('Wavelength [nm]')
-        ax_dict[col[0]].set_ylabel('Median Counts')
+        ax_dict[col[0]].set_xlabel("Wavelength [nm]")
+        ax_dict[col[0]].set_ylabel("Median Counts")
 
-        ax_dict[col[1]].set_xlabel(r'Median $\chi$')
-        ax_dict[col[1]].set_ylabel('Sky Counts Percentile')
+        ax_dict[col[1]].set_xlabel(r"Median $\chi$")
+        ax_dict[col[1]].set_ylabel("Sky Counts Percentile")
 
         # Add reference lines
-        ax_dict[col[1]].axvline(0, linestyle='--', color='k')
-        ax_dict[col[0]].axhline(0, linestyle='--', color='k')
+        ax_dict[col[1]].axvline(0, linestyle="--", color="k")
+        ax_dict[col[0]].axhline(0, linestyle="--", color="k")
 
     # Add legend and title
-    ax_dict['A'].legend()
-    fig.suptitle(f'visit={visit}; SM{spectrograph}; blocksize={block}')
+    ax_dict["A"].legend()
+    fig.suptitle(f"visit={visit}; SM{spectrograph}; blocksize={block}")
 
     return fig, ax_dict
