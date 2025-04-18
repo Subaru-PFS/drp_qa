@@ -1,5 +1,5 @@
 import eups
-from lsst.daf.butler import Butler
+from lsst.daf.butler import Butler, DatasetRef
 from pfs.datamodel import FiberStatus, TargetType
 from pfs.drp.stella.datamodel import PfsConfig, PfsFiberNorms, PfsArm
 from pfs.utils.fiberids import FiberIds
@@ -65,15 +65,6 @@ def main() -> None:
         description=layout_paragraphs(typing.cast(str, main.__doc__)),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument(
-        "visits",
-        metavar="visit",
-        nargs="+",
-        type=int,
-        help="""
-        Visit to assess.
-        """,
-    )
 
     subparser = parser.add_argument_group("Input/output options")
     subparser.add_argument(
@@ -105,14 +96,12 @@ def main() -> None:
         """,
     )
     subparser.add_argument(
-        "-a",
-        "--arm",
-        metavar="CHAR[,...]",
-        dest="arms",
-        default=list(typing.get_args(ArmId)),
-        type=argtype_armlist,
+        "-d",
+        "--data-query",
+        metavar="QUERY",
+        default="",
         help="""
-        Arms. "b", "r", "m", or "n".
+        Data selection expression.
         """,
     )
     subparser.add_argument(
@@ -132,7 +121,6 @@ def main() -> None:
         metavar="NUM",
         type=int,
         help="""
-        Visit to assess.
         Number of parallel jobs. (default: use all cores)
         """,
     )
@@ -156,35 +144,86 @@ def main() -> None:
     logging.basicConfig(level=getattr(logging, args.log_level))
     log = logging.getLogger("main")
 
-    visits = sorted(set(args.visits))
+    log.info("Querying datasets...")
+
+    butler = Butler.from_config(args.butler_config, collections=args.input)
+    dataset_groups = typing.cast(
+        list[TakahashiFiberNormsQaInput],
+        get_datasets(
+            butler,
+            args.data_query,
+            ["instrument", "visit", "arm"],
+            [
+                ("pfsConfig", Multiplicity.SIMPLE),
+                ("pfsArm", Multiplicity.MULTIPLE),
+                ("fiberNorms", Multiplicity.SIMPLE),
+            ],
+        ),
+    )
+
     if args.reference is not None:
         ref_visit = args.reference
     else:
-        ref_visit = visits.pop(0)
+        ref_visit = min(typing.cast(int, group["pfsArm"][0].dataId["visit"]) for group in dataset_groups)
 
     log.info("Use visit=%d as the reference.", ref_visit)
 
-    if not visits:
-        raise RuntimeError("No visit to process.")
+    # Make each group equipped with reference pfsArms.
+    for group in dataset_groups:
+        if ref_visit == group["pfsArm"][0].dataId["visit"]:
+            continue
 
-    butler = Butler.from_config(args.butler_config, collections=args.input)
+        refArmRefs: list[list[DatasetRef]] = [
+            butler.query_datasets(
+                "pfsArm",
+                data_id={
+                    "instrument": ref.dataId["instrument"],
+                    "visit": ref_visit,
+                    "arm": ref.dataId["arm"],
+                    "spectrograph": ref.dataId["spectrograph"],
+                },
+                find_first=True,
+                limit=None,
+                explain=False,
+            )
+            for ref in group["pfsArm"]
+        ]
+        if any(len(refs) > 1 for refs in refArmRefs):
+            raise RuntimeError(
+                "multiple pfsArms (for reference) are found for a group"
+                " (maybe database is broken hopelessly)."
+            )
 
-    num_args = len(visits) * len(args.arms)
+        # Redefine `group["pfsArm"]` so that it will contain
+        # only those spectrographs for which references exist.
+        pfsArmRefs = [arm for arm, refs in zip(group["pfsArm"], refArmRefs) if refs]
+        if not pfsArmRefs:
+            continue
+
+        group["pfsArm"] = pfsArmRefs
+        group["refArm"] = [refs[0] for refs in refArmRefs if refs]
+
+    dataset_groups = [group for group in dataset_groups if "refArm" in group]
+
+    if not dataset_groups:
+        raise RuntimeError(
+            'No matching tuples among "pfsConfig", "pfsArm" and "fiberNorms" have reference pfsArm.'
+        )
+
+    num_groups = len(dataset_groups)
+    log.info("%d dataset group(s) found.", num_groups)
 
     arglist: list[_ThreadProcArgs] = [
         {
             "job_id": i,
-            "num_jobs": num_args,
+            "num_jobs": num_groups,
             "butler": butler,
             "output": args.output,
-            "ref_visit": ref_visit,
-            "visit": visit,
-            "arm": arm,
+            "input": group,
             "config": config,
             "log": log,
         }
-        for i_visit, visit in enumerate(visits)
-        for i, arm in enumerate(args.arms, start=i_visit * len(args.arms) + 1)
+        for i, group in enumerate(dataset_groups, start=1)
     ]
 
     success_count = 0
@@ -218,12 +257,8 @@ class _ThreadProcArgs(typing.TypedDict):
         Read-only butler.
     output : `str`
         Output directory.
-    ref_visit : `int`
-        ID of a visit of reference.
-    visit : `int`
-        ID of a visit to assess.
-    arm : `ArmId`
-        Arm name.
+    input : `TakahashiFiberNormsQaInput`
+        Input to ``TakahashiFiberNormsQa``.
     config : `TakahashiFiberNormsQaConfig`
         Config of ``TakahashiFiberNormsQa``.
     log : `logging.Logger`
@@ -234,9 +269,7 @@ class _ThreadProcArgs(typing.TypedDict):
     num_jobs: int
     butler: Butler
     output: str
-    ref_visit: int
-    visit: int
-    arm: ArmId
+    input: "TakahashiFiberNormsQaInput"
     config: "TakahashiFiberNormsQaConfig"
     log: logging.Logger
 
@@ -277,13 +310,11 @@ def _main_threadproc(args: _ThreadProcArgs) -> _ThreadProcStatus:
 
         butler = args["butler"]
         output = args["output"]
-        ref_visit = args["ref_visit"]
-        visit = args["visit"]
-        arm = args["arm"]
+        input = args["input"]
         config = args["config"]
 
         log.info("[%d/%d] Starting a new job...", job_id, num_jobs)
-        task = TakahashiFiberNormsQa(butler, output, ref_visit, visit, arm, config=config, log=log)
+        task = TakahashiFiberNormsQa(butler, output, input, config=config, log=log)
         task.run()
         log.info("[%d/%d] Job done", job_id, num_jobs)
     except Exception:
@@ -362,37 +393,6 @@ def argtype_comma_separated(
         return restype(elements)
 
     return _argtype_comma_separated
-
-
-def argtype_armlist(s: str) -> list[ArmId]:
-    """List of arms.
-
-    This function is intended to be used as the ``type`` argument of
-    `argtype.ArgumentParser.add_argument`
-
-    Parameters
-    ----------
-    s : `str`
-        List of arms, optionally separated by ",".
-
-    Returns
-    -------
-    elements : `list` [`ArmId`]
-        List of elements.
-    """
-    ignored_chars = {",", " "}
-    orders = {name: i for i, name in enumerate(typing.get_args(ArmId))}
-    elements = {c for c in s if c not in ignored_chars}
-    tagged_elements: list[tuple[int, ArmId]] = []
-    for c in elements:
-        try:
-            arm = typing.cast(ArmId, c)
-            tagged_elements.append((orders[arm], arm))
-        except KeyError:
-            raise argparse.ArgumentTypeError(f"invalid arm name '{c}'.") from None
-
-    tagged_elements.sort()
-    return [elem for tag, elem in tagged_elements]
 
 
 class DataclassStoreAction(argparse.Action):
@@ -535,6 +535,171 @@ def layout_paragraphs(text: str) -> str:
     )
 
 
+class Multiplicity(enum.Enum):
+    SIMPLE = 0
+    MULTIPLE = 1
+
+
+def get_datasets(
+    butler: Butler, where: str, dimensions: list[str], dataset_types: list[tuple[str, Multiplicity]]
+) -> list[dict[str, DatasetRef | list[DatasetRef]]]:
+    """Get datasets grouped by ``dimensions``
+
+    At least one group is returned.
+    If no group is found, this function raises an exception.
+
+    Parameters
+    ----------
+    butler : `Butler`
+        Read-only butler.
+    where : `str`
+        Query string.
+    dimensions : `list` [`str`]
+        Dimensions by which to group datasets.
+    dataset_types : `list` [tuple[`str`, `Multiplicity`]]
+        Dataset types to get. If the second element in a tuple is
+        ``Multiplicity.SIMPLE``, only one dataset per group is allowed.
+        If it is ``Multiplicity.MULTIPLE``, multiple datasets per group are
+        allowed.
+
+    Returns
+    -------
+    datasets : `list` [`dict` [`str`, `DatasetRef` | `list` [`DatasetRef`]]]
+        Dataset groups. Each element is a mapping from dataset type to either
+        `DatasetRef` (when ``Multiplicity.SIMPLE``) or `list` [`DatasetRef`]
+        (when ``Multiplicity.MULTIPLE``).
+    """
+    refsdict: dict[str, list[DatasetRef]] = {
+        dataset_type: list(
+            set(
+                butler.query_datasets(
+                    dataset_type,
+                    where=where,
+                    find_first=True,
+                    limit=None,
+                )
+            )
+        )
+        for dataset_type, multiplicity in dataset_types
+    }
+
+    groupkeys = set[DatasetCoord]()
+    for refs in refsdict.values():
+        groupkeys = set(coordinates_get(ref, dimensions) for ref in refs)
+        break
+    for refs in refsdict.values():
+        groupkeys = coordinates_intersect(groupkeys, set(coordinates_get(ref, dimensions) for ref in refs))
+
+    groups = [
+        {
+            dataset_type: [
+                ref for ref in refs if coordinates_compat(groupkey, coordinates_get(ref, dimensions))
+            ]
+            for dataset_type, refs in refsdict.items()
+        }
+        for groupkey in groupkeys
+    ]
+
+    groups = [group for group in groups if all(len(refs) > 0 for refs in group.values())]
+    if not groups:
+        raise RuntimeError(f'no dataset group matching the query ("{where}") is found.')
+
+    for dataset_type, multiplicity in dataset_types:
+        if multiplicity == Multiplicity.SIMPLE:
+            if any(len(group[dataset_type]) > 1 for group in groups):
+                raise RuntimeError(
+                    f"multiple '{dataset_type}' are found (maybe database or program is broken hopelessly)."
+                )
+
+    multiplicities = {dataset_type: multiplicity for dataset_type, multiplicity in dataset_types}
+
+    return [
+        {
+            dataset_type: (refs[0] if multiplicities[dataset_type] == Multiplicity.SIMPLE else refs)
+            for dataset_type, refs in group.items()
+        }
+        for group in groups
+    ]
+
+
+DatasetCoord = frozenset[tuple[str, Any]]
+
+
+def coordinates_get(ref: DatasetRef, dimensions: list[str]) -> DatasetCoord:
+    """Get coordinates spanned by ``dimensions``.
+
+    The returned value is like ``{("instrument", "PFS"), ("visit", 1000)}``.
+
+    Parameters
+    ----------
+    ref : `DatasetRef`
+        Dataset reference.
+    dimensions : `list` [`str`]
+        List of dimension names.
+
+    Returns
+    -------
+    coordinates : DatasetCoord
+        Coordinates.
+    """
+    return frozenset((dim, ref.dataId[dim]) for dim in dimensions if dim in ref.dataId)
+
+
+def coordinates_compat(coord1: DatasetCoord, coord2: DatasetCoord) -> bool:
+    """Compare ``coord1`` and ``coord2`` not strictly.
+
+    For example,
+        coord1 = {("visit", 1000)}
+        coord2 = {("visit", 1000), (arm, "b")}
+    are considered compatible to each other.
+
+    Parameters
+    ----------
+    coord1 : `DatasetCoord`
+        Left-hand side of the comparison.
+    coord2 : `DatasetCoord`
+        Right-hand side of the comparison.
+
+    Returns
+    -------
+    compat : bool
+        True if two `DatasetCoord` are compatible.
+    """
+    return coord1 <= coord2 or coord2 <= coord1
+
+
+def coordinates_intersect(coords1: set[DatasetCoord], coords2: set[DatasetCoord]) -> set[DatasetCoord]:
+    """Take the intersection between two sets of `DatasetCoord`.
+
+    Comparison between two `DatasetCoord`, ``c`` and ``d``, is not strict.
+    For example,
+        c = {("visit", 1000)}
+        d = {("visit", 1000), (arm, "b")}
+    is considered compatible, and ``d``, the more specific one, is retained
+    in the returned set.  All `DatasetCoord` in ``coords1`` are assumed to have
+    the same set of dimensions. So are all `DatasetCoord` in ``coords2``.
+
+    Parameters
+    ----------
+    coords1 : `set` [`DatasetCoord`]
+        Left-hand side of the intersection.
+    coords2 : `set` [`DatasetCoord`]
+        Right-hand side of the intersection.
+
+    Returns
+    -------
+    intersection : `set` [`DatasetCoord`]
+        Intersection of the two sets.
+    """
+    coords1 = {c for c in coords1 if any(coordinates_compat(c, d) for d in coords2)}
+    coords2 = {c for c in coords2 if any(coordinates_compat(c, d) for d in coords1)}
+
+    if len(coords1) > len(coords2):
+        return coords1
+    else:
+        return coords2
+
+
 def ignore_numpy_warnings(func: Callable[P, R]) -> Callable[P, R]:
     """Ignore numpy warnings caused by NaN and division by zero.
 
@@ -610,6 +775,29 @@ class TakahashiFiberNormsQaStat:
     twosigma_std_95: float
     sigma_iqr: float
     df: pd.DataFrame
+
+
+class TakahashiFiberNormsQaInput(typing.TypedDict):
+    """Input dataset references for `TakahashiFiberNormsQa`
+
+    Keys
+    ----
+    pfsConfig : `DatasetRef` (pointing to `PfsConfig`)
+        Top-end fiber configuration.
+    pfsArm : `list` [`DatasetRef`] (pointing to `PfsConfig`)
+        PfsArm for assessment.
+        All elements in the list must be equal up to "spectrograph".
+    fiberNorms : `DatasetRef` (pointing to `PfsFiberNorms`)
+        Fiber norms.
+    refArm : `list` [`DatasetRef`] (pointing to `PfsConfig`)
+        PfsArm for reference.
+        All elements in the list must be equal up to "spectrograph".
+    """
+
+    pfsConfig: DatasetRef
+    pfsArm: list[DatasetRef]
+    fiberNorms: DatasetRef
+    refArm: list[DatasetRef]
 
 
 @dataclasses.dataclass
@@ -753,12 +941,8 @@ class TakahashiFiberNormsQa:
         Read-only butler.
     output : `str`
         Output directory path.
-    ref_visit : `int`
-        ID of a visit of reference.
-    visit : `int`
-        ID of a visit to assess.
-    arm : `ArmId`
-        Arm name.
+    input : `TakahashiFiberNormsQaInput`
+        Input dataset references.
     config : `TakahashiFiberNormsQaConfig`
         Configuration.
     log : `logging.Logger` | None
@@ -769,9 +953,7 @@ class TakahashiFiberNormsQa:
         self,
         butler: Butler,
         output: str,
-        ref_visit: int,
-        visit: int,
-        arm: ArmId,
+        input: TakahashiFiberNormsQaInput,
         *,
         config=TakahashiFiberNormsQaConfig(),
         log: logging.Logger | None = None,
@@ -781,38 +963,30 @@ class TakahashiFiberNormsQa:
         else:
             self.log = logging.getLogger(type(self).__qualname__)
 
-        self.output = output
-        self.ref_visit = ref_visit
-        self.visit = visit
-        self.arm = arm
-        self.config = config
+        self._validate_input(input)
 
-        self.log = self.log.getChild(f"[visit={self.visit} arm={self.arm}]")
+        self.log = self.log.getChild(
+            f'[visit={input["pfsArm"][0].dataId["visit"]} arm={input["pfsArm"][0].dataId["arm"]}]'
+        )
 
         self.log.info("Reading datasets...")
 
-        self.refArmDict: dict[SpectrographId, PfsArm] = {}
-        self.pfsArmDict: dict[SpectrographId, PfsArm] = {}
-        for spec in typing.get_args(SpectrographId):
-            try:
-                refArm = typing.cast(
-                    PfsArm, butler.get("pfsArm", visit=ref_visit, arm=arm, spectrograph=spec)
-                )
-                pfsArm = typing.cast(PfsArm, butler.get("pfsArm", visit=visit, arm=arm, spectrograph=spec))
-            except Exception:
-                continue
+        self.output = output
+        self.ref_visit = typing.cast(int, input["refArm"][0].dataId["visit"])
+        self.visit = typing.cast(int, input["pfsArm"][0].dataId["visit"])
+        self.arm = typing.cast(str, input["pfsArm"][0].dataId["arm"])
+        self.config = config
 
-            self.refArmDict[spec] = refArm
-            self.pfsArmDict[spec] = pfsArm
-
-        if not self.pfsArmDict:
-            raise RuntimeError(
-                "No pfsArms of the same spectrograph"
-                f" in both ref_visit={ref_visit} and visit={visit} (arm={arm})"
-            )
-
-        self.pfsConfig: PfsConfig = butler.get("pfsConfig", visit=visit)
-        self.fiberNorms: PfsFiberNorms = butler.get("fiberNorms", visit=visit, arm=arm)
+        self.pfsConfig: PfsConfig = butler.get(input["pfsConfig"])
+        self.fiberNorms: PfsFiberNorms = butler.get(input["fiberNorms"])
+        self.pfsArmDict = typing.cast(
+            dict[SpectrographId, PfsArm],
+            {ref.dataId["spectrograph"]: butler.get(ref) for ref in input["pfsArm"]},
+        )
+        self.refArmDict = typing.cast(
+            dict[SpectrographId, PfsArm],
+            {ref.dataId["spectrograph"]: butler.get(ref) for ref in input["refArm"]},
+        )
 
         self.spectrographs = sorted(self.pfsArmDict.keys())
 
@@ -981,6 +1155,63 @@ class TakahashiFiberNormsQa:
 
         self._cache_cleaned_fiberNorms = fiberNorms
         return fiberNorms
+
+    @staticmethod
+    def _validate_input(input: TakahashiFiberNormsQaInput) -> None:
+        """Check the consistency of input dataset references.
+
+        Parameters
+        ----------
+        input : `TakahashiFiberNormsQaInput`
+            Input dataset references.
+
+        Raises
+        ------
+        RuntimeError
+            If ``input`` is inconsistent.
+        """
+        if len(input["pfsArm"]) != len(input["refArm"]):
+            raise RuntimeError("number of input pfsArms is different from that of refArms.")
+        if not input["pfsArm"]:
+            raise RuntimeError("number of input pfsArms is zero.")
+
+        instrument = input["pfsArm"][0].dataId["instrument"]
+        visit = input["pfsArm"][0].dataId["visit"]
+        arm = input["pfsArm"][0].dataId["arm"]
+
+        if (
+            any(instrument != ref.dataId["instrument"] for ref in input["pfsArm"])
+            or any(instrument != ref.dataId["instrument"] for ref in input["refArm"])
+            or instrument != input["pfsConfig"].dataId["instrument"]
+            or instrument != input["fiberNorms"].dataId["instrument"]
+        ):
+            raise RuntimeError("instruments of input datasets are not unique.")
+
+        if (
+            any(visit != ref.dataId["visit"] for ref in input["pfsArm"])
+            or visit != input["pfsConfig"].dataId["visit"]
+            or visit != input["fiberNorms"].dataId["visit"]
+        ):
+            raise RuntimeError("visits of input datasets are not unique.")
+
+        if (
+            any(arm != ref.dataId["arm"] for ref in input["pfsArm"])
+            or any(arm != ref.dataId["arm"] for ref in input["refArm"])
+            or arm != input["fiberNorms"].dataId["arm"]
+        ):
+            raise RuntimeError("arms of input datasets are not unique.")
+
+        ref_visit = input["refArm"][0].dataId["visit"]
+        if any(ref_visit != ref.dataId["visit"] for ref in input["refArm"]):
+            raise RuntimeError("reference visits of input datasets are not unique.")
+
+        specs = set(ref.dataId["spectrograph"] for ref in input["pfsArm"])
+        if len(specs) != len(input["pfsArm"]):
+            raise RuntimeError("there are duplicate pfsArms in the input.")
+
+        ref_specs = set(ref.dataId["spectrograph"] for ref in input["refArm"])
+        if specs != ref_specs:
+            raise RuntimeError("set of spectrographs of pfsArms is different from that of refArms.")
 
     def make_plot(self, df: pd.DataFrame) -> plt.Figure:
         """Make a figure with matplotlib.
