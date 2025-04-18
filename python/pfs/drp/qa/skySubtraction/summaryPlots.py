@@ -1,15 +1,9 @@
 import numpy as np
 import scipy.stats
-from matplotlib.figure import Figure
 
 import pfs.drp.qa.skySubtraction.plot as skySubtractionQaPlot
-from pfs.drp.qa.skySubtraction.skySubtractionQa import (
-    arm_colors,
-    buildReference,
-    getStdev,
-    rolling,
-    splitSpectraIntoReferenceAndTest,
-)
+from pfs.drp.qa.skySubtraction.skySubtractionQa import arm_colors, buildReference, getStdev, rolling, \
+    splitSpectraIntoReferenceAndTest
 
 
 def summarizeSpectrograph(
@@ -326,17 +320,16 @@ def plot_outlier_summary(hold, holdAsDict, plotId, arms):
 
     Returns
     -------
-    fig : `matplotlib.figure.Figure`
-        A single figure containing subfigures for each arm.
+    figs : `list` of `matplotlib.figure.Figure`
+        List of generated figures for each arm.
     ax_dicts : `list` of `dict`
-        List of dictionaries containing axis handles for each subfigure.
+        List of dictionaries containing axis handles for each figure.
 
     Notes
     -----
     - Uses `buildReference` to generate a median sky spectrum.
     - Highlights outlier chi values with thresholds at 5 and 15.
     - Uses `scatter` to visualize outliers in wavelength space.
-    - Uses subfigures to organize plots by arm.
     """
     visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
 
@@ -344,28 +337,19 @@ def plot_outlier_summary(hold, holdAsDict, plotId, arms):
     specs = hold.copy()
     specs.pop("pfsConfig", None)
 
-    # Create a single figure to hold all subfigures
-    fig = Figure(figsize=(6 * len(arms), 4))
-
-    # Set overall title
-    fig.suptitle(f"visit={visit}; SM{spectrograph}; blocksize={block}", fontsize=14)
-
-    ax_dicts = []
+    figs, ax_dicts = [], []
 
     # Loop through each spectral arm
     for i, arm in enumerate(arms):
-        # Create a subfigure for each arm
-        subfig = fig.add_subfigure(1, len(arms), i + 1)
-        subfig.suptitle(f"Arm {arm}", fontsize=12)
-
         skySpectra = specs[(spectrograph, arm)]
 
-        # Create layout within the subfigure
-        ax_dict = subfig.subplot_mosaic(
+        # Create figure layout
+        fig, ax_dict = skySubtractionQaPlot.get_mosaic(
             """
             AAB
             AAB
-            """
+            """,
+            figsize=(6, 4),
         )
 
         # Retrieve fiber data
@@ -396,21 +380,16 @@ def plot_outlier_summary(hold, holdAsDict, plotId, arms):
         ax_dict["B"].plot(flx_sky, wve_sky)
 
         # Add colorbar
-        subfig.colorbar(sc, ax=ax_dict["A"], location="top")
+        fig.colorbar(sc, ax=ax_dict["A"], location="top")
 
-        # Add labels
-        ax_dict["A"].set_xlabel("Fiber ID")
-        ax_dict["A"].set_ylabel("Wavelength [nm]")
-        ax_dict["B"].set_xlabel("Flux")
-        ax_dict["B"].set_ylabel("Wavelength [nm]")
+        # Add title
+        fig.suptitle(f"visit={visit}; SM{spectrograph}; Arm {arm}; blocksize={block}")
 
-        # Store axis dictionary
+        # Store figure and axis dictionary
+        figs.append(fig)
         ax_dicts.append(ax_dict)
 
-    # Adjust layout
-    fig.tight_layout()
-
-    return fig, ax_dicts
+    return figs, ax_dicts
 
 
 def plot_vs_sky_brightness(hold, plotId, arms):
