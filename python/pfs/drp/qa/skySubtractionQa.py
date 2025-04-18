@@ -57,7 +57,7 @@ class SkySubtractionConnections(
     )
 
     skySubtractionQaPlot = OutputConnection(
-        name="skySubtraction1DPlot",
+        name="skySubtractionQaPlot",
         doc="Sky Subtraction Plots: 1d, 2d, outliers, and vs sky brightness",
         storageClass="MultipagePdfFigure",
         dimensions=("instrument", "visit", "spectrograph"),
