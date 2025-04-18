@@ -2,8 +2,13 @@ import numpy as np
 import scipy.stats
 
 import pfs.drp.qa.skySubtraction.plot as skySubtractionQaPlot
-from pfs.drp.qa.skySubtraction.skySubtractionQa import arm_colors, buildReference, getStdev, rolling, \
-    splitSpectraIntoReferenceAndTest
+from pfs.drp.qa.skySubtraction.skySubtractionQa import (
+    arm_colors,
+    buildReference,
+    getStdev,
+    rolling,
+    splitSpectraIntoReferenceAndTest,
+)
 
 
 def summarizeSpectrograph(

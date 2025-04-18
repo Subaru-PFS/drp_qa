@@ -25,6 +25,7 @@ from pfs.drp.qa.skySubtraction.summaryPlots import (
     plot_outlier_summary,
     plot_vs_sky_brightness,
 )
+from pfs.drp.qa.storageClasses import MultipagePdfFigure
 
 
 class SkySubtractionConnections(
@@ -55,31 +56,10 @@ class SkySubtractionConnections(
         dimensions=(),
     )
 
-    skySubtraction1DPlot = OutputConnection(
+    skySubtractionQaPlot = OutputConnection(
         name="skySubtraction1DPlot",
-        doc="Sky Subtraction 1D Plot",
-        storageClass="Plot",
-        dimensions=("instrument", "visit", "spectrograph"),
-    )
-
-    skySubtraction2DPlot = OutputConnection(
-        name="skySubtraction2DPlot",
-        doc="Sky Subtraction 2D Plot",
-        storageClass="Plot",
-        dimensions=("instrument", "visit", "spectrograph"),
-    )
-
-    skySubtractionOutlierPlot = OutputConnection(
-        name="skySubtractionOutlierPlot",
-        doc="Sky Subtraction Outlier Plot",
-        storageClass="Plot",
-        dimensions=("instrument", "visit", "spectrograph"),
-    )
-
-    skySubtractionSkyBrightnessPlot = OutputConnection(
-        name="skySubtractionSkyBrightnessPlot",
-        doc="Sky Subtraction Sky Brightness Plot",
-        storageClass="Plot",
+        doc="Sky Subtraction Plots: 1d, 2d, outliers, and vs sky brightness",
+        storageClass="MultipagePdfFigure",
         dimensions=("instrument", "visit", "spectrograph"),
     )
 
@@ -200,9 +180,11 @@ class SkySubtractionQaTask(PipelineTask):
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
         fig_sky_brightness, _ = plot_vs_sky_brightness(hold, plotId, arms)
 
-        return Struct(
-            skySubtraction1DPlot=fig_1d,
-            skySubtraction2DPlot=fig_2d,
-            skySubtractionOutlierPlot=fig_outlier,
-            skySubtractionSkyBrightnessPlot=fig_sky_brightness,
-        )
+        pdf = MultipagePdfFigure()
+        pdf.append(fig_1d)
+        pdf.append(fig_2d)
+        for fig in fig_outlier:
+            pdf.append(fig)
+        pdf.append(fig_sky_brightness)
+
+        return Struct(skySubtractionQaPlot=pdf)
