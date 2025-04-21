@@ -28,18 +28,17 @@ from pfs.drp.qa.skySubtraction.summaryPlots import (
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
 
 
-class SkySubtractionConnections(
+class SkyArmSubtractionConnections(
     PipelineTaskConnections,
-    dimensions=("instrument", "visit", "spectrograph"),
+    dimensions=("instrument", "visit", "arm", "spectrograph"),
 ):
     """Connections for SkySubtractionTask"""
 
-    pfsArms = InputConnection(
+    pfsArm = InputConnection(
         name="pfsArm",
         doc="PfsArm data",
         storageClass="PfsArm",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
-        multiple=True,
     )
 
     pfsConfig = InputConnection(
@@ -56,15 +55,15 @@ class SkySubtractionConnections(
         dimensions=(),
     )
 
-    skySubtractionQaPlot = OutputConnection(
-        name="skySubtractionQaPlot",
-        doc="Sky Subtraction Plots: 1d, 2d, outliers, and vs sky brightness",
-        storageClass="MultipagePdfFigure",
-        dimensions=("instrument", "visit", "spectrograph"),
+    mergedSpectra = OutputConnection(
+        name="mergedSpectra",
+        doc="Merged spectra after sky subtraction",
+        storageClass="PfsArm",
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
 
 
-class SkySubtractionConfig(PipelineTaskConfig, pipelineConnections=SkySubtractionConnections):
+class SkyArmSubtractionConfig(PipelineTaskConfig, pipelineConnections=SkyArmSubtractionConnections):
     """Configuration for SkySubtractionTask"""
 
     blockSize = Field(dtype=int, default=None, optional=True, doc="Block size for sky model fitting.")
@@ -74,11 +73,11 @@ class SkySubtractionConfig(PipelineTaskConfig, pipelineConnections=SkySubtractio
     mask = ListField(dtype=str, default=None, optional=True, doc="Mask types.")
 
 
-class SkySubtractionQaTask(PipelineTask):
-    """Task for QA of skySubtraction"""
+class SkyArmSubtractionTask(PipelineTask):
+    """Task for QA of sky subtraction for a single PfsArm"""
 
-    ConfigClass = SkySubtractionConfig
-    _DefaultName = "skySubtraction"
+    ConfigClass = SkyArmSubtractionConfig
+    _DefaultName = "skyArmSubtraction"
 
     def runQuantum(
         self,
@@ -118,12 +117,12 @@ class SkySubtractionQaTask(PipelineTask):
             # Store the results if valid.
             butlerQC.put(outputs, outputRefs)
 
-    def run(self, pfsArms, pfsConfig, fitSkyModelConfig, **kwargs) -> Struct:
+    def run(self, pfsArm, pfsConfig, fitSkyModelConfig, **kwargs) -> Struct:
         """Perform QA on sky subtraction.
 
         Parameters
         ----------
-        pfsArms : `pfs.drp.stella.ArcLineSet`
+        pfsArm : `pfs.drp.stella.ArcLineSet`
             The input PfsArm data.
         pfsConfig : `pfs.drp.stella.PfsConfig`
             The input PfsConfig data.
@@ -135,43 +134,111 @@ class SkySubtractionQaTask(PipelineTask):
         Struct
             A struct containing the plots.
         """
+        spectrograph = pfsArm.identity.spectrograph
+        visit = pfsArm.identity.visit
+        arm = pfsArm.identity.arm
+
+        self.log.info(f"Starting sky subtraction qa for v{visit}{arm}{spectrograph}")
+
+        # Select sky fibers.
+        selectSky = SelectFibersTask()
+        selectSky.config.targetType = ("SKY",)  # Selecting only sky fibers
+        skyConfig = selectSky.run(pfsConfig.select(fiberId=pfsArm.fiberId))
+
+        # Remove the excluded fiber from the sky selection
+        spectras = list()
+        for excludeFiberId in skyConfig.fiberId:
+            skyConfig0 = skyConfig[skyConfig.fiberId != excludeFiberId]
+            skySpectra = pfsArm.select(pfsConfig, fiberId=skyConfig0.fiberId)
+
+            if len(skySpectra) == 0:
+                raise ValueError("No sky spectra to use for sky subtraction.")
+
+            # Fit sky model using the given configuration
+            fitSkyModel = FitBlockedOversampledSplineTask(config=fitSkyModelConfig)
+            sky1d = fitSkyModel.run(skySpectra, skyConfig0)
+
+            # Apply sky subtraction to the full spectra.
+            subtractSky1d(pfsArm, pfsConfig, sky1d)
+
+            spectras.append(pfsArm[pfsArm.fiberId == excludeFiberId])
+
+        merged_spectra = PfsArm.fromMerge(spectras)
+        return Struct(mergedSpectra=merged_spectra)
+
+
+class SkySubtractionConnections(
+    PipelineTaskConnections,
+    dimensions=("instrument", "visit", "arm", "spectrograph"),
+):
+    """Connections for SkySubtractionTask"""
+
+    mergedSpectra = InputConnection(
+        name="mergedSpectra",
+        doc="Merged spectra after sky subtraction",
+        storageClass="PfsArm",
+        dimensions=("instrument", "visit", "spectrograph"),
+        multiple=True,
+    )
+
+    skySubtractionQaPlot = OutputConnection(
+        name="skySubtractionQaPlot",
+        doc="Sky Subtraction Plots: 1d, 2d, outliers, and vs sky brightness",
+        storageClass="MultipagePdfFigure",
+        dimensions=("instrument", "visit", "spectrograph"),
+    )
+
+
+class SkySubtractionConfig(PipelineTaskConfig, pipelineConnections=SkySubtractionConnections):
+    """Configuration for SkySubtractionTask"""
+
+
+class SkySubtractionQaTask(PipelineTask):
+    """Task for QA of skySubtraction"""
+
+    ConfigClass = SkyArmSubtractionConfig
+    _DefaultName = "skySubtraction"
+
+    def runQuantum(
+        self,
+        butlerQC: QuantumContext,
+        inputRefs: InputQuantizedConnection,
+        outputRefs: OutputQuantizedConnection,
+    ):
+        inputs = butlerQC.get(inputRefs)
+
+        try:
+            # Perform the actual processing.
+            outputs = self.run(**inputs)
+        except ValueError as e:
+            self.log.error(e)
+        else:
+            # Store the results if valid.
+            butlerQC.put(outputs, outputRefs)
+
+    def run(self, mergedSpectra, **kwargs) -> Struct:
+        """Perform QA on sky subtraction.
+
+        Parameters
+        ----------
+        mergedSpectra : `pfs.drp.stella.ArcLineSet`
+            The input PfsArm data.
+
+        Returns
+        -------
+        Struct
+            A struct containing the plots.
+        """
         hold = dict()
         arms = list()
-        for pfsArm in pfsArms:
+        for pfsArm in mergedSpectra:
             spectrograph = pfsArm.identity.spectrograph
-            visit = pfsArm.identity.visit
             arm = pfsArm.identity.arm
-            arms.append(arm)
-
-            self.log.info(f"Starting sky subtraction qa for v{visit}{arm}{spectrograph}")
-
-            # Select sky fibers.
-            selectSky = SelectFibersTask()
-            selectSky.config.targetType = ("SKY",)  # Selecting only sky fibers
-            skyConfig = selectSky.run(pfsConfig.select(fiberId=pfsArm.fiberId))
-
-            # Remove the excluded fiber from the sky selection
-            spectras = list()
-            for excludeFiberId in skyConfig.fiberId:
-                skyConfig0 = skyConfig[skyConfig.fiberId != excludeFiberId]
-                skySpectra = pfsArm.select(pfsConfig, fiberId=skyConfig0.fiberId)
-
-                if len(skySpectra) == 0:
-                    raise ValueError("No sky spectra to use for sky subtraction.")
-
-                # Fit sky model using the given configuration
-                fitSkyModel = FitBlockedOversampledSplineTask(config=fitSkyModelConfig)
-                sky1d = fitSkyModel.run(skySpectra, skyConfig0)
-
-                # Apply sky subtraction to the full spectra.
-                subtractSky1d(pfsArm, pfsConfig, sky1d)
-
-                spectras.append(pfsArm[pfsArm.fiberId == excludeFiberId])
-
-            hold[(spectrograph, arm)] = PfsArm.fromMerge(spectras)
+            visit = pfsArm.identity.visit
+            hold[(spectrograph, arm)] = pfsArm
 
         holdAsDict = convertToDict(hold)
-        plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block=fitSkyModelConfig.blockSize)
+        plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block="temp")
         arms = list(set(arms))
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
