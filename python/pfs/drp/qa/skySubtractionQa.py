@@ -236,6 +236,7 @@ class SkySubtractionQaTask(PipelineTask):
             arm = pfsArm.identity.arm
             visit = pfsArm.identity.visit
             hold[(spectrograph, arm)] = pfsArm
+            arms.append(arm)
 
         holdAsDict = convertToDict(hold)
         plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block="temp")
