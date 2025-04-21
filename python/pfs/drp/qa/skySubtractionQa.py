@@ -170,7 +170,7 @@ class SkySubtractionQaTask(PipelineTask):
             hold[(spectrograph, arm)] = PfsArm.fromMerge(spectras)
 
         holdAsDict = convertToDict(hold)
-        plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block=self.config.blockSize)
+        plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block=fitSkyModelConfig.blockSize)
         arms = list(set(arms))
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
