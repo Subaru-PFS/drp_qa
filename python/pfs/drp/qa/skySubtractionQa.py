@@ -163,9 +163,13 @@ class SkyArmSubtractionTask(PipelineTask):
 
             spectras.append(pfsArm[pfsArm.fiberId == excludeFiberId])
 
-        merged_spectra = PfsArm.fromMerge(spectras)
-        merged_spectra.metadata["blockSize"] = fitSkyModelConfig.blockSize
-        return Struct(mergedSpectra=merged_spectra)
+        try:
+            merged_spectra = PfsArm.fromMerge(spectras)
+            merged_spectra.metadata["blockSize"] = fitSkyModelConfig.blockSize
+            return Struct(mergedSpectra=merged_spectra)
+        except Exception as e:
+            self.log.error(f"Failed to merge spectra: {e}")
+            raise
 
 
 class SkySubtractionConnections(
