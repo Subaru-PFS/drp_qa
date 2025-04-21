@@ -104,6 +104,7 @@ class SkySubtractionQaTask(PipelineTask):
             defaultConfig["mask"] = self.config.mask
 
         fitSkyModelConfig.update(**defaultConfig)
+        self.log.info("Using sky model configuration: %s", fitSkyModelConfig)
 
         inputs = butlerQC.get(inputRefs)
         inputs["fitSkyModelConfig"] = fitSkyModelConfig
