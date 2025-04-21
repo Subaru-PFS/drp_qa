@@ -169,7 +169,7 @@ class SkyArmSubtractionTask(PipelineTask):
             return Struct(mergedSpectra=merged_spectra)
         except Exception as e:
             self.log.error(f"Failed to merge spectra: {e}")
-            raise
+            return Struct()
 
 
 class SkySubtractionConnections(
