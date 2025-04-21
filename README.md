@@ -16,7 +16,8 @@ tasks.
 
 > Note: individual tasks can be specified by using the `pipelines/drpQA.yaml#extractionQA`
 > syntax.
-> See [documentation](https://pipelines.lsst.io/modules/lsst.pipe.base/creating-a-pipeline.html#command-line-options-for-running-pipelines)
+>
+See [documentation](https://pipelines.lsst.io/modules/lsst.pipe.base/creating-a-pipeline.html#command-line-options-for-running-pipelines)
 > for details.
 
 Also see the example notebook [`examples/QA Pipelines.ipynb`](examples/QA%20Pipelines.ipynb).
@@ -116,3 +117,21 @@ Plot the fiber normalization for the given detector and visit.
 |----------------------|---------------------|----------------------------------------------------|
 | `fluxCalStats`       | `instrument, visit` | Statistics of the flux calibration analysis.       |
 | `fluxCalMagDiffPlot` | `instrument, visit` | Plot of the flux calibration magnitude difference. |
+
+#### `skySubtractionQa`
+
+##### Options
+
+If config options are not passed, the default values come from `mergeArms_config.fitSkyModel`.
+
+- `skyArmSubtraction:blockSize`: Block size for the sky subtraction, default `None`.
+- `skyArmSubtraction:rejIterations`: Number of rejection iterations, default `None`.
+- `skyArmSubtraction:rejThreshold`: Rejection threshold, default `None`.
+- `skyArmSubtraction:oversample`: Oversampling factor, default `None`.
+- `skyArmSubtraction:mask`: Mask types to use, default `None`.
+
+##### Outputs
+
+| DataSet Type           | Dimensions               | Description                                                                                 |
+|------------------------|--------------------------|---------------------------------------------------------------------------------------------| 
+| `skySubtractionQaPlot` | `instrument, visit, arm` | PDF of various plots related to sky subtraction <br/>built from all the arms for the visit. |
