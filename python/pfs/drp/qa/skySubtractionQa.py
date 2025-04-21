@@ -196,7 +196,7 @@ class SkySubtractionConfig(PipelineTaskConfig, pipelineConnections=SkySubtractio
 class SkySubtractionQaTask(PipelineTask):
     """Task for QA of skySubtraction"""
 
-    ConfigClass = SkyArmSubtractionConfig
+    ConfigClass = SkySubtractionConfig
     _DefaultName = "skySubtraction"
 
     def runQuantum(
