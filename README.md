@@ -120,6 +120,11 @@ Plot the fiber normalization for the given detector and visit.
 
 #### `skySubtractionQa`
 
+There are two tasks in the Sky Subtraction QA, the `skyArmSubtractionQa` and `skySubtractionQa`.
+The `skyArmSubtractionQa` task is used to subtract the sky from the spectra of each arm
+and the `skySubtractionQa` task is used to plot the results of the sky subtraction for
+the entire visit.
+
 ##### Options
 
 If config options are not passed, the default values come from `mergeArms_config.fitSkyModel`.
