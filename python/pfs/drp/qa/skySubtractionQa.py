@@ -71,7 +71,7 @@ class SkySubtractionConfig(PipelineTaskConfig, pipelineConnections=SkySubtractio
     rejIterations = Field(dtype=int, default=None, optional=True, doc="Number of rejection iterations.")
     rejThreshold = Field(dtype=float, default=None, optional=True, doc="Rejection threshold.")
     oversample = Field(dtype=float, default=None, optional=True, doc="Oversampling factor.")
-    mask = ListField(dtype=list, default=None, optional=True, doc="Mask types.")
+    mask = ListField(dtype=str, default=None, optional=True, doc="Mask types.")
 
 
 class SkySubtractionQaTask(PipelineTask):
