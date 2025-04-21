@@ -169,7 +169,7 @@ class SkyArmSubtractionTask(PipelineTask):
 
 class SkySubtractionConnections(
     PipelineTaskConnections,
-    dimensions=("instrument", "visit", "arm", "spectrograph"),
+    dimensions=("instrument", "visit", "spectrograph"),
 ):
     """Connections for SkySubtractionTask"""
 
@@ -177,7 +177,7 @@ class SkySubtractionConnections(
         name="mergedSpectra",
         doc="Merged spectra after sky subtraction",
         storageClass="PfsArm",
-        dimensions=("instrument", "visit", "spectrograph"),
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
         multiple=True,
     )
 
