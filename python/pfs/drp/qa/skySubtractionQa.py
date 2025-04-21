@@ -1,5 +1,5 @@
 from lsst.afw.image import VisitInfo
-from lsst.pex.config import Field
+from lsst.pex.config import Field, ListField
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -67,11 +67,11 @@ class SkySubtractionConnections(
 class SkySubtractionConfig(PipelineTaskConfig, pipelineConnections=SkySubtractionConnections):
     """Configuration for SkySubtractionTask"""
 
-    blockSize = Field(dtype=int, default=20, doc="Block size for sky model fitting.")
-    rejIterations = Field(dtype=int, default=5, doc="Number of rejection iterations.")
-    rejThreshold = Field(dtype=float, default=3.0, doc="Rejection threshold.")
-    # mask = Field(dtype=list, default=["NO_DATA"], doc="Mask types.")
-    oversample = Field(dtype=float, default=1.2, doc="Oversampling factor.")
+    blockSize = Field(dtype=int, default=None, optional=True, doc="Block size for sky model fitting.")
+    rejIterations = Field(dtype=int, default=None, optional=True, doc="Number of rejection iterations.")
+    rejThreshold = Field(dtype=float, default=None, optional=True, doc="Rejection threshold.")
+    oversample = Field(dtype=float, default=None, optional=True, doc="Oversampling factor.")
+    mask = ListField(dtype=list, default=None, optional=True, doc="Mask types.")
 
 
 class SkySubtractionQaTask(PipelineTask):
@@ -92,11 +92,16 @@ class SkySubtractionQaTask(PipelineTask):
         defaultConfig = mergeArms_config.fitSkyModel.toDict()
 
         # Update only if user provides values
-        # defaultConfig["blockSize"] = self.config.blockSize
-        # defaultConfig["rejIterations"] = self.config.rejIterations
-        # defaultConfig["rejThreshold"] = self.config.rejThreshold
-        # defaultConfig["mask"] = ["NO_DATA", "BAD_FLAT", "BAD_FIBERNORMS", "SUSPECT"]
-        # defaultConfig["oversample"] = self.config.oversample
+        if self.config.blockSize is not None:
+            defaultConfig["blockSize"] = self.config.blockSize
+        if self.config.rejIterations is not None:
+            defaultConfig["rejIterations"] = self.config.rejIterations
+        if self.config.rejThreshold is not None:
+            defaultConfig["rejThreshold"] = self.config.rejThreshold
+        if self.config.oversample is not None:
+            defaultConfig["oversample"] = self.config.oversample
+        if self.config.mask is not None:
+            defaultConfig["mask"] = self.config.mask
 
         fitSkyModelConfig.update(**defaultConfig)
 
