@@ -164,6 +164,7 @@ class SkyArmSubtractionTask(PipelineTask):
             spectras.append(pfsArm[pfsArm.fiberId == excludeFiberId])
 
         merged_spectra = PfsArm.fromMerge(spectras)
+        merged_spectra.metadata["blockSize"] = fitSkyModelConfig.blockSize
         return Struct(mergedSpectra=merged_spectra)
 
 
@@ -231,15 +232,20 @@ class SkySubtractionQaTask(PipelineTask):
         """
         hold = dict()
         arms = list()
+        blockSize = None
         for pfsArm in mergedSpectra:
             spectrograph = pfsArm.identity.spectrograph
             arm = pfsArm.identity.arm
             visit = pfsArm.identity.visit
             hold[(spectrograph, arm)] = pfsArm
             arms.append(arm)
+            if blockSize is None:
+                blockSize = pfsArm.metadata["blockSize"]
+            elif blockSize != pfsArm.metadata["blockSize"]:
+                raise ValueError("Block size mismatch between arms.")
 
         holdAsDict = convertToDict(hold)
-        plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block="temp")
+        plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block=blockSize)
         arms = list(set(arms))
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
