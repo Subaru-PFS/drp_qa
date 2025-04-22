@@ -55,8 +55,8 @@ class SkyArmSubtractionConnections(
         dimensions=(),
     )
 
-    mergedSpectra = OutputConnection(
-        name="mergedSpectra",
+    skySubtraction_mergedSpectra = OutputConnection(
+        name="skySubtraction_mergedSpectra",
         doc="Merged spectra after sky subtraction",
         storageClass="PfsArm",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -145,6 +145,9 @@ class SkyArmSubtractionTask(PipelineTask):
         selectSky.config.targetType = ("SKY",)  # Selecting only sky fibers
         skyConfig = selectSky.run(pfsConfig.select(fiberId=pfsArm.fiberId))
 
+        # Create a sky model using the given configuration.
+        fitSkyModel = FitBlockedOversampledSplineTask(config=fitSkyModelConfig)
+
         # Remove the excluded fiber from the sky selection
         spectras = list()
         for excludeFiberId in skyConfig.fiberId:
@@ -155,7 +158,6 @@ class SkyArmSubtractionTask(PipelineTask):
                 raise ValueError("No sky spectra to use for sky subtraction.")
 
             # Fit sky model using the given configuration
-            fitSkyModel = FitBlockedOversampledSplineTask(config=fitSkyModelConfig)
             sky1d = fitSkyModel.run(skySpectra, skyConfig0)
 
             # Apply sky subtraction to the full spectra.
@@ -166,7 +168,7 @@ class SkyArmSubtractionTask(PipelineTask):
         try:
             merged_spectra = PfsArm.fromMerge(spectras)
             merged_spectra.metadata["blockSize"] = fitSkyModelConfig.blockSize
-            return Struct(mergedSpectra=merged_spectra)
+            return Struct(skySubtraction_mergedSpectra=merged_spectra)
         except Exception as e:
             self.log.error(f"Failed to merge spectra: {e}")
             return Struct()
@@ -178,8 +180,8 @@ class SkySubtractionConnections(
 ):
     """Connections for SkySubtractionTask"""
 
-    mergedSpectra = InputConnection(
-        name="mergedSpectra",
+    skySubtraction_mergedSpectra = InputConnection(
+        name="skySubtraction_mergedSpectra",
         doc="Merged spectra after sky subtraction",
         storageClass="PfsArm",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -221,12 +223,12 @@ class SkySubtractionQaTask(PipelineTask):
             # Store the results if valid.
             butlerQC.put(outputs, outputRefs)
 
-    def run(self, mergedSpectra, **kwargs) -> Struct:
+    def run(self, skySubtraction_mergedSpectra, **kwargs) -> Struct:
         """Perform QA on sky subtraction.
 
         Parameters
         ----------
-        mergedSpectra : `pfs.drp.stella.ArcLineSet`
+        skySubtraction_mergedSpectra : `pfs.drp.stella.ArcLineSet`
             The input PfsArm data.
 
         Returns
@@ -237,7 +239,7 @@ class SkySubtractionQaTask(PipelineTask):
         hold = dict()
         arms = list()
         blockSize = None
-        for pfsArm in mergedSpectra:
+        for pfsArm in skySubtraction_mergedSpectra:
             spectrograph = pfsArm.identity.spectrograph
             arm = pfsArm.identity.arm
             visit = pfsArm.identity.visit
