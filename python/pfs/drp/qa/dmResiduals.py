@@ -402,7 +402,7 @@ def getGoodLines(
     isArc = isTrace == False
 
     log.debug(f"{traceIndex.sum()} line centroids for {numTraceLines} traces")
-    log.debug(f"{lineIndex.sum()} line centroids for {numArcLines} traces")
+    log.debug(f"{lineIndex.sum()} line centroids for {numArcLines} arc lines")
     log.debug(f"{lineIndex.sum() + traceIndex.sum()} lines in list")
 
     def getCounts():
@@ -420,22 +420,23 @@ def getGoodLines(
     if lineFlags is None:
         lineFlags = adjustDMConfig.lineFlags
     if lineFlags is not None:
+        log.debug(f"Filtering lines with flags {lineFlags}")
         good &= (lines.status & ReferenceLineStatus.fromNames(*lineFlags)) == 0
         log.debug(f"{good.sum()} good lines after line flags ({getCounts()})")
 
     good &= np.isfinite(lines.x) & np.isfinite(lines.y)
     good &= np.isfinite(lines.xErr) & np.isfinite(lines.yErr)
+    log.debug(f"{good.sum()} good lines after finite positions ({getCounts()})")
+    good &= np.isfinite(lines.flux) & np.isfinite(lines.fluxErr)
+    log.debug(f"{good.sum()} good lines after finite fluxes ({getCounts()})")
 
     if hasattr(lines, "slope"):
         good &= np.isfinite(lines.slope) | ~traceIndex
-    log.debug(f"{good.sum()} good lines after finite positions ({getCounts()})")
+        log.debug(f"{good.sum()} good lines after finite slopes ({getCounts()})")
 
     if minSignalToNoise is None:
         minSignalToNoise = adjustDMConfig.minSignalToNoise
     if minSignalToNoise > 0:
-        good &= np.isfinite(lines.flux) & np.isfinite(lines.fluxErr)
-        log.debug(f"{good.sum()} good lines after finite intensities ({getCounts()})")
-
         with np.errstate(invalid="ignore", divide="ignore"):
             sn = lines.flux / lines.fluxErr
             mean_sn = np.nanmean(sn[good])
