@@ -284,6 +284,10 @@ def get_data_and_stats(
 
     is_science = visitInfo.observationReason == "science"
 
+    # Add the REJECTED flag to the lines.
+    lineFlags = adjustDM_config.lineFlags if adjustDM_config is not None else []
+    lineFlags.append(ReferenceLineStatus.REJECTED.name)
+
     good_lines_idx = getGoodLines(
         arcLines,
         dispersion=detectorMap.getDispersionAtCenter(),
@@ -294,7 +298,9 @@ def get_data_and_stats(
     )
     arcLines = arcLines[good_lines_idx].copy()
 
-    arc_data = scrub_data(arcLines, detectorMap, dropNaColumns=True, log=log)
+    arc_data = scrub_data(
+        arcLines, detectorMap, dropNaColumns=True, log=log, onlyReservedAndUsed=not is_science
+    )
     if len(arc_data) == 0:
         raise ValueError("After scrubbing the data, the data is empty, cannot proceed.")
 
@@ -501,6 +507,9 @@ def scrub_data(
         fitPosition[isTrace, 0] = detectorMap.getXCenter(arcLines.fiberId[isTrace], arcLines.y[isTrace])
         fitPosition[isTrace, 1] = np.nan
 
+    log.debug(f"Number of traces: {isTrace.sum()}")
+    log.debug(f"Number of lines: {isLine.sum()}")
+
     arcLines.data["isTrace"] = isTrace
     arcLines.data["isLine"] = isLine
     arcLines.data["xModel"] = fitPosition[:, 0]
@@ -513,7 +522,10 @@ def scrub_data(
     arc_data = arcLines.data.copy()
 
     if removeFlagged:
+        log.info("Removing flagged data")
+        log.debug(f"{arc_data.flag.sum()} flagged lines")
         arc_data = arc_data.query("flag == False").copy()
+        log.debug(f"{len(arc_data)} lines after filtering")
 
     # Convert nm to pixels.
     arc_data["dispersion"] = detectorMap.getDispersion(
@@ -524,6 +536,9 @@ def scrub_data(
     is_reserved = (arc_data.status & ReferenceLineStatus.DETECTORMAP_RESERVED.value) != 0
     is_used = (arc_data.status & ReferenceLineStatus.DETECTORMAP_USED.value) != 0
 
+    log.debug(f"Number of reserved lines: {is_reserved.sum()}")
+    log.debug(f"Number of used lines: {is_used.sum()}")
+
     # Make one-hot columns for status_names.
     arc_data.loc[:, "isUsed"] = is_used
     arc_data.loc[:, "isReserved"] = is_reserved
@@ -532,14 +547,20 @@ def scrub_data(
 
     # Filter to only the RESERVED and USED data.
     if onlyReservedAndUsed is True:
+        log.info("Filtering to only the reserved and used data")
         arc_data = arc_data[is_used | is_reserved]
+        log.debug(f"{len(arc_data)} lines after filtering to only reserved and used data")
 
     # Drop empty rows.
     if dropNaColumns:
+        log.info("Dropping empty columns")
         arc_data = arc_data.dropna(axis=0, how="all")
 
         # Drop rows without enough info in position.
+        log.info("Dropping rows without enough info in position")
         arc_data = arc_data.dropna(subset=["x", "y"])
+
+        log.debug(f"{len(arc_data)} lines after dropping empty columns")
 
     # Change some of the dtypes explicitly.
     try:
