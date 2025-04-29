@@ -1,5 +1,10 @@
+from dataclasses import dataclass
+from numbers import Number
+from typing import Callable, Iterable, List
+
 import numpy as np
 import scipy.stats
+from astropy.nddata import NDDataArray
 from lsst.pex.config import Field, ListField
 from lsst.pipe.base import (
     InputQuantizedConnection,
@@ -15,12 +20,26 @@ from lsst.pipe.base.connectionTypes import (
     Output as OutputConnection,
 )
 from matplotlib import pylab as plt
-from pfs.drp.stella import PfsArm
+from matplotlib.axes import Axes
+from pfs.drp.stella import PfsArm, PfsConfig
 from pfs.drp.stella.fitFocalPlane import FitBlockedOversampledSplineConfig, FitBlockedOversampledSplineTask
 from pfs.drp.stella.selectFibers import SelectFibersTask
 from pfs.drp.stella.subtractSky1d import subtractSky1d
 
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
+
+arm_colors = ["steelblue", "firebrick", "darkgoldenrod"]
+plot_colors = [
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#7f7f7f",
+    "#bcbd22",
+]
 
 
 class SkyArmSubtractionConnections(
@@ -112,7 +131,13 @@ class SkyArmSubtractionTask(PipelineTask):
             # Store the results if valid.
             butlerQC.put(outputs, outputRefs)
 
-    def run(self, pfsArm, pfsConfig, fitSkyModelConfig, **kwargs) -> Struct:
+    def run(
+        self,
+        pfsArm: PfsArm,
+        pfsConfig: PfsConfig,
+        fitSkyModelConfig: FitBlockedOversampledSplineConfig,
+        **kwargs,
+    ) -> Struct:
         """Perform QA on sky subtraction.
 
         This function performs sky subtraction multiple times,
@@ -223,12 +248,12 @@ class SkySubtractionQaTask(PipelineTask):
             # Store the results if valid.
             butlerQC.put(outputs, outputRefs)
 
-    def run(self, skySubtraction_mergedSpectra, **kwargs) -> Struct:
+    def run(self, skySubtraction_mergedSpectra: Iterable[PfsArm], **kwargs) -> Struct:
         """Perform QA on sky subtraction.
 
         Parameters
         ----------
-        skySubtraction_mergedSpectra : `pfs.drp.stella.ArcLineSet`
+        skySubtraction_mergedSpectra : `Iterable[pfs.drp.stella.PfsArm]`
             The input PfsArm data.
 
         Returns
@@ -236,35 +261,35 @@ class SkySubtractionQaTask(PipelineTask):
         Struct
             A struct containing the plots.
         """
-        hold = dict()
+        spectras = dict()
         arms = list()
         blockSize = None
         for pfsArm in skySubtraction_mergedSpectra:
             spectrograph = pfsArm.identity.spectrograph
             arm = pfsArm.identity.arm
             visit = pfsArm.identity.visit
-            hold[(spectrograph, arm)] = pfsArm
+            spectras[(spectrograph, arm)] = pfsArm
             arms.append(arm)
             if blockSize is None:
                 blockSize = pfsArm.metadata["blockSize"]
             elif blockSize != pfsArm.metadata["blockSize"]:
                 raise ValueError("Block size mismatch between arms.")
 
-        holdAsDict = convertToDict(hold)
+        spectraDict = convertToDict(spectras)
         plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block=blockSize)
         arms = list(set(arms))
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
-        fig_1d, _ = plot_1d_spectrograph(holdAsDict, plotId, arms)
+        fig_1d, _ = plot_1d_spectrograph(spectraDict, plotId, arms)
 
         self.log.info(f"Plotting 2D spectra for arms {arms}.")
-        fig_2d, _ = plot_2d_spectrograph(hold, plotId, arms)
+        fig_2d, _ = plot_2d_spectrograph(spectras, plotId, arms)
 
         self.log.info(f"Plotting outlier summary for arms {arms}.")
-        fig_outlier, ax_dicts = plot_outlier_summary(hold, holdAsDict, plotId, arms)
+        fig_outlier, ax_dicts = plot_outlier_summary(spectras, spectraDict, plotId, arms)
 
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
-        fig_sky_brightness, _ = plot_vs_sky_brightness(hold, plotId, arms)
+        fig_sky_brightness, _ = plot_vs_sky_brightness(spectras, plotId, arms)
 
         pdf = MultipagePdfFigure()
         pdf.append(fig_1d)
@@ -276,7 +301,7 @@ class SkySubtractionQaTask(PipelineTask):
         return Struct(skySubtractionQaPlot=pdf)
 
 
-def convertToDict(hold, finite=True):
+def convertToDict(hold: dict, finite: bool = True):
     """
     Convert spectral data into a structured dictionary format.
 
@@ -360,11 +385,13 @@ def convertToDict(hold, finite=True):
     return ret
 
 
-arm_colors = ["steelblue", "firebrick", "darkgoldenrod"]
-
-
 def summarizeSpectrograph(
-    hold, spectrograph, arms=("b", "r", "n"), colors=None, fontsize=25, xlim=(-10, 10), alpha=0.2
+    hold: dict,
+    spectrograph: int,
+    arms: Iterable[str] = ("b", "r", "n"),
+    fontsize: int = 25,
+    xlim: tuple[int, int] = (-10, 10),
+    alpha: float = 0.2,
 ):
     """
     Summarize spectrograph sky subtraction residuals using chi distributions.
@@ -381,11 +408,9 @@ def summarizeSpectrograph(
         Spectrograph number for labeling the plots.
     arms : `tuple` of `str`, optional
         List of arms to include in the analysis (default: ('b', 'r', 'n')).
-    colors : `list` of `str`, optional
-        Colors for each arm in the plot. Defaults to predefined `arm_colors` if None.
     fontsize : `int`, optional
         Font size for labels and titles (default: 25).
-    xlim : `tuple` of `float`, optional
+    xlim : `tuple` of `int`, optional
         X-axis limits for the histograms (default: (-10, 10)).
     alpha : `float`, optional
         Transparency level for histogram layers (default: 0.2).
@@ -403,41 +428,36 @@ def summarizeSpectrograph(
     - Compares mean, median, standard deviation, and IQR across arms.
     - Uses `skySubtractionQaPlot` for visualization.
     """
-
-    if colors is None:
-        colors = arm_colors  # Default to predefined colors
-
     all_axs = ["ABC", "DEF", "GHI"][: len(arms)]
     axt = "\n".join(all_axs)
     fig, ax_dict = get_mosaic(axt, figsize=(20, 10))
 
-    # Iterate over arms and generate histograms
-    for color, arm, axs in zip(colors, arms, all_axs):
+    # Iterate over arms and generate histograms.
+    for color, arm, axs in zip(plot_colors, arms, all_axs):
         h = hold[(spectrograph, arm)]
         big_chi = []  # Store all chi values for overall distribution
         layers = []
         means = []
         stdev = []
 
-        # Process each fiber
+        # Process each fiber.
         for fib in h.keys():
             chi = h[fib]["chi"]
             chiPoisson = h[fib]["chiPoisson"]
-            # std = h[fib]['std']
 
-            # Add histogram layer for each fiber
+            # Add a histogram layer for each fiber.
             layers.append(
                 Layer("hist", chi, color=color, alpha=alpha, linewidth=2, density=True, rnge=xlim, bins=30)
             )
 
-            # Add histogram layer for each fiber
+            # Add a histogram layer for each fiber.
             layers.append(
                 Layer("hist", chiPoisson, color="k", alpha=0.1, linewidth=2, density=True, rnge=xlim, bins=30)
             )
 
             # Compute statistical metrics
             means.append([np.mean(chi), np.median(chi)])
-            stdev.append([np.std(chi), getStdev(chi, useIQR=True)])
+            stdev.append([np.std(chi), getStddev(chi, useIQR=True)])
             big_chi.extend(chi)
 
         # Convert lists to NumPy arrays for easier processing
@@ -465,13 +485,13 @@ def summarizeSpectrograph(
 
         # Iterate over mean/median and stdev/IQR plots
         for j, x, ax, rnge in zip(range(2), [means, stdev], axs[1:], rnge_options):
-            other = [Layer("vert", 0 if j == 0 else 1, linestyle="--", zorder=10)]
+            other = [Layer("vert", X=0 if j == 0 else 1, linestyle="--", zorder=10)]
 
             # Generate the histogram layers for statistical metrics
             hist_layers = [
                 Layer(
                     "hist",
-                    x[:, i],
+                    X=x[:, i],
                     color=color,
                     alpha=[1, 0.5][i],
                     density=True,
@@ -512,18 +532,28 @@ def summarizeSpectrograph(
     return fig, ax_dict
 
 
-def plot_1d_spectrograph(holdAsDict, plotId, arms, fontsize=22, xlim=(-5, 5)):
+def plot_1d_spectrograph(
+    spectraDict: dict,
+    plotId: dict,
+    arms: List[str],
+    fontsize: int = 22,
+    xlim: tuple[int, int] = (-5, 5),
+):
     """
     Generate 1D plots summarizing spectrograph data, including a Gaussian reference.
 
     Parameters
     ----------
-    holdAsDict : `dict`
+    spectraDict : `dict`
         Dictionary containing spectrograph data.
     plotId : `dict`
         Dictionary containing plot metadata (`visit`, `spectrograph`, `block`).
     arms : `list` of `str`
         List of spectral arms (e.g., ['b', 'r', 'n']).
+    fontsize : `int`, optional
+        Font size for labels and titles (default: 22).
+    xlim : `tuple` of `int`, optional
+        X-axis limits for the plots (default: (-5, 5)).
 
     Returns
     -------
@@ -534,15 +564,13 @@ def plot_1d_spectrograph(holdAsDict, plotId, arms, fontsize=22, xlim=(-5, 5)):
     """
     visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
 
-    fontsize = 22
-    xlim = [-5, 5]
     all_axs = ["ABC", "DEF", "GHI"][: len(arms)]
     all_labels = ["Blue arm\n", "Red arm\n", "NIR arm\n"][: len(arms)]
     ax0 = [ax[0] for ax in all_axs]
 
     # Generate spectrograph summary plots
     fig, ax_dict = summarizeSpectrograph(
-        holdAsDict, spectrograph=spectrograph, arms=arms, fontsize=fontsize, xlim=xlim, alpha=0.5
+        spectraDict, spectrograph=spectrograph, arms=arms, fontsize=fontsize, xlim=xlim, alpha=0.5
     )
 
     # Generate Gaussian distribution
@@ -567,7 +595,7 @@ def plot_1d_spectrograph(holdAsDict, plotId, arms, fontsize=22, xlim=(-5, 5)):
     return fig, ax_dict
 
 
-def plot_2d_spectrograph(hold, plotId, arms, binsize=10):
+def plot_2d_spectrograph(spectras: dict, plotId: dict, arms: List[str], binsize: int | None = 10):
     """
     Generate a 2D spectrograph plot showing sky subtraction residuals.
 
@@ -576,7 +604,7 @@ def plot_2d_spectrograph(hold, plotId, arms, binsize=10):
 
     Parameters
     ----------
-    hold : `dict`
+    spectras : `dict`
         Dictionary containing spectrograph data.
     plotId : `dict`
         Dictionary containing plot metadata (`visit`, `spectrograph`, `block`).
@@ -600,42 +628,40 @@ def plot_2d_spectrograph(hold, plotId, arms, binsize=10):
     """
     visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
 
-    # Copy and remove pfsConfig to avoid unnecessary data
-    specs = hold.copy()
+    # Copy and remove pfsConfig to avoid unnecessary data.
+    specs = spectras.copy()
     specs.pop("pfsConfig", None)
 
-    # Define axis layout for the number of arms
+    # Define axis layout for the number of arms.
     axt = "ABC"[: len(arms)]
     fig, ax_dict = get_mosaic(axt, figsize=(15, 5))
 
-    # Loop through each spectral arm
+    # Loop through each spectral arm.
     for i, arm in enumerate(arms):
         ax = axt[i]
         skySpectra = specs[(spectrograph, arm)]
 
-        # Build reference spectra
+        # Build reference spectra.
         references = buildReference(skySpectra, func=None, model="chi")
-        # references_none = buildReference(skySpectra, func=None, model='sky_chi')
 
-        # Extract data
+        # Extract data.
         x, y = references
         xb, yb, eb = rolling(x, y[0], binsize)
 
-        # Initialize 2D array for fiber-based spectral residuals
-        # Initialize 2D array for fiber-based spectral residuals
+        # Initialize 2D array for fiber-based spectral residuals.
         z = np.ones((len(xb), len(y)))
 
         for i, yi in enumerate(y):
             xb, yb, eb = rolling(x, yi, binsize)
             z[:, i] = yb
 
-        # Create mesh grid for plotting
+        # Create a mesh grid for plotting.
         X, Y = np.meshgrid(np.arange(len(y)), xb)
 
-        # Plot 2D colormap of residuals
+        # Plot 2D colormap of residuals.
         sc = ax_dict[ax].pcolormesh(X, Y, z, vmin=-1, vmax=1, cmap="bwr")
 
-        # Configure plot labels
+        # Configure plot labels.
         make_plot(
             [],
             ax_dict[ax],
@@ -644,14 +670,14 @@ def plot_2d_spectrograph(hold, plotId, arms, binsize=10):
             title=f"Arm: {arm}",
         )
 
-    # Add colorbar and overall title
+    # Add colorbar and overall title.
     fig.colorbar(sc, ax=ax_dict["A"], location="left")
     fig.suptitle(f"visit={visit}; SM{spectrograph}; blocksize={block}", fontsize=22)
 
     return fig, ax_dict
 
 
-def plot_outlier_summary(hold, holdAsDict, plotId, arms):
+def plot_outlier_summary(spectras: dict, spectraDict: dict, plotId: dict, arms: List[str]):
     """
     Generate a summary plot highlighting outliers in sky subtraction residuals.
 
@@ -660,9 +686,9 @@ def plot_outlier_summary(hold, holdAsDict, plotId, arms):
 
     Parameters
     ----------
-    hold : `dict`
+    spectras : `dict`
         Dictionary containing spectrograph data.
-    holdAsDict : `dict`
+    spectraDict : `dict`
         Dictionary of processed fiber data with fiber-specific residuals.
     plotId : `dict`
         Dictionary containing plot metadata (`visit`, `spectrograph`, `block`).
@@ -684,17 +710,17 @@ def plot_outlier_summary(hold, holdAsDict, plotId, arms):
     """
     visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
 
-    # Copy and remove pfsConfig to avoid unnecessary data
-    specs = hold.copy()
+    # Copy and remove pfsConfig to avoid unnecessary data.
+    specs = spectras.copy()
     specs.pop("pfsConfig", None)
 
     figs, ax_dicts = [], []
 
-    # Loop through each spectral arm
+    # Loop through each spectral arm.
     for i, arm in enumerate(arms):
         skySpectra = specs[(spectrograph, arm)]
 
-        # Create figure layout
+        # Create a figure layout.
         fig, ax_dict = get_mosaic(
             """
             AAB
@@ -703,47 +729,47 @@ def plot_outlier_summary(hold, holdAsDict, plotId, arms):
             figsize=(6, 4),
         )
 
-        # Retrieve fiber data
-        fibers = holdAsDict[(spectrograph, arm)]
+        # Retrieve fiber data.
+        fibers = spectraDict[(spectrograph, arm)]
 
-        # Compute sky reference spectrum
+        # Compute sky reference spectrum.
         wve_sky, flx_sky = buildReference(skySpectra, func=np.nanmedian, model="sky")
 
-        # Loop over fibers and plot outliers
+        # Loop over fibers and plot outliers.
         for fiberId, fiber in fibers.items():
             wve, _, chi = fiber["wave"], fiber["flux"], fiber["chi"]
             absChi = np.abs(chi)
 
-            # Define outlier conditions
+            # Define outlier conditions.
             C1 = (absChi > 5) & (absChi < 15)
             C2 = absChi > 15
 
-            # Plot scatter points for outliers
+            # Plot scatter points for outliers.
             for C, color in zip([C1, C2], ["steelblue", "navy"]):
                 sc = ax_dict["A"].scatter(
                     [fiberId] * len(wve[C]), wve[C], c=absChi[C], vmin=5, vmax=15, cmap="viridis"
                 )
 
-        # Adjust plot limits
+        # Adjust plot limits.
         ax_dict["A"].set_xlim(min(fibers.keys()) - 10, max(fibers.keys()) + 10)
 
-        # Plot the sky spectrum
+        # Plot the sky spectrum.
         ax_dict["B"].plot(flx_sky, wve_sky)
 
-        # Add colorbar
+        # Add colorbar.
         fig.colorbar(sc, ax=ax_dict["A"], location="top")
 
-        # Add title
+        # Add title.
         fig.suptitle(f"visit={visit}; SM{spectrograph}; Arm {arm}; blocksize={block}")
 
-        # Store figure and axis dictionary
+        # Store figure and axis dictionary.
         figs.append(fig)
         ax_dicts.append(ax_dict)
 
     return figs, ax_dicts
 
 
-def plot_vs_sky_brightness(hold, plotId, arms):
+def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
     """
     Generate plots comparing sky brightness with spectral residuals.
 
@@ -752,7 +778,7 @@ def plot_vs_sky_brightness(hold, plotId, arms):
 
     Parameters
     ----------
-    hold : `dict`
+    spectras : `dict`
         Dictionary containing spectrograph data.
     plotId : `dict`
         Dictionary containing plot metadata (`visit`, `spectrograph`, `block`).
@@ -774,26 +800,27 @@ def plot_vs_sky_brightness(hold, plotId, arms):
     """
     visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
 
-    # Define panel layout dynamically based on arms
+    # Define panel layout dynamically based on arms.
     axt = [t[: len(arms)] for t in ["ABC", "DEF"]]
     axt = "\n".join(axt)
     panel_labels = ["".join([a[i] for a in axt.split("\n")]) for i in range(len(arms))]
 
-    # Create figure layout
+    # Create a figure layout.
     fig, ax_dict = get_mosaic(axt, figsize=(int(5 * len(arms)), 10))
 
-    # Copy and remove pfsConfig to avoid unnecessary data
-    specs = hold.copy()
+    # Copy and remove pfsConfig to avoid unnecessary data.
+    specs = spectras.copy()
     specs.pop("pfsConfig", None)
 
-    # Loop through each spectral arm
+    # Loop through each spectral arm.
+    # TODO (wtgee) this should be moved out of the plotting code.
     for i, arm in enumerate(arms):
         skySpectra = specs[(spectrograph, arm)]
 
-        # Split into reference and test spectra
+        # Split into reference and test spectra.
         referenceSpectra, testSpectra = splitSpectraIntoReferenceAndTest(skySpectra)
 
-        # Compute reference and test statistics
+        # Compute reference and test statistics.
         references_sky = buildReference(referenceSpectra, func=np.nanmedian, model="none")
         references_flx = buildReference(testSpectra, func=np.median, model="residuals")
         # references_err = buildReference(testSpectra, func='quadrature', model='variance')
@@ -802,51 +829,51 @@ def plot_vs_sky_brightness(hold, plotId, arms):
         color = arm_colors[i]
         col = panel_labels[i]
 
-        # Interpolate sky brightness onto residual wavelength grid
+        # Interpolate sky brightness onto a residual wavelength grid.
         wve_sky, sky = references_sky
         wve, flx = references_flx
         sky = np.interp(wve, wve_sky, sky)
 
         chi = references_chi_median[1]
 
-        # Compute ranked percentile of sky brightness
+        # Compute ranked percentile of sky brightness.
         ranked = np.argsort(np.argsort(sky))
         ranked = 100 * ranked / len(ranked)
 
-        # Bin residuals based on sky brightness percentiles
+        # Bin residuals based on sky brightness percentiles.
         yb, xb, eb = rolling(ranked, chi, 10)
 
-        # Scatter plot of residual flux vs wavelength
+        # Scatter plot of residual flux vs wavelength.
         ax_dict[col[0]].scatter(wve, flx, s=1, color=color, rasterized=True, alpha=0.7)
         ax_dict[col[0]].plot(wve, sky / 100, color="k", linewidth=1, alpha=0.6, label="1% sky")
 
-        # Scatter plot of residuals vs sky brightness percentile
+        # Scatter plot of residuals vs sky brightness percentile.
         ax_dict[col[1]].scatter(chi, ranked, s=1, color=color, rasterized=True, alpha=0.7)
         ax_dict[col[1]].errorbar(xb, yb, xerr=eb, color="k", linewidth=3)
 
-        # Set axis limits
-        ax_dict[col[0]].set_ylim([-100, 100])
-        ax_dict[col[1]].set_xlim([-0.5, 0.5])
+        # Set axis limits.
+        ax_dict[col[0]].set_ylim(-100, 100)
+        ax_dict[col[1]].set_xlim(-0.5, 0.5)
 
-        # Set axis labels
+        # Set axis labels.
         ax_dict[col[0]].set_xlabel("Wavelength [nm]")
         ax_dict[col[0]].set_ylabel("Median Counts")
 
         ax_dict[col[1]].set_xlabel(r"Median $\chi$")
         ax_dict[col[1]].set_ylabel("Sky Counts Percentile")
 
-        # Add reference lines
+        # Add reference lines.
         ax_dict[col[1]].axvline(0, linestyle="--", color="k")
         ax_dict[col[0]].axhline(0, linestyle="--", color="k")
 
-    # Add legend and title
+    # Add legend and title.
     ax_dict["A"].legend()
     fig.suptitle(f"visit={visit}; SM{spectrograph}; blocksize={block}")
 
     return fig, ax_dict
 
 
-def rolling(x, y, sep):
+def rolling(x: NDDataArray, y: NDDataArray, sep: int):
     """
     Compute a rolling statistic over a dataset, binning data points into segments of size `sep`.
 
@@ -856,7 +883,7 @@ def rolling(x, y, sep):
         The independent variable (e.g., wavelength, time).
     y : `numpy.ndarray`
         The dependent variable (e.g., flux, intensity).
-    sep : `float`
+    sep : `int`
         The bin width for segmenting `x`.
 
     Returns
@@ -885,14 +912,14 @@ def rolling(x, y, sep):
         if np.any(C):  # Ensure there are valid points in the bin
             xw.append(x0 + sep / 2)  # Bin center
             yw.append(np.median(y[C]))  # Median value of y in the bin
-            ew.append(getStdev(y[C]))  # Custom standard deviation function
+            ew.append(getStddev(y[C]))  # Custom standard deviation function
 
         x0 += sep  # Move to the next bin
 
     return np.array(xw), np.array(yw), np.array(ew)
 
 
-def getStdev(x, axis=0, useIQR=True):
+def getStddev(x: NDDataArray, axis: int = 0, useIQR: bool = True):
     """
     Compute the standard deviation of an array using either the interquartile range (IQR)
     or the standard deviation method.
@@ -909,7 +936,7 @@ def getStdev(x, axis=0, useIQR=True):
 
     Returns
     -------
-    stdev : `float` or `numpy.ndarray`
+    stddev : `float` or `numpy.ndarray`
         Estimated standard deviation along the specified axis.
 
     Notes
@@ -926,10 +953,10 @@ def getStdev(x, axis=0, useIQR=True):
         alpha = 0.741 * (q3 - q1)
         return alpha
     else:
-        return np.nanstd(x, axis=axis)  # Using nanstd to ignore NaNs
+        return np.nanstd(x, axis=axis)
 
 
-def buildReference(spectra, func=np.mean, model="residuals"):
+def buildReference(spectra: PfsArm, func: Callable = np.mean, model: str = "residuals"):
     """
     Build a reference spectrum by aggregating spectral data from multiple fibers.
     The reference spectrum is constructed by applying a specified aggregation function
@@ -966,16 +993,16 @@ def buildReference(spectra, func=np.mean, model="residuals"):
     - Uses interpolation to map each fiber's spectrum onto the reference wavelength array.
     - Applies the selected aggregation function (`func`) to compute the final reference spectrum.
     """
-    # Containers for spectral data
+    # Containers for spectral data.
     x, y = [], []
 
-    # Process each fiber
+    # Process each fiber.
     for fiberId in spectra.fiberId:
         wave, flux, std, sky, chi, stdPoisson, chiPoisson, C = extractFiber(
             spectra, fiberId=fiberId, finite=True
         )
 
-        # Select model to build reference spectrum
+        # Select model to build reference spectrum.
         if model == "none":
             y.append(sky + flux)
         elif model == "sky":
@@ -997,13 +1024,13 @@ def buildReference(spectra, func=np.mean, model="residuals"):
 
         x.append(wave)
 
-    # Choose the longest wavelength grid as the reference
+    # Choose the longest wavelength grid as the reference.
     wave_ref = x[np.argmax([len(xi) for xi in x])]
 
-    # Interpolate all spectra to the reference wavelength grid
+    # Interpolate all spectra to the reference wavelength grid.
     sky_ref = [np.interp(wave_ref, wave, sky) for wave, sky in zip(x, y)]
 
-    # Apply the aggregation function to compute final reference spectrum
+    # Apply the aggregation function to compute final reference spectrum.
     if func:
         if func == "quadrature":
             sky_ref = np.sqrt(np.sum(np.array(sky_ref) ** 2, axis=0))
@@ -1013,7 +1040,7 @@ def buildReference(spectra, func=np.mean, model="residuals"):
     return wave_ref, sky_ref
 
 
-def splitSpectraIntoReferenceAndTest(spectra, referenceFraction=0.1):
+def splitSpectraIntoReferenceAndTest(spectra: PfsArm, referenceFraction: float = 0.1):
     """
     Randomly split spectra into reference (10%) and test (90%) subsets.
 
@@ -1044,22 +1071,22 @@ def splitSpectraIntoReferenceAndTest(spectra, referenceFraction=0.1):
     if not (0 < referenceFraction < 1):
         raise ValueError("referenceFraction must be between 0 and 1.")
 
-    # Randomly shuffle fiber IDs
+    # Randomly shuffle fiber IDs.
     shuffled_fiber_ids = np.random.choice(spectra.fiberId, size=len(spectra), replace=False)
 
-    # Split at the reference fraction point
+    # Split at the reference fraction point.
     split_idx = int(len(shuffled_fiber_ids) * referenceFraction)
     reference_fiber_ids = shuffled_fiber_ids[:split_idx]
     test_fiber_ids = shuffled_fiber_ids[split_idx:]
 
-    # Filter spectra based on selected fiber IDs
+    # Filter spectra based on selected fiber IDs,
     referenceSpectra = spectra[np.isin(spectra.fiberId, reference_fiber_ids)]
     testSpectra = spectra[np.isin(spectra.fiberId, test_fiber_ids)]
 
     return referenceSpectra, testSpectra
 
 
-def extractFiber(spectra, fiberId, finite=True):
+def extractFiber(spectra: PfsArm, fiberId: int, finite: bool = True):
     """
     Extract relevant spectral data for a specific fiber.
 
@@ -1095,25 +1122,25 @@ def extractFiber(spectra, fiberId, finite=True):
     - The function applies filtering to ensure valid data: sky > 0 and variance > 0.
     - If `finite` is True, only valid data points are returned.
     """
-    # Identify the index of the fiber in the spectra
+    # Identify the index of the fiber in the spectra.
     j = spectra.fiberId == fiberId
 
-    # Retrieve corresponding arrays
+    # Retrieve corresponding arrays.
     wave = spectra.wavelength[j][0]
     flux = spectra.flux[j][0]
     sky = spectra.sky[j][0]
     var = spectra.variance[j][0]
 
-    # Define a validity mask: data must be finite, with positive sky & variance
+    # Define a validity mask: data must be finite, with positive sky & variance.
     C = np.isfinite(flux) & (sky > 0) & (var > 0)
-    # adding masked values
+    # adding masked values.
     C = np.logical_and(C, spectra.mask[j][0] == 0)
 
-    # Compute standard deviation (sqrt of variance), setting invalid values to NaN
+    # Compute standard deviation (sqrt of variance), setting invalid values to NaN.
     std = np.ones_like(var) * np.nan
     std[C] = np.sqrt(var[C])
 
-    # Compute chi (flux divided by standard deviation), handling invalid cases
+    # Compute chi (flux divided by standard deviation), handling invalid cases.
     chi = np.ones_like(var) * np.nan
     chi[C] = flux[C] / std[C]
 
@@ -1125,7 +1152,7 @@ def extractFiber(spectra, fiberId, finite=True):
     chiPoisson = np.ones_like(var) * np.nan
     chiPoisson[C] = flux[C] / stdPoisson[C]
 
-    # Return only finite values if requested
+    # Return only finite values if requested.
     if finite:
         wave, flux, std, sky, chi = wave[C], flux[C], std[C], sky[C], chi[C]
         stdPoisson, chiPoisson = stdPoisson[C], chiPoisson[C]
@@ -1133,19 +1160,52 @@ def extractFiber(spectra, fiberId, finite=True):
     return wave, flux, std, sky, chi, stdPoisson, chiPoisson, C
 
 
+@dataclass
+class Layer:
+    version: str = "scatter"
+    X: Number | List[Number] | None = None
+    Y: Number | List[Number] | None = None
+    Z: Number | List[Number] | None = None
+    XERR: List[Number] | None = None
+    YERR: List[Number] | None = None
+    W: List[Number] | None = None
+    STR: str | None = None
+    rnge: tuple[Number, Number] | None = None
+    label: str | None = None
+    zlabel: str | None = None
+    capsize: float | None = None
+    color: str = "k"
+    shape: str = "o"
+    alpha: float = 1.0
+    zorder: float = 1.0
+    size: float | None = None
+    linestyle: str = "-"
+    linewidth: int = 3
+    bar: bool | None = None
+    cumulative: bool = False
+    bins: str | int = "auto"
+    density: bool = False
+    contours: bool | None = None
+    smooth: int | None = None
+    bold: bool = False
+    orientation: str = "vertical"
+    step: str | None = None
+    histtype: str = "step"
+    vmin: float | None = None
+    vmax: float | None = None
+
+
 def make_plot(
-    layers,
-    ax=None,
-    xlabel=None,
-    ylabel=None,
-    fontsize=20,
-    title=None,
-    xlim=None,
-    ylim=None,
-    legend=False,
-    square=False,
-    savename=None,
-    show=False,
+    layers: Iterable[Layer],
+    ax: Axes | None = None,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    fontsize: int = 20,
+    title: str = None,
+    xlim: tuple[int, int] | None = None,
+    ylim: tuple[int, int] | None = None,
+    legend: bool = False,
+    square: bool = False,
     figsize=(8, 5),
     frameon=False,
     xticks=None,
@@ -1157,14 +1217,62 @@ def make_plot(
     xlog=False,
     ylog=False,
     loc="best",
-    stack=False,
     ncol=1,
-    dpi=100,
 ):
+    """Add the plot layer.
+
+    Generates a customizable plot by adding layers and applying various visual
+    settings. This function allows for detailed configuration of plot appearance,
+    including axis labels, font sizes, ticks, log scales, legends, titles, and
+    more. It also supports optional axis reversal and aspect ratio adjustments.
+
+    Parameters:
+        layers (Iterable[Layer]): A collection of plot layers to be added to the
+            plot. Each layer represents an individual component of the plot.
+        ax (Axes | None, optional): An optional Axes instance where the plot will
+            be rendered. If not provided, a new Axes will be created.
+        xlabel (str | None, optional): Label for the x-axis. If None, no label
+            will be added.
+        ylabel (str | None, optional): Label for the y-axis. If None, no label
+            will be added.
+        fontsize (int, optional): Font size to be used for plot labels, ticks, and
+            title. Default is 20.
+        title (str | None, optional): Title of the plot. If None, no title will be
+            added.
+        xlim (tuple[int, int] | None, optional): Limits for the x-axis as a tuple
+            of two integers. If None, no limits are set.
+        ylim (tuple[int, int] | None, optional): Limits for the y-axis as a tuple
+            of two integers. If None, no limits are set.
+        legend (bool, optional): Whether to display a legend for the plot. Default
+            is False.
+        square (bool, optional): Whether the axes should be adjusted to have equal
+            aspect ratio. Default is False.
+        figsize (tuple, optional): Size of the figure in inches. Default is (8, 5).
+        frameon (bool, optional): Whether a frame should be displayed around the
+            legend. Default is False.
+        xticks (optional): Custom values and labels for x-axis ticks. Can be None
+            or a tuple of two lists (tick positions and tick labels).
+        yticks (optional): Custom values and labels for y-axis ticks. Can be None
+            or a tuple of two lists (tick positions and tick labels).
+        xreverse (bool, optional): Whether to invert the x-axis. Default is False.
+        yreverse (bool, optional): Whether to invert the y-axis. Default is False.
+        xrotation (optional): Rotation angle for x-axis tick labels. If None, no
+            rotation is applied.
+        yrotation (optional): Rotation angle for y-axis tick labels. If None, no
+            rotation is applied.
+        xlog (bool, optional): Whether to use a logarithmic scale for the x-axis.
+            Default is False.
+        ylog (bool, optional): Whether to use a logarithmic scale for the y-axis.
+            Default is False.
+        loc (str, optional): Location for the legend on the plot. Default is
+            "best".
+        ncol (int, optional): Number of columns in the legend. Default is 1.
+    """
     if ax is None:
-        fig, ((ax)) = plt.subplots(nrows=1, ncols=1)
+        fig, ax = plt.subplots(nrows=1, ncols=1)
         fig.set_size_inches(figsize)
-    # add layers
+
+    # Add the plotting layers.
     for layer in layers:
         layer.fontsize = fontsize
         add_layer(ax, layer)
@@ -1225,92 +1333,28 @@ def make_plot(
 
     if square:
         ax.set_aspect("equal", adjustable="box")
-    if show:
-        plt.show()
-    if savename:
-        fig.tight_layout()
-        fig.savefig(savename, dpi=dpi)
 
 
-colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22"]
-
-
-def get_mosaic(mosaic="""A""", figsize=(10, 10)):
+def get_mosaic(mosaic="A", figsize=(10, 10)):
+    """Create a figure with a specified layout using matplotlib's subplot_mosaic."""
     mosaic = mosaic
     fig = plt.figure(constrained_layout=True, figsize=figsize)
     ax_dict = fig.subplot_mosaic(mosaic)
     return fig, ax_dict
 
 
-class Layer:
-    def __init__(
-        self,
-        version="scatter",
-        X=None,
-        Y=None,
-        Z=None,
-        XERR=None,
-        YERR=None,
-        W=None,
-        STR=None,
-        rnge=None,
-        label=None,
-        zlabel=None,
-        capsize=None,
-        color="k",
-        shape="o",
-        alpha=1.0,
-        zorder=1.0,
-        size=None,
-        linestyle="-",
-        linewidth=3,
-        bar=None,
-        cumulative=False,
-        bins="auto",
-        density=False,
-        contours=None,
-        smooth=None,
-        bold=False,
-        orientation="vertical",
-        step=None,
-        histtype="step",
-        vmin=None,
-        vmax=None,
-    ):
-        self.version = version
-        self.X = X
-        self.Y = Y
-        self.Z = Z
-        self.XERR = XERR
-        self.YERR = YERR
-        self.W = W
-        self.STR = STR
-        self.rnge = rnge
-        self.label = label
-        self.zlabel = zlabel
-        self.color = color
-        self.capsize = capsize
-        self.size = size
-        self.shape = shape
-        self.alpha = alpha
-        self.zorder = zorder
-        self.linestyle = linestyle
-        self.linewidth = linewidth
-        self.bar = bar
-        self.cumulative = cumulative
-        self.bins = bins
-        self.density = density
-        self.contours = contours
-        self.smooth = smooth
-        self.bold = bold
-        self.orientation = orientation
-        self.step = step
-        self.histtype = histtype
-        self.vmin = vmin
-        self.vmax = vmax
+def add_layer(ax: Axes, layer: Layer):
+    """Adds a layer to the plot based on the specified version.
 
+    The bulk of the plotting options and work is done in this function.
 
-def add_layer(ax, layer):
+    Parameters
+    ----------
+    ax : `matplotlib.axes.Axes`
+        The axes to which the layer will be added.
+    layer : `Layer`
+        The layer object containing the data and properties for the plot.
+    """
     if layer.version == "line":
         ax.plot(
             layer.X,
