@@ -301,7 +301,7 @@ class SkySubtractionQaTask(PipelineTask):
         return Struct(skySubtractionQaPlot=pdf)
 
 
-def convertToDict(hold: dict, finite: bool = True):
+def convertToDict(spectras: dict):
     """
     Convert spectral data into a structured dictionary format.
 
@@ -309,13 +309,15 @@ def convertToDict(hold: dict, finite: bool = True):
     where each entry corresponds to a spectrograph arm and fiber ID, storing relevant spectral
     properties such as wavelength, flux, standard deviation, sky background, and chi values.
 
+    - Uses `extractFiber` to extract spectral information for each fiber.
+    - Each spectrograph arm has its own dictionary containing fiber-specific data.
+    - If `pfsConfig` is not found in `hold`, fiber positions (`xy`, `ra_dec`) will be omitted.
+
     Parameters
     ----------
-    hold : `dict`
+    spectras : `dict`
         Dictionary containing spectral data indexed by `(spectrograph, arm)`.
         Expected to contain a `pfsConfig` key for positional metadata.
-    finite : `bool`, optional
-        If `True`, filters out non-finite values (NaN, invalid sky, invalid variance) (default: `True`).
 
     Returns
     -------
@@ -338,28 +340,21 @@ def convertToDict(hold: dict, finite: bool = True):
             ...
         }
         ```
-
-    Notes
-    -----
-    - Uses `extractFiber` to extract spectral information for each fiber.
-    - Each spectrograph arm has its own dictionary containing fiber-specific data.
-    - If `pfsConfig` is not found in `hold`, fiber positions (`xy`, `ra_dec`) will be omitted.
-
     """
-    hold = hold.copy()  # Prevent modification of the original input
-    pfsConfig = hold.pop("pfsConfig", None)  # Extract pfsConfig metadata if available
+    spectras = spectras.copy()  # Prevent modification of the original input
+    pfsConfig = spectras.pop("pfsConfig", None)  # Extract pfsConfig metadata if available
 
     ret = {}  # Dictionary to store processed data
 
     # Iterate over spectrograph-arm combinations
-    for (spectrograph, arm), spectra in hold.items():
+    for (spectrograph, arm), spectra in spectras.items():
         ret[(spectrograph, arm)] = {}
 
         # Process each fiber
         for iFib, fiberId in enumerate(spectra.fiberId):
             # Extract spectral data
             wave, flux, std, sky, chi, stdPoisson, chiPoisson, C = extractFiber(
-                spectra, fiberId=fiberId, finite=finite
+                spectra, fiberId=fiberId, finite=True
             )
 
             # Initialize fiber entry
