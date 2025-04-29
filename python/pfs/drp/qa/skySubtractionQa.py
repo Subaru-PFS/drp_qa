@@ -381,7 +381,7 @@ def convertToDict(spectras: dict):
 
 
 def summarizeSpectrograph(
-    hold: dict,
+    spectraDict: dict,
     spectrograph: int,
     arms: Iterable[str] = ("b", "r", "n"),
     fontsize: int = 25,
@@ -397,7 +397,7 @@ def summarizeSpectrograph(
 
     Parameters
     ----------
-    hold : `dict`
+    spectraDict : `dict`
         Dictionary containing sky-subtraction residuals for different spectrograph arms.
     spectrograph : `int`
         Spectrograph number for labeling the plots.
@@ -429,42 +429,48 @@ def summarizeSpectrograph(
 
     # Iterate over arms and generate histograms.
     for color, arm, axs in zip(plot_colors, arms, all_axs):
-        h = hold[(spectrograph, arm)]
+        spectraFibers = spectraDict[(spectrograph, arm)]
         big_chi = []  # Store all chi values for overall distribution
         layers = []
         means = []
         stdev = []
 
         # Process each fiber.
-        for fib in h.keys():
-            chi = h[fib]["chi"]
-            chiPoisson = h[fib]["chiPoisson"]
+        for fib in spectraFibers.keys():
+            chi = spectraFibers[fib]["chi"]
+            chiPoisson = spectraFibers[fib]["chiPoisson"]
 
             # Add a histogram layer for each fiber.
             layers.append(
-                Layer("hist", chi, color=color, alpha=alpha, linewidth=2, density=True, rnge=xlim, bins=30)
+                PlotLayer(
+                    "hist", chi, color=color, alpha=alpha, linewidth=2, density=True, rnge=xlim, bins=30
+                )
             )
 
             # Add a histogram layer for each fiber.
             layers.append(
-                Layer("hist", chiPoisson, color="k", alpha=0.1, linewidth=2, density=True, rnge=xlim, bins=30)
+                PlotLayer(
+                    "hist", chiPoisson, color="k", alpha=0.1, linewidth=2, density=True, rnge=xlim, bins=30
+                )
             )
 
-            # Compute statistical metrics
+            # Compute statistical metrics.
             means.append([np.mean(chi), np.median(chi)])
             stdev.append([np.std(chi), getStddev(chi, useIQR=True)])
             big_chi.extend(chi)
 
-        # Convert lists to NumPy arrays for easier processing
+        # Convert lists to NumPy arrays for easier processing.
         means = np.array(means)
         stdev = np.array(stdev)
 
-        # Add combined chi distribution (all fibers) with a distinctive color
+        # Add combined chi distribution (all fibers) with a distinctive color.
         layers.append(
-            Layer("hist", big_chi, color="magenta", alpha=1, linewidth=6, density=True, rnge=xlim, bins=30)
+            PlotLayer(
+                "hist", big_chi, color="magenta", alpha=1, linewidth=6, density=True, rnge=xlim, bins=30
+            )
         )
 
-        # Plot chi distribution
+        # Plot chi distribution.
         make_plot(
             layers,
             ax_dict[axs[0]],
@@ -480,11 +486,11 @@ def summarizeSpectrograph(
 
         # Iterate over mean/median and stdev/IQR plots
         for j, x, ax, rnge in zip(range(2), [means, stdev], axs[1:], rnge_options):
-            other = [Layer("vert", X=0 if j == 0 else 1, linestyle="--", zorder=10)]
+            other = [PlotLayer("vert", X=0 if j == 0 else 1, linestyle="--", zorder=10)]
 
             # Generate the histogram layers for statistical metrics
             hist_layers = [
-                Layer(
+                PlotLayer(
                     "hist",
                     X=x[:, i],
                     color=color,
@@ -563,24 +569,24 @@ def plot_1d_spectrograph(
     all_labels = ["Blue arm\n", "Red arm\n", "NIR arm\n"][: len(arms)]
     ax0 = [ax[0] for ax in all_axs]
 
-    # Generate spectrograph summary plots
+    # Generate spectrograph summary plots.
     fig, ax_dict = summarizeSpectrograph(
         spectraDict, spectrograph=spectrograph, arms=arms, fontsize=fontsize, xlim=xlim, alpha=0.5
     )
 
-    # Generate Gaussian distribution
+    # Generate Gaussian distribution.
     xp = np.linspace(-6, 6, 1000)
     yp = scipy.stats.norm.pdf(xp, loc=0, scale=1)
 
-    # Update axis labels and add Gaussian reference
+    # Update axis labels and add Gaussian reference.
     for ax, arm in zip(ax0, all_labels):
         ax_dict[ax].set_ylabel(arm, fontsize=fontsize)
         ax_dict[ax].plot(xp, yp, color="k", linewidth=4, linestyle="--")
 
-    # Set title
+    # Set title.
     ax_dict["B"].set_title(f"visit={visit}; SM{spectrograph}; blocksize={block}", fontsize=fontsize)
 
-    # Add legend
+    # Add legend.
     ax_dict["A"].plot([], [], color=arm_colors[0], label="DRP")
     ax_dict["A"].plot([], [], color="magenta", label="Combined DRP")
     ax_dict["A"].plot([], [], color="k", label="Using Poisson errors")
@@ -736,10 +742,12 @@ def plot_outlier_summary(spectras: dict, spectraDict: dict, plotId: dict, arms: 
             absChi = np.abs(chi)
 
             # Define outlier conditions.
+            # TODO (wtgee) remove hard-coding.
             C1 = (absChi > 5) & (absChi < 15)
             C2 = absChi > 15
 
             # Plot scatter points for outliers.
+            # TODO (wtgee) this `color` doesn't seem to be used and should maybe be replaced with a marker.
             for C, color in zip([C1, C2], ["steelblue", "navy"]):
                 sc = ax_dict["A"].scatter(
                     [fiberId] * len(wve[C]), wve[C], c=absChi[C], vmin=5, vmax=15, cmap="viridis"
@@ -825,22 +833,24 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
         col = panel_labels[i]
 
         # Interpolate sky brightness onto a residual wavelength grid.
-        wve_sky, sky = references_sky
-        wve, flx = references_flx
-        sky = np.interp(wve, wve_sky, sky)
+        sky_wave_ref, sky_flux = references_sky
+        resid_wave_ref, resid_flux = references_flx
+        sky_flux = np.interp(resid_wave_ref, sky_wave_ref, sky_flux)
 
         chi = references_chi_median[1]
 
         # Compute ranked percentile of sky brightness.
-        ranked = np.argsort(np.argsort(sky))
+        ranked = np.argsort(np.argsort(sky_flux))
         ranked = 100 * ranked / len(ranked)
 
         # Bin residuals based on sky brightness percentiles.
         yb, xb, eb = rolling(ranked, chi, 10)
 
         # Scatter plot of residual flux vs wavelength.
-        ax_dict[col[0]].scatter(wve, flx, s=1, color=color, rasterized=True, alpha=0.7)
-        ax_dict[col[0]].plot(wve, sky / 100, color="k", linewidth=1, alpha=0.6, label="1% sky")
+        ax_dict[col[0]].scatter(resid_wave_ref, resid_flux, s=1, color=color, rasterized=True, alpha=0.7)
+        ax_dict[col[0]].plot(
+            resid_wave_ref, sky_flux / 100, color="k", linewidth=1, alpha=0.6, label="1% sky"
+        )
 
         # Scatter plot of residuals vs sky brightness percentile.
         ax_dict[col[1]].scatter(chi, ranked, s=1, color=color, rasterized=True, alpha=0.7)
@@ -852,7 +862,7 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
 
         # Set axis labels.
         ax_dict[col[0]].set_xlabel("Wavelength [nm]")
-        ax_dict[col[0]].set_ylabel("Median Counts")
+        ax_dict[col[0]].set_ylabel("Median Sky Flux Counts")
 
         ax_dict[col[1]].set_xlabel(r"Median $\chi$")
         ax_dict[col[1]].set_ylabel("Sky Counts Percentile")
@@ -957,6 +967,12 @@ def buildReference(spectra: PfsArm, func: Callable = np.mean, model: str = "resi
     The reference spectrum is constructed by applying a specified aggregation function
     (e.g., mean, median) to the selected model across all fibers.
 
+    Notes
+    -----
+    - The function extracts and aligns spectra from all fibers to a common wavelength grid.
+    - Uses interpolation to map each fiber's spectrum onto the reference wavelength array.
+    - Applies the selected aggregation function (`func`) to compute the final reference spectrum.
+
     Parameters
     ----------
     spectra : `pfs.datamodel.PfsArm`
@@ -981,12 +997,6 @@ def buildReference(spectra: PfsArm, func: Callable = np.mean, model: str = "resi
         Reference wavelength array.
     sky_ref : `numpy.ndarray`
         Aggregated reference spectrum based on the chosen model.
-
-    Notes
-    -----
-    - The function extracts and aligns spectra from all fibers to a common wavelength grid.
-    - Uses interpolation to map each fiber's spectrum onto the reference wavelength array.
-    - Applies the selected aggregation function (`func`) to compute the final reference spectrum.
     """
     # Containers for spectral data.
     x, y = [], []
@@ -1025,7 +1035,7 @@ def buildReference(spectra: PfsArm, func: Callable = np.mean, model: str = "resi
     # Interpolate all spectra to the reference wavelength grid.
     sky_ref = [np.interp(wave_ref, wave, sky) for wave, sky in zip(x, y)]
 
-    # Apply the aggregation function to compute final reference spectrum.
+    # Apply the aggregation function to compute the final reference spectrum.
     if func:
         if func == "quadrature":
             sky_ref = np.sqrt(np.sum(np.array(sky_ref) ** 2, axis=0))
@@ -1156,7 +1166,7 @@ def extractFiber(spectra: PfsArm, fiberId: int, finite: bool = True):
 
 
 @dataclass
-class Layer:
+class PlotLayer:
     version: str = "scatter"
     X: Number | List[Number] | None = None
     Y: Number | List[Number] | None = None
@@ -1191,7 +1201,7 @@ class Layer:
 
 
 def make_plot(
-    layers: Iterable[Layer],
+    layers: Iterable[PlotLayer],
     ax: Axes | None = None,
     xlabel: str | None = None,
     ylabel: str | None = None,
@@ -1222,7 +1232,7 @@ def make_plot(
     more. It also supports optional axis reversal and aspect ratio adjustments.
 
     Parameters:
-        layers (Iterable[Layer]): A collection of plot layers to be added to the
+        layers (Iterable[PlotLayer]): A collection of plot layers to be added to the
             plot. Each layer represents an individual component of the plot.
         ax (Axes | None, optional): An optional Axes instance where the plot will
             be rendered. If not provided, a new Axes will be created.
@@ -1338,7 +1348,7 @@ def get_mosaic(mosaic="A", figsize=(10, 10)):
     return fig, ax_dict
 
 
-def add_layer(ax: Axes, layer: Layer):
+def add_layer(ax: Axes, layer: PlotLayer):
     """Adds a layer to the plot based on the specified version.
 
     The bulk of the plotting options and work is done in this function.
@@ -1347,7 +1357,7 @@ def add_layer(ax: Axes, layer: Layer):
     ----------
     ax : `matplotlib.axes.Axes`
         The axes to which the layer will be added.
-    layer : `Layer`
+    layer : `PlotLayer`
         The layer object containing the data and properties for the plot.
     """
     if layer.version == "line":
