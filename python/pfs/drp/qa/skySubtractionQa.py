@@ -275,18 +275,18 @@ class SkySubtractionQaTask(PipelineTask):
             elif blockSize != subtracted_pfsArm.metadata["blockSize"]:
                 raise ValueError("Block size mismatch between arms.")
 
-        spectraDict = convertToDict(spectras)
+        spectraFibers = extractFibers(spectras)
         plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block=blockSize)
         arms = list(set(arms))
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
-        fig_1d, _ = plot_1d_spectrograph(spectraDict, plotId, arms)
+        fig_1d, _ = plot_1d_spectrograph(spectraFibers, plotId, arms)
 
         self.log.info(f"Plotting 2D spectra for arms {arms}.")
         fig_2d, _ = plot_2d_spectrograph(spectras, plotId, arms)
 
         self.log.info(f"Plotting outlier summary for arms {arms}.")
-        fig_outlier, ax_dicts = plot_outlier_summary(spectras, spectraDict, plotId, arms)
+        fig_outlier, ax_dicts = plot_outlier_summary(spectras, spectraFibers, plotId, arms)
 
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
         fig_sky_brightness, _ = plot_vs_sky_brightness(spectras, plotId, arms)
@@ -301,15 +301,16 @@ class SkySubtractionQaTask(PipelineTask):
         return Struct(skySubtractionQaPlot=pdf)
 
 
-def convertToDict(spectras: dict):
-    """
+def extractFibers(spectras: dict):
+    """Extract fiber data from PFS spectral data.
+
     Convert spectral data into a structured dictionary format.
 
     This function processes PFS spectral data and organizes it into a nested dictionary,
     where each entry corresponds to a spectrograph arm and fiber ID, storing relevant spectral
     properties such as wavelength, flux, standard deviation, sky background, and chi values.
 
-    - Uses `extractFiber` to extract spectral information for each fiber.
+    - Uses `extractFiberInfo` to extract spectral information for each fiber.
     - Each spectrograph arm has its own dictionary containing fiber-specific data.
     - If `pfsConfig` is not found in `hold`, fiber positions (`xy`, `ra_dec`) will be omitted.
 
@@ -353,7 +354,7 @@ def convertToDict(spectras: dict):
         # Process each fiber
         for iFib, fiberId in enumerate(spectra.fiberId):
             # Extract spectral data
-            wave, flux, std, sky, chi, stdPoisson, chiPoisson, C = extractFiber(
+            wave, flux, std, sky, chi, stdPoisson, chiPoisson, C = extractFiberInfo(
                 spectra, fiberId=fiberId, finite=True
             )
 
@@ -430,24 +431,24 @@ def summarizeSpectrograph(
     # Iterate over arms and generate histograms.
     for color, arm, axs in zip(plot_colors, arms, all_axs):
         spectraFibers = spectraDict[(spectrograph, arm)]
-        big_chi = []  # Store all chi values for overall distribution
         layers = []
         means = []
         stdev = []
+        big_chi = []  # Store all chi values for overall distribution
 
         # Process each fiber.
         for fib in spectraFibers.keys():
             chi = spectraFibers[fib]["chi"]
             chiPoisson = spectraFibers[fib]["chiPoisson"]
 
-            # Add a histogram layer for each fiber.
+            # DRP chi distribution per fiber.
             layers.append(
                 PlotLayer(
                     "hist", chi, color=color, alpha=alpha, linewidth=2, density=True, rnge=xlim, bins=30
                 )
             )
 
-            # Add a histogram layer for each fiber.
+            # Poisson chi distribution per fiber.
             layers.append(
                 PlotLayer(
                     "hist", chiPoisson, color="k", alpha=0.1, linewidth=2, density=True, rnge=xlim, bins=30
@@ -486,7 +487,7 @@ def summarizeSpectrograph(
 
         # Iterate over mean/median and stdev/IQR plots
         for j, x, ax, rnge in zip(range(2), [means, stdev], axs[1:], rnge_options):
-            other = [PlotLayer("vert", X=0 if j == 0 else 1, linestyle="--", zorder=10)]
+            ref_line = [PlotLayer("vert", X=0 if j == 0 else 1, linestyle="--", zorder=10)]
 
             # Generate the histogram layers for statistical metrics
             hist_layers = [
@@ -507,18 +508,14 @@ def summarizeSpectrograph(
 
             # Plot statistical metrics
             make_plot(
-                other + hist_layers,
+                ref_line + hist_layers,
                 ax_dict[ax],
                 xlim=rnge,
                 legend="A" in axs,
                 loc="upper right",
                 fontsize=fontsize,
                 title=f"Spectrograph: {spectrograph}" if ((arm == arms[0]) and (j == 0)) else None,
-                xlabel=(
-                    [r"Mean/Median $\chi$", r"Stdev/$\sigma_\mathrm{IQR}$ $\chi$"][j]
-                    if arm == arms[-1]
-                    else None
-                ),
+                xlabel=([r"$\chi$", r"$\chi$"][j] if arm == arms[-1] else None),
             )
 
         # Remove x-axis labels for non-bottom plots
@@ -1003,7 +1000,7 @@ def buildReference(spectra: PfsArm, func: Callable = np.mean, model: str = "resi
 
     # Process each fiber.
     for fiberId in spectra.fiberId:
-        wave, flux, std, sky, chi, stdPoisson, chiPoisson, C = extractFiber(
+        wave, flux, std, sky, chi, stdPoisson, chiPoisson, C = extractFiberInfo(
             spectra, fiberId=fiberId, finite=True
         )
 
@@ -1091,7 +1088,7 @@ def splitSpectraIntoReferenceAndTest(spectra: PfsArm, referenceFraction: float =
     return referenceSpectra, testSpectra
 
 
-def extractFiber(spectra: PfsArm, fiberId: int, finite: bool = True):
+def extractFiberInfo(spectra: PfsArm, fiberId: int, finite: bool = True):
     """
     Extract relevant spectral data for a specific fiber.
 
