@@ -552,7 +552,7 @@ def plot_1d_spectrograph(
     visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
 
     all_axs = ["ABC", "DEF", "GHI"][: len(arms)]
-    all_labels = ["Blue arm\n", "Red arm\n", "NIR arm\n"][: len(arms)]
+    label_lookup = {"b": "Blue", "r": "Red", "n": "NIR", "m": "Medium"}
     ax0 = [ax[0] for ax in all_axs]
 
     # Generate spectrograph summary plots.
@@ -565,8 +565,8 @@ def plot_1d_spectrograph(
     yp = scipy.stats.norm.pdf(xp, loc=0, scale=1)
 
     # Update axis labels and add Gaussian reference.
-    for ax, arm in zip(ax0, all_labels):
-        ax_dict[ax].set_ylabel(arm, fontsize=fontsize)
+    for ax, arm in zip(ax0, arms):
+        ax_dict[ax].set_ylabel(f"{label_lookup[arm]} arm", fontsize=fontsize)
         ax_dict[ax].plot(xp, yp, color="k", linewidth=4, linestyle="--")
 
     # Set title.
@@ -1337,6 +1337,7 @@ def add_layer(ax: Axes, layer: PlotLayer):
             linestyle=layer.linestyle,
             linewidth=layer.linewidth,
             histtype=layer.histtype,
+            alpha=layer.alpha,
         )
     elif layer.version == "vert":
         ax.axvline(
