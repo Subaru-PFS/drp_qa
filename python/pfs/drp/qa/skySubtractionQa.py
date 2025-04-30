@@ -264,15 +264,15 @@ class SkySubtractionQaTask(PipelineTask):
         spectras = dict()
         arms = list()
         blockSize = None
-        for pfsArm in skySubtraction_mergedSpectra:
-            spectrograph = pfsArm.identity.spectrograph
-            arm = pfsArm.identity.arm
-            visit = pfsArm.identity.visit
-            spectras[(spectrograph, arm)] = pfsArm
+        for subtracted_pfsArm in skySubtraction_mergedSpectra:
+            spectrograph = subtracted_pfsArm.identity.spectrograph
+            arm = subtracted_pfsArm.identity.arm
+            visit = subtracted_pfsArm.identity.visit
+            spectras[(spectrograph, arm)] = subtracted_pfsArm
             arms.append(arm)
             if blockSize is None:
-                blockSize = pfsArm.metadata["blockSize"]
-            elif blockSize != pfsArm.metadata["blockSize"]:
+                blockSize = subtracted_pfsArm.metadata["blockSize"]
+            elif blockSize != subtracted_pfsArm.metadata["blockSize"]:
                 raise ValueError("Block size mismatch between arms.")
 
         spectraDict = convertToDict(spectras)
@@ -1098,6 +1098,11 @@ def extractFiber(spectra: PfsArm, fiberId: int, finite: bool = True):
     This function retrieves wavelength, flux, sky background, variance, and
     computes standard deviation and chi values for the given fiber.
 
+    Notes
+    -----
+    - The function applies filtering to ensure valid data: sky > 0 and variance > 0.
+    - If `finite` is True, only valid data points are returned.
+
     Parameters
     ----------
     spectra : `pfs.datamodel.PfsArm`
@@ -1121,11 +1126,6 @@ def extractFiber(spectra: PfsArm, fiberId: int, finite: bool = True):
         Chi values computed as flux / sqrt(variance).
     C : `numpy.ndarray`
         Boolean mask indicating valid (finite) data points.
-
-    Notes
-    -----
-    - The function applies filtering to ensure valid data: sky > 0 and variance > 0.
-    - If `finite` is True, only valid data points are returned.
     """
     # Identify the index of the fiber in the spectra.
     j = spectra.fiberId == fiberId
