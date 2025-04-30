@@ -442,17 +442,11 @@ def summarizeSpectrograph(
             chiPoisson = spectraFibers[fib]["chiPoisson"]
 
             # DRP chi distribution per fiber.
-            layers.append(
-                PlotLayer(
-                    "hist", chi, color=color, alpha=alpha, linewidth=2, density=True, rnge=xlim, bins=30
-                )
-            )
+            layers.append(PlotLayer("hist", chi, color=color, alpha=alpha, linewidth=2, rnge=xlim, bins=30))
 
             # Poisson chi distribution per fiber.
             layers.append(
-                PlotLayer(
-                    "hist", chiPoisson, color="k", alpha=0.1, linewidth=2, density=True, rnge=xlim, bins=30
-                )
+                PlotLayer("hist", chiPoisson, color="k", alpha=0.1, linewidth=2, rnge=xlim, bins=30)
             )
 
             # Compute statistical metrics.
@@ -465,11 +459,7 @@ def summarizeSpectrograph(
         stdev = np.array(stdev)
 
         # Add combined chi distribution (all fibers) with a distinctive color.
-        layers.append(
-            PlotLayer(
-                "hist", big_chi, color="magenta", alpha=1, linewidth=6, density=True, rnge=xlim, bins=30
-            )
-        )
+        layers.append(PlotLayer("hist", big_chi, color="magenta", alpha=1, linewidth=6, rnge=xlim, bins=30))
 
         # Plot chi distribution.
         make_plot(
@@ -487,7 +477,7 @@ def summarizeSpectrograph(
 
         # Iterate over mean/median and stdev/IQR plots
         for j, x, ax, rnge in zip(range(2), [means, stdev], axs[1:], rnge_options):
-            ref_line = [PlotLayer("vert", X=0 if j == 0 else 1, linestyle="--", zorder=10)]
+            ref_line = [PlotLayer("vert", X=0 if j == 0 else 1, linestyle="--")]
 
             # Generate the histogram layers for statistical metrics
             hist_layers = [
@@ -496,7 +486,6 @@ def summarizeSpectrograph(
                     X=x[:, i],
                     color=color,
                     alpha=[1, 0.5][i],
-                    density=True,
                     rnge=rnge,
                     bins=30,
                     linewidth=4,
@@ -1166,35 +1155,15 @@ def extractFiberInfo(spectra: PfsArm, fiberId: int, finite: bool = True):
 class PlotLayer:
     version: str = "scatter"
     X: Number | List[Number] | None = None
-    Y: Number | List[Number] | None = None
-    Z: Number | List[Number] | None = None
-    XERR: List[Number] | None = None
-    YERR: List[Number] | None = None
     W: List[Number] | None = None
-    STR: str | None = None
     rnge: tuple[Number, Number] | None = None
     label: str | None = None
-    zlabel: str | None = None
-    capsize: float | None = None
     color: str = "k"
-    shape: str = "o"
     alpha: float = 1.0
-    zorder: float = 1.0
-    size: float | None = None
     linestyle: str = "-"
     linewidth: int = 3
-    bar: bool | None = None
-    cumulative: bool = False
     bins: str | int = "auto"
-    density: bool = False
-    contours: bool | None = None
-    smooth: int | None = None
-    bold: bool = False
-    orientation: str = "vertical"
-    step: str | None = None
     histtype: str = "step"
-    vmin: float | None = None
-    vmax: float | None = None
 
 
 def make_plot(
@@ -1360,19 +1329,14 @@ def add_layer(ax: Axes, layer: PlotLayer):
     if layer.version == "hist":
         ax.hist(
             layer.X,
-            bins=layer.bins,
-            zorder=layer.zorder,
-            density=layer.density,
-            weights=layer.W,
+            bins=30,
+            density=True,
             color=layer.color,
-            alpha=layer.alpha,
             range=layer.rnge,
             label=layer.label,
             linestyle=layer.linestyle,
             linewidth=layer.linewidth,
             histtype=layer.histtype,
-            cumulative=layer.cumulative,
-            orientation=layer.orientation,
         )
     elif layer.version == "vert":
         ax.axvline(
@@ -1382,5 +1346,5 @@ def add_layer(ax: Axes, layer: PlotLayer):
             linewidth=layer.linewidth,
             label=layer.label,
             alpha=layer.alpha,
-            zorder=layer.zorder,
+            zorder=10,
         )
