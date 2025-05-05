@@ -3,6 +3,7 @@ from numbers import Number
 from typing import Callable, Iterable, List
 
 import numpy as np
+import pandas as pd
 import scipy.stats
 from astropy.nddata import NDDataArray
 from lsst.pex.config import Field, ListField
@@ -21,6 +22,7 @@ from lsst.pipe.base.connectionTypes import (
 )
 from matplotlib import pylab as plt
 from matplotlib.axes import Axes
+from pandas import DataFrame
 from pfs.drp.stella import PfsArm, PfsConfig
 from pfs.drp.stella.fitFocalPlane import FitBlockedOversampledSplineConfig, FitBlockedOversampledSplineTask
 from pfs.drp.stella.selectFibers import SelectFibersTask
@@ -220,6 +222,13 @@ class SkySubtractionConnections(
         dimensions=("instrument", "visit", "spectrograph"),
     )
 
+    skySubtractionFiberStats = OutputConnection(
+        name="skySubtractionFiberStats",
+        doc="Sky Subtraction Fiber Statistics",
+        storageClass="DataFrame",
+        dimensions=("instrument", "visit", "spectrograph"),
+    )
+
 
 class SkySubtractionConfig(PipelineTaskConfig, pipelineConnections=SkySubtractionConnections):
     """Configuration for SkySubtractionTask"""
@@ -275,13 +284,18 @@ class SkySubtractionQaTask(PipelineTask):
             elif blockSize != subtracted_pfsArm.metadata["blockSize"]:
                 raise ValueError("Block size mismatch between arms.")
 
-        spectraFibers = extractFibers(spectras)
         plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block=blockSize)
         # Get the unique set of arms and sort them according to: b, r, n, m
         arms = sorted(set(arms), key=lambda x: ["b", "r", "n", "m"].index(x))
 
+        # Extract the information for the fibers.
+        spectraFibers = extractFibers(spectras)
+
+        # Get the stats for each arm.
+        stats = getSpectraStats(spectraFibers)
+
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
-        fig_1d, _ = plot_1d_spectrograph(spectraFibers, plotId, arms)
+        fig_1d, _ = plot_1d_spectrograph(spectraFibers, stats, plotId, arms)
 
         self.log.info(f"Plotting 2D spectra for arms {arms}.")
         fig_2d, _ = plot_2d_spectrograph(spectras, plotId, arms)
@@ -299,7 +313,49 @@ class SkySubtractionQaTask(PipelineTask):
             pdf.append(fig)
         pdf.append(fig_sky_brightness)
 
-        return Struct(skySubtractionQaPlot=pdf)
+        return Struct(skySubtractionQaPlot=pdf, skySubtractionFiberStats=stats)
+
+
+def getSpectraStats(spectraFibers: dict) -> DataFrame:
+    """Compute statistics for each arm in the spectraFibers dictionary.
+
+    This function calculates the mean, median, standard deviation, and interquartile range
+    (IQR) of the chi values for each arm in the provided spectraFibers dictionary.
+
+    Parameters
+    ----------
+    spectraFibers : `dict`
+        Dictionary containing fiber data indexed by `(spectrograph, arm)`.
+
+
+    """
+    dfs = list()
+    for spec, arm in spectraFibers.keys():
+        print(arm, spec)
+        for fiberId, data in spectraFibers[(spec, arm)].items():
+            df = pd.DataFrame(data)
+            df["fiberId"] = fiberId
+            df["arm"] = str(arm)
+            df["spectrograph"] = spec
+            dfs.append(df)
+
+    df = pd.concat(dfs)
+
+    df.fiberId = df.fiberId.astype("category")
+    df.arm = df.arm.astype("category")
+    df.spectrograph = df.spectrograph.astype("category")
+
+    stats = (
+        df.groupby(["arm", "spectrograph", "fiberId"], observed=False)
+        .chi.agg(["mean", "median", "std", getStddev])
+        .reset_index()
+    )
+    stats.rename(
+        columns={"mean": "fiberMean", "median": "fiberMedian", "std": "fiberStd", "getStddev": "fiberIQR"},
+        inplace=True,
+    )
+
+    return stats
 
 
 def extractFibers(spectras: dict):
@@ -383,9 +439,10 @@ def extractFibers(spectras: dict):
 
 
 def summarizeSpectrograph(
-    spectraDict: dict,
+    spectraFibers: dict,
+    stats: DataFrame,
     spectrograph: int,
-    arms: Iterable[str] = ("b", "r", "n"),
+    arms: Iterable[str] = ("b", "r", "n", "m"),
     fontsize: int = 25,
     xlim: tuple[int, int] = (-10, 10),
     alpha: float = 0.2,
@@ -395,12 +452,14 @@ def summarizeSpectrograph(
 
     This function generates a summary plot of sky-subtracted residuals (`chi` values)
     across different arms of the spectrograph, comparing mean, median, standard deviation,
-    and interquartile range (IQR) statistics.
+    and interquartile range (IQR) statistics provided by the `stats` DataFrame.
 
     Parameters
     ----------
-    spectraDict : `dict`
+    spectraFibers : `dict`
         Dictionary containing sky-subtraction residuals for different spectrograph arms.
+    stats : `DataFrame`
+        DataFrame containing statistics for each arm.
     spectrograph : `int`
         Spectrograph number for labeling the plots.
     arms : `tuple` of `str`, optional
@@ -430,11 +489,9 @@ def summarizeSpectrograph(
     fig, ax_dict = get_mosaic(axt, figsize=(20, 10))
 
     # Iterate over arms and generate histograms.
-    for color, arm, axs in zip(plot_colors, arms, all_axs):
-        spectraFibers = spectraDict[(spectrograph, arm)]
+    for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
+        spectraFibers = spectraFibers[(spectrograph, arm)]
         layers = []
-        means = []
-        stdev = []
         big_chi = []  # Store all chi values for overall distribution
 
         # Process each fiber.
@@ -443,7 +500,9 @@ def summarizeSpectrograph(
             chiPoisson = spectraFibers[fib]["chiPoisson"]
 
             # DRP chi distribution per fiber.
-            layers.append(PlotLayer("hist", chi, color=color, alpha=alpha, linewidth=2, rnge=xlim, bins=30))
+            layers.append(
+                PlotLayer("hist", chi, color=plot_color, alpha=alpha, linewidth=2, rnge=xlim, bins=30)
+            )
 
             # Poisson chi distribution per fiber.
             layers.append(
@@ -451,13 +510,7 @@ def summarizeSpectrograph(
             )
 
             # Compute statistical metrics.
-            means.append([np.mean(chi), np.median(chi)])
-            stdev.append([np.std(chi), getStddev(chi, useIQR=True)])
             big_chi.extend(chi)
-
-        # Convert lists to NumPy arrays for easier processing.
-        means = np.array(means)
-        stdev = np.array(stdev)
 
         # Add combined chi distribution (all fibers) with a distinctive color.
         layers.append(PlotLayer("hist", big_chi, color="magenta", alpha=1, linewidth=6, rnge=xlim, bins=30))
@@ -476,6 +529,9 @@ def summarizeSpectrograph(
         labels = [["Mean", "Median"], ["Stdev", "IQR Stdev"]]
         rnge_options = [(-3, 3), (0, 3)]  # Range for mean/median and stdev/IQR plots
 
+        means = stats.loc[stats.spectrograph == spectrograph, ["fiberMean", "fiberMedian"]].values
+        stdev = stats.loc[stats.spectrograph == spectrograph, ["fiberStd", "fiberIQR"]].values
+
         # Iterate over mean/median and stdev/IQR plots
         for j, x, ax, rnge in zip(range(2), [means, stdev], axs[1:], rnge_options):
             ref_line = [PlotLayer("vert", X=0 if j == 0 else 1, linestyle="--")]
@@ -485,7 +541,7 @@ def summarizeSpectrograph(
                 PlotLayer(
                     "hist",
                     X=x[:, i],
-                    color=color,
+                    color=plot_color,
                     alpha=[1, 0.5][i],
                     rnge=rnge,
                     bins=30,
@@ -521,7 +577,8 @@ def summarizeSpectrograph(
 
 
 def plot_1d_spectrograph(
-    spectraDict: dict,
+    spectraFibers: dict,
+    stats: DataFrame,
     plotId: dict,
     arms: List[str],
     fontsize: int = 22,
@@ -532,8 +589,10 @@ def plot_1d_spectrograph(
 
     Parameters
     ----------
-    spectraDict : `dict`
+    spectraFibers : `dict`
         Dictionary containing spectrograph data.
+    stats : `DataFrame`
+        DataFrame containing statistics for each arm.
     plotId : `dict`
         Dictionary containing plot metadata (`visit`, `spectrograph`, `block`).
     arms : `list` of `str`
@@ -558,7 +617,7 @@ def plot_1d_spectrograph(
 
     # Generate spectrograph summary plots.
     fig, ax_dict = summarizeSpectrograph(
-        spectraDict, spectrograph=spectrograph, arms=arms, fontsize=fontsize, xlim=xlim, alpha=0.5
+        spectraFibers, stats, spectrograph=spectrograph, arms=arms, fontsize=fontsize, xlim=xlim, alpha=0.5
     )
 
     # Generate Gaussian distribution.
@@ -816,7 +875,7 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
         # references_err = buildReference(testSpectra, func='quadrature', model='variance')
         references_chi_median = buildReference(testSpectra, func=np.median, model="chi")
 
-        color = arm_colors[i]
+        arm_color = arm_colors[i]
         col = panel_labels[i]
 
         # Interpolate sky brightness onto a residual wavelength grid.
@@ -834,13 +893,13 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
         yb, xb, eb = rolling(ranked, chi, 10)
 
         # Scatter plot of residual flux vs wavelength.
-        ax_dict[col[0]].scatter(resid_wave_ref, resid_flux, s=1, color=color, rasterized=True, alpha=0.7)
+        ax_dict[col[0]].scatter(resid_wave_ref, resid_flux, s=1, color=arm_color, rasterized=True, alpha=0.7)
         ax_dict[col[0]].plot(
             resid_wave_ref, sky_flux / 100, color="k", linewidth=1, alpha=0.6, label="1% sky"
         )
 
         # Scatter plot of residuals vs sky brightness percentile.
-        ax_dict[col[1]].scatter(chi, ranked, s=1, color=color, rasterized=True, alpha=0.7)
+        ax_dict[col[1]].scatter(chi, ranked, s=1, color=arm_color, rasterized=True, alpha=0.7)
         ax_dict[col[1]].errorbar(xb, yb, xerr=eb, color="k", linewidth=3)
 
         # Set axis limits.
