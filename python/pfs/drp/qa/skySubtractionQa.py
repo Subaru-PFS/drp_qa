@@ -490,14 +490,14 @@ def summarizeSpectrograph(
 
     # Iterate over arms and generate histograms.
     for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
-        spectraFibers = spectraFibers[(spectrograph, arm)]
+        fibers = spectraFibers[(spectrograph, arm)]
         layers = []
         big_chi = []  # Store all chi values for overall distribution
 
         # Process each fiber.
-        for fib in spectraFibers.keys():
-            chi = spectraFibers[fib]["chi"]
-            chiPoisson = spectraFibers[fib]["chiPoisson"]
+        for fib in fibers.keys():
+            chi = fibers[fib]["chi"]
+            chiPoisson = fibers[fib]["chiPoisson"]
 
             # DRP chi distribution per fiber.
             layers.append(
