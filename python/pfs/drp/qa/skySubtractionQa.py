@@ -486,7 +486,7 @@ def summarizeSpectrograph(
     """
     all_axs = ["ABC", "DEF", "GHI"][: len(arms)]
     axt = "\n".join(all_axs)
-    fig, ax_dict = get_mosaic(axt, figsize=(20, 10))
+    fig, ax_dict = get_mosaic(axt, figsize=(15, 10))
 
     # Iterate over arms and generate histograms.
     for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
@@ -681,7 +681,7 @@ def plot_2d_spectrograph(spectras: dict, plotId: dict, arms: List[str], binsize:
 
     # Define axis layout for the number of arms.
     axt = "ABC"[: len(arms)]
-    fig, ax_dict = get_mosaic(axt, figsize=(20, 10))
+    fig, ax_dict = get_mosaic(axt, figsize=(15, 5))
 
     # Loop through each spectral arm.
     for i, arm in enumerate(arms):
@@ -790,7 +790,7 @@ def plot_outlier_summary(
     )
 
     fig, ax = plt.subplot_mosaic("AAB", layout="constrained", sharey=True)
-    fig.set_size_inches(20, 10)
+    fig.set_size_inches(15, 5)
 
     sb.scatterplot(
         data=df.query('chi_value != "< 5"'),
@@ -849,7 +849,7 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
     panel_labels = ["".join([a[i] for a in axt.split("\n")]) for i in range(len(arms))]
 
     # Create a figure layout.
-    fig, ax_dict = get_mosaic(axt, figsize=(20, 10))
+    fig, ax_dict = get_mosaic(axt, figsize=(15, 10))
 
     # Copy and remove pfsConfig to avoid unnecessary data.
     specs = spectras.copy()
