@@ -277,7 +277,8 @@ class SkySubtractionQaTask(PipelineTask):
 
         spectraFibers = extractFibers(spectras)
         plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block=blockSize)
-        arms = list(set(arms))
+        # Get the unique set of arms and sort them according to: b, r, n, m
+        arms = sorted(set(arms), key=lambda x: ["b", "r", "n", "m"].index(x))
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
         fig_1d, _ = plot_1d_spectrograph(spectraFibers, plotId, arms)
