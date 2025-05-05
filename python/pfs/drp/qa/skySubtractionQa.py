@@ -5,6 +5,7 @@ from typing import Callable, Iterable, List
 import numpy as np
 import pandas as pd
 import scipy.stats
+import seaborn as sb
 from astropy.nddata import NDDataArray
 from lsst.pex.config import Field, ListField
 from lsst.pipe.base import (
@@ -22,6 +23,7 @@ from lsst.pipe.base.connectionTypes import (
 )
 from matplotlib import pylab as plt
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from pandas import DataFrame
 from pfs.drp.stella import PfsArm, PfsConfig
 from pfs.drp.stella.fitFocalPlane import FitBlockedOversampledSplineConfig, FitBlockedOversampledSplineTask
@@ -301,7 +303,7 @@ class SkySubtractionQaTask(PipelineTask):
         fig_2d, _ = plot_2d_spectrograph(spectras, plotId, arms)
 
         self.log.info(f"Plotting outlier summary for arms {arms}.")
-        fig_outlier, ax_dicts = plot_outlier_summary(spectras, spectraFibers, plotId, arms)
+        fig_outlier = plot_outlier_summary(spectras, spectraFibers, plotId, arms)
 
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
         fig_sky_brightness, _ = plot_vs_sky_brightness(spectras, plotId, arms)
@@ -309,8 +311,7 @@ class SkySubtractionQaTask(PipelineTask):
         pdf = MultipagePdfFigure()
         pdf.append(fig_1d)
         pdf.append(fig_2d)
-        for fig in fig_outlier:
-            pdf.append(fig)
+        pdf.append(fig_outlier)
         pdf.append(fig_sky_brightness)
 
         return Struct(skySubtractionQaPlot=pdf, skySubtractionFiberStats=stats)
@@ -331,7 +332,6 @@ def getSpectraStats(spectraFibers: dict) -> DataFrame:
     """
     dfs = list()
     for spec, arm in spectraFibers.keys():
-        print(arm, spec)
         for fiberId, data in spectraFibers[(spec, arm)].items():
             df = pd.DataFrame(data)
             df["fiberId"] = fiberId
@@ -724,98 +724,92 @@ def plot_2d_spectrograph(spectras: dict, plotId: dict, arms: List[str], binsize:
     return fig, ax_dict
 
 
-def plot_outlier_summary(spectras: dict, spectraDict: dict, plotId: dict, arms: List[str]):
+def plot_outlier_summary(
+    spectras: dict, spectraFibers: dict, plotId: dict, arms: List[str], thresholds=None
+) -> Figure:
     """
     Generate a summary plot highlighting outliers in sky subtraction residuals.
 
     This function visualizes spectral regions where the absolute chi values exceed
     predefined thresholds (5 and 15) and provides a sky model reference plot.
 
+    Notes
+    -----
+        - Uses `buildReference` to generate a median sky spectrum.
+        - Highlights outlier chi values with thresholds at 5 and 15.
+        - Uses `scatter` to visualize outliers in wavelength space.
+
     Parameters
     ----------
     spectras : `dict`
         Dictionary containing spectrograph data.
-    spectraDict : `dict`
+    spectraFibers : `dict`
         Dictionary of processed fiber data with fiber-specific residuals.
     plotId : `dict`
         Dictionary containing plot metadata (`visit`, `spectrograph`, `block`).
     arms : `list` of `str`
         List of spectral arms to be processed (e.g., ['b', 'r', 'n']).
+    thresholds : `list` of `float`, optional
+        List of thresholds for outlier detection (default: [5, 15]).
 
     Returns
     -------
-    figs : `list` of `matplotlib.figure.Figure`
-        List of generated figures for each arm.
-    ax_dicts : `list` of `dict`
-        List of dictionaries containing axis handles for each figure.
-
-    Notes
-    -----
-    - Uses `buildReference` to generate a median sky spectrum.
-    - Highlights outlier chi values with thresholds at 5 and 15.
-    - Uses `scatter` to visualize outliers in wavelength space.
+    fig : `matplotlib.figure.Figure`
+        The generated figure containing the outlier summary plot.
     """
-    visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
+    if thresholds is None:
+        thresholds = [5, 15]
+
+    threshold_low = thresholds[0]
+    threshold_high = thresholds[1]
 
     # Copy and remove pfsConfig to avoid unnecessary data.
     specs = spectras.copy()
     specs.pop("pfsConfig", None)
 
-    figs, ax_dicts = [], []
+    dfs = list()
+    for spec, arm in spectraFibers.keys():
+        for fiberId, data in spectraFibers[(spec, arm)].items():
+            df = pd.DataFrame(data)
+            df["fiberId"] = fiberId
+            df["arm"] = str(arm)
+            df["spectrograph"] = spec
+            dfs.append(df)
 
-    # Loop through each spectral arm.
-    for i, arm in enumerate(arms):
-        skySpectra = specs[(spectrograph, arm)]
-
-        # Create a figure layout.
-        fig, ax_dict = get_mosaic(
-            """
-            AAB
-            AAB
-            """,
-            figsize=(6, 4),
+    df = pd.concat(dfs)
+    df["chi_value"] = df.chi.map(
+        lambda x: (
+            f"< {threshold_low}"
+            if abs(x) < threshold_low
+            else (
+                f"> {threshold_high}"
+                if abs(x) > threshold_high
+                else f"{threshold_low} < x < {threshold_high}"
+            )
         )
+    )
 
-        # Retrieve fiber data.
-        fibers = spectraDict[(spectrograph, arm)]
+    fig, ax = plt.subplot_mosaic("AAB", layout="constrained", sharey=True)
+    fig.set_size_inches(10, 5)
 
-        # Compute sky reference spectrum.
-        wve_sky, flx_sky = buildReference(skySpectra, func=np.nanmedian, model="sky")
+    sb.scatterplot(
+        data=df.query('chi_value != "< 5"'),
+        x="fiberId",
+        y="wave",
+        hue="chi_value",
+        palette="tab10",
+        ax=ax["A"],
+    )
+    sb.move_legend(ax["A"], "lower left")
 
-        # Loop over fibers and plot outliers.
-        for fiberId, fiber in fibers.items():
-            wve, _, chi = fiber["wave"], fiber["flux"], fiber["chi"]
-            absChi = np.abs(chi)
+    for skySpectra in spectras.values():
+        sky_wavelength, sky_flux = buildReference(skySpectra, func=np.nanmedian, model="sky")
+        ax["B"].plot(sky_flux, sky_wavelength)
 
-            # Define outlier conditions.
-            # TODO (wtgee) remove hard-coding.
-            C1 = (absChi > 5) & (absChi < 15)
-            C2 = absChi > 15
+    ax["A"].set_ylabel("wavelength [nm]")
+    ax["B"].set_xlabel("flux")
 
-            # Plot scatter points for outliers.
-            # TODO (wtgee) this `color` doesn't seem to be used and should maybe be replaced with a marker.
-            for C, color in zip([C1, C2], ["steelblue", "navy"]):
-                sc = ax_dict["A"].scatter(
-                    [fiberId] * len(wve[C]), wve[C], c=absChi[C], vmin=5, vmax=15, cmap="viridis"
-                )
-
-        # Adjust plot limits.
-        ax_dict["A"].set_xlim(min(fibers.keys()) - 10, max(fibers.keys()) + 10)
-
-        # Plot the sky spectrum.
-        ax_dict["B"].plot(flx_sky, wve_sky)
-
-        # Add colorbar.
-        fig.colorbar(sc, ax=ax_dict["A"], location="top")
-
-        # Add title.
-        fig.suptitle(f"visit={visit}; SM{spectrograph}; Arm {arm}; blocksize={block}")
-
-        # Store figure and axis dictionary.
-        figs.append(fig)
-        ax_dicts.append(ax_dict)
-
-    return figs, ax_dicts
+    return fig
 
 
 def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
