@@ -106,22 +106,21 @@ class SkyArmSubtractionTask(PipelineTask):
         mergeArms_config = butlerQC.get(inputRefs.mergeArms_config)
         # Get default sky model configuration
         fitSkyModelConfig = FitBlockedOversampledSplineConfig()
-        defaultConfig = mergeArms_config.fitSkyModel.toDict()
 
-        # Update only if user provides values
-        if self.config.blockSize is not None:
-            defaultConfig["blockSize"] = self.config.blockSize
-        if self.config.rejIterations is not None:
-            defaultConfig["rejIterations"] = self.config.rejIterations
-        if self.config.rejThreshold is not None:
-            defaultConfig["rejThreshold"] = self.config.rejThreshold
-        if self.config.oversample is not None:
-            defaultConfig["oversample"] = self.config.oversample
-        if self.config.mask is not None:
-            defaultConfig["mask"] = self.config.mask
+        if hasattr(mergeArms_config, "fitSkyModel"):
+            # Update only if user provides values
+            if self.config.blockSize is not None:
+                fitSkyModelConfig.blockSize = self.config.blockSize
+            if self.config.rejIterations is not None:
+                fitSkyModelConfig.rejIterations = self.config.rejIterations
+            if self.config.rejThreshold is not None:
+                fitSkyModelConfig.rejThreshold = self.config.rejThreshold
+            if self.config.oversample is not None:
+                fitSkyModelConfig.oversample = self.config.oversample
+            if self.config.mask is not None:
+                fitSkyModelConfig.mask = self.config.mask
 
-        fitSkyModelConfig.update(**defaultConfig)
-        self.log.info("Using sky model configuration: %s", fitSkyModelConfig)
+        self.log.info(f"Using sky model configuration: {fitSkyModelConfig}")
 
         inputs = butlerQC.get(inputRefs)
         inputs["fitSkyModelConfig"] = fitSkyModelConfig
@@ -1001,7 +1000,7 @@ def getStddev(x: NDDataArray, axis: int = 0, useIQR: bool = True):
         return np.nanstd(x, axis=axis)
 
 
-def buildReference(spectra: PfsArm, func: Callable = np.mean, model: str = "residuals"):
+def buildReference(spectra: PfsArm, func: Callable | None = np.mean, model: str = "residuals"):
     """
     Build a reference spectrum by aggregating spectral data from multiple fibers.
     The reference spectrum is constructed by applying a specified aggregation function
