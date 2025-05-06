@@ -679,12 +679,12 @@ def plot_2d_spectrograph(spectras: dict, plotId: dict, arms: List[str], binsize:
     specs.pop("pfsConfig", None)
 
     # Define axis layout for the number of arms.
-    axt = "ABC"[: len(arms)]
-    fig, ax_dict = get_mosaic(axt, figsize=(15, 5))
+    axt = "A"
+    fig, ax_dict = get_mosaic(axt, figsize=(15, 5), sharey=True)
 
     # Loop through each spectral arm.
     for i, arm in enumerate(arms):
-        ax = axt[i]
+        ax = ax_dict[axt]
         skySpectra = specs[(spectrograph, arm)]
 
         # Build reference spectra.
@@ -705,19 +705,12 @@ def plot_2d_spectrograph(spectras: dict, plotId: dict, arms: List[str], binsize:
         X, Y = np.meshgrid(np.arange(len(y)), xb)
 
         # Plot 2D colormap of residuals.
-        sc = ax_dict[ax].pcolormesh(X, Y, z, vmin=-1, vmax=1, cmap="bwr")
-
-        # Configure plot labels.
-        make_plot(
-            [],
-            ax_dict[ax],
-            xlabel="Fiber Index",
-            ylabel="Wavelength [nm]" if ax == "A" else None,
-            title=f"Arm: {arm}",
-        )
+        sc = ax_dict[ax].pcolormesh(Y, X, z, vmin=-1, vmax=1, cmap="bwr")
 
     # Add colorbar and overall title.
-    fig.colorbar(sc, ax=ax_dict["A"], location="left")
+    ax_dict[axt].set_xlabel("Wavelength [nm]")
+    ax_dict[axt].set_ylabel("Wavelength [nm]")
+    fig.colorbar(sc, ax=ax_dict[axt], location="right", shrink=0.8)
     fig.suptitle(f"visit={visit}; SM{spectrograph}; blocksize={block}", fontsize=22)
 
     return fig, ax_dict
@@ -1359,11 +1352,11 @@ def make_plot(
         ax.set_aspect("equal", adjustable="box")
 
 
-def get_mosaic(mosaic="A", figsize=(10, 10)):
+def get_mosaic(mosaic="A", figsize=(10, 10), **kwargs):
     """Create a figure with a specified layout using matplotlib's subplot_mosaic."""
     mosaic = mosaic
     fig = plt.figure(constrained_layout=True, figsize=figsize)
-    ax_dict = fig.subplot_mosaic(mosaic)
+    ax_dict = fig.subplot_mosaic(mosaic, **kwargs)
     return fig, ax_dict
 
 
