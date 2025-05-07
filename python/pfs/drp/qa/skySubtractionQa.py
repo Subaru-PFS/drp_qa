@@ -618,9 +618,10 @@ def plot_1d_spectrograph(
         ax_dict[ax].plot(xp, yp, color="k", linewidth=4, linestyle="--")
 
     # Set title.
-    ax_dict["A"].set_title("Chi histograms")
-    ax_dict["B"].set_title("Mean and Median Chi")
-    ax_dict["C"].set_title("Stddev and IQR Chi")
+    fig.suptitle("Chi distributions for sky fibers")
+    ax_dict["A"].set_title("Histogram")
+    ax_dict["B"].set_title("Mean and Median")
+    ax_dict["C"].set_title("Stddev and IQR")
 
     # Add legend.
     ax_dict["A"].plot([], [], color=arm_colors[0], label="DRP")
@@ -702,14 +703,12 @@ def plot_2d_spectrograph(spectras: dict, plotId: dict, arms: List[str], binsize:
     ax_dict[axt].set_xlabel("Wavelength [nm]")
     ax_dict[axt].set_ylabel("Wavelength [nm]")
     fig.colorbar(sc, ax=ax_dict[axt], location="right", shrink=0.8)
-    fig.suptitle(f"visit={visit}; SM{spectrograph}; blocksize={block}", fontsize=22)
+    fig.suptitle("Sky fiber chi values")
 
     return fig, ax_dict
 
 
-def plot_outlier_summary(
-    spectras: dict, spectraFibers: dict, plotId: dict, arms: List[str], thresholds=None
-) -> Figure:
+def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -> Figure:
     """
     Generate a summary plot highlighting outliers in sky subtraction residuals.
 
@@ -728,10 +727,6 @@ def plot_outlier_summary(
         Dictionary containing spectrograph data.
     spectraFibers : `dict`
         Dictionary of processed fiber data with fiber-specific residuals.
-    plotId : `dict`
-        Dictionary containing plot metadata (`visit`, `spectrograph`, `block`).
-    arms : `list` of `str`
-        List of spectral arms to be processed (e.g., ['b', 'r', 'n']).
     thresholds : `list` of `float`, optional
         List of thresholds for outlier detection (default: [5, 15]).
 
@@ -784,7 +779,8 @@ def plot_outlier_summary(
         ax=ax["CHI"],
     )
     sb.move_legend(ax["CHI"], "lower left")
-    ax["CHI"].set_ylabel("wavelength [nm]")
+    ax["CHI"].set_ylabel("Fiber ID")
+    ax["CHI"].set_xlabel("Wavelength [nm]")
     ax["CHI"].set_title("Chi outliers")
     ax["CHI"].grid(True, alpha=0.25)
 
@@ -793,9 +789,10 @@ def plot_outlier_summary(
         ax["SKY"].plot(sky_wavelength, sky_flux)
 
     ax["SKY"].set_yscale("log")
-    ax["SKY"].set_xlabel("flux")
     ax["SKY"].set_title("Median sky flux")
     ax["SKY"].grid(True, alpha=0.25)
+
+    fig.suptitle("Sky fiber chi outliers")
 
     return fig
 
@@ -806,6 +803,12 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
 
     This function visualizes the relationship between median residual flux
     and sky brightness percentile, as well as how residuals change with wavelength.
+
+    Notes
+    -----
+    - Uses `splitSpectraIntoReferenceAndTest` to separate reference and test spectra.
+    - Compares sky brightness and residuals across different wavelengths.
+    - Uses `rolling` to compute binned statistics of residuals versus sky brightness percentile.
 
     Parameters
     ----------
@@ -822,22 +825,11 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
         Generated figure containing subplots.
     ax_dict : `dict`
         Dictionary containing axis handles.
-
-    Notes
-    -----
-    - Uses `splitSpectraIntoReferenceAndTest` to separate reference and test spectra.
-    - Compares sky brightness and residuals across different wavelengths.
-    - Uses `rolling` to compute binned statistics of residuals versus sky brightness percentile.
     """
     visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
 
-    # Define panel layout dynamically based on arms.
-    axt = [t[: len(arms)] for t in ["ABC", "DEF"]]
-    axt = "\n".join(axt)
-    panel_labels = ["".join([a[i] for a in axt.split("\n")]) for i in range(len(arms))]
-
     # Create a figure layout.
-    fig, ax_dict = get_mosaic(axt, figsize=(15, 10))
+    fig, ax_dict = get_mosaic([["RESIDUALS"], ["SKY_PERCENTILE"]], figsize=(15, 10))
 
     # Copy and remove pfsConfig to avoid unnecessary data.
     specs = spectras.copy()
@@ -853,16 +845,15 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
 
         # Compute reference and test statistics.
         references_sky = buildReference(referenceSpectra, func=np.nanmedian, model="none")
-        references_flx = buildReference(testSpectra, func=np.median, model="residuals")
+        residual_flux = buildReference(testSpectra, func=np.median, model="residuals")
         # references_err = buildReference(testSpectra, func='quadrature', model='variance')
         references_chi_median = buildReference(testSpectra, func=np.median, model="chi")
 
         arm_color = arm_colors[i]
-        col = panel_labels[i]
 
         # Interpolate sky brightness onto a residual wavelength grid.
         sky_wave_ref, sky_flux = references_sky
-        resid_wave_ref, resid_flux = references_flx
+        resid_wave_ref, resid_flux = residual_flux
         sky_flux = np.interp(resid_wave_ref, sky_wave_ref, sky_flux)
 
         chi = references_chi_median[1]
@@ -875,32 +866,34 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
         yb, xb, eb = rolling(ranked, chi, 10)
 
         # Scatter plot of residual flux vs wavelength.
-        ax_dict[col[0]].scatter(resid_wave_ref, resid_flux, s=1, color=arm_color, rasterized=True, alpha=0.7)
-        ax_dict[col[0]].plot(
+        ax_dict["RESIDUALS"].scatter(
+            resid_wave_ref, resid_flux, s=1, color=arm_color, rasterized=True, alpha=0.7
+        )
+        ax_dict["RESIDUALS"].plot(
             resid_wave_ref, sky_flux / 100, color="k", linewidth=1, alpha=0.6, label="1% sky"
         )
 
         # Scatter plot of residuals vs sky brightness percentile.
-        ax_dict[col[1]].scatter(chi, ranked, s=1, color=arm_color, rasterized=True, alpha=0.7)
-        ax_dict[col[1]].errorbar(xb, yb, xerr=eb, color="k", linewidth=3)
+        ax_dict["SKY_PERCENTILE"].scatter(chi, ranked, s=1, color=arm_color, rasterized=True, alpha=0.7)
+        ax_dict["SKY_PERCENTILE"].errorbar(xb, yb, xerr=eb, color="k", linewidth=3)
 
         # Set axis limits.
-        ax_dict[col[0]].set_ylim(-100, 100)
-        ax_dict[col[1]].set_xlim(-0.5, 0.5)
+        ax_dict["RESIDUALS"].set_ylim(-100, 100)
+        ax_dict["SKY_PERCENTILE"].set_xlim(-0.5, 0.5)
 
         # Set axis labels.
-        ax_dict[col[0]].set_xlabel("Wavelength [nm]")
-        ax_dict[col[0]].set_ylabel("Median Sky Flux Counts")
+        ax_dict["RESIDUALS"].set_xlabel("Wavelength [nm]")
+        ax_dict["RESIDUALS"].set_ylabel("Median Sky Flux Counts")
 
-        ax_dict[col[1]].set_xlabel(r"Median $\chi$")
-        ax_dict[col[1]].set_ylabel("Sky Counts Percentile")
+        ax_dict["SKY_PERCENTILE"].set_xlabel(r"Median $\chi$")
+        ax_dict["SKY_PERCENTILE"].set_ylabel("Sky Counts Percentile")
 
         # Add reference lines.
-        ax_dict[col[1]].axvline(0, linestyle="--", color="k")
-        ax_dict[col[0]].axhline(0, linestyle="--", color="k")
+        ax_dict["SKY_PERCENTILE"].axvline(0, linestyle="--", color="k")
+        ax_dict["RESIDUALS"].axhline(0, linestyle="--", color="k")
 
     # Add legend and title.
-    ax_dict["A"].legend()
+    ax_dict["RESIDUALS"].legend()
     fig.suptitle(f"visit={visit}; SM{spectrograph}; blocksize={block}")
 
     return fig, ax_dict
