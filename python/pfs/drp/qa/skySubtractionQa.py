@@ -829,7 +829,7 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
     visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
 
     # Create a figure layout.
-    fig, ax_dict = get_mosaic([["RESIDUALS"], ["SKY_PERCENTILE"]], figsize=(15, 10))
+    fig, ax_dict = get_mosaic([["RESIDUALS"], ["SKY_0", "SKY_1", "SKY_2"]], figsize=(15, 10))
 
     # Copy and remove pfsConfig to avoid unnecessary data.
     specs = spectras.copy()
@@ -874,21 +874,19 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
         )
 
         # Scatter plot of residuals vs sky brightness percentile.
-        ax_dict["SKY_PERCENTILE"].scatter(chi, ranked, s=1, color=arm_color, rasterized=True, alpha=0.7)
-        ax_dict["SKY_PERCENTILE"].errorbar(
-            xb, yb, xerr=eb, capsize=10, capthick=3, color=arm_color, linewidth=3
-        )
+        ax_dict[f"SKY_{i}"].scatter(chi, ranked, s=1, color=arm_color, rasterized=True, alpha=0.7)
+        ax_dict[f"SKY_{i}"].errorbar(xb, yb, xerr=eb, capsize=10, capthick=3, color=arm_color, linewidth=3)
 
         # Set axis limits.
         ax_dict["RESIDUALS"].set_ylim(-100, 100)
-        ax_dict["SKY_PERCENTILE"].set_xlim(-0.5, 0.5)
+        ax_dict[f"SKY_{i}"].set_xlim(-0.5, 0.5)
 
         # Set axis labels.
         ax_dict["RESIDUALS"].set_xlabel("Wavelength [nm]")
         ax_dict["RESIDUALS"].set_ylabel("Median Sky Flux Counts")
 
-        ax_dict["SKY_PERCENTILE"].set_xlabel(r"Median $\chi$")
-        ax_dict["SKY_PERCENTILE"].set_ylabel("Sky Counts Percentile")
+        ax_dict[f"SKY_{i}"].set_xlabel(r"Median $\chi$")
+        ax_dict[f"SKY_{i}"].set_ylabel("Sky Counts Percentile")
 
         # Add reference lines.
         ax_dict["SKY_PERCENTILE"].axvline(0, linestyle="--", color="k")
