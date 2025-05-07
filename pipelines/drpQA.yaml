@@ -8,8 +8,6 @@ tasks:
     class: pfs.drp.qa.extractionQa.ExtractionQaTask
   fluxCalQa:
     class: pfs.drp.qa.fluxCalQa.FluxCalQaTask
-  fiberNormsQa:
-    class: pfs.drp.qa.fiberNormsQa.FiberNormQaTask
   skyArmSubtractionQa:
     class: pfs.drp.qa.skySubtractionQa.SkyArmSubtractionTask
   skySubtractionQa:
