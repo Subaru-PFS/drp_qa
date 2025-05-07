@@ -867,15 +867,15 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
 
         # Scatter plot of residual flux vs wavelength.
         ax_dict["RESIDUALS"].scatter(
-            resid_wave_ref, resid_flux, s=1, color=arm_color, rasterized=True, alpha=0.7
+            resid_wave_ref, resid_flux, s=3, color=arm_color, rasterized=True, alpha=0.7
         )
         ax_dict["RESIDUALS"].plot(
             resid_wave_ref, sky_flux / 100, color="k", linewidth=1, alpha=0.3, label="1% sky", zorder=-100
         )
 
         # Scatter plot of residuals vs sky brightness percentile.
-        ax_dict["SKY_PERCENTILE"].scatter(chi, ranked, s=4, color=arm_color, rasterized=True, alpha=0.7)
-        ax_dict["SKY_PERCENTILE"].errorbar(xb, yb, xerr=eb, capsize=2, color=arm_color, linewidth=3)
+        ax_dict["SKY_PERCENTILE"].scatter(chi, ranked, s=1, color=arm_color, rasterized=True, alpha=0.7)
+        ax_dict["SKY_PERCENTILE"].errorbar(xb, yb, xerr=eb, capsize=10, color=arm_color, linewidth=3)
 
         # Set axis limits.
         ax_dict["RESIDUALS"].set_ylim(-100, 100)
