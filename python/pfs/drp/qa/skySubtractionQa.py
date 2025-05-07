@@ -891,7 +891,7 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
         ax_dict[f"SKY_{i}"].set_ylabel("Sky Counts Percentile")
 
         # Add reference lines.
-        ax_dict["SKY_PERCENTILE"].axvline(0, linestyle="--", color="k")
+        ax_dict[f"SKY_{i}"].axvline(0, linestyle="--", color="k")
         ax_dict["RESIDUALS"].axhline(0, linestyle="--", color="k")
 
     fig.suptitle("Residual flux and 1% sky spectra reference")
