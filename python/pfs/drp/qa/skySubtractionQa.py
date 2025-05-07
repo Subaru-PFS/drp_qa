@@ -781,25 +781,30 @@ def plot_outlier_summary(
         )
     )
 
-    fig, ax = plt.subplot_mosaic("AAB", layout="constrained", sharey=True)
+    fig, ax = plt.subplot_mosaic([["SKY"], ["CHI"]], sharex=True, layout="constrained")
     fig.set_size_inches(15, 5)
 
     sb.scatterplot(
         data=df.query('chi_value != "< 5"'),
-        x="fiberId",
-        y="wave",
+        x="wave",
+        y="fiberId",
         hue="chi_value",
         palette="tab10",
-        ax=ax["A"],
+        ax=ax["CHI"],
     )
-    sb.move_legend(ax["A"], "lower left")
+    sb.move_legend(ax["CHI"], "lower left")
+    ax["CHI"].set_ylabel("wavelength [nm]")
+    ax["CHI"].set_title("Chi outliers")
+    ax["CHI"].grid(True, alpha=0.25)
 
     for skySpectra in spectras.values():
         sky_wavelength, sky_flux = buildReference(skySpectra, func=np.nanmedian, model="sky")
-        ax["B"].plot(sky_flux, sky_wavelength)
+        ax["SKY"].plot(sky_flux, sky_wavelength)
 
-    ax["A"].set_ylabel("wavelength [nm]")
-    ax["B"].set_xlabel("flux")
+    ax["SKY"].set_yscale("log")
+    ax["SKY"].set_xlabel("flux")
+    ax["SKY"].set_title("Median sky flux")
+    ax["SKY"].grid(True, alpha=0.25)
 
     return fig
 
