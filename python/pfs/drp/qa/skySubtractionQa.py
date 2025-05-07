@@ -442,9 +442,7 @@ def summarizeSpectrograph(
     stats: DataFrame,
     spectrograph: int,
     arms: Iterable[str] = ("b", "r", "n", "m"),
-    fontsize: int = 25,
     xlim: tuple[int, int] = (-10, 10),
-    alpha: float = 0.2,
 ):
     """
     Summarize spectrograph sky subtraction residuals using chi distributions.
@@ -463,12 +461,8 @@ def summarizeSpectrograph(
         Spectrograph number for labeling the plots.
     arms : `tuple` of `str`, optional
         List of arms to include in the analysis (default: ('b', 'r', 'n')).
-    fontsize : `int`, optional
-        Font size for labels and titles (default: 25).
     xlim : `tuple` of `int`, optional
         X-axis limits for the histograms (default: (-10, 10)).
-    alpha : `float`, optional
-        Transparency level for histogram layers (default: 0.2).
 
     Returns
     -------
@@ -500,7 +494,7 @@ def summarizeSpectrograph(
 
             # DRP chi distribution per fiber.
             layers.append(
-                PlotLayer("hist", chi, color=plot_color, alpha=alpha, linewidth=2, rnge=xlim, bins=30)
+                PlotLayer("hist", chi, color=plot_color, alpha=0.5, linewidth=2, rnge=xlim, bins=30)
             )
 
             # Poisson chi distribution per fiber.
@@ -521,7 +515,6 @@ def summarizeSpectrograph(
             xlim=xlim,
             xlabel=r"$\chi$" if arm == arms[-1] else None,
             ylabel=f"Arm: {arm}\nPDF",
-            fontsize=fontsize,
         )
 
         # Labels for statistics
@@ -558,7 +551,6 @@ def summarizeSpectrograph(
                 xlim=rnge,
                 legend="A" in axs,
                 loc="upper right",
-                fontsize=fontsize,
                 title=f"Spectrograph: {spectrograph}" if ((arm == arms[0]) and (j == 0)) else None,
                 xlabel=([r"$\chi$", r"$\chi$"][j] if arm == arms[-1] else None),
             )
@@ -580,7 +572,6 @@ def plot_1d_spectrograph(
     stats: DataFrame,
     plotId: dict,
     arms: List[str],
-    fontsize: int = 22,
     xlim: tuple[int, int] = (-5, 5),
 ):
     """
@@ -596,8 +587,6 @@ def plot_1d_spectrograph(
         Dictionary containing plot metadata (`visit`, `spectrograph`, `block`).
     arms : `list` of `str`
         List of spectral arms (e.g., ['b', 'r', 'n']).
-    fontsize : `int`, optional
-        Font size for labels and titles (default: 22).
     xlim : `tuple` of `int`, optional
         X-axis limits for the plots (default: (-5, 5)).
 
@@ -616,7 +605,7 @@ def plot_1d_spectrograph(
 
     # Generate spectrograph summary plots.
     fig, ax_dict = summarizeSpectrograph(
-        spectraFibers, stats, spectrograph=spectrograph, arms=arms, fontsize=fontsize, xlim=xlim, alpha=0.5
+        spectraFibers, stats, spectrograph=spectrograph, arms=arms, xlim=xlim
     )
 
     # Generate Gaussian distribution.
@@ -625,18 +614,20 @@ def plot_1d_spectrograph(
 
     # Update axis labels and add Gaussian reference.
     for ax, arm in zip(ax0, arms):
-        ax_dict[ax].set_ylabel(f"{label_lookup[arm]} arm", fontsize=fontsize)
+        ax_dict[ax].set_ylabel(f"{label_lookup[arm]} arm")
         ax_dict[ax].plot(xp, yp, color="k", linewidth=4, linestyle="--")
 
     # Set title.
-    ax_dict["B"].set_title(f"visit={visit}; SM{spectrograph}; blocksize={block}", fontsize=fontsize)
+    ax_dict["A"].set_title("Chi histograms")
+    ax_dict["B"].set_title("Mean and Median Chi")
+    ax_dict["C"].set_title("Stddev and IQR Chi")
 
     # Add legend.
     ax_dict["A"].plot([], [], color=arm_colors[0], label="DRP")
     ax_dict["A"].plot([], [], color="magenta", label="Combined DRP")
     ax_dict["A"].plot([], [], color="k", label="Using Poisson errors")
 
-    ax_dict["A"].legend(fontsize=fontsize * 0.6, loc="upper left")
+    ax_dict["A"].legend(loc="upper left")
 
     return fig, ax_dict
 
