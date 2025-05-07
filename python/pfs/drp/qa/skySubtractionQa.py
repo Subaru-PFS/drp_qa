@@ -799,7 +799,7 @@ def plot_outlier_summary(
 
     for skySpectra in spectras.values():
         sky_wavelength, sky_flux = buildReference(skySpectra, func=np.nanmedian, model="sky")
-        ax["SKY"].plot(sky_flux, sky_wavelength)
+        ax["SKY"].plot(sky_wavelength, sky_flux)
 
     ax["SKY"].set_yscale("log")
     ax["SKY"].set_xlabel("flux")
