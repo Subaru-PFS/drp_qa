@@ -874,7 +874,7 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
         )
 
         # Scatter plot of residuals vs sky brightness percentile.
-        ax_dict["SKY_PERCENTILE"].scatter(chi, ranked, s=2, color=arm_color, rasterized=True, alpha=0.7)
+        ax_dict["SKY_PERCENTILE"].scatter(chi, ranked, s=4, color=arm_color, rasterized=True, alpha=0.7)
         ax_dict["SKY_PERCENTILE"].errorbar(xb, yb, xerr=eb, capsize=2, color=arm_color, linewidth=3)
 
         # Set axis limits.
