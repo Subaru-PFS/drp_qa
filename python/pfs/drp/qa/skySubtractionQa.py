@@ -705,7 +705,7 @@ def plot_2d_spectrograph(spectras: dict, plotId: dict, arms: List[str], binsize:
         X, Y = np.meshgrid(np.arange(len(y)), xb)
 
         # Plot 2D colormap of residuals.
-        sc = ax_dict[ax].pcolormesh(Y, X, z, vmin=-1, vmax=1, cmap="bwr")
+        sc = ax.pcolormesh(Y, X, z, vmin=-1, vmax=1, cmap="bwr")
 
     # Add colorbar and overall title.
     ax_dict[axt].set_xlabel("Wavelength [nm]")
