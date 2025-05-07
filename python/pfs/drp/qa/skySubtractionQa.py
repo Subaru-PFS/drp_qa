@@ -619,9 +619,9 @@ def plot_1d_spectrograph(
 
     # Set title.
     fig.suptitle("Chi distributions for sky fibers")
-    ax_dict["A"].set_title("Histogram")
-    ax_dict["B"].set_title("Mean and Median")
-    ax_dict["C"].set_title("Stddev and IQR")
+    ax_dict["A"].set_title("Chi Histogram")
+    ax_dict["B"].set_title("Mean and Median Chi")
+    ax_dict["C"].set_title("Stddev and IQR Chi")
 
     # Add legend.
     ax_dict["A"].plot([], [], color=arm_colors[0], label="DRP")
@@ -867,7 +867,7 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
 
         # Scatter plot of residual flux vs wavelength.
         ax_dict["RESIDUALS"].scatter(
-            resid_wave_ref, resid_flux, s=3, color=arm_color, rasterized=True, alpha=0.7
+            resid_wave_ref, resid_flux, s=3, color=arm_color, rasterized=True, alpha=0.9
         )
         ax_dict["RESIDUALS"].plot(
             resid_wave_ref, sky_flux / 100, color="k", linewidth=1, alpha=0.3, label="1% sky", zorder=-100
@@ -875,7 +875,9 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
 
         # Scatter plot of residuals vs sky brightness percentile.
         ax_dict["SKY_PERCENTILE"].scatter(chi, ranked, s=1, color=arm_color, rasterized=True, alpha=0.7)
-        ax_dict["SKY_PERCENTILE"].errorbar(xb, yb, xerr=eb, capsize=10, color=arm_color, linewidth=3)
+        ax_dict["SKY_PERCENTILE"].errorbar(
+            xb, yb, xerr=eb, capsize=10, capthick=3, color=arm_color, linewidth=3
+        )
 
         # Set axis limits.
         ax_dict["RESIDUALS"].set_ylim(-100, 100)
@@ -892,9 +894,7 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
         ax_dict["SKY_PERCENTILE"].axvline(0, linestyle="--", color="k")
         ax_dict["RESIDUALS"].axhline(0, linestyle="--", color="k")
 
-    # Add legend and title.
-    ax_dict["RESIDUALS"].legend()
-    fig.suptitle(f"visit={visit}; SM{spectrograph}; blocksize={block}")
+    fig.suptitle("Residual flux and 1% sky spectra reference")
 
     return fig, ax_dict
 
