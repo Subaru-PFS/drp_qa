@@ -302,7 +302,7 @@ class SkySubtractionQaTask(PipelineTask):
         fig_2d, _ = plot_2d_spectrograph(spectras, plotId, arms)
 
         self.log.info(f"Plotting outlier summary for arms {arms}.")
-        fig_outlier = plot_outlier_summary(spectras, spectraFibers, plotId, arms)
+        fig_outlier = plot_outlier_summary(spectras, spectraFibers)
 
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
         fig_sky_brightness, _ = plot_vs_sky_brightness(spectras, plotId, arms)
