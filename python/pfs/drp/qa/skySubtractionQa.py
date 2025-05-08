@@ -23,6 +23,7 @@ from lsst.pipe.base.connectionTypes import (
 )
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pandas import DataFrame
 from pfs.drp.stella import PfsArm, PfsConfig
 from pfs.drp.stella.fitFocalPlane import FitBlockedOversampledSplineConfig, FitBlockedOversampledSplineTask
@@ -702,7 +703,9 @@ def plot_2d_spectrograph(
     ax.set_xlabel("Wavelength [nm]")
     ax.set_ylabel("Fiber ID")
     if sc is not None:
-        fig.colorbar(sc, ax=ax, location="bottom", shrink=0.8)
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("bottom", size="3%", pad=0.05)
+        fig.colorbar(sc, cax=cax, orientation="horizontal")
     fig.suptitle(f"Sky fiber chi rolling median {binsize=}")
 
     return fig
