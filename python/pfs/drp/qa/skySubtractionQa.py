@@ -259,18 +259,21 @@ class SkySubtractionQaTask(PipelineTask):
             # Store the results if valid.
             butlerQC.put(outputs, outputRefs)
 
-    def run(self, skySubtraction_mergedSpectra: Iterable[PfsArm], **kwargs) -> Struct:
+    def run(self, skySubtraction_mergedSpectra: Iterable[PfsArm], make_pdf: bool = True, **kwargs) -> Struct:
         """Perform QA on sky subtraction.
 
         Parameters
         ----------
         skySubtraction_mergedSpectra : `Iterable[pfs.drp.stella.PfsArm]`
             The input PfsArm data.
+        make_pdf : `bool`, optional
+            If True, generate a PDF with the plots. Default is True,
+            otherwise return all plot figures.
 
         Returns
         -------
         Struct
-            A struct containing the plots.
+            A struct containing the plots if `store_results` is True else None.
         """
         spectras = dict()
         arms = list()
@@ -308,13 +311,29 @@ class SkySubtractionQaTask(PipelineTask):
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
         fig_sky_brightness = plot_vs_sky_brightness(spectras)
 
-        pdf = MultipagePdfFigure()
-        pdf.append(fig_1d)
-        pdf.append(fig_2d)
-        pdf.append(fig_outlier)
-        pdf.append(fig_sky_brightness)
+        results = Struct(
+            skySubtractionFiberStats=stats,
+        )
 
-        return Struct(skySubtractionQaPlot=pdf, skySubtractionFiberStats=stats)
+        if make_pdf:
+            # Create a PDF with all the plots.
+            pdf = MultipagePdfFigure()
+            pdf.append(fig_1d)
+            pdf.append(fig_2d)
+            pdf.append(fig_outlier)
+            pdf.append(fig_sky_brightness)
+
+            results.skySubtractionQaPlot = pdf
+        else:
+            # Store the figures in the results struct.
+            results.skySubtractionQaPlot = {
+                "1d": fig_1d,
+                "2d": fig_2d,
+                "outlier": fig_outlier,
+                "sky_brightness": fig_sky_brightness,
+            }
+
+        return results
 
 
 def getSpectraStats(spectraFibers: dict) -> DataFrame:
