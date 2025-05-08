@@ -738,10 +738,10 @@ def plot_2d_spectrograph(
     if sc is not None:
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("bottom", size="5%", pad=0.5)
-        fig.colorbar(sc, cax=cax, orientation="horizontal", extend="both", label="chi value")
+        cbar = fig.colorbar(sc, cax=cax, orientation="horizontal", extend="both", label="chi value")
     fig.suptitle(f"Sky fiber chi rolling median {binsize=}", fontsize=16)
 
-    # Turn off ticks
+    # Turn off ticks for axes and colorbar.
     ax.tick_params(axis="both", which="both", bottom=False, top=False, left=False, right=False)
 
     return fig
