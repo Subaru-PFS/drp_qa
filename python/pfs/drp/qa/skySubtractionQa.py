@@ -688,9 +688,8 @@ def plot_2d_spectrograph(
     specs.pop("pfsConfig", None)
 
     # Define axis layout for the number of arms.
-    fig = Figure()
+    fig = Figure(layout="constrained", figsize=(15, 5))
     ax = fig.add_subplot(111)
-    fig.set_size_inches(15, 5)
 
     # Loop through each spectral arm.
     sc = None
