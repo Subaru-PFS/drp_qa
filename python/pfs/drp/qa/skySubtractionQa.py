@@ -695,7 +695,7 @@ def plot_2d_spectrograph(
 
         # Plot 2D colormap of residuals.
         if lims is None:
-            lims = (None, None)
+            lims = (-1, 1)
 
         sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap="RdBu_r")
 
@@ -705,7 +705,7 @@ def plot_2d_spectrograph(
     if sc is not None:
         divider = make_axes_locatable(ax)
         cax = divider.append_axes("bottom", size="3%", pad=0.05)
-        fig.colorbar(sc, cax=cax, orientation="horizontal")
+        fig.colorbar(sc, cax=cax, orientation="horizontal", extend="both")
     fig.suptitle(f"Sky fiber chi rolling median {binsize=}")
 
     return fig
