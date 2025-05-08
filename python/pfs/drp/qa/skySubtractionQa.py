@@ -306,7 +306,7 @@ class SkySubtractionQaTask(PipelineTask):
         fig_2d = plot_2d_spectrograph(spectras)
 
         self.log.info(f"Plotting outlier summary for arms {arms}.")
-        fig_outlier = plot_outlier_summary(spectras, stats)
+        fig_outlier = plot_outlier_summary(spectras, spectraFibers)
 
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
         fig_sky_brightness = plot_vs_sky_brightness(spectras)
@@ -370,7 +370,12 @@ def getSpectraStats(spectraFibers: dict) -> DataFrame:
         .reset_index()
     )
     stats.rename(
-        columns={"mean": "fiberMean", "median": "fiberMedian", "std": "fiberStd", "getStddev": "fiberIQR"},
+        columns={
+            "mean": "fiberChiMean",
+            "median": "fiberChiMedian",
+            "std": "fiberChiStd",
+            "getStddev": "fiberChiIQR",
+        },
         inplace=True,
     )
 
@@ -543,8 +548,8 @@ def summarizeSpectrograph(
         labels = [["Mean", "Median"], ["Stddev", "IQR Stddev"]]
         rnge_options = [(-3, 3), (0, 3)]  # Range for mean/median and stddev/IQR plots
 
-        means = stats.loc[stats.spectrograph == spectrograph, ["fiberMean", "fiberMedian"]].values
-        stdev = stats.loc[stats.spectrograph == spectrograph, ["fiberStd", "fiberIQR"]].values
+        means = stats.loc[stats.spectrograph == spectrograph, ["fiberChiMean", "fiberChiMedian"]].values
+        stdev = stats.loc[stats.spectrograph == spectrograph, ["fiberChiStd", "fiberChiIQR"]].values
 
         # Iterate over mean/median and stdev/IQR plots
         for j, x, ax, rnge in zip(range(2), [means, stdev], all_axs[i][1:], rnge_options):
@@ -726,7 +731,7 @@ def plot_2d_spectrograph(
     return fig
 
 
-def plot_outlier_summary(spectras: dict, stats: DataFrame, thresholds=None) -> Figure:
+def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -> Figure:
     """
     Generate a summary plot highlighting outliers in sky subtraction residuals.
 
@@ -743,8 +748,8 @@ def plot_outlier_summary(spectras: dict, stats: DataFrame, thresholds=None) -> F
     ----------
     spectras : `dict`
         Dictionary containing spectrograph data.
-    stats : `DataFrame`
-        DataFrame containing statistics for each arm.
+    spectraFibers : `dict`
+        Dictionary containing fiber data.
     thresholds : `list` of `float`, optional
         List of thresholds for outlier detection (default: [5, 15]).
 
@@ -763,7 +768,18 @@ def plot_outlier_summary(spectras: dict, stats: DataFrame, thresholds=None) -> F
     specs = spectras.copy()
     specs.pop("pfsConfig", None)
 
-    stats["chi_value"] = stats.chi.map(
+    dfs = list()
+    for spec, arm in spectraFibers.keys():
+        for fiberId, data in spectraFibers[(spec, arm)].items():
+            df = pd.DataFrame(data)
+            df["fiberId"] = fiberId
+            df["arm"] = str(arm)
+            df["spectrograph"] = spec
+            dfs.append(df)
+
+    df = pd.concat(dfs)
+
+    df["chi_value"] = df.chi.map(
         lambda x: (
             f"< {threshold_low}"
             if abs(x) < threshold_low
@@ -779,7 +795,7 @@ def plot_outlier_summary(spectras: dict, stats: DataFrame, thresholds=None) -> F
     fig.set_size_inches(15, 5)
 
     sb.scatterplot(
-        data=stats.query('chi_value != "< 5"'),
+        data=df.query(f'chi_value != "< {threshold_low}"'),
         x="wave",
         y="fiberId",
         hue="chi_value",
