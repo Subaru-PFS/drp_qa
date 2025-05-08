@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from numbers import Number
 from typing import Callable, Iterable, List
 
+import matplotlib
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
 import scipy.stats
@@ -31,20 +33,32 @@ from pfs.drp.stella.selectFibers import SelectFibersTask
 from pfs.drp.stella.subtractSky1d import subtractSky1d
 
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
-from pfs.drp.qa.utils.plotting import detector_palette
+from pfs.drp.qa.utils.plotting import detector_palette, div_palette
 
-arm_colors = ["steelblue", "firebrick", "darkgoldenrod"]
-plot_colors = [
-    "#1f77b4",
-    "#ff7f0e",
-    "#2ca02c",
-    "#d62728",
-    "#9467bd",
-    "#8c564b",
-    "#e377c2",
-    "#7f7f7f",
-    "#bcbd22",
-]
+matplotlib.rcParams["font.serif"] = "DejaVu Serif"
+matplotlib.rcParams["font.family"] = "serif"
+matplotlib.rcParams["mathtext.fontset"] = "dejavuserif"
+matplotlib.rcParams["axes.linewidth"] = 2
+
+mpl.rcParams["xtick.major.size"] = 9
+mpl.rcParams["xtick.major.width"] = 1.2
+mpl.rcParams["xtick.minor.size"] = 4
+mpl.rcParams["xtick.minor.width"] = 1.2
+
+mpl.rcParams["ytick.major.size"] = 9
+mpl.rcParams["ytick.major.width"] = 1.2
+mpl.rcParams["ytick.minor.size"] = 4
+mpl.rcParams["ytick.minor.width"] = 1.2
+
+mpl.rcParams["xtick.direction"] = "in"
+mpl.rcParams["ytick.direction"] = "in"
+
+mpl.rcParams["ytick.right"] = True
+
+mpl.rcParams["ytick.minor.visible"] = True
+mpl.rcParams["xtick.minor.visible"] = True
+
+mpl.rcParams["xtick.top"] = True
 
 
 class SkyArmSubtractionConnections(
@@ -289,10 +303,6 @@ class SkySubtractionQaTask(PipelineTask):
             elif blockSize != subtracted_pfsArm.metadata["blockSize"]:
                 raise ValueError("Block size mismatch between arms.")
 
-        plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block=blockSize)
-        # Get the unique set of arms and sort them according to: b, r, n, m
-        arms = sorted(set(arms), key=lambda x: ["b", "r", "n", "m"].index(x))
-
         # Extract the information for the fibers.
         spectraFibers = extractFibers(spectras)
 
@@ -300,7 +310,8 @@ class SkySubtractionQaTask(PipelineTask):
         stats = getSpectraStats(spectraFibers)
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
-        fig_1d = plot_1d_spectrograph(spectraFibers, stats, arms)
+        fig_1d = plot_1d_spectrograph(spectraFibers, stats)
+        fig_1d.suptitle(f"Sky Subtraction QA\n{visit=} {spectrograph=}", fontsize=16)
 
         self.log.info(f"Plotting 2D spectra for arms {arms}.")
         fig_2d = plot_2d_spectrograph(spectras)
@@ -370,7 +381,12 @@ def getSpectraStats(spectraFibers: dict) -> DataFrame:
         .reset_index()
     )
     stats.rename(
-        columns={"mean": "fiberMean", "median": "fiberMedian", "std": "fiberStd", "getStddev": "fiberIQR"},
+        columns={
+            "mean": "fiberChiMean",
+            "median": "fiberChiMedian",
+            "std": "fiberChiStd",
+            "getStddev": "fiberChiIQR",
+        },
         inplace=True,
     )
 
@@ -460,7 +476,6 @@ def extractFibers(spectras: dict):
 def summarizeSpectrograph(
     spectraFibers: dict,
     stats: DataFrame,
-    arms: Iterable[str] = ("b", "r", "n", "m"),
     xlim: tuple[int, int] = (-10, 10),
 ):
     """
@@ -498,7 +513,7 @@ def summarizeSpectrograph(
     """
     all_axs = ["ABC", "DEF", "GHI"]
     axt = "\n".join(all_axs)
-    fig, ax_dict = get_mosaic(axt, figsize=(15, 10), sharey=True, sharex=True)
+    fig, ax_dict = get_mosaic(axt, figsize=(15, 8), sharex=True)
 
     # Iterate over arms and generate histograms.
     # for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
@@ -541,10 +556,10 @@ def summarizeSpectrograph(
 
         # Labels for statistics
         labels = [["Mean", "Median"], ["Stddev", "IQR Stddev"]]
-        rnge_options = [(-3, 3), (0, 3)]  # Range for mean/median and stddev/IQR plots
+        rnge_options = [(-3, 3), (-3, 3)]  # Range for mean/median and stddev/IQR plots
 
-        means = stats.loc[stats.spectrograph == spectrograph, ["fiberMean", "fiberMedian"]].values
-        stdev = stats.loc[stats.spectrograph == spectrograph, ["fiberStd", "fiberIQR"]].values
+        means = stats.loc[stats.spectrograph == spectrograph, ["fiberChiMean", "fiberChiMedian"]].values
+        stdev = stats.loc[stats.spectrograph == spectrograph, ["fiberChiStd", "fiberChiIQR"]].values
 
         # Iterate over mean/median and stdev/IQR plots
         for j, x, ax, rnge in zip(range(2), [means, stdev], all_axs[i][1:], rnge_options):
@@ -573,8 +588,7 @@ def summarizeSpectrograph(
                 xlim=rnge,
                 legend="A" in all_axs[i],
                 loc="upper right",
-                title=f"Spectrograph: {spectrograph}" if ((arm == arms[0]) and (j == 0)) else None,
-                xlabel=([r"$\chi$", r"$\chi$"][j] if arm == arms[-1] else None),
+                xlabel=r"$\chi$",
             )
 
         # Remove x-axis labels for non-bottom plots
@@ -592,7 +606,6 @@ def summarizeSpectrograph(
 def plot_1d_spectrograph(
     spectraFibers: dict,
     stats: DataFrame,
-    arms: List[str],
     xlim: tuple[int, int] = (-5, 5),
 ) -> Figure:
     """
@@ -604,8 +617,6 @@ def plot_1d_spectrograph(
         Dictionary containing spectrograph data.
     stats : `DataFrame`
         DataFrame containing statistics for each arm.
-    arms : `list` of `str`
-        List of spectral arms (e.g., ['b', 'r', 'n']).
     xlim : `tuple` of `int`, optional
         X-axis limits for the plots (default: (-5, 5)).
 
@@ -614,30 +625,30 @@ def plot_1d_spectrograph(
     fig : `matplotlib.figure.Figure`
         The generated figure.
     """
-    all_axs = ["ABC", "DEF", "GHI"][: len(arms)]
+    all_axs = ["ABC", "DEF", "GHI"]
     label_lookup = {"b": "Blue", "r": "Red", "n": "NIR", "m": "Medium"}
     ax0 = [ax[0] for ax in all_axs]
 
     # Generate spectrograph summary plots.
-    fig, ax_dict = summarizeSpectrograph(spectraFibers, stats, arms=arms, xlim=xlim)
+    fig, ax_dict = summarizeSpectrograph(spectraFibers, stats, xlim=xlim)
 
     # Generate Gaussian distribution.
     xp = np.linspace(-6, 6, 1000)
     yp = scipy.stats.norm.pdf(xp, loc=0, scale=1)
 
     # Update axis labels and add Gaussian reference.
-    for ax, arm in zip(ax0, arms):
+    for ax, specKey in zip(ax0, spectraFibers.keys()):
+        spectrograph, arm = specKey
         ax_dict[ax].set_ylabel(f"{label_lookup[arm]} arm")
         ax_dict[ax].plot(xp, yp, color="k", linewidth=4, linestyle="--")
 
     # Set title.
-    fig.suptitle("Chi distributions for sky fibers")
     ax_dict["A"].set_title("Chi Histogram")
     ax_dict["B"].set_title("Mean and Median Chi")
     ax_dict["C"].set_title("Stddev and IQR Chi")
 
     # Add legend.
-    ax_dict["A"].plot([], [], color=arm_colors[0], label="DRP")
+    ax_dict["A"].plot([], [], color=detector_palette["b"], label="DRP")
     ax_dict["A"].plot([], [], color="magenta", label="Combined DRP")
     ax_dict["A"].plot([], [], color="k", label="Using Poisson errors")
 
@@ -683,9 +694,8 @@ def plot_2d_spectrograph(
     specs.pop("pfsConfig", None)
 
     # Define axis layout for the number of arms.
-    fig = Figure()
+    fig = Figure(layout="constrained", figsize=(15, 5))
     ax = fig.add_subplot(111)
-    fig.set_size_inches(15, 5)
 
     # Loop through each spectral arm.
     sc = None
@@ -712,16 +722,19 @@ def plot_2d_spectrograph(
         if lims is None:
             lims = (-1, 1)
 
-        sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap="RdBu_r")
+        sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap=div_palette)
 
     # Add colorbar and overall title.
     ax.set_xlabel("Wavelength [nm]")
     ax.set_ylabel("Fiber ID")
     if sc is not None:
         divider = make_axes_locatable(ax)
-        cax = divider.append_axes("bottom", size="3%", pad=0.05)
-        fig.colorbar(sc, cax=cax, orientation="horizontal", extend="both")
-    fig.suptitle(f"Sky fiber chi rolling median {binsize=}")
+        cax = divider.append_axes("bottom", size="5%", pad=0.5)
+        cbar = fig.colorbar(sc, cax=cax, orientation="horizontal", extend="both", label="chi value")
+    fig.suptitle(f"Sky fiber chi rolling median {binsize=}", fontsize=16)
+
+    # Turn off ticks for axes and colorbar.
+    ax.tick_params(axis="both", which="both", bottom=False, top=False, left=False, right=False)
 
     return fig
 
@@ -744,7 +757,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     spectras : `dict`
         Dictionary containing spectrograph data.
     spectraFibers : `dict`
-        Dictionary of processed fiber data with fiber-specific residuals.
+        Dictionary containing fiber data.
     thresholds : `list` of `float`, optional
         List of thresholds for outlier detection (default: [5, 15]).
 
@@ -773,6 +786,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
             dfs.append(df)
 
     df = pd.concat(dfs)
+
     df["chi_value"] = df.chi.map(
         lambda x: (
             f"< {threshold_low}"
@@ -789,17 +803,18 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     fig.set_size_inches(15, 5)
 
     sb.scatterplot(
-        data=df.query('chi_value != "< 5"'),
+        data=df.query(f'chi_value != "< {threshold_low}"'),
         x="wave",
         y="fiberId",
-        hue="chi_value",
-        palette="tab10",
+        hue="chi",
+        palette=div_palette,
         ax=ax["CHI"],
+        legend="brief",
     )
     sb.move_legend(ax["CHI"], "lower left")
     ax["CHI"].set_ylabel("Fiber ID")
     ax["CHI"].set_xlabel("Wavelength [nm]")
-    ax["CHI"].set_title("Chi outliers")
+    ax["CHI"].set_title("Sky fibers chi outliers")
     ax["CHI"].grid(True, alpha=0.25)
 
     for skySpectra in spectras.values():
@@ -809,8 +824,6 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     ax["SKY"].set_yscale("log")
     ax["SKY"].set_title("Median sky flux")
     ax["SKY"].grid(True, alpha=0.25)
-
-    fig.suptitle("Sky fiber chi outliers")
 
     return fig
 
@@ -840,7 +853,7 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
     """
     # Create a figure layout.
     fig, ax_dict = get_mosaic(
-        [["RESIDUALS", "RESIDUALS", "RESIDUALS"], ["SKY_0", "SKY_1", "SKY_2"]], figsize=(15, 10)
+        [["RESIDUALS", "RESIDUALS", "RESIDUALS"], ["SKY_0", "SKY_1", "SKY_2"]], figsize=(15, 6)
     )
 
     # Copy and remove pfsConfig to avoid unnecessary data.
@@ -850,6 +863,7 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
     # Loop through each spectral arm.
     # TODO (wtgee) this should be moved out of the plotting code.
     for i, skySpectra in enumerate(specs.values()):
+        arm = skySpectra.identity.arm
         # Split into reference and test spectra.
         referenceSpectra, testSpectra = splitSpectraIntoReferenceAndTest(skySpectra)
 
@@ -859,7 +873,7 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
         # references_err = buildReference(testSpectra, func='quadrature', model='variance')
         references_chi_median = buildReference(testSpectra, func=np.median, model="chi")
 
-        arm_color = arm_colors[i]
+        arm_color = detector_palette[arm]
 
         # Interpolate sky brightness onto a residual wavelength grid.
         sky_wave_ref, sky_flux = references_sky
@@ -1214,7 +1228,7 @@ def make_plot(
     ax: Axes | None = None,
     xlabel: str | None = None,
     ylabel: str | None = None,
-    fontsize: int = 20,
+    fontsize: int = 12,
     title: str = None,
     xlim: tuple[int, int] | None = None,
     ylim: tuple[int, int] | None = None,
