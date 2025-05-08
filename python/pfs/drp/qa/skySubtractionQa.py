@@ -705,6 +705,10 @@ def plot_2d_spectrograph(
         X, Y = np.meshgrid(np.arange(len(y)), xb)
 
         # Plot 2D colormap of residuals.
+        if lims is None:
+            lims = (np.nanmin(z), np.nanmax(z))
+        else:
+            lims = (lims[0], lims[1])
         sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap="bwr")
 
     # Add colorbar and overall title.
