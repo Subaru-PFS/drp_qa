@@ -296,16 +296,16 @@ class SkySubtractionQaTask(PipelineTask):
         stats = getSpectraStats(spectraFibers)
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
-        fig_1d, _ = plot_1d_spectrograph(spectraFibers, stats, plotId, arms)
+        fig_1d = plot_1d_spectrograph(spectraFibers, stats, plotId, arms)
 
         self.log.info(f"Plotting 2D spectra for arms {arms}.")
-        fig_2d, _ = plot_2d_spectrograph(spectras, plotId, arms)
+        fig_2d = plot_2d_spectrograph(spectras)
 
         self.log.info(f"Plotting outlier summary for arms {arms}.")
         fig_outlier = plot_outlier_summary(spectras, spectraFibers)
 
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
-        fig_sky_brightness, _ = plot_vs_sky_brightness(spectras)
+        fig_sky_brightness = plot_vs_sky_brightness(spectras)
 
         pdf = MultipagePdfFigure()
         pdf.append(fig_1d)
@@ -573,7 +573,7 @@ def plot_1d_spectrograph(
     plotId: dict,
     arms: List[str],
     xlim: tuple[int, int] = (-5, 5),
-):
+) -> Figure:
     """
     Generate 1D plots summarizing spectrograph data, including a Gaussian reference.
 
@@ -594,8 +594,6 @@ def plot_1d_spectrograph(
     -------
     fig : `matplotlib.figure.Figure`
         The generated figure.
-    ax_dict : `dict`
-        Dictionary of axes corresponding to the plotted elements.
     """
     spectrograph = plotId["spectrograph"]
 
@@ -630,16 +628,14 @@ def plot_1d_spectrograph(
 
     ax_dict["A"].legend(loc="upper left")
 
-    return fig, ax_dict
+    return fig
 
 
 def plot_2d_spectrograph(
     spectras: dict,
-    plotId: dict,
-    arms: List[str],
     binsize: int | None = 10,
     lims: tuple[int, int] | None = None,
-):
+) -> Figure:
     """
     Generate a 2D spectrograph plot showing sky subtraction residuals.
 
@@ -650,10 +646,6 @@ def plot_2d_spectrograph(
     ----------
     spectras : `dict`
         Dictionary containing spectrograph data.
-    plotId : `dict`
-        Dictionary containing plot metadata (`visit`, `spectrograph`, `block`).
-    arms : `list` of `str`
-        List of spectral arms (e.g., ['b', 'r', 'n']).
     binsize : `int`, optional
         Size of wavelength bins for rolling median (default: 10).
     lims : `tuple` of `int`, optional
@@ -663,8 +655,6 @@ def plot_2d_spectrograph(
     -------
     fig : `matplotlib.figure.Figure`
         The generated figure.
-    ax_dict : `dict`
-        Dictionary of axes corresponding to the plotted elements.
 
     Notes
     -----
@@ -672,37 +662,35 @@ def plot_2d_spectrograph(
     - Uses `rolling` to smooth data along the wavelength axis.
     - Uses `pcolormesh` to create a 2D heatmap for visualization.
     """
-    spectrograph = plotId["spectrograph"]
 
     # Copy and remove pfsConfig to avoid unnecessary data.
     specs = spectras.copy()
     specs.pop("pfsConfig", None)
 
     # Define axis layout for the number of arms.
-    axt = "A"
-    fig, ax_dict = get_mosaic(axt, figsize=(15, 5), sharey=True)
+    fig, ax_dict = get_mosaic("A", figsize=(15, 5), sharey=True)
+    ax = ax_dict["A"]
 
     # Loop through each spectral arm.
-    for i, arm in enumerate(arms):
-        ax = ax_dict[axt]
-        skySpectra = specs[(spectrograph, arm)]
+    sc = None
+    for skySpectra in specs.values():
 
         # Build reference spectra.
         references = buildReference(skySpectra, func=None, model="chi")
 
         # Extract data.
-        x, y = references
-        xb, yb, eb = rolling(x, y[0], binsize)
+        ref_wavelength, ref_chi = references
+        binned_wavelength, binned_chi, binned_error = rolling(ref_wavelength, ref_chi[0], binsize)
 
         # Initialize 2D array for fiber-based spectral residuals.
-        z = np.ones((len(xb), len(y)))
+        z = np.ones((len(binned_wavelength), len(ref_chi)))
 
-        for i, yi in enumerate(y):
-            xb, yb, eb = rolling(x, yi, binsize)
-            z[:, i] = yb
+        for j, yi in enumerate(ref_chi):
+            binned_wavelength, binned_chi, binned_error = rolling(ref_wavelength, yi, binsize)
+            z[:, j] = binned_chi
 
         # Create a mesh grid for plotting.
-        X, Y = np.meshgrid(np.arange(len(y)), xb)
+        X, Y = np.meshgrid(np.arange(len(ref_chi)), binned_wavelength)
 
         # Plot 2D colormap of residuals.
         if lims is None:
@@ -711,12 +699,13 @@ def plot_2d_spectrograph(
         sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap="bwr")
 
     # Add colorbar and overall title.
-    ax_dict[axt].set_xlabel("Wavelength [nm]")
-    ax_dict[axt].set_ylabel("Fiber ID")
-    fig.colorbar(sc, ax=ax_dict[axt], location="bottom", shrink=0.8)
+    ax.set_xlabel("Wavelength [nm]")
+    ax.set_ylabel("Fiber ID")
+    if sc is not None:
+        fig.colorbar(sc, ax=ax, location="bottom", shrink=0.8)
     fig.suptitle("Sky fiber chi values")
 
-    return fig, ax_dict
+    return fig
 
 
 def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -> Figure:
@@ -808,7 +797,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     return fig
 
 
-def plot_vs_sky_brightness(spectras: dict):
+def plot_vs_sky_brightness(spectras: dict) -> Figure:
     """
     Generate plots comparing sky brightness with spectral residuals.
 
@@ -830,8 +819,6 @@ def plot_vs_sky_brightness(spectras: dict):
     -------
     fig : `matplotlib.figure.Figure`
         Generated figure containing subplots.
-    ax_dict : `dict`
-        Dictionary containing axis handles.
     """
     # Create a figure layout.
     fig, ax_dict = get_mosaic(
@@ -899,7 +886,7 @@ def plot_vs_sky_brightness(spectras: dict):
 
     fig.suptitle("Residual flux and 1% sky spectra reference")
 
-    return fig, ax_dict
+    return fig
 
 
 def rolling(x: NDDataArray, y: NDDataArray, sep: int):
