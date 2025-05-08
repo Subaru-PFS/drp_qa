@@ -460,7 +460,6 @@ def extractFibers(spectras: dict):
 def summarizeSpectrograph(
     spectraFibers: dict,
     stats: DataFrame,
-    spectrograph: int,
     arms: Iterable[str] = ("b", "r", "n", "m"),
     xlim: tuple[int, int] = (-10, 10),
 ):
@@ -546,7 +545,7 @@ def summarizeSpectrograph(
         stdev = stats.loc[stats.spectrograph == spectrograph, ["fiberStd", "fiberIQR"]].values
 
         # Iterate over mean/median and stdev/IQR plots
-        for j, x, ax, rnge in zip(range(2), [means, stdev], axs[1:], rnge_options):
+        for j, x, ax, rnge in zip(range(2), [means, stdev], all_axs[i][1:], rnge_options):
             ref_line = [PlotLayer("vert", X=0 if j == 0 else 1, linestyle="--")]
 
             # Generate the histogram layers for statistical metrics
@@ -623,9 +622,7 @@ def plot_1d_spectrograph(
     ax0 = [ax[0] for ax in all_axs]
 
     # Generate spectrograph summary plots.
-    fig, ax_dict = summarizeSpectrograph(
-        spectraFibers, stats, spectrograph=spectrograph, arms=arms, xlim=xlim
-    )
+    fig, ax_dict = summarizeSpectrograph(spectraFibers, stats, arms=arms, xlim=xlim)
 
     # Generate Gaussian distribution.
     xp = np.linspace(-6, 6, 1000)
