@@ -1229,7 +1229,7 @@ def make_plot(
     ax: Axes | None = None,
     xlabel: str | None = None,
     ylabel: str | None = None,
-    fontsize: int = 20,
+    fontsize: int = 12,
     title: str = None,
     xlim: tuple[int, int] | None = None,
     ylim: tuple[int, int] | None = None,
