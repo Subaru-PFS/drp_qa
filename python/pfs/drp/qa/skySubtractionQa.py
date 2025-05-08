@@ -592,8 +592,7 @@ def summarizeSpectrograph(
                 xlim=rnge,
                 legend="A" in all_axs[i],
                 loc="upper right",
-                title=f"Spectrograph: {spectrograph}" if ((arm == arms[0]) and (j == 0)) else None,
-                xlabel=([r"$\chi$", r"$\chi$"][j] if arm == arms[-1] else None),
+                xlabel=r"$\chi$",
             )
 
         # Remove x-axis labels for non-bottom plots
