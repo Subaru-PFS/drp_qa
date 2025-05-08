@@ -300,7 +300,7 @@ class SkySubtractionQaTask(PipelineTask):
         stats = getSpectraStats(spectraFibers)
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
-        fig_1d = plot_1d_spectrograph(spectraFibers, stats, plotId, arms)
+        fig_1d = plot_1d_spectrograph(spectraFibers, stats, arms)
 
         self.log.info(f"Plotting 2D spectra for arms {arms}.")
         fig_2d = plot_2d_spectrograph(spectras)
@@ -502,8 +502,9 @@ def summarizeSpectrograph(
 
     # Iterate over arms and generate histograms.
     # for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
-    for i, spec_key, fibers in enumerate(spectraFibers.items()):
+    for i, spec_key in enumerate(spectraFibers.keys()):
         (spectrograph, arm) = spec_key
+        fibers = spectraFibers[spec_key]
         layers = []
         big_chi = []  # Store all chi values for overall distribution
         plot_color = detector_palette[arm]
@@ -591,7 +592,6 @@ def summarizeSpectrograph(
 def plot_1d_spectrograph(
     spectraFibers: dict,
     stats: DataFrame,
-    plotId: dict,
     arms: List[str],
     xlim: tuple[int, int] = (-5, 5),
 ) -> Figure:
@@ -604,8 +604,6 @@ def plot_1d_spectrograph(
         Dictionary containing spectrograph data.
     stats : `DataFrame`
         DataFrame containing statistics for each arm.
-    plotId : `dict`
-        Dictionary containing plot metadata (`visit`, `spectrograph`, `block`).
     arms : `list` of `str`
         List of spectral arms (e.g., ['b', 'r', 'n']).
     xlim : `tuple` of `int`, optional
@@ -616,8 +614,6 @@ def plot_1d_spectrograph(
     fig : `matplotlib.figure.Figure`
         The generated figure.
     """
-    spectrograph = plotId["spectrograph"]
-
     all_axs = ["ABC", "DEF", "GHI"][: len(arms)]
     label_lookup = {"b": "Blue", "r": "Red", "n": "NIR", "m": "Medium"}
     ax0 = [ax[0] for ax in all_axs]
