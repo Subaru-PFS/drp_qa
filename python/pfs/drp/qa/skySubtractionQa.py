@@ -697,14 +697,14 @@ def plot_2d_spectrograph(
         if lims is None:
             lims = (None, None)
 
-        sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap="bwr")
+        sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap="RdBu_r")
 
     # Add colorbar and overall title.
     ax.set_xlabel("Wavelength [nm]")
     ax.set_ylabel("Fiber ID")
     if sc is not None:
         fig.colorbar(sc, ax=ax, location="bottom", shrink=0.8)
-    fig.suptitle("Sky fiber chi values")
+    fig.suptitle(f"Sky fiber chi rolling median {binsize=}")
 
     return fig
 
