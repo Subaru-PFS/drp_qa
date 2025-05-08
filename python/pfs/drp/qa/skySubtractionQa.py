@@ -21,7 +21,6 @@ from lsst.pipe.base.connectionTypes import (
     Input as InputConnection,
     Output as OutputConnection,
 )
-from matplotlib import pylab as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from pandas import DataFrame
@@ -768,7 +767,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
         )
     )
 
-    fig, ax = plt.subplot_mosaic([["SKY"], ["CHI"]], sharex=True, layout="constrained")
+    fig, ax = get_mosaic([["SKY"], ["CHI"]], sharex=True, layout="constrained")
     fig.set_size_inches(15, 5)
 
     sb.scatterplot(
@@ -1266,8 +1265,8 @@ def make_plot(
         ncol (int, optional): Number of columns in the legend. Default is 1.
     """
     if ax is None:
-        fig, ax = plt.subplots(nrows=1, ncols=1)
-        fig.set_size_inches(figsize)
+        fig = Figure(layout="constrained", figsize=figsize)
+        ax = fig.add_subplot(111)
 
     # Add the plotting layers.
     for layer in layers:
@@ -1334,8 +1333,7 @@ def make_plot(
 
 def get_mosaic(mosaic="A", figsize=(10, 10), **kwargs):
     """Create a figure with a specified layout using matplotlib's subplot_mosaic."""
-    mosaic = mosaic
-    fig = plt.figure(constrained_layout=True, figsize=figsize)
+    fig = Figure(layout="constrained", figsize=figsize)
     ax_dict = fig.subplot_mosaic(mosaic, **kwargs)
     return fig, ax_dict
 
