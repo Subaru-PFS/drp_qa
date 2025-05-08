@@ -833,7 +833,7 @@ def plot_vs_sky_brightness(spectras: dict):
 
     # Loop through each spectral arm.
     # TODO (wtgee) this should be moved out of the plotting code.
-    for i, (spectrograph, arm), skySpectra in enumerate(specs.items()):
+    for i, skySpectra in enumerate(specs.values()):
         # Split into reference and test spectra.
         referenceSpectra, testSpectra = splitSpectraIntoReferenceAndTest(skySpectra)
 
