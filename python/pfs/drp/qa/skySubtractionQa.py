@@ -806,8 +806,8 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
         data=df.query(f'chi_value != "< {threshold_low}"'),
         x="wave",
         y="fiberId",
-        hue="chi_value",
-        palette="tab10",
+        hue="chi",
+        palette="Set1",
         ax=ax["CHI"],
     )
     sb.move_legend(ax["CHI"], "lower left")
