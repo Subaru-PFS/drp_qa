@@ -303,10 +303,6 @@ class SkySubtractionQaTask(PipelineTask):
             elif blockSize != subtracted_pfsArm.metadata["blockSize"]:
                 raise ValueError("Block size mismatch between arms.")
 
-        plotId = dict(visit=visit, arm=arm, spectrograph=spectrograph, block=blockSize)
-        # Get the unique set of arms and sort them according to: b, r, n, m
-        arms = sorted(set(arms), key=lambda x: ["b", "r", "n", "m"].index(x))
-
         # Extract the information for the fibers.
         spectraFibers = extractFibers(spectras)
 
@@ -314,7 +310,8 @@ class SkySubtractionQaTask(PipelineTask):
         stats = getSpectraStats(spectraFibers)
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
-        fig_1d = plot_1d_spectrograph(spectraFibers, stats, arms)
+        fig_1d = plot_1d_spectrograph(spectraFibers, stats)
+        fig_1d.suptitle(f"Sky Subtraction QA\n{visit=} {spectrograph=}", fontsize=16)
 
         self.log.info(f"Plotting 2D spectra for arms {arms}.")
         fig_2d = plot_2d_spectrograph(spectras)
@@ -479,7 +476,6 @@ def extractFibers(spectras: dict):
 def summarizeSpectrograph(
     spectraFibers: dict,
     stats: DataFrame,
-    arms: Iterable[str] = ("b", "r", "n", "m"),
     xlim: tuple[int, int] = (-10, 10),
 ):
     """
@@ -610,7 +606,6 @@ def summarizeSpectrograph(
 def plot_1d_spectrograph(
     spectraFibers: dict,
     stats: DataFrame,
-    arms: List[str],
     xlim: tuple[int, int] = (-5, 5),
 ) -> Figure:
     """
@@ -622,8 +617,6 @@ def plot_1d_spectrograph(
         Dictionary containing spectrograph data.
     stats : `DataFrame`
         DataFrame containing statistics for each arm.
-    arms : `list` of `str`
-        List of spectral arms (e.g., ['b', 'r', 'n']).
     xlim : `tuple` of `int`, optional
         X-axis limits for the plots (default: (-5, 5)).
 
@@ -632,24 +625,24 @@ def plot_1d_spectrograph(
     fig : `matplotlib.figure.Figure`
         The generated figure.
     """
-    all_axs = ["ABC", "DEF", "GHI"][: len(arms)]
+    all_axs = ["ABC", "DEF", "GHI"]
     label_lookup = {"b": "Blue", "r": "Red", "n": "NIR", "m": "Medium"}
     ax0 = [ax[0] for ax in all_axs]
 
     # Generate spectrograph summary plots.
-    fig, ax_dict = summarizeSpectrograph(spectraFibers, stats, arms=arms, xlim=xlim)
+    fig, ax_dict = summarizeSpectrograph(spectraFibers, stats, xlim=xlim)
 
     # Generate Gaussian distribution.
     xp = np.linspace(-6, 6, 1000)
     yp = scipy.stats.norm.pdf(xp, loc=0, scale=1)
 
     # Update axis labels and add Gaussian reference.
-    for ax, arm in zip(ax0, arms):
+    for ax, specKey in zip(ax0, spectraFibers.keys()):
+        spectrograph, arm = specKey
         ax_dict[ax].set_ylabel(f"{label_lookup[arm]} arm")
         ax_dict[ax].plot(xp, yp, color="k", linewidth=4, linestyle="--")
 
     # Set title.
-    fig.suptitle("Chi distributions for sky fibers")
     ax_dict["A"].set_title("Chi Histogram")
     ax_dict["B"].set_title("Mean and Median Chi")
     ax_dict["C"].set_title("Stddev and IQR Chi")
