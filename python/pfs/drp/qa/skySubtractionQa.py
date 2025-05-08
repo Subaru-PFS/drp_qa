@@ -35,15 +35,10 @@ from pfs.drp.stella.subtractSky1d import subtractSky1d
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
 from pfs.drp.qa.utils.plotting import detector_palette, div_palette
 
-# Say, "the default sans-serif font is COMIC SANS"
 matplotlib.rcParams["font.serif"] = "DejaVu Serif"
-
-# Then, "ALWAYS use sans-serif fonts"
 matplotlib.rcParams["font.family"] = "serif"
-
-matplotlib.rcParams["axes.linewidth"] = 2
-
 matplotlib.rcParams["mathtext.fontset"] = "dejavuserif"
+matplotlib.rcParams["axes.linewidth"] = 2
 
 mpl.rcParams["xtick.major.size"] = 9
 mpl.rcParams["xtick.major.width"] = 1.2
@@ -742,9 +737,12 @@ def plot_2d_spectrograph(
     ax.set_ylabel("Fiber ID")
     if sc is not None:
         divider = make_axes_locatable(ax)
-        cax = divider.append_axes("bottom", size="3%", pad=0.1)
+        cax = divider.append_axes("bottom", size="3%", pad=1)
         fig.colorbar(sc, cax=cax, orientation="horizontal", extend="both")
-    fig.suptitle(f"Sky fiber chi rolling median {binsize=}")
+    fig.suptitle(f"Sky fiber chi rolling median {binsize=}", fontsize=16)
+
+    # Turn off ticks
+    ax.tick_params(axis="both", which="both", bottom=False, top=False, left=False, right=False)
 
     return fig
 
