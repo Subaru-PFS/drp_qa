@@ -305,7 +305,7 @@ class SkySubtractionQaTask(PipelineTask):
         fig_outlier = plot_outlier_summary(spectras, spectraFibers)
 
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
-        fig_sky_brightness, _ = plot_vs_sky_brightness(spectras, plotId, arms)
+        fig_sky_brightness, _ = plot_vs_sky_brightness(spectras)
 
         pdf = MultipagePdfFigure()
         pdf.append(fig_1d)
@@ -597,7 +597,7 @@ def plot_1d_spectrograph(
     ax_dict : `dict`
         Dictionary of axes corresponding to the plotted elements.
     """
-    visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
+    spectrograph = plotId["spectrograph"]
 
     all_axs = ["ABC", "DEF", "GHI"][: len(arms)]
     label_lookup = {"b": "Blue", "r": "Red", "n": "NIR", "m": "Medium"}
@@ -797,7 +797,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     return fig
 
 
-def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
+def plot_vs_sky_brightness(spectras: dict):
     """
     Generate plots comparing sky brightness with spectral residuals.
 
@@ -814,10 +814,6 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
     ----------
     spectras : `dict`
         Dictionary containing spectrograph data.
-    plotId : `dict`
-        Dictionary containing plot metadata (`visit`, `spectrograph`, `block`).
-    arms : `list` of `str`
-        List of spectral arms to be processed (e.g., ['b', 'r', 'n']).
 
     Returns
     -------
@@ -826,8 +822,6 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
     ax_dict : `dict`
         Dictionary containing axis handles.
     """
-    visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
-
     # Create a figure layout.
     fig, ax_dict = get_mosaic(
         [["RESIDUALS", "RESIDUALS", "RESIDUALS"], ["SKY_0", "SKY_1", "SKY_2"]], figsize=(15, 10)
@@ -839,9 +833,7 @@ def plot_vs_sky_brightness(spectras: dict, plotId: dict, arms: List[str]):
 
     # Loop through each spectral arm.
     # TODO (wtgee) this should be moved out of the plotting code.
-    for i, arm in enumerate(arms):
-        skySpectra = specs[(spectrograph, arm)]
-
+    for i, (spectrograph, arm), skySpectra in enumerate(specs.items()):
         # Split into reference and test spectra.
         referenceSpectra, testSpectra = splitSpectraIntoReferenceAndTest(skySpectra)
 
