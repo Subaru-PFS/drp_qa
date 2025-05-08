@@ -498,7 +498,7 @@ def summarizeSpectrograph(
     """
     all_axs = ["ABC", "DEF", "GHI"]
     axt = "\n".join(all_axs)
-    fig, ax_dict = get_mosaic(axt, figsize=(15, 10), sharey=True, sharex=True)
+    fig, ax_dict = get_mosaic(axt, figsize=(15, 10))
 
     # Iterate over arms and generate histograms.
     # for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
