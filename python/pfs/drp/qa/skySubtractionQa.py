@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from numbers import Number
 from typing import Callable, Iterable, List
 
+import matplotlib
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
 import scipy.stats
@@ -33,18 +35,35 @@ from pfs.drp.stella.subtractSky1d import subtractSky1d
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
 from pfs.drp.qa.utils.plotting import detector_palette, div_palette
 
-arm_colors = ["steelblue", "firebrick", "darkgoldenrod"]
-plot_colors = [
-    "#1f77b4",
-    "#ff7f0e",
-    "#2ca02c",
-    "#d62728",
-    "#9467bd",
-    "#8c564b",
-    "#e377c2",
-    "#7f7f7f",
-    "#bcbd22",
-]
+# Say, "the default sans-serif font is COMIC SANS"
+matplotlib.rcParams["font.serif"] = "DejaVu Serif"
+
+# Then, "ALWAYS use sans-serif fonts"
+matplotlib.rcParams["font.family"] = "serif"
+
+matplotlib.rcParams["axes.linewidth"] = 2
+
+matplotlib.rcParams["mathtext.fontset"] = "dejavuserif"
+
+mpl.rcParams["xtick.major.size"] = 9
+mpl.rcParams["xtick.major.width"] = 1.2
+mpl.rcParams["xtick.minor.size"] = 4
+mpl.rcParams["xtick.minor.width"] = 1.2
+
+mpl.rcParams["ytick.major.size"] = 9
+mpl.rcParams["ytick.major.width"] = 1.2
+mpl.rcParams["ytick.minor.size"] = 4
+mpl.rcParams["ytick.minor.width"] = 1.2
+
+mpl.rcParams["xtick.direction"] = "in"
+mpl.rcParams["ytick.direction"] = "in"
+
+mpl.rcParams["ytick.right"] = True
+
+mpl.rcParams["ytick.minor.visible"] = True
+mpl.rcParams["xtick.minor.visible"] = True
+
+mpl.rcParams["xtick.top"] = True
 
 
 class SkyArmSubtractionConnections(
@@ -642,7 +661,7 @@ def plot_1d_spectrograph(
     ax_dict["C"].set_title("Stddev and IQR Chi")
 
     # Add legend.
-    ax_dict["A"].plot([], [], color=arm_colors[0], label="DRP")
+    ax_dict["A"].plot([], [], color=detector_palette["b"], label="DRP")
     ax_dict["A"].plot([], [], color="magenta", label="Combined DRP")
     ax_dict["A"].plot([], [], color="k", label="Using Poisson errors")
 
@@ -855,6 +874,7 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
     # Loop through each spectral arm.
     # TODO (wtgee) this should be moved out of the plotting code.
     for i, skySpectra in enumerate(specs.values()):
+        arm = skySpectra.identity.arm
         # Split into reference and test spectra.
         referenceSpectra, testSpectra = splitSpectraIntoReferenceAndTest(skySpectra)
 
@@ -864,7 +884,7 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
         # references_err = buildReference(testSpectra, func='quadrature', model='variance')
         references_chi_median = buildReference(testSpectra, func=np.median, model="chi")
 
-        arm_color = arm_colors[i]
+        arm_color = detector_palette[arm]
 
         # Interpolate sky brightness onto a residual wavelength grid.
         sky_wave_ref, sky_flux = references_sky
