@@ -502,7 +502,8 @@ def summarizeSpectrograph(
 
     # Iterate over arms and generate histograms.
     # for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
-    for i, (spectrograph, arm), fibers in enumerate(spectraFibers.items()):
+    for i, spec_key, fibers in enumerate(spectraFibers.items()):
+        (spectrograph, arm) = spec_key
         layers = []
         big_chi = []  # Store all chi values for overall distribution
         plot_color = detector_palette[arm]
