@@ -31,6 +31,7 @@ from pfs.drp.stella.selectFibers import SelectFibersTask
 from pfs.drp.stella.subtractSky1d import subtractSky1d
 
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
+from pfs.drp.qa.utils.plotting import detector_palette
 
 arm_colors = ["steelblue", "firebrick", "darkgoldenrod"]
 plot_colors = [
@@ -477,15 +478,16 @@ def summarizeSpectrograph(
     - Compares mean, median, standard deviation, and IQR across arms.
     - Uses `skySubtractionQaPlot` for visualization.
     """
-    all_axs = ["ABC", "DEF", "GHI"][: len(arms)]
+    all_axs = ["ABC", "DEF", "GHI"]
     axt = "\n".join(all_axs)
-    fig, ax_dict = get_mosaic(axt, figsize=(15, 10))
+    fig, ax_dict = get_mosaic(axt, figsize=(15, 10), sharey=True, sharex=True)
 
     # Iterate over arms and generate histograms.
-    for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
-        fibers = spectraFibers[(spectrograph, arm)]
+    # for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
+    for i, (spectrograph, arm), fibers in enumerate(spectraFibers.items()):
         layers = []
         big_chi = []  # Store all chi values for overall distribution
+        plot_color = detector_palette[arm]
 
         # Process each fiber.
         for fib in fibers.keys():
@@ -511,15 +513,15 @@ def summarizeSpectrograph(
         # Plot chi distribution.
         make_plot(
             layers,
-            ax_dict[axs[0]],
+            ax_dict[all_axs[i][0]],
             xlim=xlim,
-            xlabel=r"$\chi$" if arm == arms[-1] else None,
+            xlabel=r"$\chi$",
             ylabel=f"Arm: {arm}\nPDF",
         )
 
         # Labels for statistics
-        labels = [["Mean", "Median"], ["Stdev", "IQR Stdev"]]
-        rnge_options = [(-3, 3), (0, 3)]  # Range for mean/median and stdev/IQR plots
+        labels = [["Mean", "Median"], ["Stddev", "IQR Stddev"]]
+        rnge_options = [(-3, 3), (0, 3)]  # Range for mean/median and stddev/IQR plots
 
         means = stats.loc[stats.spectrograph == spectrograph, ["fiberMean", "fiberMedian"]].values
         stdev = stats.loc[stats.spectrograph == spectrograph, ["fiberStd", "fiberIQR"]].values
@@ -549,20 +551,20 @@ def summarizeSpectrograph(
                 ref_line + hist_layers,
                 ax_dict[ax],
                 xlim=rnge,
-                legend="A" in axs,
+                legend="A" in all_axs[i],
                 loc="upper right",
                 title=f"Spectrograph: {spectrograph}" if ((arm == arms[0]) and (j == 0)) else None,
                 xlabel=([r"$\chi$", r"$\chi$"][j] if arm == arms[-1] else None),
             )
 
         # Remove x-axis labels for non-bottom plots
-        if arm != arms[-1]:
-            for ax in axs:
-                ax_dict[ax].axes.xaxis.set_ticklabels([])
+        # if arm != arms[-1]:
+        # for ax in all_axs:
+        # ax_dict[ax].axes.xaxis.set_ticklabels([])
 
         # Remove y-axis labels for all plots
-        for ax in axs:
-            ax_dict[ax].axes.yaxis.set_ticklabels([])
+        # for ax in all_axs:
+        #     ax_dict[ax].axes.yaxis.set_ticklabels([])
 
     return fig, ax_dict
 
