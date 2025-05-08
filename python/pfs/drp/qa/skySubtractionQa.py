@@ -259,18 +259,21 @@ class SkySubtractionQaTask(PipelineTask):
             # Store the results if valid.
             butlerQC.put(outputs, outputRefs)
 
-    def run(self, skySubtraction_mergedSpectra: Iterable[PfsArm], **kwargs) -> Struct:
+    def run(self, skySubtraction_mergedSpectra: Iterable[PfsArm], make_pdf: bool = True, **kwargs) -> Struct:
         """Perform QA on sky subtraction.
 
         Parameters
         ----------
         skySubtraction_mergedSpectra : `Iterable[pfs.drp.stella.PfsArm]`
             The input PfsArm data.
+        make_pdf : `bool`, optional
+            If True, generate a PDF with the plots. Default is True,
+            otherwise return all plot figures.
 
         Returns
         -------
         Struct
-            A struct containing the plots.
+            A struct containing the plots if `store_results` is True else None.
         """
         spectras = dict()
         arms = list()
@@ -297,7 +300,7 @@ class SkySubtractionQaTask(PipelineTask):
         stats = getSpectraStats(spectraFibers)
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
-        fig_1d = plot_1d_spectrograph(spectraFibers, stats, plotId, arms)
+        fig_1d = plot_1d_spectrograph(spectraFibers, stats, arms)
 
         self.log.info(f"Plotting 2D spectra for arms {arms}.")
         fig_2d = plot_2d_spectrograph(spectras)
@@ -308,13 +311,29 @@ class SkySubtractionQaTask(PipelineTask):
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
         fig_sky_brightness = plot_vs_sky_brightness(spectras)
 
-        pdf = MultipagePdfFigure()
-        pdf.append(fig_1d)
-        pdf.append(fig_2d)
-        pdf.append(fig_outlier)
-        pdf.append(fig_sky_brightness)
+        results = Struct(
+            skySubtractionFiberStats=stats,
+        )
 
-        return Struct(skySubtractionQaPlot=pdf, skySubtractionFiberStats=stats)
+        if make_pdf:
+            # Create a PDF with all the plots.
+            pdf = MultipagePdfFigure()
+            pdf.append(fig_1d)
+            pdf.append(fig_2d)
+            pdf.append(fig_outlier)
+            pdf.append(fig_sky_brightness)
+
+            results.skySubtractionQaPlot = pdf
+        else:
+            # Store the figures in the results struct.
+            results.skySubtractionQaPlot = {
+                "1d": fig_1d,
+                "2d": fig_2d,
+                "outlier": fig_outlier,
+                "sky_brightness": fig_sky_brightness,
+            }
+
+        return results
 
 
 def getSpectraStats(spectraFibers: dict) -> DataFrame:
@@ -441,7 +460,6 @@ def extractFibers(spectras: dict):
 def summarizeSpectrograph(
     spectraFibers: dict,
     stats: DataFrame,
-    spectrograph: int,
     arms: Iterable[str] = ("b", "r", "n", "m"),
     xlim: tuple[int, int] = (-10, 10),
 ):
@@ -484,7 +502,9 @@ def summarizeSpectrograph(
 
     # Iterate over arms and generate histograms.
     # for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
-    for i, (spectrograph, arm), fibers in enumerate(spectraFibers.items()):
+    for i, spec_key in enumerate(spectraFibers.keys()):
+        (spectrograph, arm) = spec_key
+        fibers = spectraFibers[spec_key]
         layers = []
         big_chi = []  # Store all chi values for overall distribution
         plot_color = detector_palette[arm]
@@ -527,7 +547,7 @@ def summarizeSpectrograph(
         stdev = stats.loc[stats.spectrograph == spectrograph, ["fiberStd", "fiberIQR"]].values
 
         # Iterate over mean/median and stdev/IQR plots
-        for j, x, ax, rnge in zip(range(2), [means, stdev], axs[1:], rnge_options):
+        for j, x, ax, rnge in zip(range(2), [means, stdev], all_axs[i][1:], rnge_options):
             ref_line = [PlotLayer("vert", X=0 if j == 0 else 1, linestyle="--")]
 
             # Generate the histogram layers for statistical metrics
@@ -572,7 +592,6 @@ def summarizeSpectrograph(
 def plot_1d_spectrograph(
     spectraFibers: dict,
     stats: DataFrame,
-    plotId: dict,
     arms: List[str],
     xlim: tuple[int, int] = (-5, 5),
 ) -> Figure:
@@ -585,8 +604,6 @@ def plot_1d_spectrograph(
         Dictionary containing spectrograph data.
     stats : `DataFrame`
         DataFrame containing statistics for each arm.
-    plotId : `dict`
-        Dictionary containing plot metadata (`visit`, `spectrograph`, `block`).
     arms : `list` of `str`
         List of spectral arms (e.g., ['b', 'r', 'n']).
     xlim : `tuple` of `int`, optional
@@ -597,16 +614,12 @@ def plot_1d_spectrograph(
     fig : `matplotlib.figure.Figure`
         The generated figure.
     """
-    spectrograph = plotId["spectrograph"]
-
     all_axs = ["ABC", "DEF", "GHI"][: len(arms)]
     label_lookup = {"b": "Blue", "r": "Red", "n": "NIR", "m": "Medium"}
     ax0 = [ax[0] for ax in all_axs]
 
     # Generate spectrograph summary plots.
-    fig, ax_dict = summarizeSpectrograph(
-        spectraFibers, stats, spectrograph=spectrograph, arms=arms, xlim=xlim
-    )
+    fig, ax_dict = summarizeSpectrograph(spectraFibers, stats, arms=arms, xlim=xlim)
 
     # Generate Gaussian distribution.
     xp = np.linspace(-6, 6, 1000)
