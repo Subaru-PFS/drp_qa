@@ -767,7 +767,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
         )
     )
 
-    fig, ax = get_mosaic([["SKY"], ["CHI"]], sharex=True, layout="constrained")
+    fig, ax = get_mosaic([["SKY"], ["CHI"]], sharex=True)
     fig.set_size_inches(15, 5)
 
     sb.scatterplot(
