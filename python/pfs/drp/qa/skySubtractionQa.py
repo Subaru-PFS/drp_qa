@@ -24,6 +24,7 @@ from lsst.pipe.base.connectionTypes import (
     Output as OutputConnection,
 )
 from matplotlib.axes import Axes
+from matplotlib.colors import SymLogNorm
 from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pandas import DataFrame
@@ -821,7 +822,14 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
         x="wave",
         y="fiberId",
         hue="chi",
+        hue_norm=SymLogNorm(threshold_low),
         palette=div_palette,
+        size="chi_value",
+        size_order=[
+            f"> {threshold_high}",
+            f"{threshold_low} < x < {threshold_high}",
+            f"< {threshold_low}",
+        ],
         ax=ax["CHI"],
         legend="brief",
     )
@@ -913,8 +921,21 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
         )
 
         # Scatter plot of residuals vs sky brightness percentile.
-        ax_dict[f"SKY_{i}"].scatter(chi, ranked, s=1, color=arm_color, rasterized=True, alpha=0.7)
-        ax_dict[f"SKY_{i}"].errorbar(xb, yb, xerr=eb, capsize=10, capthick=3, color=arm_color, linewidth=3)
+        ax_dict[f"SKY_{i}"].scatter(chi, ranked, s=1, color=arm_color, rasterized=True, alpha=0.5)
+        ax_dict[f"SKY_{i}"].errorbar(
+            xb,
+            yb,
+            xerr=eb,
+            capsize=5,
+            capthick=3,
+            color="k",
+            mec="k",
+            mfc=arm_color,
+            linewidth=3,
+            marker="o",
+            alpha=0.75,
+            zorder=100,
+        )
 
         # Set axis limits.
         ax_dict["RESIDUALS"].set_ylim(-100, 100)
