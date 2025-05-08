@@ -633,7 +633,13 @@ def plot_1d_spectrograph(
     return fig, ax_dict
 
 
-def plot_2d_spectrograph(spectras: dict, plotId: dict, arms: List[str], binsize: int | None = 10):
+def plot_2d_spectrograph(
+    spectras: dict,
+    plotId: dict,
+    arms: List[str],
+    binsize: int | None = 10,
+    lims: tuple[int, int] | None = None,
+):
     """
     Generate a 2D spectrograph plot showing sky subtraction residuals.
 
@@ -650,6 +656,8 @@ def plot_2d_spectrograph(spectras: dict, plotId: dict, arms: List[str], binsize:
         List of spectral arms (e.g., ['b', 'r', 'n']).
     binsize : `int`, optional
         Size of wavelength bins for rolling median (default: 10).
+    lims : `tuple` of `int`, optional
+        Limits for the color scale (default: None, auto-scaled).
 
     Returns
     -------
@@ -664,7 +672,7 @@ def plot_2d_spectrograph(spectras: dict, plotId: dict, arms: List[str], binsize:
     - Uses `rolling` to smooth data along the wavelength axis.
     - Uses `pcolormesh` to create a 2D heatmap for visualization.
     """
-    visit, spectrograph, block = plotId["visit"], plotId["spectrograph"], plotId["block"]
+    spectrograph = plotId["spectrograph"]
 
     # Copy and remove pfsConfig to avoid unnecessary data.
     specs = spectras.copy()
@@ -697,12 +705,12 @@ def plot_2d_spectrograph(spectras: dict, plotId: dict, arms: List[str], binsize:
         X, Y = np.meshgrid(np.arange(len(y)), xb)
 
         # Plot 2D colormap of residuals.
-        sc = ax.pcolormesh(Y, X, z, vmin=-1, vmax=1, cmap="bwr")
+        sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap="bwr")
 
     # Add colorbar and overall title.
     ax_dict[axt].set_xlabel("Wavelength [nm]")
-    ax_dict[axt].set_ylabel("Wavelength [nm]")
-    fig.colorbar(sc, ax=ax_dict[axt], location="right", shrink=0.8)
+    ax_dict[axt].set_ylabel("Fiber ID")
+    fig.colorbar(sc, ax=ax_dict[axt], location="bottom", shrink=0.8)
     fig.suptitle("Sky fiber chi values")
 
     return fig, ax_dict
