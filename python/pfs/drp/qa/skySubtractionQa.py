@@ -724,6 +724,9 @@ def plot_2d_spectrograph(
 
         sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap=div_palette)
 
+        # Set y-ticks to the fiberId instead of the index.
+        ax.set_yticks(skySpectra.fiberId)
+
     # Add colorbar and overall title.
     ax.set_xlabel("Wavelength [nm]")
     ax.set_ylabel("Fiber ID")
