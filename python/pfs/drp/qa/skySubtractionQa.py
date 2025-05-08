@@ -668,8 +668,9 @@ def plot_2d_spectrograph(
     specs.pop("pfsConfig", None)
 
     # Define axis layout for the number of arms.
-    fig, ax_dict = get_mosaic("A", figsize=(15, 5), sharey=True)
-    ax = ax_dict["A"]
+    fig = Figure()
+    ax = fig.add_subplot(111)
+    fig.set_size_inches(15, 5)
 
     # Loop through each spectral arm.
     sc = None
@@ -696,14 +697,14 @@ def plot_2d_spectrograph(
         if lims is None:
             lims = (None, None)
 
-        sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap="bwr")
+        sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap="RdBu_r")
 
     # Add colorbar and overall title.
     ax.set_xlabel("Wavelength [nm]")
     ax.set_ylabel("Fiber ID")
     if sc is not None:
         fig.colorbar(sc, ax=ax, location="bottom", shrink=0.8)
-    fig.suptitle("Sky fiber chi values")
+    fig.suptitle(f"Sky fiber chi rolling median {binsize=}")
 
     return fig
 
