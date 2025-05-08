@@ -832,8 +832,9 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     ax["CHI"].grid(True, alpha=0.25)
 
     for skySpectra in spectras.values():
+        arm = skySpectra.identity.arm
         sky_wavelength, sky_flux = buildReference(skySpectra, func=np.nanmedian, model="sky")
-        ax["SKY"].plot(sky_wavelength, sky_flux)
+        ax["SKY"].plot(sky_wavelength, sky_flux, color=detector_palette[arm], label=arm)
 
     ax["SKY"].set_yscale("log")
     ax["SKY"].set_title("Median sky flux")
