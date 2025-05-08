@@ -513,7 +513,7 @@ def summarizeSpectrograph(
     """
     all_axs = ["ABC", "DEF", "GHI"]
     axt = "\n".join(all_axs)
-    fig, ax_dict = get_mosaic(axt, figsize=(15, 10), sharex=True)
+    fig, ax_dict = get_mosaic(axt, figsize=(15, 8), sharex=True)
 
     # Iterate over arms and generate histograms.
     # for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
@@ -723,9 +723,6 @@ def plot_2d_spectrograph(
             lims = (-1, 1)
 
         sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap=div_palette)
-
-        # Set y-ticks to the fiberId instead of the index.
-        ax.set_yticks(skySpectra.fiberId)
 
     # Add colorbar and overall title.
     ax.set_xlabel("Wavelength [nm]")
