@@ -31,7 +31,7 @@ from pfs.drp.stella.selectFibers import SelectFibersTask
 from pfs.drp.stella.subtractSky1d import subtractSky1d
 
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
-from pfs.drp.qa.utils.plotting import detector_palette
+from pfs.drp.qa.utils.plotting import detector_palette, div_palette
 
 arm_colors = ["steelblue", "firebrick", "darkgoldenrod"]
 plot_colors = [
@@ -306,7 +306,7 @@ class SkySubtractionQaTask(PipelineTask):
         fig_2d = plot_2d_spectrograph(spectras)
 
         self.log.info(f"Plotting outlier summary for arms {arms}.")
-        fig_outlier = plot_outlier_summary(spectras, spectraFibers)
+        fig_outlier = plot_outlier_summary(spectras, stats)
 
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
         fig_sky_brightness = plot_vs_sky_brightness(spectras)
@@ -712,21 +712,21 @@ def plot_2d_spectrograph(
         if lims is None:
             lims = (-1, 1)
 
-        sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap="RdBu_r")
+        sc = ax.pcolormesh(Y, X, z, vmin=lims[0], vmax=lims[1], cmap=div_palette)
 
     # Add colorbar and overall title.
     ax.set_xlabel("Wavelength [nm]")
     ax.set_ylabel("Fiber ID")
     if sc is not None:
         divider = make_axes_locatable(ax)
-        cax = divider.append_axes("top", size="3%", pad=0.1)
+        cax = divider.append_axes("bottom", size="3%", pad=0.1)
         fig.colorbar(sc, cax=cax, orientation="horizontal", extend="both")
     fig.suptitle(f"Sky fiber chi rolling median {binsize=}")
 
     return fig
 
 
-def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -> Figure:
+def plot_outlier_summary(spectras: dict, stats: DataFrame, thresholds=None) -> Figure:
     """
     Generate a summary plot highlighting outliers in sky subtraction residuals.
 
@@ -743,8 +743,8 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     ----------
     spectras : `dict`
         Dictionary containing spectrograph data.
-    spectraFibers : `dict`
-        Dictionary of processed fiber data with fiber-specific residuals.
+    stats : `DataFrame`
+        DataFrame containing statistics for each arm.
     thresholds : `list` of `float`, optional
         List of thresholds for outlier detection (default: [5, 15]).
 
@@ -763,17 +763,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     specs = spectras.copy()
     specs.pop("pfsConfig", None)
 
-    dfs = list()
-    for spec, arm in spectraFibers.keys():
-        for fiberId, data in spectraFibers[(spec, arm)].items():
-            df = pd.DataFrame(data)
-            df["fiberId"] = fiberId
-            df["arm"] = str(arm)
-            df["spectrograph"] = spec
-            dfs.append(df)
-
-    df = pd.concat(dfs)
-    df["chi_value"] = df.chi.map(
+    stats["chi_value"] = stats.chi.map(
         lambda x: (
             f"< {threshold_low}"
             if abs(x) < threshold_low
@@ -789,7 +779,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     fig.set_size_inches(15, 5)
 
     sb.scatterplot(
-        data=df.query('chi_value != "< 5"'),
+        data=stats.query('chi_value != "< 5"'),
         x="wave",
         y="fiberId",
         hue="chi_value",
