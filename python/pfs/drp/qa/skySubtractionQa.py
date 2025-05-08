@@ -737,8 +737,8 @@ def plot_2d_spectrograph(
     ax.set_ylabel("Fiber ID")
     if sc is not None:
         divider = make_axes_locatable(ax)
-        cax = divider.append_axes("bottom", size="3%", pad=1)
-        fig.colorbar(sc, cax=cax, orientation="horizontal", extend="both")
+        cax = divider.append_axes("bottom", size="5%", pad=0.5)
+        fig.colorbar(sc, cax=cax, orientation="horizontal", extend="both", label="chi value")
     fig.suptitle(f"Sky fiber chi rolling median {binsize=}", fontsize=16)
 
     # Turn off ticks
