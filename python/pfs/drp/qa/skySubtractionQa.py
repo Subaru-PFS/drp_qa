@@ -846,7 +846,7 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
     """
     # Create a figure layout.
     fig, ax_dict = get_mosaic(
-        [["RESIDUALS", "RESIDUALS", "RESIDUALS"], ["SKY_0", "SKY_1", "SKY_2"]], figsize=(15, 10)
+        [["RESIDUALS", "RESIDUALS", "RESIDUALS"], ["SKY_0", "SKY_1", "SKY_2"]], figsize=(15, 6)
     )
 
     # Copy and remove pfsConfig to avoid unnecessary data.
