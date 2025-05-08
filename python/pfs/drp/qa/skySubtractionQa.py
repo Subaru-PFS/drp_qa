@@ -360,20 +360,7 @@ def getSpectraStats(spectraFibers: dict) -> DataFrame:
 
 
     """
-    dfs = list()
-    for spec, arm in spectraFibers.keys():
-        for fiberId, data in spectraFibers[(spec, arm)].items():
-            df = pd.DataFrame(data)
-            df["fiberId"] = fiberId
-            df["arm"] = str(arm)
-            df["spectrograph"] = spec
-            dfs.append(df)
-
-    df = pd.concat(dfs)
-
-    df.fiberId = df.fiberId.astype("category")
-    df.arm = df.arm.astype("category")
-    df.spectrograph = df.spectrograph.astype("category")
+    df = getFiberData(spectraFibers)
 
     stats = (
         df.groupby(["arm", "spectrograph", "fiberId"], observed=False)
@@ -391,6 +378,42 @@ def getSpectraStats(spectraFibers: dict) -> DataFrame:
     )
 
     return stats
+
+
+def getFiberData(spectraFibers: dict) -> DataFrame:
+    """Convert spectraFibers dictionary into a DataFrame.
+
+    This function takes a nested dictionary structure containing spectral data for different
+    spectrograph arms and fibers, and flattens it into a pandas DataFrame. Each row in the
+    DataFrame corresponds to a specific fiber, with columns for wavelength, flux, standard
+    deviation, sky background, chi values, and additional metadata such as fiber ID, arm,
+    and spectrograph.
+
+    Parameters
+    ----------
+    spectraFibers : `dict`
+        Dictionary containing spectral data indexed by `(spectrograph, arm)`.
+        Each entry contains a nested dictionary with fiber IDs as keys and spectral properties
+        (wavelength, flux, std, sky, chi) as values.
+
+    Returns
+    -------
+    df : `pandas.DataFrame`
+        DataFrame containing the flattened spectral data.
+    """
+    dfs = list()
+    for spec, arm in spectraFibers.keys():
+        for fiberId, data in spectraFibers[(spec, arm)].items():
+            df = pd.DataFrame(data)
+            df["fiberId"] = fiberId
+            df["arm"] = str(arm)
+            df["spectrograph"] = spec
+            dfs.append(df)
+    df = pd.concat(dfs)
+    df.fiberId = df.fiberId.astype("category")
+    df.arm = df.arm.astype("category")
+    df.spectrograph = df.spectrograph.astype("category")
+    return df
 
 
 def extractFibers(spectras: dict):
@@ -776,16 +799,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     specs = spectras.copy()
     specs.pop("pfsConfig", None)
 
-    dfs = list()
-    for spec, arm in spectraFibers.keys():
-        for fiberId, data in spectraFibers[(spec, arm)].items():
-            df = pd.DataFrame(data)
-            df["fiberId"] = fiberId
-            df["arm"] = str(arm)
-            df["spectrograph"] = spec
-            dfs.append(df)
-
-    df = pd.concat(dfs)
+    df = getFiberData(spectraFibers)
 
     df["chi_value"] = df.chi.map(
         lambda x: (
