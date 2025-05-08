@@ -807,8 +807,9 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
         x="wave",
         y="fiberId",
         hue="chi",
-        palette="Set1",
+        palette=div_palette,
         ax=ax["CHI"],
+        legend="brief",
     )
     sb.move_legend(ax["CHI"], "lower left")
     ax["CHI"].set_ylabel("Fiber ID")
