@@ -813,7 +813,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     sb.move_legend(ax["CHI"], "lower left")
     ax["CHI"].set_ylabel("Fiber ID")
     ax["CHI"].set_xlabel("Wavelength [nm]")
-    ax["CHI"].set_title("Chi outliers")
+    ax["CHI"].set_title("Sky fibers chi outliers")
     ax["CHI"].grid(True, alpha=0.25)
 
     for skySpectra in spectras.values():
@@ -823,8 +823,6 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     ax["SKY"].set_yscale("log")
     ax["SKY"].set_title("Median sky flux")
     ax["SKY"].grid(True, alpha=0.25)
-
-    fig.suptitle("Sky fiber chi outliers")
 
     return fig
 
