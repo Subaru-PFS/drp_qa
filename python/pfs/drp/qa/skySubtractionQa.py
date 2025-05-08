@@ -513,7 +513,7 @@ def summarizeSpectrograph(
     """
     all_axs = ["ABC", "DEF", "GHI"]
     axt = "\n".join(all_axs)
-    fig, ax_dict = get_mosaic(axt, figsize=(15, 10), sharex=True, sharey=True)
+    fig, ax_dict = get_mosaic(axt, figsize=(15, 10), sharex=True)
 
     # Iterate over arms and generate histograms.
     # for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
@@ -556,7 +556,7 @@ def summarizeSpectrograph(
 
         # Labels for statistics
         labels = [["Mean", "Median"], ["Stddev", "IQR Stddev"]]
-        rnge_options = [(-3, 3), (0, 3)]  # Range for mean/median and stddev/IQR plots
+        rnge_options = [(-3, 3), (-3, 3)]  # Range for mean/median and stddev/IQR plots
 
         means = stats.loc[stats.spectrograph == spectrograph, ["fiberChiMean", "fiberChiMedian"]].values
         stdev = stats.loc[stats.spectrograph == spectrograph, ["fiberChiStd", "fiberChiIQR"]].values
