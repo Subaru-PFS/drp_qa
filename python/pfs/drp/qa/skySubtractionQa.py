@@ -315,7 +315,8 @@ class SkySubtractionQaTask(PipelineTask):
         fig_1d.suptitle(f"Sky Subtraction QA\n{visit=} {spectrograph=}", fontsize=16)
 
         self.log.info(f"Plotting 2D spectra for arms {arms}.")
-        fig_2d = plot_2d_spectrograph(spectras)
+        # fig_2d = plot_2d_spectrograph(spectras)
+        fig_2d = plot_2d_chi(spectraFibers)
 
         self.log.info(f"Plotting outlier summary for arms {arms}.")
         fig_outlier = plot_outlier_summary(spectras, spectraFibers)
@@ -535,94 +536,101 @@ def summarizeSpectrograph(
     - Compares mean, median, standard deviation, and IQR across arms.
     - Uses `skySubtractionQaPlot` for visualization.
     """
-    all_axs = ["ABC", "DEF", "GHI"]
-    axt = "\n".join(all_axs)
-    fig, ax_dict = get_mosaic(axt, figsize=(15, 8), sharex=True)
+    arms = [arm for (_, arm) in spectraFibers.keys()]
+
+    all_axs = {arm: [f"{arm}_HIST", f"{arm}_AVG", f"{arm}_ERR"] for arm in "brmn" if arm in arms}
+    fig, ax_dict = get_mosaic(all_axs.values(), figsize=(15, 8), sharex=True)
 
     # Iterate over arms and generate histograms.
     # for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
-    for i, spec_key in enumerate(spectraFibers.keys()):
-        (spectrograph, arm) = spec_key
-        fibers = spectraFibers[spec_key]
-        layers = []
-        big_chi = []  # Store all chi values for overall distribution
-        plot_color = detector_palette[arm]
+    for arm in ["b", "r", "m", "n"]:
+        for spectrograph in [1, 2, 3, 4]:
+            spec_key = (spectrograph, arm)
+            if spec_key not in spectraFibers:
+                continue
 
-        # Process each fiber.
-        for fib in fibers.keys():
-            chi = fibers[fib]["chi"]
-            chiPoisson = fibers[fib]["chiPoisson"]
+            fibers = spectraFibers[spec_key]
+            layers = []
+            big_chi = []  # Store all chi values for overall distribution
+            plot_color = detector_palette[arm]
 
-            # DRP chi distribution per fiber.
-            layers.append(
-                PlotLayer("hist", chi, color=plot_color, alpha=0.5, linewidth=2, rnge=xlim, bins=30)
-            )
+            # Process each fiber.
+            for fib in fibers.keys():
+                chi = fibers[fib]["chi"]
+                chiPoisson = fibers[fib]["chiPoisson"]
 
-            # Poisson chi distribution per fiber.
-            layers.append(
-                PlotLayer("hist", chiPoisson, color="k", alpha=0.1, linewidth=2, rnge=xlim, bins=30)
-            )
-
-            # Compute statistical metrics.
-            big_chi.extend(chi)
-
-        # Add combined chi distribution (all fibers) with a distinctive color.
-        layers.append(PlotLayer("hist", big_chi, color="magenta", alpha=1, linewidth=6, rnge=xlim, bins=30))
-
-        # Plot chi distribution.
-        make_plot(
-            layers,
-            ax_dict[all_axs[i][0]],
-            xlim=xlim,
-            xlabel=r"$\chi$",
-            ylabel=f"Arm: {arm}\nPDF",
-        )
-
-        # Labels for statistics
-        labels = [["Mean", "Median"], ["Stddev", "IQR Stddev"]]
-        rnge_options = [(-3, 3), (-3, 3)]  # Range for mean/median and stddev/IQR plots
-
-        means = stats.loc[stats.spectrograph == spectrograph, ["fiberChiMean", "fiberChiMedian"]].values
-        stdev = stats.loc[stats.spectrograph == spectrograph, ["fiberChiStd", "fiberChiIQR"]].values
-
-        # Iterate over mean/median and stdev/IQR plots
-        for j, x, ax, rnge in zip(range(2), [means, stdev], all_axs[i][1:], rnge_options):
-            ref_line = [PlotLayer("vert", X=0 if j == 0 else 1, linestyle="--")]
-
-            # Generate the histogram layers for statistical metrics
-            hist_layers = [
-                PlotLayer(
-                    "hist",
-                    X=x[:, i],
-                    color=plot_color,
-                    alpha=[1, 0.5][i],
-                    rnge=rnge,
-                    bins=30,
-                    linewidth=4,
-                    histtype=["step", "stepfilled"][i],
-                    label=labels[j][i],
+                # DRP chi distribution per fiber.
+                layers.append(
+                    PlotLayer("hist", chi, color=plot_color, alpha=0.5, linewidth=2, rnge=xlim, bins=30)
                 )
-                for i in range(2)
-            ]
 
-            # Plot statistical metrics
-            make_plot(
-                ref_line + hist_layers,
-                ax_dict[ax],
-                xlim=rnge,
-                legend="A" in all_axs[i],
-                loc="upper right",
-                xlabel=r"$\chi$",
+                # Poisson chi distribution per fiber.
+                layers.append(
+                    PlotLayer("hist", chiPoisson, color="k", alpha=0.1, linewidth=2, rnge=xlim, bins=30)
+                )
+
+                # Compute statistical metrics.
+                big_chi.extend(chi)
+
+            # Add combined chi distribution (all fibers) with a distinctive color.
+            layers.append(
+                PlotLayer("hist", big_chi, color="magenta", alpha=1, linewidth=6, rnge=xlim, bins=30)
             )
 
-        # Remove x-axis labels for non-bottom plots
-        # if arm != arms[-1]:
-        # for ax in all_axs:
-        # ax_dict[ax].axes.xaxis.set_ticklabels([])
+            # Plot chi distribution.
+            make_plot(
+                layers,
+                ax_dict[all_axs[arm][0]],
+                xlim=xlim,
+                xlabel=r"$\chi$",
+                ylabel=f"Arm: {arm}\nPDF",
+            )
 
-        # Remove y-axis labels for all plots
-        # for ax in all_axs:
-        #     ax_dict[ax].axes.yaxis.set_ticklabels([])
+            # Labels for statistics
+            labels = [["Mean", "Median"], ["Stddev", "IQR Stddev"]]
+            rnge_options = [(-3, 3), (-3, 3)]  # Range for mean/median and stddev/IQR plots
+
+            means = stats.loc[stats.spectrograph == spectrograph, ["fiberChiMean", "fiberChiMedian"]].values
+            stdev = stats.loc[stats.spectrograph == spectrograph, ["fiberChiStd", "fiberChiIQR"]].values
+
+            # Iterate over mean/median and stdev/IQR plots
+            for j, x, ax, rnge in zip(range(2), [means, stdev], all_axs[arm][1:], rnge_options):
+                ref_line = [PlotLayer("vert", X=0 if j == 0 else 1, linestyle="--")]
+
+                # Generate the histogram layers for statistical metrics
+                hist_layers = [
+                    PlotLayer(
+                        "hist",
+                        X=x[:, i],
+                        color=plot_color,
+                        alpha=[1, 0.5][i],
+                        rnge=rnge,
+                        bins=30,
+                        linewidth=4,
+                        histtype=["step", "stepfilled"][i],
+                        label=labels[j][i],
+                    )
+                    for i in range(2)
+                ]
+
+                # Plot statistical metrics
+                make_plot(
+                    ref_line + hist_layers,
+                    ax_dict[ax],
+                    xlim=rnge,
+                    legend="A" in all_axs[arm],
+                    loc="upper right",
+                    xlabel=r"$\chi$",
+                )
+
+            # Remove x-axis labels for non-bottom plots
+            # if arm != arms[-1]:
+            # for ax in all_axs:
+            # ax_dict[ax].axes.xaxis.set_ticklabels([])
+
+            # Remove y-axis labels for all plots
+            # for ax in all_axs:
+            #     ax_dict[ax].axes.yaxis.set_ticklabels([])
 
     return fig, ax_dict
 
@@ -649,9 +657,7 @@ def plot_1d_spectrograph(
     fig : `matplotlib.figure.Figure`
         The generated figure.
     """
-    all_axs = ["ABC", "DEF", "GHI"]
     label_lookup = {"b": "Blue", "r": "Red", "n": "NIR", "m": "Medium"}
-    ax0 = [ax[0] for ax in all_axs]
 
     # Generate spectrograph summary plots.
     fig, ax_dict = summarizeSpectrograph(spectraFibers, stats, xlim=xlim)
@@ -661,22 +667,23 @@ def plot_1d_spectrograph(
     yp = scipy.stats.norm.pdf(xp, loc=0, scale=1)
 
     # Update axis labels and add Gaussian reference.
-    for ax, specKey in zip(ax0, spectraFibers.keys()):
+    for specKey in spectraFibers.keys():
         spectrograph, arm = specKey
-        ax_dict[ax].set_ylabel(f"{label_lookup[arm]} arm")
-        ax_dict[ax].plot(xp, yp, color="k", linewidth=4, linestyle="--")
+        ax = ax_dict[f"{arm}_HIST"]
+        ax.set_ylabel(f"{label_lookup[arm]} arm")
+        ax.plot(xp, yp, color="k", linewidth=4, linestyle="--")
 
     # Set title.
-    ax_dict["A"].set_title("Chi Histogram")
-    ax_dict["B"].set_title("Mean and Median Chi")
-    ax_dict["C"].set_title("Stddev and IQR Chi")
+    ax_dict["b_HIST"].set_title("Chi Histogram")
+    ax_dict["b_AVG"].set_title("Mean and Median Chi")
+    ax_dict["b_ERR"].set_title("Stddev and IQR Chi")
 
     # Add legend.
-    ax_dict["A"].plot([], [], color=detector_palette["b"], label="DRP")
-    ax_dict["A"].plot([], [], color="magenta", label="Combined DRP")
-    ax_dict["A"].plot([], [], color="k", label="Using Poisson errors")
+    ax_dict["b_HIST"].plot([], [], color=detector_palette["b"], label="DRP")
+    ax_dict["b_HIST"].plot([], [], color="magenta", label="Combined DRP")
+    ax_dict["b_HIST"].plot([], [], color="k", label="Using Poisson errors")
 
-    ax_dict["A"].legend(loc="upper left")
+    ax_dict["b_HIST"].legend(loc="upper left")
 
     return fig
 
@@ -763,6 +770,57 @@ def plot_2d_spectrograph(
     return fig
 
 
+def plot_2d_chi(spectraFibers: dict, vmin: float = -3, vmax: float = 3) -> Figure:
+    """
+    Generate a 2D plot of chi values for sky subtraction residuals.
+
+    This function visualizes the chi values across different fibers and wavelengths,
+    providing insights into the performance of sky subtraction.
+
+    Parameters
+    ----------
+    spectraFibers : `dict`
+        Dictionary containing spectrograph data.
+    vmin : `float`, optional
+        Minimum value for the color scale (default: -3).
+    vmax : `float`, optional
+        Maximum value for the color scale (default: 3).
+
+    Returns
+    -------
+    fig : `matplotlib.figure.Figure`
+        The generated figure.
+    """
+    fd0 = getFiberData(spectraFibers)
+    fd0["wave_row"] = fd0.wave.astype("int")
+
+    fd0 = fd0.pivot_table(index=["fiberId"], columns="wave_row", values="chi", observed=False, aggfunc="mean")
+
+    wave_range = np.arange(fd0.columns.min(), fd0.columns.max())
+    fd0 = fd0.T.reindex(wave_range).T
+
+    fig = Figure(layout="constrained", figsize=(15, 5))
+    ax = fig.add_subplot(111)
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("bottom", size="3%", pad=0.6)
+    cbar = dict(orientation="horizontal", extend="both", label="chi value")
+
+    dp = div_palette.copy()
+    dp.set_bad(color="k", alpha=0.0)
+    sb.heatmap(fd0, cmap=dp, ax=ax, center=0, vmin=vmin, vmax=vmax, robust=True, cbar_ax=cax, cbar_kws=cbar)
+    ax.tick_params(axis="both", which="both", bottom=False, top=False, left=False, right=False)
+    ax.spines["top"].set_visible(True)
+    ax.spines["bottom"].set_visible(True)
+    ax.spines["left"].set_visible(True)
+    ax.spines["right"].set_visible(True)
+
+    ax.set_xlabel("Wavelength [Å]")
+    ax.set_title("Median chi values per nm")
+
+    return fig
+
+
 def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -> Figure:
     """
     Generate a summary plot highlighting outliers in sky subtraction residuals.
@@ -783,7 +841,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     spectraFibers : `dict`
         Dictionary containing fiber data.
     thresholds : `list` of `float`, optional
-        List of thresholds for outlier detection (default: [5, 15]).
+        List of thresholds for outlier detection (default: [3, 10]).
 
     Returns
     -------
@@ -791,7 +849,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
         The generated figure containing the outlier summary plot.
     """
     if thresholds is None:
-        thresholds = [5, 15]
+        thresholds = [3, 10]
 
     threshold_low = thresholds[0]
     threshold_high = thresholds[1]
@@ -818,7 +876,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     fig.set_size_inches(15, 5)
 
     sb.scatterplot(
-        data=df.query(f'chi_value != "< {threshold_low}"'),
+        data=df.query(f"abs(chi) >= {threshold_low}"),
         x="wave",
         y="fiberId",
         hue="chi",
@@ -828,7 +886,6 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
         size_order=[
             f"> {threshold_high}",
             f"{threshold_low} < x < {threshold_high}",
-            f"< {threshold_low}",
         ],
         ax=ax["CHI"],
         legend="brief",
@@ -876,7 +933,7 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
     """
     # Create a figure layout.
     fig, ax_dict = get_mosaic(
-        [["RESIDUALS", "RESIDUALS", "RESIDUALS"], ["SKY_0", "SKY_1", "SKY_2"]], figsize=(15, 6)
+        [["RESIDUALS", "RESIDUALS", "RESIDUALS"], ["SKY_1", "SKY_2", "SKY_3"]], figsize=(15, 6)
     )
 
     # Copy and remove pfsConfig to avoid unnecessary data.
@@ -885,72 +942,80 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
 
     # Loop through each spectral arm.
     # TODO (wtgee) this should be moved out of the plotting code.
-    for i, skySpectra in enumerate(specs.values()):
-        arm = skySpectra.identity.arm
-        # Split into reference and test spectra.
-        referenceSpectra, testSpectra = splitSpectraIntoReferenceAndTest(skySpectra)
+    i = 0
+    for arm in ["b", "r", "m", "n"]:
+        for spectrograph in [1, 2, 3, 4]:
+            spec_key = (spectrograph, arm)
+            if spec_key not in spectras:
+                continue
 
-        # Compute reference and test statistics.
-        references_sky = buildReference(referenceSpectra, func=np.nanmedian, model="none")
-        residual_flux = buildReference(testSpectra, func=np.median, model="residuals")
-        # references_err = buildReference(testSpectra, func='quadrature', model='variance')
-        references_chi_median = buildReference(testSpectra, func=np.median, model="chi")
+            i += 1
 
-        arm_color = detector_palette[arm]
+            skySpectra = spectras[spec_key]
+            # Split into reference and test spectra.
+            referenceSpectra, testSpectra = splitSpectraIntoReferenceAndTest(skySpectra)
 
-        # Interpolate sky brightness onto a residual wavelength grid.
-        sky_wave_ref, sky_flux = references_sky
-        resid_wave_ref, resid_flux = residual_flux
-        sky_flux = np.interp(resid_wave_ref, sky_wave_ref, sky_flux)
+            # Compute reference and test statistics.
+            references_sky = buildReference(referenceSpectra, func=np.nanmedian, model="none")
+            residual_flux = buildReference(testSpectra, func=np.median, model="residuals")
+            # references_err = buildReference(testSpectra, func='quadrature', model='variance')
+            references_chi_median = buildReference(testSpectra, func=np.median, model="chi")
 
-        chi = references_chi_median[1]
+            arm_color = detector_palette[arm]
 
-        # Compute ranked percentile of sky brightness.
-        ranked = np.argsort(np.argsort(sky_flux))
-        ranked = 100 * ranked / len(ranked)
+            # Interpolate sky brightness onto a residual wavelength grid.
+            sky_wave_ref, sky_flux = references_sky
+            resid_wave_ref, resid_flux = residual_flux
+            sky_flux = np.interp(resid_wave_ref, sky_wave_ref, sky_flux)
 
-        # Bin residuals based on sky brightness percentiles.
-        yb, xb, eb = rolling(ranked, chi, 10)
+            chi = references_chi_median[1]
 
-        # Scatter plot of residual flux vs wavelength.
-        ax_dict["RESIDUALS"].scatter(
-            resid_wave_ref, resid_flux, s=3, color=arm_color, rasterized=True, alpha=0.9
-        )
-        ax_dict["RESIDUALS"].plot(
-            resid_wave_ref, sky_flux / 100, color="k", linewidth=1, alpha=0.3, label="1% sky", zorder=-100
-        )
+            # Compute ranked percentile of sky brightness.
+            ranked = np.argsort(np.argsort(sky_flux))
+            ranked = 100 * ranked / len(ranked)
 
-        # Scatter plot of residuals vs sky brightness percentile.
-        ax_dict[f"SKY_{i}"].scatter(chi, ranked, s=1, color=arm_color, rasterized=True, alpha=0.5)
-        ax_dict[f"SKY_{i}"].errorbar(
-            xb,
-            yb,
-            xerr=eb,
-            capsize=5,
-            capthick=3,
-            color="k",
-            mec="k",
-            mfc=arm_color,
-            linewidth=3,
-            marker="o",
-            alpha=0.75,
-            zorder=100,
-        )
+            # Bin residuals based on sky brightness percentiles.
+            yb, xb, eb = rolling(ranked, chi, 10)
 
-        # Set axis limits.
-        ax_dict["RESIDUALS"].set_ylim(-100, 100)
-        ax_dict[f"SKY_{i}"].set_xlim(-0.5, 0.5)
+            # Scatter plot of residual flux vs wavelength.
+            ax_dict["RESIDUALS"].scatter(
+                resid_wave_ref, resid_flux, s=3, color=arm_color, rasterized=True, alpha=0.9
+            )
+            ax_dict["RESIDUALS"].plot(
+                resid_wave_ref, sky_flux / 100, color="k", linewidth=1, alpha=0.3, label="1% sky", zorder=-100
+            )
 
-        # Set axis labels.
-        ax_dict["RESIDUALS"].set_xlabel("Wavelength [nm]")
-        ax_dict["RESIDUALS"].set_ylabel("Median Sky Flux Counts")
+            # Scatter plot of residuals vs sky brightness percentile.
+            ax_dict[f"SKY_{i}"].scatter(chi, ranked, s=1, color=arm_color, rasterized=True, alpha=0.5)
+            ax_dict[f"SKY_{i}"].errorbar(
+                xb,
+                yb,
+                xerr=eb,
+                capsize=5,
+                capthick=3,
+                color="k",
+                mec="k",
+                mfc=arm_color,
+                linewidth=3,
+                marker="o",
+                alpha=0.75,
+                zorder=100,
+            )
 
-        ax_dict[f"SKY_{i}"].set_xlabel(r"Median $\chi$")
-        ax_dict[f"SKY_{i}"].set_ylabel("Sky Counts Percentile")
+            # Set axis limits.
+            ax_dict["RESIDUALS"].set_ylim(-100, 100)
+            ax_dict[f"SKY_{i}"].set_xlim(-0.5, 0.5)
 
-        # Add reference lines.
-        ax_dict[f"SKY_{i}"].axvline(0, linestyle="--", color="k")
-        ax_dict["RESIDUALS"].axhline(0, linestyle="--", color="k")
+            # Set axis labels.
+            ax_dict["RESIDUALS"].set_xlabel("Wavelength [nm]")
+            ax_dict["RESIDUALS"].set_ylabel("Median Sky Flux Counts")
+
+            ax_dict[f"SKY_{i}"].set_xlabel(r"Median $\chi$")
+            ax_dict[f"SKY_{i}"].set_ylabel("Sky Counts Percentile")
+
+            # Add reference lines.
+            ax_dict[f"SKY_{i}"].axvline(0, linestyle="--", color="k")
+            ax_dict["RESIDUALS"].axhline(0, linestyle="--", color="k")
 
     fig.suptitle("Residual flux and 1% sky spectra reference")
 
