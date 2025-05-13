@@ -339,7 +339,34 @@ class SkySubtractionQaTask(PipelineTask):
         return results
 
 
-def getSpectraData(skySubtraction_mergedSpectra):
+def getSpectraData(skySubtraction_mergedSpectra: Iterable[PfsArm]) -> tuple[dict, dict, DataFrame]:
+    """Extract spectra data from merged spectra.
+
+    This function processes merged spectra data and extracts relevant information
+    for each arm. It organizes the data into a structured dictionary format,
+    where each entry corresponds to a spectrograph arm and fiber ID, storing
+    relevant spectral properties such as wavelength, flux, standard deviation,
+    sky background, and chi values.
+    - Uses `extractFibers` to extract spectral information for each fiber.
+    - Each spectrograph arm has its own dictionary containing fiber-specific data.
+
+    Parameters
+    ----------
+    skySubtraction_mergedSpectra : `Iterable[pfs.drp.stella.PfsArm]`
+        Iterable of merged spectra after sky subtraction.
+
+    Returns
+    -------
+    spectras : `dict`
+        Dictionary containing spectral data indexed by `(spectrograph, arm)`.
+        Each entry contains a nested dictionary with fiber IDs as keys and spectral properties
+        (wavelength, flux, standard deviation, sky background, chi values) as values.
+    spectraFibers : `dict`
+        Dictionary containing fiber data indexed by `(spectrograph, arm)`.
+    stats : `pandas.DataFrame`
+        DataFrame containing statistics for each arm.
+    """
+
     spectras = dict()
     arms = list()
     blockSize = None
