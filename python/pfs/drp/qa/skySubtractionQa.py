@@ -224,13 +224,6 @@ class SkySubtractionConnections(
 ):
     """Connections for SkySubtractionTask"""
 
-    pfsConfig = InputConnection(
-        name="pfsConfig",
-        doc="PfsConfig data",
-        storageClass="PfsConfig",
-        dimensions=("instrument", "visit"),
-    )
-
     skySubtraction_mergedSpectra = InputConnection(
         name="skySubtraction_mergedSpectra",
         doc="Merged spectra after sky subtraction",
@@ -283,7 +276,6 @@ class SkySubtractionQaTask(PipelineTask):
 
     def run(
         self,
-        pfsConfig: PfsConfig,
         skySubtraction_mergedSpectra: Iterable[PfsArm],
         make_pdf: bool = True,
         **kwargs,
@@ -292,8 +284,6 @@ class SkySubtractionQaTask(PipelineTask):
 
         Parameters
         ----------
-        pfsConfig : `pfs.drp.stella.PfsConfig`
-            The input PfsConfig data.
         skySubtraction_mergedSpectra : `Iterable[pfs.drp.stella.PfsArm]`
             The input PfsArm data.
         make_pdf : `bool`, optional
@@ -318,9 +308,6 @@ class SkySubtractionQaTask(PipelineTask):
                 blockSize = subtracted_pfsArm.metadata["blockSize"]
             elif blockSize != subtracted_pfsArm.metadata["blockSize"]:
                 raise ValueError("Block size mismatch between arms.")
-
-        # Add the pfsConfig to the spectra for positional information.
-        spectras["pfsConfig"] = pfsConfig
 
         # Extract the information for the fibers.
         spectraFibers = extractFibers(spectras)
@@ -447,7 +434,6 @@ def extractFibers(spectras: dict):
 
     - Uses `extractFiberInfo` to extract spectral information for each fiber.
     - Each spectrograph arm has its own dictionary containing fiber-specific data.
-    - If `pfsConfig` is not found in `hold`, fiber positions (`xy`, `ra_dec`) will be omitted.
 
     Parameters
     ----------
@@ -468,8 +454,6 @@ def extractFibers(spectras: dict):
                     'std'   : numpy.ndarray,  # Standard deviation of flux
                     'sky'   : numpy.ndarray,  # Sky background values
                     'chi'   : numpy.ndarray,  # Chi values (flux/std)
-                    'xy'    : tuple(float, float),  # PFI nominal position (x, y)
-                    'ra_dec': tuple(float, float)   # Sky coordinates (RA, Dec)
                 },
                 ...
             },
@@ -477,14 +461,11 @@ def extractFibers(spectras: dict):
         }
         ```
     """
-    spectras = spectras.copy()  # Prevent modification of the original input
-    pfsConfig = spectras.pop("pfsConfig", None)  # Extract pfsConfig metadata if available
-
-    ret = {}  # Dictionary to store processed data
+    spectraDict = {}  # Dictionary to store processed data
 
     # Iterate over spectrograph-arm combinations
     for (spectrograph, arm), spectra in spectras.items():
-        ret[(spectrograph, arm)] = {}
+        spectraDict[(spectrograph, arm)] = {}
 
         # Process each fiber
         for iFib, fiberId in enumerate(spectra.fiberId):
@@ -494,7 +475,7 @@ def extractFibers(spectras: dict):
             )
 
             # Initialize fiber entry
-            ret[(spectrograph, arm)][fiberId] = {
+            spectraDict[(spectrograph, arm)][fiberId] = {
                 "wave": wave,
                 "flux": flux,
                 "std": std,
@@ -504,16 +485,7 @@ def extractFibers(spectras: dict):
                 "chiPoisson": chiPoisson,
             }
 
-            # Add positional metadata if `pfsConfig` is available
-            if pfsConfig:
-                ret[(spectrograph, arm)][fiberId].update(
-                    {
-                        "xy": tuple(pfsConfig.pfiNominal[iFib]),  # PFI nominal position (x, y)
-                        "ra_dec": (pfsConfig.ra[iFib], pfsConfig.dec[iFib]),  # Sky coordinates (RA, Dec)
-                    }
-                )
-
-    return ret
+    return spectraDict
 
 
 def summarizeSpectrograph(
@@ -737,18 +709,13 @@ def plot_2d_spectrograph(
     - Uses `rolling` to smooth data along the wavelength axis.
     - Uses `pcolormesh` to create a 2D heatmap for visualization.
     """
-
-    # Copy and remove pfsConfig to avoid unnecessary data.
-    specs = spectras.copy()
-    specs.pop("pfsConfig", None)
-
     # Define axis layout for the number of arms.
     fig = Figure(layout="constrained", figsize=(15, 5))
     ax = fig.add_subplot(111)
 
     # Loop through each spectral arm.
     sc = None
-    for skySpectra in specs.values():
+    for skySpectra in spectras.values():
 
         # Build reference spectra.
         references = buildReference(skySpectra, func=None, model="chi")
@@ -872,10 +839,6 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     threshold_low = thresholds[0]
     threshold_high = thresholds[1]
 
-    # Copy and remove pfsConfig to avoid unnecessary data.
-    specs = spectras.copy()
-    specs.pop("pfsConfig", None)
-
     df = getFiberData(spectraFibers)
 
     df["chi_value"] = df.chi.map(
@@ -953,10 +916,6 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
     fig, ax_dict = get_mosaic(
         [["RESIDUALS", "RESIDUALS", "RESIDUALS"], ["SKY_1", "SKY_2", "SKY_3"]], figsize=(15, 6)
     )
-
-    # Copy and remove pfsConfig to avoid unnecessary data.
-    specs = spectras.copy()
-    specs.pop("pfsConfig", None)
 
     # Loop through each spectral arm.
     # TODO (wtgee) this should be moved out of the plotting code.
