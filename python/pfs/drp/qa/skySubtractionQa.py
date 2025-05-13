@@ -295,25 +295,10 @@ class SkySubtractionQaTask(PipelineTask):
         Struct
             A struct containing the plots if `store_results` is True else None.
         """
-        spectras = dict()
-        arms = list()
-        blockSize = None
-        for subtracted_pfsArm in skySubtraction_mergedSpectra:
-            spectrograph = subtracted_pfsArm.identity.spectrograph
-            arm = subtracted_pfsArm.identity.arm
-            visit = subtracted_pfsArm.identity.visit
-            spectras[(spectrograph, arm)] = subtracted_pfsArm
-            arms.append(arm)
-            if blockSize is None:
-                blockSize = subtracted_pfsArm.metadata["blockSize"]
-            elif blockSize != subtracted_pfsArm.metadata["blockSize"]:
-                raise ValueError("Block size mismatch between arms.")
-
-        # Extract the information for the fibers.
-        spectraFibers = extractFibers(spectras)
-
-        # Get the stats for each arm.
-        stats = getSpectraStats(spectraFibers)
+        spectras, spectraFibers, stats = getSpectraData(skySubtraction_mergedSpectra)
+        arms = [arm for (_, arm) in spectras.keys()]
+        visit = skySubtraction_mergedSpectra[0].identity.visit
+        spectrograph = skySubtraction_mergedSpectra[0].identity.spectrograph
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
         fig_1d = plot_1d_spectrograph(spectraFibers, stats)
@@ -352,6 +337,29 @@ class SkySubtractionQaTask(PipelineTask):
             }
 
         return results
+
+
+def getSpectraData(skySubtraction_mergedSpectra):
+    spectras = dict()
+    arms = list()
+    blockSize = None
+    for subtracted_pfsArm in skySubtraction_mergedSpectra:
+        spectrograph = subtracted_pfsArm.identity.spectrograph
+        arm = subtracted_pfsArm.identity.arm
+        spectras[(spectrograph, arm)] = subtracted_pfsArm
+        arms.append(arm)
+        if blockSize is None:
+            blockSize = subtracted_pfsArm.metadata["blockSize"]
+        elif blockSize != subtracted_pfsArm.metadata["blockSize"]:
+            raise ValueError("Block size mismatch between arms.")
+
+    # Extract the information for the fibers.
+    spectraFibers = extractFibers(spectras)
+
+    # Get the stats for each arm.
+    stats = getSpectraStats(spectraFibers)
+
+    return spectras, spectraFibers, stats
 
 
 def getSpectraStats(spectraFibers: dict) -> DataFrame:
