@@ -305,18 +305,18 @@ class SkySubtractionQaTask(PipelineTask):
         fig_1d = plot_1d_spectrograph(spectraFibers, stats)
         fig_1d.suptitle(f"Sky Subtraction QA\n{visit=} {spectrograph=}", fontsize=16)
 
-        self.log.info(f"Plotting 2D spectra for arms {arms}.")
-        # fig_2d = plot_2d_spectrograph(spectras)
-        fig_2d = plot_2d_chi(spectraFibers)
-
         self.log.info(f"Plotting outlier summary for arms {arms}.")
         fig_outlier = plot_outlier_summary(spectras, spectraFibers)
 
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
         fig_sky_brightness = plot_vs_sky_brightness(spectras)
 
-        # Set the fig_2d ylim to the same as the fig_outlier ylim
-        fig_2d.axes[0].set_xlim(fig_outlier.axes[0].get_xlim())
+        # Set the fig_2d ylim to the same as the fig_outlier ylim.
+        wave_lims = fig_outlier.axes[1].get_xlim()
+
+        self.log.info(f"Plotting 2D spectra for arms {arms}.")
+        # fig_2d = plot_2d_spectrograph(spectras)
+        fig_2d = plot_2d_chi(spectraFibers, wave_lims=wave_lims)
 
         results = Struct(
             skySubtractionFiberStats=stats,
@@ -794,7 +794,9 @@ def plot_2d_spectrograph(
     return fig
 
 
-def plot_2d_chi(spectraFibers: dict, vmin: float = -3, vmax: float = 3) -> Figure:
+def plot_2d_chi(
+    spectraFibers: dict, wave_lims: tuple[float, float] = None, vmin: float = -3, vmax: float = 3
+) -> Figure:
     """
     Generate a 2D plot of chi values for sky subtraction residuals.
 
@@ -805,6 +807,8 @@ def plot_2d_chi(spectraFibers: dict, vmin: float = -3, vmax: float = 3) -> Figur
     ----------
     spectraFibers : `dict`
         Dictionary containing spectrograph data.
+    wave_lims : `tuple` of `float`, optional
+        Wavelength limits for the plot (default: None, uses min and max).
     vmin : `float`, optional
         Minimum value for the color scale (default: -3).
     vmax : `float`, optional
@@ -820,7 +824,10 @@ def plot_2d_chi(spectraFibers: dict, vmin: float = -3, vmax: float = 3) -> Figur
 
     fd0 = fd0.pivot_table(index=["fiberId"], columns="wave_row", values="chi", observed=False, aggfunc="mean")
 
-    wave_range = np.arange(fd0.columns.min(), fd0.columns.max())
+    wave_min = wave_lims[0] if wave_lims is not None else fd0.columns.min()
+    wave_max = wave_lims[1] if wave_lims is not None else fd0.columns.max()
+
+    wave_range = np.arange(wave_min, wave_max + 1, dtype="int")
     fd0 = fd0.T.reindex(wave_range).T
 
     fig = Figure(layout="constrained", figsize=(15, 5))
@@ -1021,6 +1028,9 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
             # Set axis limits.
             ax_dict["RESIDUALS"].set_ylim(-100, 100)
             ax_dict[f"SKY_{i}"].set_xlim(-0.5, 0.5)
+            # Share the SKY_i y axis with the first plot.
+            if i > 1:
+                ax_dict[f"SKY_{i}"].sharey(ax_dict["SKY_1"])
 
             # Set axis labels.
             ax_dict["RESIDUALS"].set_xlabel("Wavelength [nm]")
