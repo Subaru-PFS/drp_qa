@@ -305,20 +305,19 @@ class SkySubtractionQaTask(PipelineTask):
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
         fig_1d = plot_1d_spectrograph(spectraFibers, stats)
-        fig_1d.suptitle(f"Sky Subtraction QA\n{visit=} {spectrograph=}", fontsize=16)
+        fig_1d.suptitle(
+            f"Sky Subtraction QA - {visit} SM{spectrograph}\nChi (flux / std) of Sky Fibers", fontsize=16
+        )
+
+        self.log.info(f"Plotting 2D spectra for arms {arms}.")
+        # fig_2d = plot_2d_spectrograph(spectras)
+        fig_2d = plot_2d_chi(spectraFibers)
 
         self.log.info(f"Plotting outlier summary for arms {arms}.")
         fig_outlier = plot_outlier_summary(spectras, spectraFibers)
 
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
         fig_sky_brightness = plot_vs_sky_brightness(spectras)
-
-        # Set the fig_2d ylim to the same as the fig_outlier ylim.
-        wave_lims = fig_outlier.axes[1].get_xlim()
-
-        self.log.info(f"Plotting 2D spectra for arms {arms}.")
-        # fig_2d = plot_2d_spectrograph(spectras)
-        fig_2d = plot_2d_chi(spectraFibers, wave_lims=wave_lims)
 
         results = Struct(
             skySubtractionFiberStats=stats,
@@ -655,13 +654,13 @@ def summarizeSpectrograph(
                 )
 
             # Remove x-axis labels for non-bottom plots
-            # if arm != arms[-1]:
-            # for ax in all_axs:
-            # ax_dict[ax].axes.xaxis.set_ticklabels([])
+            if arm != arms[-1]:
+                for ax in all_axs:
+                    ax_dict[arm].axes.xaxis.set_ticklabels([])
 
             # Remove y-axis labels for all plots
-            # for ax in all_axs:
-            #     ax_dict[ax].axes.yaxis.set_ticklabels([])
+            for arm in arms:
+                ax_dict[arm].axes.yaxis.set_ticklabels([])
 
     return fig, ax_dict
 
@@ -831,36 +830,71 @@ def plot_2d_chi(
     fd0 = getFiberData(spectraFibers)
     fd0["wave_row"] = fd0.wave.astype("int")
 
-    fd0 = fd0.pivot_table(
-        index=["fiberId"], columns="wave_row", values=plotCol, observed=False, aggfunc=aggfunc
-    )
+    allArms = ["b", "r", "m", "n"]
+    arms = fd0.arm.unique()
+    availableArms = [arm for arm in allArms if arm in arms]
 
-    wave_min = wave_lims[0] if wave_lims is not None else fd0.columns.min()
-    wave_max = wave_lims[1] if wave_lims is not None else fd0.columns.max()
-
-    wave_range = np.arange(wave_min, wave_max + 1, dtype="int")
-    fd0 = fd0.T.reindex(wave_range).T
-
-    fig = Figure(layout="constrained", figsize=(15, 5))
-    ax = fig.add_subplot(111)
-
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("bottom", size="3%", pad=0.6)
-    cbar = dict(orientation="horizontal", extend="both", label="chi value")
+    dp = div_palette.copy()
+    dp.set_bad(color="k", alpha=0.0)
 
     vmin = vlims[0] if vlims is not None else -3
     vmax = vlims[1] if vlims is not None else 3
-    dp = div_palette.copy()
-    dp.set_bad(color="k", alpha=0.0)
-    sb.heatmap(fd0, cmap=dp, ax=ax, center=0, vmin=vmin, vmax=vmax, robust=True, cbar_ax=cax, cbar_kws=cbar)
-    ax.tick_params(axis="both", which="both", bottom=False, top=False, left=False, right=False)
-    ax.spines["top"].set_visible(True)
-    ax.spines["bottom"].set_visible(True)
-    ax.spines["left"].set_visible(True)
-    ax.spines["right"].set_visible(True)
 
-    ax.set_xlabel("Wavelength [nm]")
-    ax.set_title(f"{aggfunc.title()} {plotCol} values per nm")
+    fig, ax_dict = get_mosaic("".join(availableArms), figsize=(15, 5), sharey=True)
+
+    plotData = dict()
+    for i, arm in enumerate(availableArms):
+        ax = ax_dict[arm]
+        rows = fd0.query(f"arm == '{arm}'")
+
+        arm_fd0 = rows.pivot_table(
+            index=["fiberId"], columns="wave_row", values=plotCol, observed=False, aggfunc=aggfunc
+        )
+
+        wave_min = wave_lims[0] if wave_lims is not None else arm_fd0.columns.min()
+        wave_max = wave_lims[1] if wave_lims is not None else arm_fd0.columns.max()
+
+        wave_range = np.arange(wave_min, wave_max + 1, dtype="int")
+        arm_fd0 = arm_fd0.T.reindex(wave_range).T
+
+        # Plot each arm separately
+        plotData[arm] = arm_fd0
+        ax.set_title(f"{arm} arm")
+
+        cax = None
+        cbar_kws = dict()
+        cbar = False
+        if i == len(availableArms) - 1:
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="3%", pad=0.1)
+            cbar_kws = dict(orientation="vertical", extend="both")
+            cbar = True
+
+        sb.heatmap(
+            arm_fd0,
+            cmap=dp,
+            ax=ax,
+            center=0,
+            vmin=vmin,
+            vmax=vmax,
+            robust=True,
+            cbar=cbar,
+            cbar_ax=cax,
+            cbar_kws=cbar_kws,
+        )
+        ax.set(xlabel="", ylabel="")
+        ax.tick_params(axis="both", which="both", bottom=False, top=False, left=False, right=False)
+        ax.spines["top"].set_visible(True)
+        ax.spines["bottom"].set_visible(True)
+        ax.spines["left"].set_visible(True)
+        ax.spines["right"].set_visible(True)
+
+        if i == 0:
+            ax.set_ylabel("Fiber ID")
+        if i == 1:
+            ax.set_xlabel("Wavelength [nm]")
+
+    fig.suptitle(f"{aggfunc.title()} {plotCol} values per nm")
 
     return fig
 
@@ -1002,9 +1036,9 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
             # Interpolate sky brightness onto a residual wavelength grid.
             sky_wave_ref, sky_flux = references_sky
             resid_wave_ref, resid_flux = residual_flux
-            sky_flux = np.interp(resid_wave_ref, sky_wave_ref, sky_flux)
+            chi_wave_ref, chi = references_chi_median
 
-            chi = references_chi_median[1]
+            sky_flux = np.interp(resid_wave_ref, sky_wave_ref, sky_flux)
 
             # Compute ranked percentile of sky brightness.
             ranked = np.argsort(np.argsort(sky_flux))
@@ -1017,6 +1051,7 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
             ax_dict["RESIDUALS"].scatter(
                 resid_wave_ref, resid_flux, s=3, color=arm_color, rasterized=True, alpha=0.9
             )
+            # Plot 1% sky brightness reference.
             ax_dict["RESIDUALS"].plot(
                 resid_wave_ref, sky_flux / 100, color="k", linewidth=1, alpha=0.3, label="1% sky", zorder=-100
             )
