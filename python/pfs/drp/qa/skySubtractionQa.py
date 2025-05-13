@@ -297,8 +297,9 @@ class SkySubtractionQaTask(PipelineTask):
         """
         spectras, spectraFibers, stats = getSpectraData(skySubtraction_mergedSpectra)
         arms = [arm for (_, arm) in spectras.keys()]
-        visit = skySubtraction_mergedSpectra[0].identity.visit
-        spectrograph = skySubtraction_mergedSpectra[0].identity.spectrograph
+        identity = list(skySubtraction_mergedSpectra)[0].identity
+        visit = identity.visit
+        spectrograph = identity.spectrograph
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
         fig_1d = plot_1d_spectrograph(spectraFibers, stats)
@@ -313,6 +314,9 @@ class SkySubtractionQaTask(PipelineTask):
 
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
         fig_sky_brightness = plot_vs_sky_brightness(spectras)
+
+        # Set the fig_2d ylim to the same as the fig_outlier ylim
+        fig_2d.axes[0].set_xlim(fig_outlier.axes[0].get_xlim())
 
         results = Struct(
             skySubtractionFiberStats=stats,
