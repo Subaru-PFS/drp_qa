@@ -224,6 +224,13 @@ class SkySubtractionConnections(
 ):
     """Connections for SkySubtractionTask"""
 
+    pfsConfig = InputConnection(
+        name="pfsConfig",
+        doc="PfsConfig data",
+        storageClass="PfsConfig",
+        dimensions=("instrument", "visit"),
+    )
+
     skySubtraction_mergedSpectra = InputConnection(
         name="skySubtraction_mergedSpectra",
         doc="Merged spectra after sky subtraction",
@@ -274,11 +281,19 @@ class SkySubtractionQaTask(PipelineTask):
             # Store the results if valid.
             butlerQC.put(outputs, outputRefs)
 
-    def run(self, skySubtraction_mergedSpectra: Iterable[PfsArm], make_pdf: bool = True, **kwargs) -> Struct:
+    def run(
+        self,
+        pfsConfig: PfsConfig,
+        skySubtraction_mergedSpectra: Iterable[PfsArm],
+        make_pdf: bool = True,
+        **kwargs,
+    ) -> Struct:
         """Perform QA on sky subtraction.
 
         Parameters
         ----------
+        pfsConfig : `pfs.drp.stella.PfsConfig`
+            The input PfsConfig data.
         skySubtraction_mergedSpectra : `Iterable[pfs.drp.stella.PfsArm]`
             The input PfsArm data.
         make_pdf : `bool`, optional
@@ -303,6 +318,9 @@ class SkySubtractionQaTask(PipelineTask):
                 blockSize = subtracted_pfsArm.metadata["blockSize"]
             elif blockSize != subtracted_pfsArm.metadata["blockSize"]:
                 raise ValueError("Block size mismatch between arms.")
+
+        # Add the pfsConfig to the spectra for positional information.
+        spectras["pfsConfig"] = pfsConfig
 
         # Extract the information for the fibers.
         spectraFibers = extractFibers(spectras)
