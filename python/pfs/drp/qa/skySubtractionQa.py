@@ -301,6 +301,8 @@ class SkySubtractionQaTask(PipelineTask):
         visit = identity.visit
         spectrograph = identity.spectrograph
 
+        # Create the figure and axes for the plots.
+
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
         fig_1d = plot_1d_spectrograph(spectraFibers, stats)
         fig_1d.suptitle(f"Sky Subtraction QA\n{visit=} {spectrograph=}", fontsize=16)
@@ -795,7 +797,11 @@ def plot_2d_spectrograph(
 
 
 def plot_2d_chi(
-    spectraFibers: dict, wave_lims: tuple[float, float] = None, vmin: float = -3, vmax: float = 3
+    spectraFibers: dict,
+    plotCol: str = "chi",
+    wave_lims: tuple[float, float] = None,
+    vlims: tuple[float, float] = None,
+    aggfunc: str | Callable = "mean",
 ) -> Figure:
     """
     Generate a 2D plot of chi values for sky subtraction residuals.
@@ -807,12 +813,15 @@ def plot_2d_chi(
     ----------
     spectraFibers : `dict`
         Dictionary containing spectrograph data.
+    plotCol : `str`, optional
+        Column name to plot (default: 'chi').
     wave_lims : `tuple` of `float`, optional
         Wavelength limits for the plot (default: None, uses min and max).
-    vmin : `float`, optional
-        Minimum value for the color scale (default: -3).
-    vmax : `float`, optional
-        Maximum value for the color scale (default: 3).
+    vlims : `tuple` of `float`, optional
+        Color scale limits for the plot (default: None, (-3, 3)).
+    aggfunc : `str` or `Callable`, optional
+        Aggregation function for chi values (default: "mean").
+        Can be a string or a callable function.
 
     Returns
     -------
@@ -822,7 +831,9 @@ def plot_2d_chi(
     fd0 = getFiberData(spectraFibers)
     fd0["wave_row"] = fd0.wave.astype("int")
 
-    fd0 = fd0.pivot_table(index=["fiberId"], columns="wave_row", values="chi", observed=False, aggfunc="mean")
+    fd0 = fd0.pivot_table(
+        index=["fiberId"], columns="wave_row", values=plotCol, observed=False, aggfunc=aggfunc
+    )
 
     wave_min = wave_lims[0] if wave_lims is not None else fd0.columns.min()
     wave_max = wave_lims[1] if wave_lims is not None else fd0.columns.max()
@@ -837,6 +848,8 @@ def plot_2d_chi(
     cax = divider.append_axes("bottom", size="3%", pad=0.6)
     cbar = dict(orientation="horizontal", extend="both", label="chi value")
 
+    vmin = vlims[0] if vlims is not None else -3
+    vmax = vlims[1] if vlims is not None else 3
     dp = div_palette.copy()
     dp.set_bad(color="k", alpha=0.0)
     sb.heatmap(fd0, cmap=dp, ax=ax, center=0, vmin=vmin, vmax=vmax, robust=True, cbar_ax=cax, cbar_kws=cbar)
@@ -846,8 +859,8 @@ def plot_2d_chi(
     ax.spines["left"].set_visible(True)
     ax.spines["right"].set_visible(True)
 
-    ax.set_xlabel("Wavelength [Å]")
-    ax.set_title("Median chi values per nm")
+    ax.set_xlabel("Wavelength [nm]")
+    ax.set_title(f"{aggfunc.title()} {plotCol} values per nm")
 
     return fig
 
@@ -1028,9 +1041,6 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
             # Set axis limits.
             ax_dict["RESIDUALS"].set_ylim(-100, 100)
             ax_dict[f"SKY_{i}"].set_xlim(-0.5, 0.5)
-            # Share the SKY_i y axis with the first plot.
-            if i > 1:
-                ax_dict[f"SKY_{i}"].sharey(ax_dict["SKY_1"])
 
             # Set axis labels.
             ax_dict["RESIDUALS"].set_xlabel("Wavelength [nm]")
