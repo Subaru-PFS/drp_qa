@@ -32,6 +32,7 @@ from pfs.drp.stella import PfsArm, PfsConfig
 from pfs.drp.stella.fitFocalPlane import FitBlockedOversampledSplineConfig, FitBlockedOversampledSplineTask
 from pfs.drp.stella.selectFibers import SelectFibersTask
 from pfs.drp.stella.subtractSky1d import subtractSky1d
+from pfs.drp.stella.utils.math import robustRms
 
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
 from pfs.drp.qa.utils.plotting import detector_palette, div_palette
@@ -411,7 +412,7 @@ def getSpectraStats(spectraFibers: dict) -> DataFrame:
 
     stats = (
         df.groupby(["arm", "spectrograph", "fiberId"], observed=False)
-        .chi.agg(["mean", "median", "std", getStddev])
+        .chi.agg(["mean", "median", "std", robustRms])
         .reset_index()
     )
     stats.rename(
@@ -1132,48 +1133,11 @@ def rolling(x: NDDataArray, y: NDDataArray, sep: int):
         if np.any(C):  # Ensure there are valid points in the bin
             xw.append(x0 + sep / 2)  # Bin center
             yw.append(np.median(y[C]))  # Median value of y in the bin
-            ew.append(getStddev(y[C]))  # Custom standard deviation function
+            ew.append(robustRms(y[C]))  # Custom standard deviation function
 
         x0 += sep  # Move to the next bin
 
     return np.array(xw), np.array(yw), np.array(ew)
-
-
-def getStddev(x: NDDataArray, axis: int = 0, useIQR: bool = True):
-    """
-    Compute the standard deviation of an array using either the interquartile range (IQR)
-    or the standard deviation method.
-
-    Parameters
-    ----------
-    x : `numpy.ndarray`
-        Input array for which the standard deviation is computed.
-    axis : `int`, optional
-        Axis along which the standard deviation is computed (default: 0).
-    useIQR : `bool`, optional
-        If `True`, computes a robust estimate of standard deviation using the IQR method.
-        If `False`, computes the standard deviation using `np.std` (default: True).
-
-    Returns
-    -------
-    stddev : `float` or `numpy.ndarray`
-        Estimated standard deviation along the specified axis.
-
-    Notes
-    -----
-    - The IQR-based estimator uses: `alpha = 0.741 * (Q3 - Q1)`, where:
-      - Q1 is the first quartile (25th percentile)
-      - Q3 is the third quartile (75th percentile)
-      - 0.741 is a conversion factor to approximate standard deviation for a normal distribution.
-    - If `useIQR=False`, it falls back to the standard deviation computed via `np.std`.
-
-    """
-    if useIQR:
-        q1, q3 = np.nanpercentile(x, [25, 75], axis=axis)
-        alpha = 0.741 * (q3 - q1)
-        return alpha
-    else:
-        return np.nanstd(x, axis=axis)
 
 
 def buildReference(spectra: PfsArm, func: Callable | None = np.mean, model: str = "residuals"):
