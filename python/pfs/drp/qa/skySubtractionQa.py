@@ -655,13 +655,13 @@ def summarizeSpectrograph(
                 )
 
             # Remove x-axis labels for non-bottom plots
-            if arm != arms[-1]:
-                for ax in all_axs:
-                    ax_dict[arm].axes.xaxis.set_ticklabels([])
-
-            # Remove y-axis labels for all plots
-            for arm in arms:
-                ax_dict[arm].axes.yaxis.set_ticklabels([])
+            # if arm != arms[-1]:
+            #     for ax in all_axs:
+            #         ax_dict[arm].axes.xaxis.set_ticklabels([])
+            #
+            # # Remove y-axis labels for all plots
+            # for arm in arms:
+            #     ax_dict[arm].axes.yaxis.set_ticklabels([])
 
     return fig, ax_dict
 
