@@ -420,7 +420,7 @@ def getSpectraStats(spectraFibers: dict) -> DataFrame:
             "mean": "fiberChiMean",
             "median": "fiberChiMedian",
             "std": "fiberChiStd",
-            "getStddev": "fiberChiIQR",
+            "robustRms": "fiberChiIQR",
         },
         inplace=True,
     )
