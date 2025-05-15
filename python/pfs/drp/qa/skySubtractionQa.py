@@ -614,7 +614,6 @@ def summarizeSpectrograph(
                 layers,
                 ax_dict[all_axs[arm][0]],
                 xlim=xlim,
-                xlabel=r"$\chi$",
                 ylabel=f"Arm: {arm}\nPDF",
             )
 
@@ -652,7 +651,6 @@ def summarizeSpectrograph(
                     xlim=rnge,
                     legend="A" in all_axs[arm],
                     loc="upper right",
-                    xlabel=r"$\chi$",
                 )
 
     # Set axis labels and titles
@@ -660,9 +658,8 @@ def summarizeSpectrograph(
         for ax_name in ["HIST", "AVG", "ERR"]:
             ax_dict[f"{arm}_{ax_name}"].set_yticks([])
 
-        if arm != arms[-1]:
-            ax_dict[f"{arm}_{ax_name}"].set_xticks([])
-            ax_dict[f"{arm}_{ax_name}"].set_xlabel("")
+            if arm == "n":
+                ax_dict[f"{arm}_{ax_name}"].set_xlabel(r"$\chi$")
 
     return fig, ax_dict
 
