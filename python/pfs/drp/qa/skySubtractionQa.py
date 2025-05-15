@@ -655,17 +655,14 @@ def summarizeSpectrograph(
                     xlabel=r"$\chi$",
                 )
 
-            # Remove x-axis labels for non-bottom plots
-            if arm != arms[-1]:
-                ax_dict[f"{arm}_HIST"].axes.xaxis.set_ticklabels([])
-                ax_dict[f"{arm}_AVG"].axes.xaxis.set_ticklabels([])
-                ax_dict[f"{arm}_ERR"].axes.xaxis.set_ticklabels([])
+    # Set axis labels and titles
+    for arm in arms:
+        for ax_name in ["HIST", "AVG", "ERR"]:
+            ax_dict[f"{arm}_{ax_name}"].set_yticks([])
 
-            # Remove y-axis labels for all plots
-            for arm in arms:
-                ax_dict[f"{arm}_HIST"].axes.yaxis.set_ticklabels([])
-                ax_dict[f"{arm}_AVG"].axes.yaxis.set_ticklabels([])
-                ax_dict[f"{arm}_ERR"].axes.yaxis.set_ticklabels([])
+        if arm != arms[-1]:
+            ax_dict[f"{arm}_{ax_name}"].set_xticks([])
+            ax_dict[f"{arm}_{ax_name}"].set_xlabel("")
 
     return fig, ax_dict
 
