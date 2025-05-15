@@ -308,7 +308,7 @@ class SkySubtractionQaTask(PipelineTask):
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
         fig_1d = plot_1d_spectrograph(spectraFibers, stats)
         fig_1d.suptitle(
-            f"Sky Subtraction QA - {visit} SM{spectrograph}\nChi (flux / std) of Sky Fibers", fontsize=16
+            f"Sky Subtraction QA - {visit} SM{spectrograph}\n" f"Chi (flux / std) of Sky Fibers", fontsize=16
         )
 
         self.log.info(f"Plotting 2D spectra for arms {arms}.")
@@ -571,7 +571,7 @@ def summarizeSpectrograph(
     arms = [arm for (_, arm) in spectraFibers.keys()]
 
     all_axs = {arm: [f"{arm}_HIST", f"{arm}_AVG", f"{arm}_ERR"] for arm in "brmn" if arm in arms}
-    fig, ax_dict = get_mosaic(all_axs.values(), figsize=(15, 8), sharex=True)
+    fig, ax_dict = get_mosaic(all_axs.values(), figsize=(10, 6), sharex=True)
 
     # Iterate over arms and generate histograms.
     # for plot_color, arm, axs in zip(plot_colors, arms, all_axs):
@@ -762,7 +762,7 @@ def plot_2d_chi(
     vmin = vlims[0] if vlims is not None else -3
     vmax = vlims[1] if vlims is not None else 3
 
-    fig, ax_dict = get_mosaic("".join(availableArms), figsize=(15, 5), sharey=True)
+    fig, ax_dict = get_mosaic("".join(availableArms), figsize=(10, 5), sharey=True)
 
     plotData = dict()
     for i, arm in enumerate(availableArms):
@@ -869,7 +869,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     )
 
     fig, ax = get_mosaic([["SKY"], ["CHI"]], sharex=True)
-    fig.set_size_inches(15, 5)
+    fig.set_size_inches(10, 5)
 
     sb.scatterplot(
         data=df.query(f"abs(chi) >= {threshold_low}"),
@@ -929,7 +929,7 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
     """
     # Create a figure layout.
     fig, ax_dict = get_mosaic(
-        [["RESIDUALS", "RESIDUALS", "RESIDUALS"], ["SKY_1", "SKY_2", "SKY_3"]], figsize=(15, 6)
+        [["RESIDUALS", "RESIDUALS", "RESIDUALS"], ["SKY_1", "SKY_2", "SKY_3"]], figsize=(10, 6)
     )
 
     # Loop through each spectral arm.
