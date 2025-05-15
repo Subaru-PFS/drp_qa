@@ -1,3 +1,4 @@
+import contextlib
 from dataclasses import dataclass
 from numbers import Number
 from typing import Callable, Iterable, List
@@ -1463,7 +1464,8 @@ def make_plot(
     if title:
         ax.set_title(title, fontsize=fontsize)
 
-    ax.ticklabel_format(useOffset=False)
+    with contextlib.suppress(AttributeError):
+        ax.ticklabel_format(useOffset=False)
 
     if ylog:
         ax.set_yscale("log")
