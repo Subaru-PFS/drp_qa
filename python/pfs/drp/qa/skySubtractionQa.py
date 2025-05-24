@@ -312,6 +312,9 @@ class SkySubtractionQaTask(PipelineTask):
         self.log.info(f"Plotting outlier summary for arms {arms}.")
         fig_outlier = plot_outlier_summary(spectras, spectraFibers)
 
+        self.log.info(f"Plotting sky reference for arms {arms}.")
+        fig_sky_ref = plot_sky_reference(spectras)
+
         self.log.info(f"Plotting vs sky brightness for arms {arms}.")
         fig_sky_brightness = plot_vs_sky_brightness(spectras)
 
@@ -323,9 +326,10 @@ class SkySubtractionQaTask(PipelineTask):
             # Create a PDF with all the plots.
             pdf = MultipagePdfFigure()
             pdf.append(fig_1d)
+            pdf.append(fig_sky_brightness)
             pdf.append(fig_2d)
             pdf.append(fig_outlier)
-            pdf.append(fig_sky_brightness)
+            pdf.append(fig_sky_ref)
 
             results.skySubtractionQaPlot = pdf
         else:
@@ -334,6 +338,7 @@ class SkySubtractionQaTask(PipelineTask):
                 "1d": fig_1d,
                 "2d": fig_2d,
                 "outlier": fig_outlier,
+                "sky_ref": fig_sky_ref,
                 "sky_brightness": fig_sky_brightness,
             }
 
@@ -783,7 +788,7 @@ def plot_2d_chi(
         if i == len(availableArms) - 1:
             divider = make_axes_locatable(ax)
             cax = divider.append_axes("right", size="3%", pad=0.1)
-            cbar_kws = dict(orientation="vertical", extend="both")
+            cbar_kws = dict(orientation="vertical", extend="both", ticklocation="left")
             cbar = True
 
         sb.heatmap(
@@ -897,18 +902,8 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
     return fig
 
 
-def plot_vs_sky_brightness(spectras: dict) -> Figure:
-    """
-    Generate plots comparing sky brightness with spectral residuals.
-
-    This function visualizes the relationship between median residual flux
-    and sky brightness percentile, as well as how residuals change with wavelength.
-
-    Notes
-    -----
-    - Uses `splitSpectraIntoReferenceAndTest` to separate reference and test spectra.
-    - Compares sky brightness and residuals across different wavelengths.
-    - Uses `rolling` to compute binned statistics of residuals versus sky brightness percentile.
+def plot_sky_reference(spectras: dict) -> Figure:
+    """Plots the sky reference spectrum and flux residuals.
 
     Parameters
     ----------
@@ -918,15 +913,13 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
     Returns
     -------
     fig : `matplotlib.figure.Figure`
-        Generated figure containing subplots.
+        Generated figure.
     """
     # Create a figure layout.
-    fig, ax_dict = get_mosaic(
-        [["RESIDUALS", "RESIDUALS", "RESIDUALS"], ["SKY_1", "SKY_2", "SKY_3"]], figsize=(10, 5)
-    )
+    fig = Figure(figsize=(10, 3), layout="constrained")
+    ax = fig.add_subplot(111)
 
-    # Loop through each spectral arm.
-    # TODO (wtgee) this should be moved out of the plotting code.
+    # Loop through each spectral arm in a specific order.
     i = 0
     for arm in ["b", "r", "m", "n"]:
         for spectrograph in [1, 2, 3, 4]:
@@ -943,69 +936,144 @@ def plot_vs_sky_brightness(spectras: dict) -> Figure:
             # Compute reference and test statistics.
             references_sky = buildReference(referenceSpectra, func=np.nanmedian, model="none")
             residual_flux = buildReference(testSpectra, func=np.median, model="residuals")
-            # references_err = buildReference(testSpectra, func='quadrature', model='variance')
-            references_chi_median = buildReference(testSpectra, func=np.median, model="chi")
 
             arm_color = detector_palette[arm]
 
             # Interpolate sky brightness onto a residual wavelength grid.
             sky_wave_ref, sky_flux = references_sky
             resid_wave_ref, resid_flux = residual_flux
-            chi_wave_ref, chi = references_chi_median
 
             sky_flux = np.interp(resid_wave_ref, sky_wave_ref, sky_flux)
 
-            # Compute ranked percentile of sky brightness.
-            ranked = np.argsort(np.argsort(sky_flux))
-            ranked = 100 * ranked / len(ranked)
-
-            # Bin residuals based on sky brightness percentiles.
-            yb, xb, eb = rolling(ranked, chi, 10)
-
             # Scatter plot of residual flux vs wavelength.
-            ax_dict["RESIDUALS"].scatter(
-                resid_wave_ref, resid_flux, s=3, color=arm_color, rasterized=True, alpha=0.9
-            )
+            ax.scatter(resid_wave_ref, resid_flux, s=3, color=arm_color, rasterized=True, alpha=0.9)
             # Plot 1% sky brightness reference.
-            ax_dict["RESIDUALS"].plot(
+            ax.plot(
                 resid_wave_ref, sky_flux / 100, color="k", linewidth=1, alpha=0.3, label="1% sky", zorder=-100
             )
 
-            # Scatter plot of residuals vs sky brightness percentile.
-            ax_dict[f"SKY_{i}"].scatter(chi, ranked, s=1, color=arm_color, rasterized=True, alpha=0.5)
-            ax_dict[f"SKY_{i}"].errorbar(
-                xb,
-                yb,
-                xerr=eb,
-                capsize=5,
-                capthick=3,
-                color="k",
-                mec="k",
-                mfc=arm_color,
-                linewidth=3,
-                marker="o",
-                alpha=0.75,
-                zorder=100,
-            )
-
             # Set axis limits.
-            ax_dict["RESIDUALS"].set_ylim(-100, 100)
-            ax_dict[f"SKY_{i}"].set_xlim(-0.5, 0.5)
+            ax.set_ylim(-100, 100)
 
             # Set axis labels.
-            ax_dict["RESIDUALS"].set_xlabel("Wavelength [nm]")
-            ax_dict["RESIDUALS"].set_ylabel("Median Sky Flux Counts")
-
-            ax_dict[f"SKY_{i}"].set_xlabel(r"Median $\chi$")
-            ax_dict[f"SKY_{i}"].set_ylabel("Sky Counts Percentile")
+            ax.set_xlabel("Wavelength [nm]")
+            ax.set_ylabel("Median Sky Flux Counts")
 
             # Add reference lines.
-            ax_dict[f"SKY_{i}"].axvline(0, linestyle="--", color="k")
-            ax_dict["RESIDUALS"].axhline(0, linestyle="--", color="k")
+            ax.axhline(0, linestyle="--", color="k")
 
     fig.suptitle("Residual flux and 1% sky spectra reference")
 
     return fig
+
+
+def plot_vs_sky_brightness(spectras: dict, method="median") -> Figure:
+    """
+    Generate plots comparing sky brightness with spectral residuals.
+
+    This function visualizes the relationship between median residual flux
+    and sky brightness percentile, as well as how residuals change with wavelength.
+
+    Notes
+    -----
+    - Uses `splitSpectraIntoReferenceAndTest` to separate reference and test spectra.
+    - Compares sky brightness and residuals across different wavelengths.
+    - Uses `rolling` to compute binned statistics of residuals versus sky brightness percentile.
+
+    Parameters
+    ----------
+    spectras : `dict`
+        Dictionary containing spectrograph data.
+    method : `str`, optional
+        Method to compute the median residual flux (default: "median").
+        Can be "median", "mean", or any other valid aggregation function.
+
+    Returns
+    -------
+    fig : `matplotlib.figure.Figure`
+        Generated figure containing subplots.
+    """
+    # Create a figure layout.
+    fig, ax_dict = get_mosaic(
+        [["CHI_0", "CHI_1", "CHI_2"], ["CHI_POISSON_0", "CHI_POISSON_1", "CHI_POISSON_2"]],
+        figsize=(10, 6),
+        sharex=True,
+    )
+
+    # Loop through each spectral arm.
+    for row, col in enumerate(["chi", "chi_poisson"]):
+        i = 0
+        for arm in ["b", "r", "m", "n"]:
+            for spectrograph in [1, 2, 3, 4]:
+                spec_key = (spectrograph, arm)
+                if spec_key not in spectras:
+                    continue
+
+                ax_name = f"{col.upper()}_{i}"
+                if i == 1:
+                    ax_dict[ax_name].set_title(f"{col}")
+
+                skySpectra = spectras[spec_key]
+                rank0 = getSkyPercentile(skySpectra, column=col)
+                plotPercentile(rank0, ax_dict[ax_name], skySpectra.identity.arm, method=method, column=col)
+
+                i += 1
+
+    # Set title and labels.
+    fig.suptitle("Median chis by sky brightness percentile")
+    ax_dict["CHI_0"].set_ylabel("Sky Brightness Percentile")
+    ax_dict["CHI_POISSON_0"].set_ylabel("Sky Brightness Percentile")
+    ax_dict["CHI_POISSON_0"].set_xlabel(r"$\chi$")
+    ax_dict["CHI_POISSON_1"].set_xlabel(r"$\chi$")
+    ax_dict["CHI_POISSON_2"].set_xlabel(r"$\chi$")
+
+    return fig
+
+
+def getSkyPercentile(skySpectra, column="chi", binsize=10):
+    referenceSpectra, testSpectra = splitSpectraIntoReferenceAndTest(skySpectra)
+
+    # Compute reference and test statistics.
+    references_sky = buildReference(referenceSpectra, func=np.nanmedian, model="none")
+    references_chi_median = buildReference(testSpectra, func=np.median, model=column)
+
+    sky_wave_ref, sky_flux = references_sky
+    chi_wave_ref, chi = references_chi_median
+
+    # Interpolate sky brightness onto a chi wavelength grid.
+    sky_flux = np.interp(chi_wave_ref, sky_wave_ref, sky_flux)
+
+    # Compute ranked percentile of sky brightness.
+    ranked = pd.Series(sky_flux).rank(pct=True).values * 100
+
+    bright_bin = pd.cut(
+        ranked, binsize, labels=np.arange(start=0, stop=100 + binsize, step=(100 + binsize) // binsize)
+    )
+
+    rank0 = pd.DataFrame({"ranked": ranked, column: chi, "ranked_bin": bright_bin})
+
+    return rank0
+
+
+def plotPercentile(data, ax, arm, column="chi", method="median"):
+    rank0_grp = data.groupby("ranked_bin", observed=False)[column].agg([method, robustRms]).reset_index()
+
+    X = rank0_grp[method]
+    Xerr = rank0_grp.robustRms
+    Y = rank0_grp.ranked_bin
+
+    plot_color = detector_palette[arm]
+
+    ax.errorbar(x=X, xerr=Xerr, y=Y, marker="o", mfc=plot_color, c="k", linewidth=2, capsize=5, capthick=3)
+
+    ax.scatter(data[column], data.ranked, c=plot_color, marker="o", alpha=0.25, zorder=-100, s=4)
+
+    ax.axvline(0, c="k", ls="--")
+
+    ax.set_xlim(-0.5, 0.5)
+    ax.set_xlabel(r"$\chi$")
+    ax.tick_params(axis="both", which="both", bottom=False, right=False, top=False, left=False)
+    ax.grid()
 
 
 def rolling(x: NDDataArray, y: NDDataArray, sep: int):
