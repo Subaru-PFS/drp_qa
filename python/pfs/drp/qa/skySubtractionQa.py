@@ -9,7 +9,6 @@ import numpy as np
 import pandas as pd
 import scipy.stats
 import seaborn as sb
-from astropy.nddata import NDDataArray
 from lsst.pex.config import Field, ListField
 from lsst.pipe.base import (
     InputQuantizedConnection,
@@ -1185,52 +1184,6 @@ def plotPercentile(
     ax.set_xlabel(r"$\chi$")
     ax.tick_params(axis="both", which="both", bottom=False, right=False, top=False, left=False)
     ax.grid()
-
-
-def rolling(x: NDDataArray, y: NDDataArray, sep: int):
-    """
-    Compute a rolling statistic over a dataset, binning data points into segments of size `sep`.
-
-    Parameters
-    ----------
-    x : `numpy.ndarray`
-        The independent variable (e.g., wavelength, time).
-    y : `numpy.ndarray`
-        The dependent variable (e.g., flux, intensity).
-    sep : `int`
-        The bin width for segmenting `x`.
-
-    Returns
-    -------
-    xw : `numpy.ndarray`
-        The center points of the bins.
-    yw : `numpy.ndarray`
-        The median of `y` values in each bin.
-    ew : `numpy.ndarray`
-        The computed standard deviation (or IQR-based metric) for `y` in each bin.
-
-    Notes
-    -----
-    - The function slides over `x` in steps of `sep`, computing statistics for each window.
-    - The rolling statistic is defined as:
-        - `yw`: Median of `y` in the bin.
-        - `ew`: Standard deviation (or IQR-based deviation if `get_stdev_func` is IQR-based).
-    """
-    x0 = x.min()
-    xw, yw, ew = [], [], []
-
-    while x0 + sep / 2 < x.max():
-        # Define the bin mask
-        C = (x > x0) & (x <= x0 + sep)
-
-        if np.any(C):  # Ensure there are valid points in the bin
-            xw.append(x0 + sep / 2)  # Bin center
-            yw.append(np.median(y[C]))  # Median value of y in the bin
-            ew.append(robustRms(y[C]))  # Custom standard deviation function
-
-        x0 += sep  # Move to the next bin
-
-    return np.array(xw), np.array(yw), np.array(ew)
 
 
 def buildReference(spectra: PfsArm, func: Callable | None = np.mean, model: str = "residuals"):
