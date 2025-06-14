@@ -1047,6 +1047,8 @@ def main():
     parser.add_argument('visit')
     parser.add_argument('--datastore', default = '/work/datastore')
     parser.add_argument('--saveFigDir', default = '.')
+    parser.add_argument('--saveData', default=False, action='store_true')
+    parser.add_argument('--skipFluxCal', default=False, action='store_true')
     parser.add_argument('--doAnonymize', default = True, type=str2bool)
     args=parser.parse_args()
 
@@ -1059,8 +1061,16 @@ def main():
     butler = Butler(args.datastore, collections=args.collections)
 
     fluxcalqa = fluxCalQA(butler, verbose = True, doAnonymize = args.doAnonymize)
-    fluxcalqa.plot([int(args.visit)], saveFigDir = args.saveFigDir)
-    
+    fluxcalqa.plot([int(args.visit)], saveFigDir = args.saveFigDir, skipFluxCal=args.skipFluxCal)
+    res = fluxcalqa.results
+    for k,v in res.items():
+        if len(v)==0:
+            res[k] = [np.nan]
+
+    if args.saveData:
+        import pandas as pd
+        df = pd.DataFrame(res)
+        df.to_csv(os.path.join(args.saveFigDir, f"fluxCalQA_data_v{args.visit}.csv"), index=False)
         
         
 #-------------------------------------------------------------
