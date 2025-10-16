@@ -11,8 +11,9 @@ __pycache__
 bin
 
 # Ignore everything in examples except our example notebook.
-examples
+examples/*
 !examples/QA Pipelines.ipynb
+!examples/check_fiberProfiles.ipynb
 
 .sconf_temp
 tests/.tests
