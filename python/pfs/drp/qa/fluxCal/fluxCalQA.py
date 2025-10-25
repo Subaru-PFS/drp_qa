@@ -285,7 +285,7 @@ class fluxCalQA:
         ax.arrow(pfsConfig.raBoresight + dra * 0.75, pfsConfig.decBoresight - ddec * 0.75,
                  length * np.cos(angle), length * np.sin(angle), width=0.02)  # minus is because R.A. increases towards left
 
-        return SN, SNMinWave, SNMaxWave, color
+        return SN, SNMinWave, SNMaxWave, color, mag
 
     
     #-------------------------------------------------------------
@@ -371,7 +371,6 @@ class fluxCalQA:
 
         self.results['imagMedian'].append(scatter[1])
         self.results['imagSigma'].append((scatter[2]-scatter[0])/1.35)
-        
 
     #-------------------------------------------------------------
     # show normalization of the flux calibration vector over the focal plane
@@ -872,6 +871,12 @@ class fluxCalQA:
         self.initializeResults()
         self.results['visit'] = visits
 
+        self.visits = np.array([])
+        self.fids = np.array([])
+        self.mags = np.array([])
+        self.cols = np.array([])
+        self.snrs = np.array([])
+        self.mags_cat = np.array([])
         # loop over visits and do fluxCalQA on each visit
         for visit in visits:
             fig = plt.figure(figsize=(15, 25))
@@ -912,7 +917,13 @@ class fluxCalQA:
             if self.verbose:
                 print('computing merged fluxes...')
             ax = fig.add_subplot(5, 3, 4)
-            SN, SNMinWave, SNMaxWave, color = self.drawPfsMerged(ax, pfsConfig, visit) 
+            SN, SNMinWave, SNMaxWave, color, mag = self.drawPfsMerged(ax, pfsConfig, visit)
+            self.visits = np.append(self.visits, np.full(len(SN), visit))
+            self.fids = np.append(self.fids, pfsConfig.fiberId)
+            self.mags = np.append(self.mags, mag)
+            self.cols = np.append(self.cols, color)
+            self.snrs = np.append(self.snrs, SN)
+            self.mags_cat = np.append(self.mags_cat, np.array([-2.5*np.log10(flx[self.psfFluxIndex]) + 31.4 if tt == datamodel.TargetType.FLUXSTD else np.nan for tt,flx in zip(pfsConfig.targetType, pfsConfig.psfFlux)]))
             #self.drawTest(ax, text='pfsMerged')
             ax = fig.add_subplot(5, 3, 6)
             self.drawMergedSN(ax, SN, SNMinWave, SNMaxWave)
@@ -1072,6 +1083,8 @@ def main():
         df = pd.DataFrame(res)
         df.to_csv(os.path.join(args.saveFigDir, f"fluxCalQA_data_v{args.visit}.csv"), index=False)
         
+        df2 = pd.DataFrame({"visit": fluxcalqa.visits, "fiberId": fluxcalqa.fids, "mag": fluxcalqa.mags, "color": fluxcalqa.cols, "mag_cat": fluxcalqa.mags_cat, "SNR": fluxcalqa.snrs})
+        df2.to_csv(os.path.join(args.saveFigDir, f"fluxCalQA_data_v{args.visit}_snr.csv"), index=False)
         
 #-------------------------------------------------------------
 if __name__ == "__main__":
