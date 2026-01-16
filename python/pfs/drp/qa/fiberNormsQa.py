@@ -497,16 +497,24 @@ def add_dataclass_to_argparser(
         lambda *args, **kwargs: DataclassStoreAction(dataclass, prefix, *args, **kwargs),
     )
 
+    def str_to_bool(value: str) -> bool:
+        if value.lower() in ("yes", "true", "t", "1"):
+            return True
+        elif value.lower() in ("no", "false", "f", "0"):
+            return False
+        raise argparse.ArgumentTypeError(f"Boolean value expected, got '{value}'")
+
     for field in dataclasses.fields(dataclass):
         hyphened = field.name.replace("_", "-")
         optionname = f"--{prefix}-{hyphened}" if prefix else f"--{hyphened}"
         fieldtype = typing.cast(type, field.type)
         doc = field.metadata.get("doc", "")
-        if fieldtype is str or fieldtype is int or fieldtype is float:
+        if fieldtype is str or fieldtype is int or fieldtype is float or fieldtype is bool:
+            type_func = str_to_bool if fieldtype is bool else fieldtype
             parser.add_argument(
                 optionname,
                 metavar=fieldtype.__name__.upper(),
-                type=fieldtype,
+                type=type_func,
                 action=store_in_dataclass,
                 help=f"""
                 {doc} (default: {getattr(dataclass, field.name)})
@@ -973,13 +981,13 @@ class FiberNormsQaConfig:
         metadata={"doc": "Random seed. This can be any text string."},
     )
     vmin: float = dataclasses.field(
-        default=0.97, metadata={"doc": "min limit of normalized flux value in plots"}
+        default=0.98, metadata={"doc": "min limit of normalized flux value in plots"}
     )
     vmax: float = dataclasses.field(
-        default=1.03, metadata={"doc": "max limit of normalized flux value in plots"}
+        default=1.02, metadata={"doc": "max limit of normalized flux value in plots"}
     )
     vmin2: float = dataclasses.field(default=0.0, metadata={"doc": "min limit of sigma in plots"})
-    vmax2: float = dataclasses.field(default=0.05, metadata={"doc": "max limit of sigma in plots"})
+    vmax2: float = dataclasses.field(default=0.02, metadata={"doc": "max limit of sigma in plots"})
 
     wavelength_range_b: tuple[float, float] = dataclasses.field(
         default=(450, 650), metadata={"doc": "Wavelength range to use (b-arm)"}
@@ -995,20 +1003,24 @@ class FiberNormsQaConfig:
     )
 
     sigma_flag_threshold_b: float = dataclasses.field(
-        default=0.01090,
+        default=0.009,
         metadata={"doc": "Fibers are flagged if stddev over wavelength is above this threshold (b-arm)"},
     )
     sigma_flag_threshold_r: float = dataclasses.field(
-        default=0.00799,
+        default=0.0055,
         metadata={"doc": "Fibers are flagged if stddev over wavelength is above this threshold (r-arm)"},
     )
     sigma_flag_threshold_m: float = dataclasses.field(
-        default=0.00799,
+        default=0.0055,
         metadata={"doc": "Fibers are flagged if stddev over wavelength is above this threshold (m-arm)"},
     )
     sigma_flag_threshold_n: float = dataclasses.field(
-        default=0.00799,
+        default=0.0120,
         metadata={"doc": "Fibers are flagged if stddev over wavelength is above this threshold (n-arm)"},
+    )
+    subtract_error: bool = dataclasses.field(
+        default=True,
+        metadata={"doc": "subtract pfsArm variance in sigma calculation"},
     )
 
     @functools.cached_property
@@ -1229,6 +1241,12 @@ class FiberNormsQa:
             q3, q1 = np.nanpercentile(ratio, [75, 25], axis=1)
             sigma_iqr = 0.741 * (q3 - q1)
 
+            # subtract statistical noise
+            if self.config.subtract_error:
+                self.log.info("Subtracting noise...")
+                var_stat = 2 / np.nanmedian(pfsArm.variance, axis=1)
+                sigma_iqr = np.sqrt(np.maximum(sigma_iqr**2 - var_stat, 0))
+
             # mineo: Is it guaranteed that the orders of fiberId on both sides of "=" are equal?
             df.loc[df["fiberId"].isin(pfsArm.fiberId), ["sigma"]] = sigma_iqr
 
@@ -1263,8 +1281,11 @@ class FiberNormsQa:
             Metadata value.
         """
         for pfsArm in self.pfsArmDict.values():
-            # Any pfsArm will do.
-            return pfsArm.metadata[key]
+            if key == "EXPTIME":
+                return pfsArm.identity._expTime
+            else:
+                # Any pfsArm will do.
+                return pfsArm.metadata[key]
         raise RuntimeError("self.pfsArmDict is empty.")
 
     def _get_pfsArmRatio(self, spec: SpectrographId) -> "PfsArmRatio":
@@ -1400,6 +1421,7 @@ class FiberNormsQa:
         df = df.reset_index()
         ins = self._get_metadata("INSROT")
         azi = np.round(self._get_metadata("AZIMUTH"), 2)
+        tex = np.round(self._get_metadata("EXPTIME"))
 
         fig = plt.figure(
             num="fiberNormsQA", figsize=self.config.figsize, clear=True, facecolor="w", edgecolor="k"
@@ -1522,7 +1544,7 @@ class FiberNormsQa:
             0.1,
             0.82,
             f"visit_reference={self.ref_visit}, arm={self.arm}, obsdate={obsdate},"
-            + f" insrot={ins}deg, azimuth={azi}deg",
+            + f" insrot={ins}deg, azimuth={azi}deg, exptime={tex}sec",
             fontsize=self.config.fontsize_large,
         )
         pfs_pipe2d = eups.getSetupVersion("pfs_pipe2d")
@@ -1533,6 +1555,10 @@ class FiberNormsQa:
             fontsize=self.config.fontsize_large,
         )
 
+        sub_text = (
+            ", where sqrt(2/pfsArm.variance) is subtracted in quadrature."
+            if self.config.subtract_error else "."
+        )
         footnote: str = (
             "fiberNormsQA is to monitor fiber throughput variation. "
             "We took quartz flux ratios for some of the figures "
@@ -1540,16 +1566,16 @@ class FiberNormsQa:
             "i.e., quartz ratio = pfsArm.flux(visit_target)/pfsArm.flux(visit_reference). "
             "Referenced quartz is the first one in the data set \n basically "
             "(see visit number above).\n"
-            "Sigma is measured from 0.741*(Q75-Q25). "
+            f"Sigma is measured from 0.741*(Q75-Q25){sub_text}\n"
             "Descriptions for each sub-fig component are as follows.\n"
             "[1] PFI image of quartz ratios. "
-            "2 sigma per fier and median flux ratio per fiber are represent "
+            "2 sigma per fiber and median flux ratio per fiber are represented "
             "in the upper left and in the upper right figure, \n respectively. "
             "We also represent median flux ratios at two different wavelength point via PFI images.\n"
             "[2] 2D spectrum of quartz ratio. If measure sigma of a fiber is larger than "
             f"{self.sigma_flag_entire}, red closs marks fiber Id in the left side.\n"
             "[3] Used MTPs compared with corresponding spectrograph ID. "
-            "The MTP groups in which all MTPs were used were represented in green.\n"
+            "The MTP groups in which all MTPs were used are represented in green.\n"
             "[4] fiberNorms.values of target quartz. "
             "Plotting bounds are 2.5$\\sigma$\n"
             "[5] Measured sigma for each fiber. "
@@ -1609,7 +1635,7 @@ class FiberNormsQa:
                 Per-fiber standard deviation with respect to wavelength.
         """
         ax.set_title("[5] Sigma per fiber", fontsize=self.config.fontsize)
-        ax.scatter(df["mtpGroup"], df["sigma"], c="black")
+        ax.scatter(df["mtpGroup"], df["sigma"], c="black", rasterized=True)
 
         sigma_median = np.nanmedian(df["sigma"])
         ax.axhline(sigma_median, ls="dashed", c="blue", zorder=0)
@@ -1667,7 +1693,7 @@ class FiberNormsQa:
         """
         ax.set_title("[3] Used MTPs", fontsize=self.config.fontsize)
         xdata, ydata = df["SM"][df["SM"] != 0], df["mtpGroup"][df["SM"] != 0]
-        ax.scatter(xdata, ydata, c="olivedrab")
+        ax.scatter(xdata, ydata, c="olivedrab", rasterized=True)
 
         ax.grid(axis="both", which="both", linestyle="--", linewidth=0.5)
         ax.set_xticks([0, 1, 2, 3, 4])
@@ -1721,6 +1747,7 @@ class FiberNormsQa:
                 s=0.6,
                 alpha=1.0,
                 label="quartz",
+                rasterized=True
             )
 
             oddfib = df["fiberId"][(df["SM"] == spec) & (df["sigma"] > self.sigma_flag_entire)].values
@@ -1737,7 +1764,7 @@ class FiberNormsQa:
     def _make_plot_quartz_ratio_by_position_n_sigma(
         self, ax: matplotlib.axes.Axes, df: pd.DataFrame, n: float
     ) -> None:
-        """Plot PFI image of quartz ratios (2 sigma per fier).
+        """Plot PFI image of quartz ratios (2 sigma per fiber).
 
         Parameters
         ----------
@@ -1766,6 +1793,7 @@ class FiberNormsQa:
                 s=30.0,
                 alpha=1.0,
                 label=f"{n}sigma",
+                rasterized=True
             )
             ax.set_xlim(xmin=-250, xmax=250)
             ax.set_ylim(ymin=-250, ymax=250)
@@ -1802,6 +1830,7 @@ class FiberNormsQa:
                 s=30.0,
                 alpha=1.0,
                 label="median per fiber",
+                rasterized=True
             )
             ax.set_xlim(xmin=-250, xmax=250)
             ax.set_ylim(ymin=-250, ymax=250)
@@ -1841,6 +1870,7 @@ class FiberNormsQa:
                 vmax=self.config.vmax,
                 s=30.0,
                 alpha=1.0,
+                rasterized=True
             )
             ax.set_xlim(xmin=-250, xmax=250)
             ax.set_ylim(ymin=-250, ymax=250)
@@ -1900,6 +1930,7 @@ class FiberNormsQa:
             vmax=upper,
             s=10,
             cmap="coolwarm",
+            rasterized=True
         )
         divider = make_axes_locatable(ax)  # AxesDivider related to ax
         cax = divider.append_axes("right", size="5%", pad=0.1)  # create new axes
@@ -1945,12 +1976,12 @@ class FiberNormsQa:
 
         xdata = pfsArm.wavelength[inx]
         ydata = ratio[inx]
-        ax.scatter(xdata, ydata, color="royalblue", s=10, label=f"{fib}")
+        ax.scatter(xdata, ydata, color="royalblue", s=10, label=f"{fib}", rasterized=True)
 
         xdata_m = pfsArm.wavelength[inx]
         ydata_m = ratio_mf[inx]
         std = np.nanstd(ydata_m)
-        ax.scatter(xdata_m, ydata_m, color="limegreen", s=10, label=f"{fib}(mf)")
+        ax.scatter(xdata_m, ydata_m, color="limegreen", s=10, label=f"{fib}(mf)", rasterized=True)
 
         ax.text(
             0.68,
@@ -2008,6 +2039,7 @@ class FiberNormsQa:
             color="navy",
             s=10,
             label=f"{fiber_id}",
+            rasterized=True
         )
 
         xdata_m = fiberNorms.wavelength[inx_nrm]
@@ -2015,7 +2047,7 @@ class FiberNormsQa:
         ydata_m = medfilt(fiberNorms.values[inx_nrm][~np.isnan(fiberNorms.values[inx_nrm])], kernel_size=15)
 
         std = np.nanstd(ydata_m)
-        ax.scatter(xdata_m, ydata_m, color="limegreen", s=10, label=f"{fiber_id}(mf)")
+        ax.scatter(xdata_m, ydata_m, color="limegreen", s=10, label=f"{fiber_id}(mf)", rasterized=True)
 
         n_sigma = 2
 
@@ -2031,7 +2063,7 @@ class FiberNormsQa:
         ax.grid(axis="y", which="both", linestyle="--", linewidth=0.5)
 
         ax.set_title(
-            f'{df["mtp_A"][df["fiberId"]==fiber_id].to_string(index=False)}',
+            f'{df["mtp_A"][df["fiberId"] == fiber_id].to_string(index=False)}',
             fontsize=self.config.fontsize,
         )
 
