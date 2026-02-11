@@ -68,23 +68,49 @@ Determines the quality of the fiber extraction.
 
 ##### Options
 
-- `extractionQa:fixWidth`: Fix the widths during Gaussian fitting, default `False`.
-- `extractionQa:rowNum`: Number of rows picked up for profile analysis, default `200`.
-- `extractionQa:thresError`: Threshold of the fitting error, default `0.1`.
-- `extractionQa:thresChi`: Threshold for chi standard deviation, default `1.5`.
 - `extractionQa:fiberWidth`: Half width of a fiber region (pix), default `3`.
-- `extractionQa:fitWidth`: Half width of a fitting region (pix), default `3`.
-- `extractionQa:plotWidth`: Half width of plot (pix), default `15`.
-- `extractionQa:plotFiberNum`: Maximum fiber number of detailed plots, default `20`.
-- `extractionQa:figureDpi`: resolution of plot for residual, default `72`.
+- `extractionQa:plotMinChiMed`: Minimum median Chi to plot, default `-1.5`.
+- `extractionQa:plotMaxChiMed`: Maximum median Chi to plot, default `1.5`.
+- `extractionQa:plotMinChiStd`: Minimum standard deviation of Chi to plot, default `0.0`.
+- `extractionQa:plotMaxChiStd`: Maximum standard deviation of Chi to plot, default `3.5`.
+- `extractionQa:plotMinChiAtPeak`: Minimum Chi at peak to plot, default `-1.5`.
+- `extractionQa:plotMaxChiAtPeak`: Maximum Chi at peak to plot, default `1.5`.
+- `extractionQa:plotMinResFrac`: Minimum residual fraction, default `-5.0`.
+- `extractionQa:plotMaxResFrac`: Maximum residual fraction, default `5.0`.
+- `extractionQa:plotHistRangeScale`: The scale factor for the Chi histogram range, default `1.5`.
+- `extractionQa:plotHistNbin`: The number of bins for the Chi histogram, default `100`.
+- `extractionQa:targetType`: Target type for which to calculate statistics, default `["^ENGINEERING"]`.
+- `extractionQa:figureDpi`: Resolution of plot for residual, default `72`.
 
 ##### Outputs
 
-| DataSet Type        | Dimensions                             | Description                                                                                                                        |
-|---------------------|----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
-| `extQaStats`        | `instrument, visit, arm, spectrograph` | Summary plots. Results of the residual analysis of extraction are plotted.                                                         |
-| `extQaImage`        | `instrument, visit, arm, spectrograph` | Residual, and chi comparisons of the postISRCCD profile and fiberProfiles are plotted for some fibers with bad extraction quality. |
-| `extQaImage_pickle` | `instrument, visit, arm, spectrograph` | Statistics of the residual analysis.                                                                                               |
+| DataSet Type        | Dimensions                             | Description                                                                                                                                                 |
+|---------------------|----------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `extQaStats`        | `instrument, visit, arm, spectrograph` | Results of the residual analysis of extraction against fiberId are plotted (Chi_median, Chi_stddev, Chi_atProfilePeak, residual_fraction).                   |
+| `extQaImage`        | `instrument, visit, arm, spectrograph` | Summary plot for 2D residual, chi, etc. (p.1),  2D image of chi (p.2), zoom-in of the chi image (p.3), and the histogram of residual fraction and chi (p.4) |
+| `extQaImage_pickle` | `instrument, visit, arm, spectrograph` | Statistics of the residual analysis.                                                                                                                        |
+
+#### `extractionQaCombined`
+
+##### Options
+
+- `extractionQaCombined:plotMinChiMed`: Minimum median Chi to plot, default `-1.5`.
+- `extractionQaCombined:plotMaxChiMed`: Maximum median Chi to plot, default `1.5`.
+- `extractionQaCombined:plotMinChiStd`: Minimum standard deviation of Chi to plot, default `0.0`.
+- `extractionQaCombined:plotMaxChiStd`: Maximum standard deviation of Chi to plot, default `3.5`.
+- `extractionQaCombined:plotMinChiAtPeak`: Minimum Chi at peak to plot, default `-1.5`.
+- `extractionQaCombined:plotMaxChiAtPeak`: Maximum Chi at peak to plot, default `1.5`.
+- `extractionQaCombined:plotMinResFrac`: Minimum residual fraction, default `-5.0`.
+- `extractionQaCombined:plotMaxResFrac`: Maximum residual fraction, default `5.0`.
+- `extractionQaCombined:targetType`: Target type for which to calculate statistics, default `["^ENGINEERING"]`.
+- `extractionQaCombined:figureDpi`: Resolution of plot for residual, default `72`.
+- `extractionQaCombined:footnoteSize`: Fontsize of the footnote, default `9`.
+
+##### Outputs
+
+| DataSet Type         | Dimensions                             | Description                                                                                                                        |
+|----------------------|----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|
+| `extQaStatsCombined` | `instrument, visit, arm` | Results of the residual analysis of extraction plotted against fiberId for all spectrographs (left) and PFI positions (right).                   |
 
 #### `fiberNormsQa`
 
