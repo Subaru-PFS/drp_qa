@@ -1,4 +1,3 @@
-import warnings
 from dataclasses import dataclass
 from functools import partial
 from logging import Logger
@@ -298,17 +297,22 @@ def get_data_and_stats(
     if len(arc_data) == 0:
         raise ValueError("After scrubbing the data, the data is empty, cannot proceed.")
 
-    # Mark the sigma-clipped outliers for each relevant group.
-    # Ignore the warnings about NaNs and inf.
     log.info("Masking outliers")
-    def mask_outliers(group):
-        group["xResidOutlier"] = sigma_clip(group["xResid"]).mask
-        group["yResidOutlier"] = sigma_clip(group["yResid"]).mask
-        return group
+    # 1. Calculate the median and standard deviation for each group in one pass
+    group_stats = arc_data.groupby(["status_type", "description"], observed=True)[["xResid", "yResid"]].agg(['median', 'std'])
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        arc_data = arc_data.groupby(["status_type", "description"], observed=True).apply(mask_outliers, include_groups=True)
+    # 2. Map those stats back to the original dataframe
+    arc_data = arc_data.join(group_stats, on=["status_type", "description"])
+
+    # 3. Define the sigma threshold (Astropy default is usually 3.0)
+    sigma = 3.0
+
+    # 4. Perform a vectorized boolean check across the entire dataframe at once
+    arc_data["xResidOutlier"] = abs(arc_data["xResid"] - arc_data[("xResid", "median")]) > (sigma * arc_data[("xResid", "std")])
+    arc_data["yResidOutlier"] = abs(arc_data["yResid"] - arc_data[("yResid", "median")]) > (sigma * arc_data[("yResid", "std")])
+
+    # 5. Drop the temporary stat columns
+    arc_data = arc_data.drop(columns=[("xResid", "median"), ("xResid", "std"), ("yResid", "median"), ("yResid", "std")])
 
     log.info("Adding fiber information")
     mtp_df = pd.DataFrame(
