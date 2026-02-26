@@ -1,3 +1,4 @@
+import warnings
 from dataclasses import dataclass
 from functools import partial
 from logging import Logger
@@ -298,21 +299,24 @@ def get_data_and_stats(
         raise ValueError("After scrubbing the data, the data is empty, cannot proceed.")
 
     log.info("Masking outliers")
-    # 1. Calculate the median and standard deviation for each group in one pass
-    group_stats = arc_data.groupby(["status_type", "description"], observed=True)[["xResid", "yResid"]].agg(['median', 'std'])
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
 
-    # 2. Map those stats back to the original dataframe
-    arc_data = arc_data.join(group_stats, on=["status_type", "description"])
+        # Define the threshold
+        sigma = 3.0
 
-    # 3. Define the sigma threshold (Astropy default is usually 3.0)
-    sigma = 3.0
+        # Group the data
+        groups = arc_data.groupby(["status_type", "description"], observed=True)
 
-    # 4. Perform a vectorized boolean check across the entire dataframe at once
-    arc_data["xResidOutlier"] = abs(arc_data["xResid"] - arc_data[("xResid", "median")]) > (sigma * arc_data[("xResid", "std")])
-    arc_data["yResidOutlier"] = abs(arc_data["yResid"] - arc_data[("yResid", "median")]) > (sigma * arc_data[("yResid", "std")])
+        # Calculate and broadcast the median and std for x
+        x_median = groups["xResid"].transform('median')
+        x_std = groups["xResid"].transform('std')
+        arc_data["xResidOutlier"] = abs(arc_data["xResid"] - x_median) > (sigma * x_std)
 
-    # 5. Drop the temporary stat columns
-    arc_data = arc_data.drop(columns=[("xResid", "median"), ("xResid", "std"), ("yResid", "median"), ("yResid", "std")])
+        # Calculate and broadcast the median and std for y
+        y_median = groups["yResid"].transform('median')
+        y_std = groups["yResid"].transform('std')
+        arc_data["yResidOutlier"] = abs(arc_data["yResid"] - y_median) > (sigma * y_std)
 
     log.info("Adding fiber information")
     mtp_df = pd.DataFrame(
