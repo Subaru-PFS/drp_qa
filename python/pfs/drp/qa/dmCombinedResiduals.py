@@ -215,6 +215,10 @@ def make_report(
     # Per visit descriptions.
     for ccd, visit_stats in residual_stats.groupby("ccd", observed=True):
         log.info(f"Making plots for {ccd}")
+        if str(ccd) not in detectorMaps:
+            log.warning(f"DetectorMap not found for {ccd}. Skipping.")
+            continue
+
         try:
             # Add the 2D residual plot.
             arm = ccd[0]
@@ -225,16 +229,18 @@ def make_report(
             grouped = plot_data[plot_cols].groupby(["status", "isLine", "fiberId", "y"], observed=True)
             plot_data = grouped.mean().reset_index()
 
+            # Ensure all columns are numeric where possible to avoid issues in plot_detectormap_residuals
+            for col in ["xResid", "yResid", "xErr", "yErr"]:
+                if col in plot_data.columns:
+                    plot_data[col] = pd.to_numeric(plot_data[col], errors="coerce")
+
             residFig = plot_detectormap_residuals(plot_data, visit_stats, detectorMaps[str(ccd)])
             residFig.suptitle(f"DetectorMap Residuals - Median of all visits - {ccd}", weight="bold")
             pdf.append(residFig, dpi=150)
 
-            # Add the description per visit breakdown.
             fig = plot_visits(visit_stats.query('status_type == "RESERVED"'), palette=description_palette)
             fig.suptitle(f"{fig.get_suptitle()} - {ccd}")
             pdf.append(fig)
-        except KeyError:
-            log.warning(f"DetectorMap not found for {ccd}. Skipping.")
         except Exception as e:
             log.warning(f"Error plotting for {ccd}: {e}")
             continue
