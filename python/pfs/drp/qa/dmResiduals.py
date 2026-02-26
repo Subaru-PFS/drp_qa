@@ -458,8 +458,9 @@ def getGoodLines(
     if exclusionRadius is None:
         exclusionRadius = adjustDMConfig.exclusionRadius
     if dispersion is not None and exclusionRadius > 0 and not np.all(traceIndex):
-        wavelength = np.unique(lines.wavelength[~traceIndex])
-        status = [np.bitwise_or.reduce(lines.status[lines.wavelength == wl]) for wl in wavelength]
+        lines_df = pd.DataFrame({'wavelength': lines.wavelength[~traceIndex], 'status': lines.status[~traceIndex]})
+        status = lines_df.groupby('wavelength', sort=True)['status'].apply(np.bitwise_or.reduce).to_numpy()
+        wavelength = np.sort(lines_df['wavelength'].unique())
         exclusionRadius = dispersion * exclusionRadius
         exclude = getExclusionZone(wavelength, exclusionRadius, np.array(status))
         good &= np.isin(lines.wavelength, wavelength[exclude], invert=True) | traceIndex
