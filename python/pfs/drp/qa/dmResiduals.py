@@ -1090,7 +1090,14 @@ def plot_residual(
         binned_data = plotData.dropna(subset=["wavelength", column]).groupby(
             ["bin", "status", "isOutlier"], observed=True
         )[["wavelength", column]]
-        plotData = binned_data.agg("median", robustRms).reset_index().sort_values("status")
+        # Use native pandas 'std' instead of the unvectorized 'robustRms'
+        plotData = binned_data.agg(["median", "std"]).reset_index().sort_values("status")
+
+        # Flatten the MultiIndex columns created by agg
+        plotData.columns = ['_'.join(col).strip('_') if col[1] else col[0] for col in plotData.columns.values]
+
+        # Rename the columns back to what the plotting function expects
+        plotData.rename(columns={f'{column}_median': column, 'wavelength_median': 'wavelength'}, inplace=True)
 
     ax3 = scatterplot_with_outliers(
         plotData.query("isOutlier == False"),
