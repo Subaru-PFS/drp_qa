@@ -299,17 +299,13 @@ def get_data_and_stats(
         raise ValueError("After scrubbing the data, the data is empty, cannot proceed.")
 
     # Mark the sigma-clipped outliers for each relevant group.
-    def maskOutliers(grp):
-        grp["xResidOutlier"] = sigma_clip(grp.xResid).mask
-        grp["yResidOutlier"] = sigma_clip(grp.yResid).mask
-        return grp
-
     # Ignore the warnings about NaNs and inf.
     log.info("Masking outliers")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        arc_data = arc_data.groupby(["status_type", "description"]).apply(maskOutliers)
-        arc_data.reset_index(drop=True, inplace=True)
+        groups = arc_data.groupby(["status_type", "description"], observed=True)
+        arc_data["xResidOutlier"] = groups["xResid"].transform(lambda x: sigma_clip(x).mask)
+        arc_data["yResidOutlier"] = groups["yResid"].transform(lambda x: sigma_clip(x).mask)
 
     log.info("Adding fiber information")
     mtp_df = pd.DataFrame(
@@ -845,21 +841,20 @@ def plot_residual(
 
     # Upper row
     # Fiber residual
-    fiber_avg = (
-        plotData.groupby(["fiberId", "status", "isOutlier"])
-        .apply(
-            lambda rows: (
-                len(rows),
-                rows[column].median(),
-                getWeightedRMS(rows[column], rows[f"{column[0]}Err"]),
-            )
-        )
-        .reset_index()
-        .rename(columns={0: "vals"})
-    )
-    fiber_avg = fiber_avg.join(
-        pd.DataFrame(fiber_avg.vals.to_list(), columns=["count", "median", "weightedRms"])
-    ).drop(columns=["vals"])
+    groups = plotData.groupby(["fiberId", "status", "isOutlier"], observed=True)
+    fiber_avg = groups[column].agg(count="count", median="median").reset_index()
+
+    # Calculate weighted RMS for each group efficiently
+    weights = 1.0 / (plotData[f"{column[0]}Err"] ** 2)
+    weighted_resid_sq = (plotData[column] ** 2) * weights
+    
+    # We can aggregate these two series using the same groups
+    agg_rms = pd.DataFrame({
+        "w_resid_sq": weighted_resid_sq,
+        "w": weights
+    }).groupby(groups.ngroup()).sum()
+    
+    fiber_avg["weightedRms"] = np.sqrt(agg_rms["w_resid_sq"] / agg_rms["w"]).values
 
     fiber_avg.sort_values(["fiberId", "status"], inplace=True)
 
