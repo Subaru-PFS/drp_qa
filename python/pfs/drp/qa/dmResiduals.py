@@ -860,13 +860,20 @@ def plot_residual(
     weights = 1.0 / (plotData[f"{column[0]}Err"] ** 2)
     weighted_resid_sq = (plotData[column] ** 2) * weights
     
-    # We can aggregate these two series using the same groups
-    agg_rms = pd.DataFrame({
+    # Aggregate these two series using the original group keys
+    agg_rms_data = pd.DataFrame({
+        "fiberId": plotData["fiberId"],
+        "status": plotData["status"],
+        "isOutlier": plotData["isOutlier"],
         "w_resid_sq": weighted_resid_sq,
         "w": weights
-    }).groupby(groups.ngroup()).sum()
-    
-    fiber_avg["weightedRms"] = np.sqrt(agg_rms["w_resid_sq"] / agg_rms["w"]).values
+    })
+    agg_rms = agg_rms_data.groupby(["fiberId", "status", "isOutlier"], observed=True).sum().reset_index()
+    agg_rms["weightedRms"] = np.sqrt(agg_rms["w_resid_sq"] / agg_rms["w"])
+
+    # Merge the weighted RMS back into fiber_avg
+    fiber_avg = fiber_avg.merge(agg_rms[["fiberId", "status", "isOutlier", "weightedRms"]], 
+                                on=["fiberId", "status", "isOutlier"])
 
     fiber_avg.sort_values(["fiberId", "status"], inplace=True)
 
