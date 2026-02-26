@@ -326,7 +326,7 @@ def get_data_and_stats(
 
     log.info("Getting residual stats")
     stats = list()
-    for (status_type, description), rows in arc_data.groupby(["status_type", "description"]):
+    for (status_type, description), rows in arc_data.groupby(["status_type", "description"], observed=True):
         visit_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
         visit_stats["status_type"] = status_type
         visit_stats["description"] = description
@@ -525,6 +525,8 @@ def scrub_data(
     arc_data.loc[:, "isReserved"] = is_reserved
     arc_data.loc[arc_data.isReserved, "status_type"] = "RESERVED"
     arc_data.loc[arc_data.isUsed, "status_type"] = "USED"
+    arc_data["status_type"] = arc_data["status_type"].astype("category")
+    arc_data["description"] = arc_data["description"].astype("category")
 
     # Filter to only the RESERVED and USED data.
     if onlyReservedAndUsed is True:
@@ -547,7 +549,12 @@ def scrub_data(
     arc_data = arc_data.replace([np.inf, -np.inf], np.nan)
 
     # Get full status names.
-    status_map = {status.value: status.name for status in ReferenceLineStatus}
+    def get_status_names(status):
+        names = [s.name for s in ReferenceLineStatus if (status & s.value) != 0]
+        return "|".join(names) if names else "NONE"
+
+    status_values = arc_data.status.dropna().unique()
+    status_map = {val: get_status_names(val) for val in status_values}
     arc_data["status_name"] = arc_data.status.map(status_map)
     arc_data["status_name"] = arc_data["status_name"].astype("category")
     arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
@@ -624,8 +631,13 @@ def get_fit_stats(
         with np.errstate(invalid="ignore"):
             return (getChi2(resid, err, soften) / dof) - 1
 
-    f_x = partial(getSoften, arc_data.xResid, arc_data.xErr, xDof)
-    f_y = partial(getSoften, lines.yResid, lines.yErr, yDof)
+    xResid = arc_data.xResid.to_numpy()
+    xErr = arc_data.xErr.to_numpy()
+    yResid = lines.yResid.to_numpy()
+    yErr = lines.yErr.to_numpy()
+
+    f_x = partial(getSoften, xResid, xErr, xDof)
+    f_y = partial(getSoften, yResid, yErr, yDof)
 
     if f_x(0) < 0:
         xSoftFit = 0.0
@@ -1020,8 +1032,12 @@ def plot_residual(
         X = "fiberId"
         Y = "wavelength"
 
-    for isLine, rows in reserved_data.groupby("isLine", observed=False):
-        im = ax2.scatter(
+    # Sort reserved_data so lines are plotted on top if they overlap traces
+    # (though they shouldn't usually overlap much in x,y)
+    # We use a single call to scatter for all points if possible, 
+    # but we have different markers for lines and traces.
+    for isLine, rows in reserved_data.sort_values("isLine").groupby("isLine", observed=True):
+        ax2.scatter(
             rows[X],
             rows[Y],
             c=rows[column],
@@ -1033,8 +1049,11 @@ def plot_residual(
             rasterized=True,
         )
 
+    # To get a colorbar, we need a ScalarMappable. 
+    sm = plt.cm.ScalarMappable(cmap=div_palette, norm=norm)
+    sm.set_array([])
     fig.colorbar(
-        im,
+        sm,
         ax=ax2,
         orientation="horizontal",
         extend="both",
@@ -1051,7 +1070,7 @@ def plot_residual(
 
     if bin_wl is True:
         binned_data = plotData.dropna(subset=["wavelength", column]).groupby(
-            ["bin", "status", "isOutlier"], observed=False
+            ["bin", "status", "isOutlier"], observed=True
         )[["wavelength", column]]
         plotData = binned_data.agg("median", robustRms).reset_index().sort_values("status")
 

@@ -213,7 +213,7 @@ def make_report(
     ]
 
     # Per visit descriptions.
-    for ccd, visit_stats in residual_stats.groupby("ccd", observed=False):
+    for ccd, visit_stats in residual_stats.groupby("ccd", observed=True):
         log.info(f"Making plots for {ccd}")
         try:
             # Add the 2D residual plot.
@@ -222,7 +222,7 @@ def make_report(
             plot_data = residual_data.query(f"arm == '{arm}' and spectrograph == {spec}")
 
             # If we are doing a combined report we want to get the mean across visits.
-            grouped = plot_data[plot_cols].groupby(["status", "isLine", "fiberId", "y"])
+            grouped = plot_data[plot_cols].groupby(["status", "isLine", "fiberId", "y"], observed=True)
             plot_data = grouped.mean().reset_index()
 
             residFig = plot_detectormap_residuals(plot_data, visit_stats, detectorMaps[str(ccd)])
@@ -246,14 +246,14 @@ def plot_detector_summary(stats: pd.DataFrame) -> Figure:
     plot_data_spatial = (
         stats.query("description == 'Trace'")
         .filter(regex="ccd|spatial.(median|weighted|soften)")
-        .groupby("ccd", observed=False)
+        .groupby("ccd", observed=True)
         .mean()
     )
     plot_data_spatial.columns = [c.replace("spatial.", "") for c in plot_data_spatial.columns]
     plot_data_wavelength = (
         stats.query("description != 'Trace'")
         .filter(regex="ccd|wavelength.(median|weighted|soften)")
-        .groupby("ccd", observed=False)
+        .groupby("ccd", observed=True)
         .mean()
     )
     plot_data_wavelength.columns = [c.replace("wavelength.", "") for c in plot_data_wavelength.columns]
@@ -429,7 +429,7 @@ def plot_visits(
         else:
             metricData = metricData.query("description != 'Trace'")
 
-        for desc, grp in metricData.groupby("description"):
+        for desc, grp in metricData.groupby("description", observed=True):
             grpPlotData = grp.copy()
             ax.errorbar(
                 y=grpPlotData["visit_idx"],
