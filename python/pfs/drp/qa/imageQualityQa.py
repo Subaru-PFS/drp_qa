@@ -104,6 +104,7 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
     )
     vmin = Field(dtype=float, default=2.5, doc="Minimum FWHM for color scale (pixels).")
     vmax = Field(dtype=float, default=3.5, doc="Maximum FWHM for color scale (pixels).")
+    maxFwhm = Field(dtype=float, default=8.0, doc="Upper FWHM cutoff for line selection and histogram binning (pixels).")
     logScale = Field(dtype=bool, default=True, doc="Log y-axis for histogram plots.")
     gridsize = Field(
         dtype=int,
@@ -210,6 +211,7 @@ class ImageQualityQaTask(PipelineTask):
             minFluxPercentile=cfg.minFluxPercentile,
             vmin=cfg.vmin,
             vmax=cfg.vmax,
+            maxFwhm=cfg.maxFwhm,
             logScale=cfg.logScale,
             gridsize=cfg.gridsize,
             stride=cfg.stride,
