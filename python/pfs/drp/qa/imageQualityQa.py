@@ -4,7 +4,6 @@ Produces per-detector FWHM and image-shape QA plots from arc-line
 second-moment measurements.
 """
 
-import numpy as np
 import pandas as pd
 from lsst.pex.config import Field
 from lsst.pipe.base import (
@@ -22,7 +21,7 @@ from lsst.pipe.base.connectionTypes import (
 )
 from matplotlib import pyplot as plt
 from pfs.drp.stella import ArcLineSet, DetectorMap
-from pfs.drp.stella.utils.quality import computeImageQuality, opaqueColorbar
+from pfs.drp.stella.utils.quality import computeImageQuality, opaqueColorbar, plotImageQuality
 from pfs.drp.stella.utils.stability import addTraceLambdaToArclines
 
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
@@ -238,128 +237,3 @@ class ImageQualityQaTask(PipelineTask):
             plt.close(fig)
 
         return pdf
-
-
-def plotImageQuality(
-    ax,
-    data: pd.DataFrame,
-    *,
-    showWhisker: bool = False,
-    showFWHM: bool = False,
-    showFWHMAgainstLambda: bool = False,
-    showFWHMHistogram: bool = False,
-    showFluxHistogram: bool = False,
-    minFluxPercentile: float = 10,
-    vmin: float = 2.5,
-    vmax: float = 3.5,
-    logScale: bool = True,
-    gridsize: int = 100,
-    stride: int = 1,
-    useSN: bool = False,
-):
-    """Draw a single image-quality panel on *ax*.
-
-    Parameters
-    ----------
-    ax : `matplotlib.axes.Axes`
-        Axes to draw on.
-    data : `pandas.DataFrame`
-        Output of `computeImageQuality`.  Must contain ``fwhm``, ``theta``,
-        ``traceOnly``, ``x``, ``y``, ``flux``, ``fluxErr``, ``flag``,
-        ``fiberId``, and ``lam`` columns.
-    showWhisker : `bool`
-        Draw FWHM as a whisker (quiver) plot coloured by FWHM magnitude.
-    showFWHM : `bool`
-        Draw a 2D spatial hexbin / scatter map of FWHM.
-    showFWHMAgainstLambda : `bool`
-        Scatter FWHM vs log(flux) or S/N, coloured by wavelength.
-    showFWHMHistogram : `bool`
-        Histogram of FWHM values.
-    showFluxHistogram : `bool`
-        Histogram of line fluxes.
-    minFluxPercentile : `float`
-        Minimum flux percentile for line selection in spatial plots.
-    vmin, vmax : `float`
-        FWHM color-scale range (pixels).
-    logScale : `bool`
-        Log y-axis for histograms.
-    gridsize : `int`
-        hexbin grid size; use ``<=0`` for scatter plot instead.
-    stride : `int`
-        Fiber-ID stride for downsampling in spatial plots.
-    useSN : `bool`
-        Use S/N instead of log10(flux) on the x-axis of FWHM-vs-λ.
-
-    Returns
-    -------
-    C : `matplotlib.cm.ScalarMappable` or ``None``
-        Colorable artist suitable for passing to ``fig.colorbar()``,
-        or ``None`` when no colorbar is applicable.
-    colorbarLabel : `str` or ``None``
-        Colorbar label string, or ``None``.
-    """
-    plt.sca(ax)
-
-    traceOnly = bool(data["traceOnly"].iloc[0]) if len(data) > 0 else False
-    fwhm = data["fwhm"]
-    theta = data["theta"]
-    C = None
-    colorbarLabel = None
-
-    if showWhisker or showFWHM or showFWHMAgainstLambda:
-        q10_arr = np.nanpercentile(data["flux"], [minFluxPercentile])
-        q10 = np.nan if np.isnan(q10_arr).all() else float(q10_arr[0])
-
-        ll = np.isfinite(data["xx"] if traceOnly else data["xx"] + data["xy"] + data["yy"])
-        ll &= data["flag"] == False  # noqa: E712
-        ll &= fwhm < 8
-        ll &= data["flux"] > q10
-        if stride > 1:
-            ll &= (data["fiberId"] % stride) == 0
-
-        norm = plt.Normalize(vmin, vmax)
-        colorbarLabel = "FWHM (pixels)"
-
-        if showWhisker:
-            imageSize = 4096
-            arrowSize = 4
-            cmap = plt.colormaps["viridis"]
-            C = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-            Q = plt.quiver(
-                data["x"][ll], data["y"][ll],
-                (fwhm * np.cos(theta))[ll], (fwhm * np.sin(theta))[ll],
-                fwhm[ll], cmap=cmap, norm=norm,
-                headwidth=0, pivot="middle",
-                angles="xy", scale_units="xy", scale=arrowSize * 30 / imageSize,
-            )
-            plt.quiverkey(Q, 0.1, 1.025, arrowSize, label=f"{arrowSize:.2g} pixels")
-        elif showFWHM:
-            if gridsize <= 0:
-                C = plt.scatter(data["x"][ll], data["y"][ll], c=fwhm[ll], s=5, norm=norm)
-            else:
-                C = plt.hexbin(data["x"][ll], data["y"][ll], fwhm[ll], norm=norm, gridsize=gridsize)
-        elif showFWHMAgainstLambda:
-            xarr = data["flux"] / data["fluxErr"] if useSN else np.log10(data["flux"])
-            C = plt.scatter(xarr[ll], fwhm[ll], c=data["lam"][ll], marker=".", alpha=0.75)
-            colorbarLabel = "Wavelength (nm)"
-            plt.xlabel("Signal/Noise" if useSN else "lg(flux)")
-            plt.ylabel("FWHM (pixels)")
-
-        if not showFWHMAgainstLambda:
-            plt.ylim(-1, 4096)
-            plt.xlim(-1, 4096)
-            plt.xlabel("x (pixels)")
-            plt.ylabel("y (pixels)")
-            ax.set_aspect(1)
-    else:
-        if showFWHMHistogram:
-            plt.hist(fwhm, bins=np.linspace(0, 10, 100))
-            plt.xlabel("FWHM (pix)")
-        elif showFluxHistogram:
-            q99 = np.nanpercentile(data["flux"], [99])[0]
-            plt.hist(data["flux"], bins=np.linspace(0, q99, 100))
-            plt.xlabel("flux")
-        if logScale:
-            plt.yscale("log")
-
-    return C, colorbarLabel
