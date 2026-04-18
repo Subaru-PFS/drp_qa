@@ -232,7 +232,7 @@ class ImageQualityQaTask(PipelineTask):
             C, colorbarLabel = plotImageQuality(ax, data, **{plotMode: True}, **plotKwargs)
             if C is not None:
                 with opaqueColorbar(C):
-                    fig.colorbar(C, label=colorbarLabel)
+                    fig.colorbar(C, ax=ax, label=colorbarLabel)
             if title:
                 fig.suptitle(title)
             pdf.append(fig)
