@@ -4,3 +4,7 @@ tasks:
     class: pfs.drp.qa.dmResiduals.DetectorMapResidualsTask
   dmCombinedResiduals:
     class: pfs.drp.qa.dmCombinedResiduals.DetectorMapCombinedResidualsTask
+  imageQualityQa:
+    class: pfs.drp.qa.imageQualityQa.ImageQualityQaTask
+  imageQualityCombinedQa:
+    class: pfs.drp.qa.imageQualityCombinedQa.ImageQualityCombinedQaTask

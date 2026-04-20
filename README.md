@@ -62,6 +62,61 @@ N/A
 | `dmQaCombinedResidualPlot` | `instrument` | 1D and 2D plots of the residual between the detectormap and the arclines for the entire detector. |
 | `dmQaDetectorStats`        | `instrument` | Statistics of the residual analysis per detector.                                                 |
 
+#### `imageQualityQa`
+
+Measures image quality from arc-line second-moment measurements for a given detector and visit.
+Computes Gaussian-equivalent FWHM metrics and produces configurable QA plots as a multi-page PDF.
+
+##### Options
+
+- `imageQualityQa:showWhisker`: Show a whisker/quiver plot of FWHM and position angle. Default `True`.
+- `imageQualityQa:showFWHM`: Show a 2D spatial hexbin map of FWHM. Default `False`.
+- `imageQualityQa:showFWHMAgainstLambda`: Plot FWHM vs log(flux) (or S/N if `useSN` is `True`). Default `False`.
+- `imageQualityQa:showFWHMHistogram`: Show a histogram of FWHM values. Default `False`.
+- `imageQualityQa:showFluxHistogram`: Show a histogram of line fluxes. Default `False`.
+- `imageQualityQa:useSN`: Use signal-to-noise rather than log10(flux) in the `showFWHMAgainstLambda` plot. Default `False`.
+- `imageQualityQa:minFluxPercentile`: Minimum flux percentile for line selection in spatial plots. Default `10.0`.
+- `imageQualityQa:vmin`: Minimum FWHM for color scale (pixels). Default `2.5`.
+- `imageQualityQa:vmax`: Maximum FWHM for color scale (pixels). Default `3.5`.
+- `imageQualityQa:maxFwhm`: Upper FWHM cutoff for line selection and histogram binning (pixels). Default `8.0`.
+- `imageQualityQa:logScale`: Log y-axis for histogram plots. Default `True`.
+- `imageQualityQa:gridsize`: Grid size for hexbin FWHM map; use `<=0` for a scatter plot. Default `100`.
+- `imageQualityQa:stride`: Fiber stride for downsampling arc lines in spatial plots. Default `1`.
+
+##### Outputs
+
+| DataSet Type | Dimensions                             | Description                                                          |
+|--------------|----------------------------------------|----------------------------------------------------------------------|
+| `iqQaData`   | `instrument, visit, arm, spectrograph` | Per-line image quality measurements, including FWHM and position angle. |
+| `iqQaPlot`   | `instrument, visit, arm, spectrograph` | Image quality QA plots (one page per enabled plot type).             |
+
+#### `imageQualityCombinedQa`
+
+Aggregates per-detector image quality data from `imageQualityQa` across all visit/arm/spectrograph
+quanta and produces a single multi-panel figure laid out as an arm × spectrograph grid.
+
+##### Options
+
+- `imageQualityCombinedQa:showWhisker`: Show a whisker/quiver plot of FWHM and position angle. Default `True`.
+- `imageQualityCombinedQa:showFWHM`: Show a 2D spatial hexbin map of FWHM. Default `False`.
+- `imageQualityCombinedQa:showFWHMAgainstLambda`: Plot FWHM vs log(flux) (or S/N if `useSN` is `True`). Default `False`.
+- `imageQualityCombinedQa:showFWHMHistogram`: Show a histogram of FWHM values. Default `False`.
+- `imageQualityCombinedQa:showFluxHistogram`: Show a histogram of line fluxes. Default `False`.
+- `imageQualityCombinedQa:useSN`: Use signal-to-noise rather than log10(flux) in the `showFWHMAgainstLambda` plot. Default `False`.
+- `imageQualityCombinedQa:minFluxPercentile`: Minimum flux percentile for line selection in spatial plots. Default `10.0`.
+- `imageQualityCombinedQa:vmin`: Minimum FWHM for color scale (pixels). Default `2.5`.
+- `imageQualityCombinedQa:vmax`: Maximum FWHM for color scale (pixels). Default `3.5`.
+- `imageQualityCombinedQa:maxFwhm`: Upper FWHM cutoff for line selection and histogram binning (pixels). Default `8.0`.
+- `imageQualityCombinedQa:logScale`: Log y-axis for histogram plots. Default `True`.
+- `imageQualityCombinedQa:gridsize`: Grid size for hexbin FWHM map; use `<=0` for a scatter plot. Default `100`.
+- `imageQualityCombinedQa:stride`: Fiber stride for downsampling arc lines in spatial plots. Default `1`.
+
+##### Outputs
+
+| DataSet Type         | Dimensions   | Description                                                                                                        |
+|----------------------|--------------|--------------------------------------------------------------------------------------------------------------------|
+| `iqQaCombinedPlot`   | `instrument` | Combined image quality QA figure arranged as an arm × spectrograph grid (one page per enabled plot type).         |
+
 #### `extractionQa`
 
 Determines the quality of the fiber extraction.
