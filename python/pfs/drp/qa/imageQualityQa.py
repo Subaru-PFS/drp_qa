@@ -1,9 +1,11 @@
 """Image quality QA pipeline task.
 
 Produces per-detector FWHM and image-shape QA plots from arc-line
-second-moment measurements.
+second-moment measurements, fiber profile calibrations, or direct
+cross-dispersion moment measurements from post-ISR pixel data.
 """
 
+import lsst.afw.image
 import numpy as np
 import pandas as pd
 from lsst.pex.config import Field
@@ -71,11 +73,23 @@ class ImageQualityQaConnections(
         name="fiberProfiles",
         doc=(
             "Fiber profile shapes; used to derive trace-width FWHM when arc-line"
-            " shape measurements are unavailable."
+            " shape measurements are unavailable and no calexp is provided."
         ),
         storageClass="FiberProfileSet",
         dimensions=("instrument", "arm", "spectrograph"),
         isCalibration=True,
+    )
+
+    calexp = InputConnection(
+        name="postISRCCD",
+        doc=(
+            "Post-ISR calibrated image.  When present for non-arc visits, fiber"
+            " profile widths are measured directly from pixel data via"
+            " cross-dispersion 2nd moments rather than read from the calibration."
+        ),
+        storageClass="Exposure",
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
+        minimum=0,
     )
 
 
@@ -135,6 +149,23 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
         default=1,
         doc="Fiber stride for downsampling arc lines in spatial plots.",
     )
+    profileHalfWidth = Field(
+        dtype=int,
+        default=7,
+        doc=(
+            "Half-width in pixels of the cross-dispersion aperture used when"
+            " measuring fiber profile widths directly from the calexp image."
+        ),
+    )
+    profileYStride = Field(
+        dtype=int,
+        default=50,
+        doc=(
+            "Row sampling interval (pixels) for image-based fiber profile"
+            " width measurements.  Smaller values give denser sampling at"
+            " the cost of increased computation time."
+        ),
+    )
 
 
 class ImageQualityQaTask(PipelineTask):
@@ -172,15 +203,21 @@ class ImageQualityQaTask(PipelineTask):
         arcLines: ArcLineSet,
         detectorMap: DetectorMap,
         fiberProfiles: FiberProfileSet | None,
+        calexp: lsst.afw.image.Exposure | None,
         dataId: dict,
     ) -> Struct:
         """Compute image quality metrics and generate QA plots.
 
-        For arc visits, FWHM is derived from 2D Gaussian second moments of the
-        arc lines.  For non-arc visits (e.g. quartz or flat), arc-line shape
-        measurements are unavailable; the task then falls back to computing
-        Gaussian-equivalent FWHM from the fiber profile trace widths stored in
-        ``fiberProfiles``.
+        For arc visits, FWHM is derived from 2D Gaussian second moments of
+        the arc lines.  For non-arc visits (e.g. quartz or flat), arc-line
+        shape measurements are unavailable.  The task then falls back in
+        order of preference:
+
+        1. Direct cross-dispersion 2nd-moment measurement from ``calexp``
+           pixel data — reflects the actual optical state of that visit.
+        2. Gaussian-equivalent FWHM from the fiber profile calibration stored
+           in ``fiberProfiles`` — uses a stale calibration product and
+           therefore cannot detect changes in focus between visits.
 
         Parameters
         ----------
@@ -189,9 +226,10 @@ class ImageQualityQaTask(PipelineTask):
         detectorMap : `DetectorMap`
             Calibrated detector mapping from fiberId,wavelength to x,y.
         fiberProfiles : `FiberProfileSet` or `None`
-            Fiber profile shapes.  If ``None`` and arc-line shape measurements
-            are unavailable the task will still succeed but produce all-NaN
-            FWHM (same behaviour as before this fallback was added).
+            Fiber profile shapes.  Used as fallback when ``calexp`` is absent.
+        calexp : `lsst.afw.image.Exposure` or `None`
+            Post-ISR calibrated image.  When provided for non-arc visits,
+            fiber widths are measured directly from pixel data.
         dataId : `dict`
             The dataId for this quantum, used to label outputs and annotate
             the output DataFrame with ``visit``, ``arm``, ``spectrograph``.
@@ -200,24 +238,32 @@ class ImageQualityQaTask(PipelineTask):
         -------
         iqQaData : `pandas.DataFrame`
             Per-line image quality data including ``fwhm``, ``theta``,
-            ``traceOnly``, plus ``visit``, ``arm``, ``spectrograph`` for
-            downstream aggregation by `ImageQualityCombinedQaTask`.
+            ``traceOnly``, ``peakRatio``, plus ``visit``, ``arm``,
+            ``spectrograph`` for downstream aggregation.
         iqQaPlot : `MultipagePdfFigure`
             QA plots, one page per enabled plot type.
         """
         self.log.info("Computing image quality metrics for %s", dataId)
         als = addTraceLambdaToArclines(arcLines, detectorMap)
         data = computeImageQuality(als)
+        data["peakRatio"] = np.nan
 
         if not data["fwhm"].notna().any():
-            if fiberProfiles is not None:
+            if calexp is not None:
                 self.log.info(
-                    "No finite arc-line FWHM for %s; falling back to fiber profile trace widths.", dataId
+                    "No finite arc-line FWHM for %s; measuring profile widths from calexp.", dataId
+                )
+                data = self._buildImageWidthData(calexp, detectorMap)
+            elif fiberProfiles is not None:
+                self.log.info(
+                    "No finite arc-line FWHM for %s; falling back to fiber profile calibration widths.",
+                    dataId,
                 )
                 data = self._buildProfileData(fiberProfiles, detectorMap)
             else:
                 self.log.warning(
-                    "No finite arc-line FWHM for %s and no fiberProfiles available; FWHM will be all NaN.",
+                    "No finite arc-line FWHM for %s and neither calexp nor fiberProfiles available;"
+                    " FWHM will be all NaN.",
                     dataId,
                 )
 
@@ -249,7 +295,7 @@ class ImageQualityQaTask(PipelineTask):
         -------
         `pandas.DataFrame`
             Columns: ``fiberId``, ``x``, ``y``, ``lam``, ``fwhm``, ``theta``,
-            ``flux``, ``fluxErr``, ``flag``, ``traceOnly``.
+            ``flux``, ``fluxErr``, ``flag``, ``traceOnly``, ``peakRatio``.
         """
         rows_list, fibers_list, fwhm_list = [], [], []
         x_list, lam_list, flux_list = [], [], []
@@ -284,7 +330,10 @@ class ImageQualityQaTask(PipelineTask):
 
         if not rows_list:
             return pd.DataFrame(
-                columns=["fiberId", "x", "y", "lam", "fwhm", "theta", "flux", "fluxErr", "flag", "traceOnly"]
+                columns=[
+                    "fiberId", "x", "y", "lam", "fwhm", "theta",
+                    "flux", "fluxErr", "flag", "traceOnly", "peakRatio",
+                ]
             )
 
         n_total = sum(len(r) for r in rows_list)
@@ -300,6 +349,132 @@ class ImageQualityQaTask(PipelineTask):
                 "fluxErr": np.ones(n_total),
                 "flag": np.zeros(n_total, dtype=bool),
                 "traceOnly": True,
+                "peakRatio": np.full(n_total, np.nan),
+            }
+        )
+
+    def _buildImageWidthData(
+        self,
+        calexp: lsst.afw.image.Exposure,
+        detectorMap: DetectorMap,
+    ) -> pd.DataFrame:
+        """Measure fiber profile FWHM directly from post-ISR image pixel data.
+
+        Samples the cross-dispersion intensity profile at regular row
+        intervals, computes the background-subtracted 2nd moment (converting
+        to a Gaussian-equivalent FWHM), and records the peak-to-total flux
+        ratio as a secondary focus indicator.
+
+        Unlike ``_buildProfileData``, this method reflects the actual optical
+        state of the exposure rather than a (possibly stale) calibration.
+
+        Parameters
+        ----------
+        calexp : `lsst.afw.image.Exposure`
+            Post-ISR calibrated image for this quantum.
+        detectorMap : `DetectorMap`
+            Calibrated detector mapping used to locate fiber centers.
+
+        Returns
+        -------
+        `pandas.DataFrame`
+            Columns: ``fiberId``, ``x``, ``y``, ``lam``, ``fwhm``, ``theta``,
+            ``flux``, ``fluxErr``, ``flag``, ``traceOnly``, ``peakRatio``.
+            ``peakRatio`` is the fraction of background-subtracted flux in
+            the peak pixel — a focus proxy independent of absolute brightness.
+        """
+        image = calexp.image.array.astype(np.float64)
+        mask_arr = calexp.mask.array
+        nRows, nCols = image.shape
+
+        halfWidth = self.config.profileHalfWidth
+        yStride = self.config.profileYStride
+        badBits = calexp.mask.getPlaneBitMask(["BAD", "SAT", "CR", "NO_DATA"])
+
+        fiberIds = np.asarray(detectorMap.fiberId, dtype=np.int32)
+        y_samples = np.arange(yStride // 2, nRows, yStride, dtype=np.float64)
+
+        all_fiberIds: list = []
+        all_y: list = []
+        all_x: list = []
+        all_lam: list = []
+        all_fwhm: list = []
+        all_flux: list = []
+        all_flag: list = []
+        all_peakRatio: list = []
+
+        for y_val in y_samples:
+            y_int = int(round(y_val))
+            if y_int < 0 or y_int >= nRows:
+                continue
+
+            y_arr = np.full(len(fiberIds), y_val, dtype=np.float64)
+            x_centers = detectorMap.getXCenter(fiberIds, y_arr)
+            lams = detectorMap.findWavelength(fiberIds, y_arr)
+            row_image = image[y_int, :]
+            row_mask = mask_arr[y_int, :]
+
+            for fiberId, x_cen, lam in zip(fiberIds, x_centers, lams):
+                if not (np.isfinite(x_cen) and np.isfinite(lam)):
+                    continue
+
+                x_lo = max(0, int(x_cen) - halfWidth)
+                x_hi = min(nCols, int(x_cen) + halfWidth + 1)
+                if x_hi - x_lo < 5:
+                    continue
+
+                strip = row_image[x_lo:x_hi]
+                is_bad = (row_mask[x_lo:x_hi] & badBits) != 0
+
+                fwhm_val = np.nan
+                flag_val = True
+                peak_ratio = np.nan
+                flux_val = np.nan
+
+                if is_bad.sum() <= halfWidth:
+                    # Background from outermost 2 pixels on each side
+                    edge = np.concatenate([strip[:2], strip[-2:]])
+                    edge_bad = np.concatenate([is_bad[:2], is_bad[-2:]])
+                    bg = float(np.nanmean(np.where(~edge_bad, edge, np.nan)))
+                    if not np.isfinite(bg):
+                        bg = 0.0
+
+                    strip_bg = np.where(is_bad, 0.0, strip - bg)
+                    total = float(strip_bg.sum())
+
+                    if total > 0:
+                        x_rel = np.arange(x_lo, x_hi, dtype=np.float64) - x_cen
+                        mu = float((x_rel * strip_bg).sum()) / total
+                        var = float(((x_rel - mu) ** 2 * strip_bg).sum()) / total
+                        if var > 0:
+                            fwhm_val = _FWHM_FACTOR * np.sqrt(var)
+                            peak_ratio = float(strip_bg.max()) / total
+                            flag_val = False
+                        flux_val = total
+
+                all_fiberIds.append(int(fiberId))
+                all_y.append(y_val)
+                all_x.append(float(x_cen))
+                all_lam.append(float(lam))
+                all_fwhm.append(fwhm_val)
+                all_flux.append(flux_val)
+                all_flag.append(flag_val)
+                all_peakRatio.append(peak_ratio)
+
+        n = len(all_fwhm)
+        return pd.DataFrame(
+            {
+                "fiberId": np.array(all_fiberIds, dtype=np.int32),
+                "y": np.array(all_y),
+                "x": np.array(all_x),
+                "lam": np.array(all_lam),
+                "fwhm": np.array(all_fwhm),
+                "theta": np.zeros(n),
+                "flux": np.array(all_flux),
+                "fluxErr": np.ones(n),
+                "flag": np.array(all_flag, dtype=bool),
+                "traceOnly": True,
+                "peakRatio": np.array(all_peakRatio),
             }
         )
 
@@ -343,7 +518,7 @@ class ImageQualityQaTask(PipelineTask):
                 continue
 
             fig, ax = plt.subplots(layout="constrained")
-            C, colorbarLabel = plotImageQuality(ax, data, **{plotMode: True}, **plotKwargs)
+            C, colorbarLabel = plotImageQuBesality(ax, data, **{plotMode: True}, **plotKwargs)
             if C is not None:
                 with opaqueColorbar(C):
                     fig.colorbar(C, ax=ax, label=colorbarLabel)
