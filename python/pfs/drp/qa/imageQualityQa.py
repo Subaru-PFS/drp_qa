@@ -264,17 +264,18 @@ class ImageQualityQaTask(PipelineTask):
 
             fwhm = _FWHM_FACTOR * np.asarray(stats.width)
 
-            fiberIds_arr = np.full(n, fiberId, dtype=int)
-            x = detectorMap.getXCenter(fiberIds_arr, swath_rows)
-            lam = detectorMap.findWavelength(fiberIds_arr, swath_rows)
+            fiberIds_arr = np.full(n, fiberId, dtype=np.int32)
+            swath_rows_f64 = np.asarray(swath_rows, dtype=np.float64)
+            x = detectorMap.getXCenter(fiberIds_arr, swath_rows_f64)
+            lam = detectorMap.findWavelength(fiberIds_arr, swath_rows_f64)
 
             if profile.norm is not None and len(profile.norm) > 0:
-                idx = np.clip(np.round(swath_rows).astype(int), 0, len(profile.norm) - 1)
+                idx = np.clip(np.round(swath_rows_f64).astype(int), 0, len(profile.norm) - 1)
                 flux = np.asarray(profile.norm[idx], dtype=float)
             else:
                 flux = np.ma.sum(profile.profiles, axis=1).filled(np.nan)
 
-            rows_list.append(swath_rows)
+            rows_list.append(swath_rows_f64)
             fibers_list.append(fiberIds_arr)
             fwhm_list.append(fwhm)
             x_list.append(x)
