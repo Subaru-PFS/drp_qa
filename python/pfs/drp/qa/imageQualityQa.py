@@ -81,11 +81,12 @@ class ImageQualityQaConnections(
     )
 
     calexp = InputConnection(
-        name="postISRCCD",
+        name="calexp",
         doc=(
-            "Post-ISR calibrated image.  When present for non-arc visits, fiber"
-            " profile widths are measured directly from pixel data via"
-            " cross-dispersion 2nd moments rather than read from the calibration."
+            "Calibrated exposure output by ReduceExposureTask.  When present for"
+            " non-arc visits, fiber profile widths are measured directly from"
+            " pixel data via cross-dispersion 2nd moments rather than read from"
+            " the calibration."
         ),
         storageClass="Exposure",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
