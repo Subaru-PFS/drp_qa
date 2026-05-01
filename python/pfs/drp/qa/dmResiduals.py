@@ -298,18 +298,25 @@ def get_data_and_stats(
     if len(arc_data) == 0:
         raise ValueError("After scrubbing the data, the data is empty, cannot proceed.")
 
-    # Mark the sigma-clipped outliers for each relevant group.
-    def maskOutliers(grp):
-        grp["xResidOutlier"] = sigma_clip(grp.xResid).mask
-        grp["yResidOutlier"] = sigma_clip(grp.yResid).mask
-        return grp
-
-    # Ignore the warnings about NaNs and inf.
     log.info("Masking outliers")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        arc_data = arc_data.groupby(["status_type", "description"]).apply(maskOutliers)
-        arc_data.reset_index(drop=True, inplace=True)
+
+        # Define the threshold
+        sigma = 3.0
+
+        # Group the data
+        groups = arc_data.groupby(["status_type", "description"], observed=True)
+
+        # Calculate and broadcast the median and std for x
+        x_median = groups["xResid"].transform('median')
+        x_std = groups["xResid"].transform('std')
+        arc_data["xResidOutlier"] = abs(arc_data["xResid"] - x_median) > (sigma * x_std)
+
+        # Calculate and broadcast the median and std for y
+        y_median = groups["yResid"].transform('median')
+        y_std = groups["yResid"].transform('std')
+        arc_data["yResidOutlier"] = abs(arc_data["yResid"] - y_median) > (sigma * y_std)
 
     log.info("Adding fiber information")
     mtp_df = pd.DataFrame(
@@ -330,7 +337,7 @@ def get_data_and_stats(
 
     log.info("Getting residual stats")
     stats = list()
-    for (status_type, description), rows in arc_data.groupby(["status_type", "description"]):
+    for (status_type, description), rows in arc_data.groupby(["status_type", "description"], observed=True):
         visit_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
         visit_stats["status_type"] = status_type
         visit_stats["description"] = description
@@ -451,8 +458,9 @@ def getGoodLines(
     if exclusionRadius is None:
         exclusionRadius = adjustDMConfig.exclusionRadius
     if dispersion is not None and exclusionRadius > 0 and not np.all(traceIndex):
-        wavelength = np.unique(lines.wavelength[~traceIndex])
-        status = [np.bitwise_or.reduce(lines.status[lines.wavelength == wl]) for wl in wavelength]
+        lines_df = pd.DataFrame({'wavelength': lines.wavelength[~traceIndex], 'status': lines.status[~traceIndex]})
+        status = lines_df.groupby('wavelength', sort=True)['status'].apply(np.bitwise_or.reduce).to_numpy()
+        wavelength = np.sort(lines_df['wavelength'].unique())
         exclusionRadius = dispersion * exclusionRadius
         exclude = getExclusionZone(wavelength, exclusionRadius, np.array(status))
         good &= np.isin(lines.wavelength, wavelength[exclude], invert=True) | traceIndex
@@ -529,6 +537,8 @@ def scrub_data(
     arc_data.loc[:, "isReserved"] = is_reserved
     arc_data.loc[arc_data.isReserved, "status_type"] = "RESERVED"
     arc_data.loc[arc_data.isUsed, "status_type"] = "USED"
+    arc_data["status_type"] = arc_data["status_type"].astype("category")
+    arc_data["description"] = arc_data["description"].astype("category")
 
     # Filter to only the RESERVED and USED data.
     if onlyReservedAndUsed is True:
@@ -551,7 +561,13 @@ def scrub_data(
     arc_data = arc_data.replace([np.inf, -np.inf], np.nan)
 
     # Get full status names.
-    arc_data["status_name"] = arc_data.status.map(lambda x: ReferenceLineStatus(x).name)
+    def get_status_names(status):
+        names = [s.name for s in ReferenceLineStatus if (status & s.value) != 0]
+        return "|".join(names) if names else "NONE"
+
+    status_values = arc_data.status.dropna().unique()
+    status_map = {val: get_status_names(val) for val in status_values}
+    arc_data["status_name"] = arc_data.status.map(status_map)
     arc_data["status_name"] = arc_data["status_name"].astype("category")
     arc_data.status_name = arc_data.status_name.cat.remove_unused_categories()
 
@@ -627,8 +643,13 @@ def get_fit_stats(
         with np.errstate(invalid="ignore"):
             return (getChi2(resid, err, soften) / dof) - 1
 
-    f_x = partial(getSoften, arc_data.xResid, arc_data.xErr, xDof)
-    f_y = partial(getSoften, lines.yResid, lines.yErr, yDof)
+    xResid = arc_data.xResid.to_numpy()
+    xErr = arc_data.xErr.to_numpy()
+    yResid = lines.yResid.to_numpy()
+    yErr = lines.yErr.to_numpy()
+
+    f_x = partial(getSoften, xResid, xErr, xDof)
+    f_y = partial(getSoften, yResid, yErr, yDof)
 
     if f_x(0) < 0:
         xSoftFit = 0.0
@@ -844,21 +865,26 @@ def plot_residual(
 
     # Upper row
     # Fiber residual
-    fiber_avg = (
-        plotData.groupby(["fiberId", "status", "isOutlier"])
-        .apply(
-            lambda rows: (
-                len(rows),
-                rows[column].median(),
-                getWeightedRMS(rows[column], rows[f"{column[0]}Err"]),
+    # Calculate weighted RMS for each group efficiently by pre-calculating the components
+    weights = 1.0 / (plotData[f"{column[0]}Err"] ** 2)
+    weighted_resid_sq = (plotData[column] ** 2) * weights
+
+    # Combine all components into plotData for a single aggregation
+    plotData["w"] = weights
+    plotData["w_resid_sq"] = weighted_resid_sq
+
+    groups = plotData.groupby(["fiberId", "status", "isOutlier"], observed=True)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        fiber_avg = (
+            groups.agg(
+                count=(column, "count"),
+                median=(column, "median"),
+                w_resid_sq_sum=("w_resid_sq", "sum"),
+                w_sum=("w", "sum"),
             )
+            .reset_index()
         )
-        .reset_index()
-        .rename(columns={0: "vals"})
-    )
-    fiber_avg = fiber_avg.join(
-        pd.DataFrame(fiber_avg.vals.to_list(), columns=["count", "median", "weightedRms"])
-    ).drop(columns=["vals"])
+        fiber_avg["weightedRms"] = np.sqrt(fiber_avg["w_resid_sq_sum"] / fiber_avg["w_sum"])
 
     fiber_avg.sort_values(["fiberId", "status"], inplace=True)
 
@@ -1024,8 +1050,12 @@ def plot_residual(
         X = "fiberId"
         Y = "wavelength"
 
-    for isLine, rows in reserved_data.groupby("isLine", observed=False):
-        im = ax2.scatter(
+    # Sort reserved_data so lines are plotted on top if they overlap traces
+    # (though they shouldn't usually overlap much in x,y)
+    # We use a single call to scatter for all points if possible, 
+    # but we have different markers for lines and traces.
+    for isLine, rows in reserved_data.sort_values("isLine").groupby("isLine", observed=True):
+        ax2.scatter(
             rows[X],
             rows[Y],
             c=rows[column],
@@ -1037,8 +1067,11 @@ def plot_residual(
             rasterized=True,
         )
 
+    # To get a colorbar, we need a ScalarMappable. 
+    sm = plt.cm.ScalarMappable(cmap=div_palette, norm=norm)
+    sm.set_array([])
     fig.colorbar(
-        im,
+        sm,
         ax=ax2,
         orientation="horizontal",
         extend="both",
@@ -1055,9 +1088,16 @@ def plot_residual(
 
     if bin_wl is True:
         binned_data = plotData.dropna(subset=["wavelength", column]).groupby(
-            ["bin", "status", "isOutlier"], observed=False
+            ["bin", "status", "isOutlier"], observed=True
         )[["wavelength", column]]
-        plotData = binned_data.agg("median", robustRms).reset_index().sort_values("status")
+        # Use native pandas 'std' instead of the unvectorized 'robustRms'
+        plotData = binned_data.agg(["median", "std"]).reset_index().sort_values("status")
+
+        # Flatten the MultiIndex columns created by agg
+        plotData.columns = ['_'.join(col).strip('_') if col[1] else col[0] for col in plotData.columns.values]
+
+        # Rename the columns back to what the plotting function expects
+        plotData.rename(columns={f'{column}_median': column, 'wavelength_median': 'wavelength'}, inplace=True)
 
     ax3 = scatterplot_with_outliers(
         plotData.query("isOutlier == False"),
