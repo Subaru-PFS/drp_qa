@@ -519,7 +519,7 @@ class ImageQualityQaTask(PipelineTask):
                 continue
 
             fig, ax = plt.subplots(layout="constrained")
-            C, colorbarLabel = plotImageQuBesality(ax, data, **{plotMode: True}, **plotKwargs)
+            C, colorbarLabel = plotImageQuality(ax, data, **{plotMode: True}, **plotKwargs)
             if C is not None:
                 with opaqueColorbar(C):
                     fig.colorbar(C, ax=ax, label=colorbarLabel)
