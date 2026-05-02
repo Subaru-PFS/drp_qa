@@ -112,6 +112,14 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
         default=False,
         doc="Plot FWHM vs log(flux) (or S/N if useSN is True).",
     )
+    showFWHMvsLambda = Field(
+        dtype=bool,
+        default=True,
+        doc=(
+            "Plot FWHM vs wavelength (nm), with a per-10-nm binned median overlay."
+            " Useful for detecting chromatic dependence of the PSF across arms."
+        ),
+    )
     showFWHMHistogram = Field(
         dtype=bool,
         default=False,
@@ -542,4 +550,69 @@ class ImageQualityQaTask(PipelineTask):
             pdf.append(fig)
             plt.close(fig)
 
+        if cfg.showFWHMvsLambda:
+            pdf.append(self._plotFWHMvsLambda(data, title=title))
+
         return pdf
+
+    def _plotFWHMvsLambda(self, data: pd.DataFrame, title: str = "") -> plt.Figure:
+        """Plot FWHM as a function of wavelength.
+
+        Scatter-plots individual arc-line FWHM measurements against their
+        wavelength, overlaying a per-10-nm binned median to reveal any
+        chromatic PSF dependence.  Only unflagged lines below ``maxFwhm``
+        are included.
+
+        Parameters
+        ----------
+        data : `pandas.DataFrame`
+            Output of `computeImageQuality`, annotated with dataId fields.
+            Must contain ``lam``, ``fwhm``, and ``flag`` columns.
+        title : `str`, optional
+            Figure suptitle.
+
+        Returns
+        -------
+        `matplotlib.figure.Figure`
+        """
+        cfg = self.config
+        good = ~data["flag"] & np.isfinite(data["fwhm"]) & np.isfinite(data["lam"])
+        good &= data["fwhm"] < cfg.maxFwhm
+
+        fig, ax = plt.subplots(layout="constrained")
+
+        if good.sum() == 0:
+            ax.text(0.5, 0.5, "No valid measurements", transform=ax.transAxes,
+                    ha="center", va="center")
+            if title:
+                fig.suptitle(title)
+            return fig
+
+        lam = data["lam"][good].to_numpy()
+        fwhm = data["fwhm"][good].to_numpy()
+
+        ax.scatter(lam, fwhm, s=1, alpha=0.15, color="steelblue", rasterized=True,
+                   label="Arc lines")
+
+        # Binned median overlay (10 nm bins)
+        bin_width = 10.0
+        lam_min = np.floor(lam.min() / bin_width) * bin_width
+        lam_max = np.ceil(lam.max() / bin_width) * bin_width
+        bin_edges = np.arange(lam_min, lam_max + bin_width, bin_width)
+        bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+        bin_medians = np.array([
+            np.nanmedian(fwhm[(lam >= lo) & (lam < hi)])
+            for lo, hi in zip(bin_edges[:-1], bin_edges[1:])
+        ])
+        finite = np.isfinite(bin_medians)
+        ax.plot(bin_centers[finite], bin_medians[finite], "o-", color="crimson",
+                ms=4, lw=1.5, label="Median (10 nm bins)")
+
+        ax.set_xlabel("Wavelength (nm)")
+        ax.set_ylabel("FWHM (px)")
+        ax.set_title("FWHM vs Wavelength")
+        ax.legend(markerscale=4, fontsize=8)
+        ax.grid(alpha=0.3)
+        if title:
+            fig.suptitle(title)
+        return fig
