@@ -201,6 +201,41 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " custom downstream analysis are needed."
         ),
     )
+    fwhmWarnThreshold = Field(
+        dtype=float,
+        default=3.2,
+        doc=(
+            "Median FWHM (pixels) above which the per-quantum status is set to"
+            " WARN.  Values above ``fwhmFailThreshold`` take priority and yield"
+            " FAIL.  Set to a large value (e.g. 999) to disable."
+        ),
+    )
+    fwhmFailThreshold = Field(
+        dtype=float,
+        default=3.5,
+        doc=(
+            "Median FWHM (pixels) above which the per-quantum status is set to"
+            " FAIL.  Tuned for arm-b (400–650 nm); adjust for other arms."
+            " Set to a large value (e.g. 999) to disable."
+        ),
+    )
+    flagRateWarnThreshold = Field(
+        dtype=float,
+        default=15.0,
+        doc=(
+            "Percentage of flagged lines above which the per-quantum status is"
+            " set to WARN.  Values above ``flagRateFailThreshold`` yield FAIL."
+            " Set to 100 to disable."
+        ),
+    )
+    flagRateFailThreshold = Field(
+        dtype=float,
+        default=20.0,
+        doc=(
+            "Percentage of flagged lines above which the per-quantum status is"
+            " set to FAIL.  Set to 100 to disable."
+        ),
+    )
 
 
 class ImageQualityQaTask(PipelineTask):
@@ -281,7 +316,9 @@ class ImageQualityQaTask(PipelineTask):
             empty DataFrame when ``writeIqQaData`` is False.
         iqQaMetrics : `pandas.DataFrame`
             Single-row summary with ``medFwhm``, ``pctFlagged``, ``nLines``,
-            ``traceOnly``, ``visit``, ``arm``, ``spectrograph``.
+            ``traceOnly``, ``qaStatus``, ``visit``, ``arm``, ``spectrograph``.
+            ``qaStatus`` is one of ``"PASS"``, ``"WARN"``, or ``"FAIL"`` based
+            on the configured FWHM and flag-rate thresholds.
         iqQaPlot : `MultipagePdfFigure`
             QA plots, one page per enabled plot type.
         """
@@ -332,12 +369,50 @@ class ImageQualityQaTask(PipelineTask):
         if "status" in data.columns:
             good &= data["status"] == 0
         trace_only = bool(data["traceOnly"].all()) if "traceOnly" in data.columns else False
+        med_fwhm = float(data.loc[good, "fwhm"].median())
+        pct_flagged = 100.0 * data["flag"].sum() / max(len(data), 1)
+
+        # Determine per-quantum pass/warn/fail status from absolute thresholds.
+        # Trace-only visits use the same flag-rate check; FWHM check is skipped
+        # when medFwhm is NaN (no valid lines).
+        reasons = []
+        fwhm_status = "PASS"
+        if not trace_only and not np.isnan(med_fwhm):
+            if med_fwhm >= self.config.fwhmFailThreshold:
+                fwhm_status = "FAIL"
+                reasons.append(f"medFWHM={med_fwhm:.2f}px >= fail threshold {self.config.fwhmFailThreshold}px")
+            elif med_fwhm >= self.config.fwhmWarnThreshold:
+                fwhm_status = "WARN"
+                reasons.append(f"medFWHM={med_fwhm:.2f}px >= warn threshold {self.config.fwhmWarnThreshold}px")
+
+        flag_status = "PASS"
+        if pct_flagged >= self.config.flagRateFailThreshold:
+            flag_status = "FAIL"
+            reasons.append(
+                f"pctFlagged={pct_flagged:.1f}% >= fail threshold {self.config.flagRateFailThreshold}%"
+            )
+        elif pct_flagged >= self.config.flagRateWarnThreshold:
+            flag_status = "WARN"
+            reasons.append(
+                f"pctFlagged={pct_flagged:.1f}% >= warn threshold {self.config.flagRateWarnThreshold}%"
+            )
+
+        _level = {"PASS": 0, "WARN": 1, "FAIL": 2}
+        qa_status = max((fwhm_status, flag_status), key=lambda s: _level[s])
+
+        reason_str = "; ".join(reasons) if reasons else "all metrics nominal"
+        self.log.info(
+            "IQ QA %-4s  %s  medFWHM=%.2fpx  pctFlagged=%.1f%%  [%s]",
+            qa_status, title, med_fwhm, pct_flagged, reason_str,
+        )
+
         metrics = pd.DataFrame(
             {
-                "medFwhm": [float(data.loc[good, "fwhm"].median())],
-                "pctFlagged": [100.0 * data["flag"].sum() / max(len(data), 1)],
+                "medFwhm": [med_fwhm],
+                "pctFlagged": [pct_flagged],
                 "nLines": [len(data)],
                 "traceOnly": [trace_only],
+                "qaStatus": [qa_status],
             }
         )
         for key in ("visit", "arm", "spectrograph"):
