@@ -372,6 +372,8 @@ class ImageQualityQaTask(PipelineTask):
         med_fwhm = float(data.loc[good, "fwhm"].median())
         pct_flagged = 100.0 * data["flag"].sum() / max(len(data), 1)
 
+        title = "{visit} {arm}{spectrograph}".format(**dataId)
+
         # Determine per-quantum pass/warn/fail status from absolute thresholds.
         # Trace-only visits use the same flag-rate check; FWHM check is skipped
         # when medFwhm is NaN (no valid lines).
@@ -419,7 +421,6 @@ class ImageQualityQaTask(PipelineTask):
             if key in dataId:
                 metrics[key] = dataId[key]
 
-        title = "{visit} {arm}{spectrograph}".format(**dataId)
         self.log.info("Generating image quality plots for %s", dataId)
         pdf = self._makePlots(data, title=title)
 
