@@ -272,6 +272,20 @@ class ImageQualityQaTask(PipelineTask):
             if key in dataId:
                 data[key] = dataId[key]
 
+        # Keep only the columns needed for downstream QA analysis and plotting.
+        # Drops intermediate shape-moment columns (xx, yy, xy), catalog fields
+        # not used in QA (wavelength, xErr, yErr, lamErr, tracePos, fluxNorm,
+        # description), and any unnamed index artifact columns.
+        _KEEP_COLUMNS = [
+            "fiberId", "x", "y", "lam",
+            "fwhm", "theta",
+            "flux", "fluxErr", "flag",
+            "traceOnly", "peakRatio",
+            "status",
+            "visit", "arm", "spectrograph",
+        ]
+        data = data[[c for c in _KEEP_COLUMNS if c in data.columns]]
+
         title = "{visit} {arm}{spectrograph}".format(**dataId)
         self.log.info("Generating image quality plots for %s", dataId)
         pdf = self._makePlots(data, title=title)
