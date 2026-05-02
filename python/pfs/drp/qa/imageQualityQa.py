@@ -57,7 +57,22 @@ class ImageQualityQaConnections(
 
     iqQaData = OutputConnection(
         name="iqQaData",
-        doc="Per-line image quality measurements, including FWHM and position angle.",
+        doc=(
+            "Per-line image quality measurements, including FWHM and position angle."
+            " Written as an empty DataFrame when ``writeIqQaData`` is False."
+        ),
+        storageClass="DataFrame",
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
+    )
+
+    iqQaMetrics = OutputConnection(
+        name="iqQaMetrics",
+        doc=(
+            "Per-quantum summary metrics (one row) for downstream cross-visit"
+            " aggregation by ImageQualityQaSummaryTask."
+            " Columns: ``visit``, ``arm``, ``spectrograph``, ``medFwhm``,"
+            " ``pctFlagged``, ``nLines``, ``traceOnly``."
+        ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
@@ -99,7 +114,7 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
 
     showWhisker = Field(
         dtype=bool,
-        default=True,
+        default=False,
         doc="Show a whisker/quiver plot of FWHM and position angle.",
     )
     showFWHM = Field(
@@ -175,6 +190,17 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " the cost of increased computation time."
         ),
     )
+    writeIqQaData = Field(
+        dtype=bool,
+        default=False,
+        doc=(
+            "Write the full per-line ``iqQaData`` DataFrame to the Butler."
+            " When False (default), an empty DataFrame is written to satisfy"
+            " the output connection while avoiding the storage cost of the"
+            " full line-level data.  Enable when per-line spatial plots or"
+            " custom downstream analysis are needed."
+        ),
+    )
 
 
 class ImageQualityQaTask(PipelineTask):
@@ -205,7 +231,10 @@ class ImageQualityQaTask(PipelineTask):
             self.log.error("ImageQualityQaTask failed for %s: %s", dataId, e)
             raise
         else:
-            butlerQC.put(outputs, outputRefs)
+            iq_data = outputs.iqQaData if self.config.writeIqQaData else pd.DataFrame()
+            butlerQC.put(iq_data, outputRefs.iqQaData)
+            butlerQC.put(outputs.iqQaMetrics, outputRefs.iqQaMetrics)
+            butlerQC.put(outputs.iqQaPlot, outputRefs.iqQaPlot)
 
     def run(
         self,
@@ -248,7 +277,11 @@ class ImageQualityQaTask(PipelineTask):
         iqQaData : `pandas.DataFrame`
             Per-line image quality data including ``fwhm``, ``theta``,
             ``traceOnly``, ``peakRatio``, plus ``visit``, ``arm``,
-            ``spectrograph`` for downstream aggregation.
+            ``spectrograph`` for downstream aggregation.  Written as an
+            empty DataFrame when ``writeIqQaData`` is False.
+        iqQaMetrics : `pandas.DataFrame`
+            Single-row summary with ``medFwhm``, ``pctFlagged``, ``nLines``,
+            ``traceOnly``, ``visit``, ``arm``, ``spectrograph``.
         iqQaPlot : `MultipagePdfFigure`
             QA plots, one page per enabled plot type.
         """
@@ -294,11 +327,28 @@ class ImageQualityQaTask(PipelineTask):
         ]
         data = data[[c for c in _KEEP_COLUMNS if c in data.columns]]
 
+        # Compute per-quantum summary metrics for downstream aggregation.
+        good = ~data["flag"] & data["fwhm"].notna()
+        if "status" in data.columns:
+            good &= data["status"] == 0
+        trace_only = bool(data["traceOnly"].all()) if "traceOnly" in data.columns else False
+        metrics = pd.DataFrame(
+            {
+                "medFwhm": [float(data.loc[good, "fwhm"].median())],
+                "pctFlagged": [100.0 * data["flag"].sum() / max(len(data), 1)],
+                "nLines": [len(data)],
+                "traceOnly": [trace_only],
+            }
+        )
+        for key in ("visit", "arm", "spectrograph"):
+            if key in dataId:
+                metrics[key] = dataId[key]
+
         title = "{visit} {arm}{spectrograph}".format(**dataId)
         self.log.info("Generating image quality plots for %s", dataId)
         pdf = self._makePlots(data, title=title)
 
-        return Struct(iqQaData=data, iqQaPlot=pdf)
+        return Struct(iqQaData=data, iqQaMetrics=metrics, iqQaPlot=pdf)
 
     def _buildProfileData(self, fiberProfiles: FiberProfileSet, detectorMap: DetectorMap) -> pd.DataFrame:
         """Build an image-quality DataFrame from fiber profile trace widths.
