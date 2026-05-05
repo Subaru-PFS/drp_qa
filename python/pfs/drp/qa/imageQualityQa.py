@@ -385,6 +385,7 @@ class ImageQualityQaTask(PipelineTask):
         n_good_arc = int(good_arc.sum())
 
         if n_good_arc < self.config.minGoodLines:
+            dense_data = False  # will be set True if calexp/profile path succeeds
             if calexp is not None:
                 self.log.info(
                     "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d);"
@@ -403,6 +404,7 @@ class ImageQualityQaTask(PipelineTask):
                         n_good_calexp, 100.0 * calexp_good_frac, dataId,
                     )
                     data = calexp_data
+                    dense_data = True
                 else:
                     # Too many samples flagged: sparse illumination (e.g. IIS
                     # arc frame).  Scattered light from the few bright fibers
@@ -425,6 +427,7 @@ class ImageQualityQaTask(PipelineTask):
                     n_good_arc, dataId, self.config.minGoodLines,
                 )
                 data = self._buildProfileData(fiberProfiles, detectorMap)
+                dense_data = True
             else:
                 self.log.warning(
                     "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d)"
@@ -456,7 +459,19 @@ class ImageQualityQaTask(PipelineTask):
             good &= data["status"] == 0
         trace_only = bool(data["traceOnly"].all()) if "traceOnly" in data.columns else False
         med_fwhm = float(data.loc[good, "fwhm"].median())
-        pct_flagged = 100.0 * data["flag"].sum() / max(len(data), 1)
+
+        # pctFlagged is only meaningful when data coverage is dense (calexp,
+        # fiber-profile path, or ≥ minGoodLines arc lines with full-detector
+        # illumination).  For sparse illumination (IIS, lamp-mismatched arc
+        # frames) the arc-line catalog denominator contains many coincidental
+        # flagged candidates; the resulting flag rate reflects catalog quality
+        # rather than optical/detector quality, and is set to NaN so the
+        # flag-rate check is suppressed.
+        sparse_fallback = (n_good_arc < self.config.minGoodLines) and not dense_data
+        if sparse_fallback:
+            pct_flagged = np.nan
+        else:
+            pct_flagged = 100.0 * data["flag"].sum() / max(len(data), 1)
 
         title = "{visit} {arm}{spectrograph}".format(**dataId)
 
@@ -474,24 +489,27 @@ class ImageQualityQaTask(PipelineTask):
                 reasons.append(f"medFWHM={med_fwhm:.2f}px >= warn threshold {self.config.fwhmWarnThreshold}px")
 
         flag_status = "PASS"
-        if pct_flagged >= self.config.flagRateFailThreshold:
-            flag_status = "FAIL"
-            reasons.append(
-                f"pctFlagged={pct_flagged:.1f}% >= fail threshold {self.config.flagRateFailThreshold}%"
-            )
-        elif pct_flagged >= self.config.flagRateWarnThreshold:
-            flag_status = "WARN"
-            reasons.append(
-                f"pctFlagged={pct_flagged:.1f}% >= warn threshold {self.config.flagRateWarnThreshold}%"
-            )
+        if np.isfinite(pct_flagged):
+            if pct_flagged >= self.config.flagRateFailThreshold:
+                flag_status = "FAIL"
+                reasons.append(
+                    f"pctFlagged={pct_flagged:.1f}% >= fail threshold {self.config.flagRateFailThreshold}%"
+                )
+            elif pct_flagged >= self.config.flagRateWarnThreshold:
+                flag_status = "WARN"
+                reasons.append(
+                    f"pctFlagged={pct_flagged:.1f}% >= warn threshold {self.config.flagRateWarnThreshold}%"
+                )
 
         _level = {"PASS": 0, "WARN": 1, "FAIL": 2}
         qa_status = max((fwhm_status, flag_status), key=lambda s: _level[s])
 
         reason_str = "; ".join(reasons) if reasons else "all metrics nominal"
         self.log.info(
-            "IQ QA %-4s  %s  medFWHM=%.2fpx  pctFlagged=%.1f%%  [%s]",
-            qa_status, title, med_fwhm, pct_flagged, reason_str,
+            "IQ QA %-4s  %s  medFWHM=%.2fpx  pctFlagged=%s  [%s]",
+            qa_status, title, med_fwhm,
+            f"{pct_flagged:.1f}%" if np.isfinite(pct_flagged) else "NaN",
+            reason_str,
         )
 
         metrics = pd.DataFrame(
