@@ -190,6 +190,19 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " the cost of increased computation time."
         ),
     )
+    minGoodLines = Field(
+        dtype=int,
+        default=10,
+        doc=(
+            "Minimum number of good (unflagged, finite-FWHM) arc-line measurements"
+            " required to trust the arc-line path.  When fewer good lines are found"
+            " the task falls back to the calexp-based width measurement (or fiber"
+            " profile calibration if no calexp is available).  This handles IIS"
+            " frames and other sparse-illumination cases where the arc-line catalog"
+            " does not match the lamp spectrum well enough to yield reliable shape"
+            " measurements."
+        ),
+    )
     writeIqQaData = Field(
         dtype=bool,
         default=False,
@@ -282,12 +295,15 @@ class ImageQualityQaTask(PipelineTask):
         """Compute image quality metrics and generate QA plots.
 
         For arc visits, FWHM is derived from 2D Gaussian second moments of
-        the arc lines.  For non-arc visits (e.g. quartz or flat), arc-line
-        shape measurements are unavailable.  The task then falls back in
-        order of preference:
+        the arc lines.  The arc-line path is used only when at least
+        ``config.minGoodLines`` unflagged lines with finite FWHM are found;
+        otherwise the task falls back in order of preference:
 
         1. Direct cross-dispersion 2nd-moment measurement from ``calexp``
            pixel data — reflects the actual optical state of that visit.
+           This is the preferred fallback and handles IIS frames, quartz
+           flats, and other sparse-illumination cases where the arc-line
+           catalog does not match the lamp spectrum.
         2. Gaussian-equivalent FWHM from the fiber profile calibration stored
            in ``fiberProfiles`` — uses a stale calibration product and
            therefore cannot detect changes in focus between visits.
@@ -327,23 +343,36 @@ class ImageQualityQaTask(PipelineTask):
         data = computeImageQuality(als)
         data["peakRatio"] = np.nan
 
-        if not data["fwhm"].notna().any():
+        # Evaluate how many good (unflagged + finite-FWHM) arc-line measurements
+        # are available.  IIS frames and lamp-mismatched visits often produce many
+        # flagged lines with coincidental finite-fwhm values from partial fits, so
+        # checking any-finite-fwhm is insufficient — we require minGoodLines good
+        # measurements to trust the arc-line path.
+        good_arc = data["fwhm"].notna() & ~data["flag"]
+        if "status" in data.columns:
+            good_arc &= data["status"] == 0
+        n_good_arc = int(good_arc.sum())
+
+        if n_good_arc < self.config.minGoodLines:
             if calexp is not None:
                 self.log.info(
-                    "No finite arc-line FWHM for %s; measuring profile widths from calexp.", dataId
+                    "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d);"
+                    " measuring profile widths from calexp.",
+                    n_good_arc, dataId, self.config.minGoodLines,
                 )
                 data = self._buildImageWidthData(calexp, detectorMap)
             elif fiberProfiles is not None:
                 self.log.info(
-                    "No finite arc-line FWHM for %s; falling back to fiber profile calibration widths.",
-                    dataId,
+                    "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d);"
+                    " falling back to fiber profile calibration widths.",
+                    n_good_arc, dataId, self.config.minGoodLines,
                 )
                 data = self._buildProfileData(fiberProfiles, detectorMap)
             else:
                 self.log.warning(
-                    "No finite arc-line FWHM for %s and neither calexp nor fiberProfiles available;"
-                    " FWHM will be all NaN.",
-                    dataId,
+                    "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d)"
+                    " and neither calexp nor fiberProfiles available; FWHM will be all NaN.",
+                    n_good_arc, dataId, self.config.minGoodLines,
                 )
 
         for key in ("visit", "arm", "spectrograph"):
