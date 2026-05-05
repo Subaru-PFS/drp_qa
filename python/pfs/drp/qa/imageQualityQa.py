@@ -426,9 +426,9 @@ class ImageQualityQaTask(PipelineTask):
         # Classify the observation type from FITS header metadata so that the
         # task can route each visit to the correct measurement path explicitly
         # rather than relying on heuristics like the arc-line count.
-        obs_type, is_iis = self._classifyVisit(calexp, pfsConfig)
+        obs_type, is_iis, seq_nam = self._classifyVisit(calexp, pfsConfig)
         self.log.debug(
-            "Visit classification: obs_type=%r is_iis=%s for %s", obs_type, is_iis, dataId
+            "Visit classification: obs_type=%r is_iis=%s seq_nam=%r for %s", obs_type, is_iis, seq_nam, dataId
         )
 
         als = addTraceLambdaToArclines(arcLines, detectorMap)
@@ -738,8 +738,8 @@ class ImageQualityQaTask(PipelineTask):
 
         reason_str = "; ".join(reasons) if reasons else "all metrics nominal"
         self.log.info(
-            "IQ QA %-4s  %s  medFWHM=%.2fpx  pctFlagged=%s  [%s]",
-            qa_status, title, med_fwhm,
+            "IQ QA %-4s  %s  %-22s  medFWHM=%.2fpx  pctFlagged=%s  [%s]",
+            qa_status, title, seq_nam, med_fwhm,
             f"{pct_flagged:.1f}%" if np.isfinite(pct_flagged) else "NaN",
             reason_str,
         )
@@ -766,7 +766,7 @@ class ImageQualityQaTask(PipelineTask):
         self,
         calexp: lsst.afw.image.Exposure | None,
         pfsConfig: PfsConfig | None,
-    ) -> tuple[str, bool]:
+    ) -> tuple[str, bool, str]:
         """Classify the observation type from FITS header metadata.
 
         Reads ``W_SEQTYP`` and ``W_SEQNAM`` from either ``calexp`` metadata or
@@ -789,6 +789,9 @@ class ImageQualityQaTask(PipelineTask):
         is_iis : `bool`
             True when the illumination comes from the 16 IIS engineering
             fibers (lamp names end with ``"_eng"``).
+        seq_nam : `str`
+            Raw ``W_SEQNAM`` header value (e.g. ``"Arc: HgCd"``), or an
+            empty string when the header is absent.
         """
         # Prefer calexp metadata; fall back to pfsConfig header.
         metadata = None
@@ -798,7 +801,7 @@ class ImageQualityQaTask(PipelineTask):
             metadata = pfsConfig.header
 
         if metadata is None:
-            return "unknown", False
+            return "unknown", False, ""
 
         seq_typ = (metadata.get("W_SEQTYP") or "").strip()
         seq_nam = (metadata.get("W_SEQNAM") or "").strip()
@@ -826,7 +829,7 @@ class ImageQualityQaTask(PipelineTask):
         except Exception:
             pass  # obs_pfs unavailable or headers missing; assume regular
 
-        return obs_type, is_iis
+        return obs_type, is_iis, seq_nam
 
     def _buildProfileData(self, fiberProfiles: FiberProfileSet, detectorMap: DetectorMap) -> pd.DataFrame:
         """Build an image-quality DataFrame from fiber profile trace widths.
