@@ -246,6 +246,27 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " resulting flag rate is typically > 90 %, well above the"
             " default threshold of 50 %, so the calexp results are rejected"
             " and the sparse arc-line data are kept instead."
+            " This threshold is not used when pfsConfig FLUXSTD filtering is"
+            " active; use ``minFluxstdGoodFrac`` instead."
+        ),
+    )
+    minFluxstdGoodFrac = Field(
+        dtype=float,
+        default=0.10,
+        doc=(
+            "Minimum fraction of FLUXSTD calexp profile samples that must pass"
+            " the S/N gate (``minPeakSN``) for the FLUXSTD-filtered calexp path"
+            " to be considered reliable.  When pfsConfig is provided, only"
+            " FLUXSTD+GOOD fibers are sampled; on frames where the standard"
+            " stars are faint (sky frames with low S/N), fewer than 10 % of"
+            " sampled positions reach S/N threshold and the resulting FWHM"
+            " estimate is unreliable.  In that case the FWHM is treated as"
+            " sparse (NaN) and no pass/fail status is assigned.  On bright-star"
+            " or arc frames where FLUXSTD fibers are well-lit, the good fraction"
+            " is typically > 10 % and the FWHM estimate is used.  The"
+            " pctFlagged metric is always suppressed (NaN) when the FLUXSTD"
+            " path is active, because the flag rate for stellar fibers reflects"
+            " exposure depth rather than optical quality."
         ),
     )
     writeIqQaData = Field(
@@ -412,6 +433,7 @@ class ImageQualityQaTask(PipelineTask):
             good_arc &= data["status"] == 0
         n_good_arc = int(good_arc.sum())
 
+        using_fluxstd_filter = False  # set True when FLUXSTD calexp path succeeds
         if n_good_arc < self.config.minGoodLines:
             dense_data = False  # will be set True if calexp/profile path succeeds
             if calexp is not None:
@@ -445,11 +467,19 @@ class ImageQualityQaTask(PipelineTask):
                 n_good_calexp = int((calexp_data["fwhm"].notna() & ~calexp_data["flag"]).sum())
                 n_total_calexp = len(calexp_data)
                 calexp_good_frac = n_good_calexp / max(n_total_calexp, 1)
-                # When pfsConfig filtering is active we sample only FLUXSTD
-                # fibers, so the flag rate among those samples reflects real
-                # fiber quality (not sparse-illumination sparsity).  Skip the
-                # maxCalexpFlagRate guard in that case.
-                min_good_frac = 0.0 if fluxstd_ids is not None else (1.0 - self.config.maxCalexpFlagRate)
+                # Choose acceptance threshold depending on whether we are
+                # sampling FLUXSTD fibers or the full detector.
+                # - Full detector: accept if < maxCalexpFlagRate flagged.
+                # - FLUXSTD path: flag rate is always high (stars don't
+                #   continuously illuminate the fiber), so use
+                #   minFluxstdGoodFrac instead to require a minimum fraction
+                #   of high-S/N rows.  Below that threshold the FWHM estimate
+                #   is too noisy to be useful (e.g. sky frames with faint
+                #   standard stars).
+                if fluxstd_ids is not None:
+                    min_good_frac = self.config.minFluxstdGoodFrac
+                else:
+                    min_good_frac = 1.0 - self.config.maxCalexpFlagRate
                 if n_good_calexp > 0 and calexp_good_frac >= min_good_frac:
                     self.log.info(
                         "calexp path gave %d good profile measurements"
@@ -458,6 +488,18 @@ class ImageQualityQaTask(PipelineTask):
                     )
                     data = calexp_data
                     dense_data = True
+                    using_fluxstd_filter = fluxstd_ids is not None
+                elif fluxstd_ids is not None:
+                    # FLUXSTD good fraction below threshold — not enough
+                    # reliable samples.  Treat as sparse (NaN FWHM) so no
+                    # pass/fail is issued rather than reporting a noisy value.
+                    self.log.info(
+                        "FLUXSTD calexp path gave too few good measurements for %s"
+                        " (%d/%d = %.1f%% < minFluxstdGoodFrac=%.0f%%); FWHM will be sparse.",
+                        dataId, n_good_calexp, n_total_calexp,
+                        100.0 * calexp_good_frac,
+                        100.0 * self.config.minFluxstdGoodFrac,
+                    )
                 else:
                     # Too many samples flagged: sparse illumination (e.g. IIS
                     # arc frame).  Scattered light from the few bright fibers
@@ -520,8 +562,14 @@ class ImageQualityQaTask(PipelineTask):
         # flagged candidates; the resulting flag rate reflects catalog quality
         # rather than optical/detector quality, and is set to NaN so the
         # flag-rate check is suppressed.
+        #
+        # The FLUXSTD calexp path also suppresses pctFlagged: stellar fibers
+        # only reach S/N threshold at a small fraction of sampled rows (the
+        # flag rate is ~87–95% even for a healthy science arc), so the flag
+        # rate reflects exposure depth rather than optical quality.  FWHM
+        # is still reported when the good-fraction threshold is met.
         sparse_fallback = (n_good_arc < self.config.minGoodLines) and not dense_data
-        if sparse_fallback:
+        if sparse_fallback or using_fluxstd_filter:
             pct_flagged = np.nan
         else:
             pct_flagged = 100.0 * data["flag"].sum() / max(len(data), 1)
