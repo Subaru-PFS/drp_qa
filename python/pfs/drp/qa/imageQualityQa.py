@@ -8,7 +8,7 @@ cross-dispersion moment measurements from post-ISR pixel data.
 import lsst.afw.image
 import numpy as np
 import pandas as pd
-from lsst.pex.config import Field
+from lsst.pex.config import DictField, Field
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -263,21 +263,28 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " Set to a large value (e.g. 999) to disable."
         ),
     )
-    flagRateWarnThreshold = Field(
-        dtype=float,
-        default=15.0,
+    flagRateWarnThreshold = DictField(
+        keytype=str,
+        itemtype=float,
+        default={"b": 40.0, "r": 15.0, "n": 15.0, "m": 15.0},
         doc=(
-            "Percentage of flagged lines above which the per-quantum status is"
-            " set to WARN.  Values above ``flagRateFailThreshold`` yield FAIL."
-            " Set to 100 to disable."
+            "Per-arm percentage of flagged lines above which the per-quantum"
+            " status is set to WARN.  Values above ``flagRateFailThreshold``"
+            " yield FAIL.  The b arm has a naturally higher flag rate (~37%)"
+            " due to arc-line crowding, so its threshold is set higher."
+            " Arms not listed fall back to 15.0.  Set to 100 to disable."
         ),
     )
-    flagRateFailThreshold = Field(
-        dtype=float,
-        default=20.0,
+    flagRateFailThreshold = DictField(
+        keytype=str,
+        itemtype=float,
+        default={"b": 45.0, "r": 20.0, "n": 20.0, "m": 20.0},
         doc=(
-            "Percentage of flagged lines above which the per-quantum status is"
-            " set to FAIL.  Set to 100 to disable."
+            "Per-arm percentage of flagged lines above which the per-quantum"
+            " status is set to FAIL.  The b arm has a naturally higher flag"
+            " rate (~37%) due to arc-line crowding, so its threshold is set"
+            " higher than r/n/m.  Arms not listed fall back to 20.0."
+            " Set to 100 to disable."
         ),
     )
 
@@ -490,15 +497,18 @@ class ImageQualityQaTask(PipelineTask):
 
         flag_status = "PASS"
         if np.isfinite(pct_flagged):
-            if pct_flagged >= self.config.flagRateFailThreshold:
+            arm = dataId.get("arm", "")
+            warn_thresh = self.config.flagRateWarnThreshold.get(arm, 15.0)
+            fail_thresh = self.config.flagRateFailThreshold.get(arm, 20.0)
+            if pct_flagged >= fail_thresh:
                 flag_status = "FAIL"
                 reasons.append(
-                    f"pctFlagged={pct_flagged:.1f}% >= fail threshold {self.config.flagRateFailThreshold}%"
+                    f"pctFlagged={pct_flagged:.1f}% >= fail threshold {fail_thresh}%"
                 )
-            elif pct_flagged >= self.config.flagRateWarnThreshold:
+            elif pct_flagged >= warn_thresh:
                 flag_status = "WARN"
                 reasons.append(
-                    f"pctFlagged={pct_flagged:.1f}% >= warn threshold {self.config.flagRateWarnThreshold}%"
+                    f"pctFlagged={pct_flagged:.1f}% >= warn threshold {warn_thresh}%"
                 )
 
         _level = {"PASS": 0, "WARN": 1, "FAIL": 2}
