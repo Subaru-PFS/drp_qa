@@ -203,6 +203,20 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " measurements."
         ),
     )
+    minPeakSN = Field(
+        dtype=float,
+        default=5.0,
+        doc=(
+            "Minimum peak signal-to-noise ratio required to accept a fiber"
+            " profile sample in the calexp-based width measurement."
+            " Noise is estimated from the 4 background edge pixels of the"
+            " cross-dispersion strip.  Samples below this threshold — e.g."
+            " scattered light in an IIS frame, or rows where a fiber is not"
+            " illuminated — are flagged and excluded from the FWHM median."
+            " Without this check pure-noise strips pass the total>0 gate"
+            " roughly 50 % of the time and corrupt the FWHM distribution."
+        ),
+    )
     writeIqQaData = Field(
         dtype=bool,
         default=False,
@@ -357,10 +371,27 @@ class ImageQualityQaTask(PipelineTask):
             if calexp is not None:
                 self.log.info(
                     "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d);"
-                    " measuring profile widths from calexp.",
+                    " attempting calexp-based profile widths.",
                     n_good_arc, dataId, self.config.minGoodLines,
                 )
-                data = self._buildImageWidthData(calexp, detectorMap)
+                calexp_data = self._buildImageWidthData(calexp, detectorMap)
+                n_good_calexp = int((calexp_data["fwhm"].notna() & ~calexp_data["flag"]).sum())
+                if n_good_calexp > 0:
+                    self.log.info(
+                        "calexp path gave %d good profile measurements for %s.",
+                        n_good_calexp, dataId,
+                    )
+                    data = calexp_data
+                else:
+                    # calexp produced nothing useful (e.g. IIS lamp provides no
+                    # continuous illumination on this arm).  Keep the sparse
+                    # arc-line data — even a handful of real lines is better
+                    # than all-NaN from the calexp path.
+                    self.log.info(
+                        "calexp path gave no good measurements for %s;"
+                        " retaining %d arc-line measurements.",
+                        dataId, n_good_arc,
+                    )
             elif fiberProfiles is not None:
                 self.log.info(
                     "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d);"
@@ -371,7 +402,7 @@ class ImageQualityQaTask(PipelineTask):
             else:
                 self.log.warning(
                     "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d)"
-                    " and neither calexp nor fiberProfiles available; FWHM will be all NaN.",
+                    " and neither calexp nor fiberProfiles available; FWHM will be sparse.",
                     n_good_arc, dataId, self.config.minGoodLines,
                 )
 
@@ -610,23 +641,35 @@ class ImageQualityQaTask(PipelineTask):
                 flux_val = np.nan
 
                 if is_bad.sum() <= halfWidth:
-                    # Background from outermost 2 pixels on each side
+                    # Background from outermost 2 pixels on each side.
                     edge = np.concatenate([strip[:2], strip[-2:]])
                     edge_bad = np.concatenate([is_bad[:2], is_bad[-2:]])
-                    bg = float(np.nanmean(np.where(~edge_bad, edge, np.nan)))
+                    good_edge = ~edge_bad
+                    bg = float(np.nanmean(np.where(good_edge, edge, np.nan)))
                     if not np.isfinite(bg):
                         bg = 0.0
 
+                    # Per-pixel noise from edge scatter; fall back to sqrt(|bg|)
+                    # when fewer than 2 good edge pixels are available.
+                    bg_rms = float(np.nanstd(np.where(good_edge, edge, np.nan)))
+                    if not np.isfinite(bg_rms) or bg_rms <= 0:
+                        bg_rms = max(1.0, np.sqrt(abs(bg)))
+
                     strip_bg = np.where(is_bad, 0.0, strip - bg)
+                    peak_val = float(strip_bg.max())
                     total = float(strip_bg.sum())
 
-                    if total > 0:
+                    # Require a minimum peak S/N before accepting this sample.
+                    # Without this gate, pure-noise strips (e.g. dark rows in
+                    # an IIS frame) pass the total>0 check ~50 % of the time
+                    # and contribute garbage FWHM values.
+                    if peak_val >= self.config.minPeakSN * bg_rms and total > 0:
                         x_rel = np.arange(x_lo, x_hi, dtype=np.float64) - x_cen
                         mu = float((x_rel * strip_bg).sum()) / total
                         var = float(((x_rel - mu) ** 2 * strip_bg).sum()) / total
                         if var > 0:
                             fwhm_val = _FWHM_FACTOR * np.sqrt(var)
-                            peak_ratio = float(strip_bg.max()) / total
+                            peak_ratio = peak_val / total
                             flag_val = False
                         flux_val = total
 
