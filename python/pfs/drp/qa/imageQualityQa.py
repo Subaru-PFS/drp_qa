@@ -24,6 +24,7 @@ from lsst.pipe.base.connectionTypes import (
     PrerequisiteInput as PrerequisiteConnection,
 )
 from matplotlib import pyplot as plt
+from pfs.datamodel import FiberStatus, PfsConfig, TargetType
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality, opaqueColorbar, plotImageQuality
 from pfs.drp.stella.utils.stability import addTraceLambdaToArclines
@@ -105,6 +106,19 @@ class ImageQualityQaConnections(
         ),
         storageClass="Exposure",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
+        minimum=0,
+    )
+
+    pfsConfig = InputConnection(
+        name="pfsConfig",
+        doc=(
+            "Fiber configuration for this visit.  When provided alongside"
+            " ``calexp``, only fibers with ``targetType=FLUXSTD`` and"
+            " ``fiberStatus=GOOD`` are used for calexp-based FWHM measurement,"
+            " avoiding contamination from dark sky fibers."
+        ),
+        storageClass="PfsConfig",
+        dimensions=("instrument", "visit"),
         minimum=0,
     )
 
@@ -328,6 +342,7 @@ class ImageQualityQaTask(PipelineTask):
         detectorMap: DetectorMap,
         fiberProfiles: FiberProfileSet | None,
         calexp: lsst.afw.image.Exposure | None,
+        pfsConfig: PfsConfig | None,
         dataId: dict,
     ) -> Struct:
         """Compute image quality metrics and generate QA plots.
@@ -339,9 +354,11 @@ class ImageQualityQaTask(PipelineTask):
 
         1. Direct cross-dispersion 2nd-moment measurement from ``calexp``
            pixel data — reflects the actual optical state of that visit.
-           This is the preferred fallback and handles IIS frames, quartz
-           flats, and other sparse-illumination cases where the arc-line
-           catalog does not match the lamp spectrum.
+           When ``pfsConfig`` is also provided, only ``FLUXSTD`` fibers with
+           ``fiberStatus=GOOD`` are sampled, so sky/science fibers (which
+           are too faint for reliable profile measurements) do not dilute
+           the result.  Without ``pfsConfig`` the full detector is sampled
+           and the ``maxCalexpFlagRate`` guard rejects IIS/sparse frames.
         2. Gaussian-equivalent FWHM from the fiber profile calibration stored
            in ``fiberProfiles`` — uses a stale calibration product and
            therefore cannot detect changes in focus between visits.
@@ -357,6 +374,10 @@ class ImageQualityQaTask(PipelineTask):
         calexp : `lsst.afw.image.Exposure` or `None`
             Post-ISR calibrated image.  When provided for non-arc visits,
             fiber widths are measured directly from pixel data.
+        pfsConfig : `PfsConfig` or `None`
+            Fiber configuration for this visit.  When provided alongside
+            ``calexp``, restricts calexp sampling to ``FLUXSTD`` fibers with
+            ``fiberStatus=GOOD``.
         dataId : `dict`
             The dataId for this quantum, used to label outputs and annotate
             the output DataFrame with ``visit``, ``arm``, ``spectrograph``.
@@ -394,16 +415,41 @@ class ImageQualityQaTask(PipelineTask):
         if n_good_arc < self.config.minGoodLines:
             dense_data = False  # will be set True if calexp/profile path succeeds
             if calexp is not None:
-                self.log.info(
-                    "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d);"
-                    " attempting calexp-based profile widths.",
-                    n_good_arc, dataId, self.config.minGoodLines,
-                )
-                calexp_data = self._buildImageWidthData(calexp, detectorMap)
+                # Build a set of fiber IDs to restrict calexp sampling to.
+                # When pfsConfig is available, use only FLUXSTD fibers with
+                # GOOD status — these are bright continuum sources that give
+                # reliable profile width measurements even when most fibers are
+                # dark (sky/science fibers below S/N threshold).  Without
+                # pfsConfig the full detector is sampled and the
+                # maxCalexpFlagRate guard distinguishes sparse (IIS) from dense
+                # (quartz/continuum) illumination.
+                fluxstd_ids: set | None = None
+                if pfsConfig is not None:
+                    good_mask = (
+                        (pfsConfig.targetType == TargetType.FLUXSTD)
+                        & (pfsConfig.fiberStatus == FiberStatus.GOOD)
+                    )
+                    fluxstd_ids = set(int(f) for f in pfsConfig.fiberId[good_mask])
+                    self.log.info(
+                        "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d);"
+                        " attempting calexp-based profile widths using %d FLUXSTD fibers.",
+                        n_good_arc, dataId, self.config.minGoodLines, len(fluxstd_ids),
+                    )
+                else:
+                    self.log.info(
+                        "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d);"
+                        " attempting calexp-based profile widths.",
+                        n_good_arc, dataId, self.config.minGoodLines,
+                    )
+                calexp_data = self._buildImageWidthData(calexp, detectorMap, fiberIds=fluxstd_ids)
                 n_good_calexp = int((calexp_data["fwhm"].notna() & ~calexp_data["flag"]).sum())
                 n_total_calexp = len(calexp_data)
                 calexp_good_frac = n_good_calexp / max(n_total_calexp, 1)
-                min_good_frac = 1.0 - self.config.maxCalexpFlagRate
+                # When pfsConfig filtering is active we sample only FLUXSTD
+                # fibers, so the flag rate among those samples reflects real
+                # fiber quality (not sparse-illumination sparsity).  Skip the
+                # maxCalexpFlagRate guard in that case.
+                min_good_frac = 0.0 if fluxstd_ids is not None else (1.0 - self.config.maxCalexpFlagRate)
                 if n_good_calexp > 0 and calexp_good_frac >= min_good_frac:
                     self.log.info(
                         "calexp path gave %d good profile measurements"
@@ -620,6 +666,7 @@ class ImageQualityQaTask(PipelineTask):
         self,
         calexp: lsst.afw.image.Exposure,
         detectorMap: DetectorMap,
+        fiberIds: set | None = None,
     ) -> pd.DataFrame:
         """Measure fiber profile FWHM directly from post-ISR image pixel data.
 
@@ -637,6 +684,12 @@ class ImageQualityQaTask(PipelineTask):
             Post-ISR calibrated image for this quantum.
         detectorMap : `DetectorMap`
             Calibrated detector mapping used to locate fiber centers.
+        fiberIds : `set` or `None`, optional
+            If provided, only fibers whose IDs are in this set are sampled.
+            Use this to restrict measurement to known bright fibers (e.g.
+            FLUXSTD fibers from ``pfsConfig``) and avoid dilution from dark
+            sky fibers.  When ``None``, all fibers in the detectorMap are
+            sampled.
 
         Returns
         -------
@@ -654,7 +707,12 @@ class ImageQualityQaTask(PipelineTask):
         yStride = self.config.profileYStride
         badBits = calexp.mask.getPlaneBitMask(["BAD", "SAT", "CR", "NO_DATA"])
 
-        fiberIds = np.asarray(detectorMap.fiberId, dtype=np.int32)
+        all_det_fiberIds = np.asarray(detectorMap.fiberId, dtype=np.int32)
+        if fiberIds is not None:
+            mask = np.isin(all_det_fiberIds, list(fiberIds))
+            det_fiberIds = all_det_fiberIds[mask]
+        else:
+            det_fiberIds = all_det_fiberIds
         y_samples = np.arange(yStride // 2, nRows, yStride, dtype=np.float64)
 
         all_fiberIds: list = []
@@ -671,13 +729,13 @@ class ImageQualityQaTask(PipelineTask):
             if y_int < 0 or y_int >= nRows:
                 continue
 
-            y_arr = np.full(len(fiberIds), y_val, dtype=np.float64)
-            x_centers = detectorMap.getXCenter(fiberIds, y_arr)
-            lams = detectorMap.findWavelength(fiberIds, y_arr)
+            y_arr = np.full(len(det_fiberIds), y_val, dtype=np.float64)
+            x_centers = detectorMap.getXCenter(det_fiberIds, y_arr)
+            lams = detectorMap.findWavelength(det_fiberIds, y_arr)
             row_image = image[y_int, :]
             row_mask = mask_arr[y_int, :]
 
-            for fiberId, x_cen, lam in zip(fiberIds, x_centers, lams):
+            for fiberId, x_cen, lam in zip(det_fiberIds, x_centers, lams):
                 if not (np.isfinite(x_cen) and np.isfinite(lam)):
                     continue
 
