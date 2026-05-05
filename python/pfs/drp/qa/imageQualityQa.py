@@ -368,21 +368,29 @@ class ImageQualityQaTask(PipelineTask):
     ) -> Struct:
         """Compute image quality metrics and generate QA plots.
 
-        For arc visits, FWHM is derived from 2D Gaussian second moments of
-        the arc lines.  The arc-line path is used only when at least
-        ``config.minGoodLines`` unflagged lines with finite FWHM are found;
-        otherwise the task falls back in order of preference:
+        The measurement path is chosen based on the observation type derived
+        from ``W_SEQTYP`` and lamp headers (see `_classifyVisit`):
 
-        1. Direct cross-dispersion 2nd-moment measurement from ``calexp``
-           pixel data — reflects the actual optical state of that visit.
-           When ``pfsConfig`` is also provided, only ``FLUXSTD`` fibers with
-           ``fiberStatus=GOOD`` are sampled, so sky/science fibers (which
-           are too faint for reliable profile measurements) do not dilute
-           the result.  Without ``pfsConfig`` the full detector is sampled
-           and the ``maxCalexpFlagRate`` guard rejects IIS/sparse frames.
-        2. Gaussian-equivalent FWHM from the fiber profile calibration stored
-           in ``fiberProfiles`` — uses a stale calibration product and
-           therefore cannot detect changes in focus between visits.
+        * **Regular arc** (``scienceArc``, all fibers): arc-line second moments
+          are the primary path.  If fewer than ``config.minGoodLines`` good
+          measurements are found (e.g. blue arm where catalog lines are sparse),
+          a calexp cross-dispersion fallback is attempted.
+        * **IIS arc** (``scienceArc``, engineering fibers): the science arc
+          catalog does not match the 16 IIS positions; FWHM is reported as
+          sparse (no value, no pass/fail).
+        * **Regular trace/quartz** (``scienceTrace``, all fibers): calexp
+          cross-dispersion moments are the primary path; fiber profile
+          calibration is the secondary fallback.
+        * **IIS trace/quartz** (``scienceTrace``, engineering fibers): too few
+          fibers for a reliable measurement; reported as sparse.
+        * **Science / all-sky** (``scienceObject*``, no lamps): when
+          ``pfsConfig`` is available, FWHM is measured from FLUXSTD+GOOD
+          fibers in ``calexp`` and ``pctFlagged`` is suppressed (stellar fibers
+          are not continuously illuminated so the flag rate reflects exposure
+          depth, not optical quality).  If the FLUXSTD good fraction is below
+          ``config.minFluxstdGoodFrac``, FWHM is treated as sparse.
+        * **Unknown** (``W_SEQTYP`` absent): falls back to the original
+          heuristic based on ``n_good_arc`` and ``maxCalexpFlagRate``.
 
         Parameters
         ----------
@@ -391,14 +399,13 @@ class ImageQualityQaTask(PipelineTask):
         detectorMap : `DetectorMap`
             Calibrated detector mapping from fiberId,wavelength to x,y.
         fiberProfiles : `FiberProfileSet` or `None`
-            Fiber profile shapes.  Used as fallback when ``calexp`` is absent.
+            Fiber profile shapes.  Used as fallback for regular trace/quartz
+            visits when ``calexp`` is absent.
         calexp : `lsst.afw.image.Exposure` or `None`
-            Post-ISR calibrated image.  When provided for non-arc visits,
-            fiber widths are measured directly from pixel data.
+            Post-ISR calibrated image.
         pfsConfig : `PfsConfig` or `None`
-            Fiber configuration for this visit.  When provided alongside
-            ``calexp``, restricts calexp sampling to ``FLUXSTD`` fibers with
-            ``fiberStatus=GOOD``.
+            Fiber configuration for this visit.  Required for science/allsky
+            FLUXSTD path; also supplies ``W_SEQTYP`` when ``calexp`` is absent.
         dataId : `dict`
             The dataId for this quantum, used to label outputs and annotate
             the output DataFrame with ``visit``, ``arm``, ``spectrograph``.
@@ -406,129 +413,253 @@ class ImageQualityQaTask(PipelineTask):
         Returns
         -------
         iqQaData : `pandas.DataFrame`
-            Per-line image quality data including ``fwhm``, ``theta``,
-            ``traceOnly``, ``peakRatio``, plus ``visit``, ``arm``,
-            ``spectrograph`` for downstream aggregation.  Written as an
-            empty DataFrame when ``writeIqQaData`` is False.
+            Per-line image quality data.  Written as an empty DataFrame when
+            ``writeIqQaData`` is False.
         iqQaMetrics : `pandas.DataFrame`
             Single-row summary with ``medFwhm``, ``pctFlagged``, ``nLines``,
             ``traceOnly``, ``qaStatus``, ``visit``, ``arm``, ``spectrograph``.
-            ``qaStatus`` is one of ``"PASS"``, ``"WARN"``, or ``"FAIL"`` based
-            on the configured FWHM and flag-rate thresholds.
         iqQaPlot : `MultipagePdfFigure`
             QA plots, one page per enabled plot type.
         """
         self.log.info("Computing image quality metrics for %s", dataId)
+
+        # Classify the observation type from FITS header metadata so that the
+        # task can route each visit to the correct measurement path explicitly
+        # rather than relying on heuristics like the arc-line count.
+        obs_type, is_iis = self._classifyVisit(calexp, pfsConfig)
+        self.log.debug(
+            "Visit classification: obs_type=%r is_iis=%s for %s", obs_type, is_iis, dataId
+        )
+
         als = addTraceLambdaToArclines(arcLines, detectorMap)
         data = computeImageQuality(als)
         data["peakRatio"] = np.nan
 
-        # Evaluate how many good (unflagged + finite-FWHM) arc-line measurements
-        # are available.  IIS frames and lamp-mismatched visits often produce many
-        # flagged lines with coincidental finite-fwhm values from partial fits, so
-        # checking any-finite-fwhm is insufficient — we require minGoodLines good
-        # measurements to trust the arc-line path.
+        # Count good (unflagged + finite-FWHM) arc-line measurements.
         good_arc = data["fwhm"].notna() & ~data["flag"]
         if "status" in data.columns:
             good_arc &= data["status"] == 0
         n_good_arc = int(good_arc.sum())
 
-        using_fluxstd_filter = False  # set True when FLUXSTD calexp path succeeds
-        if n_good_arc < self.config.minGoodLines:
-            dense_data = False  # will be set True if calexp/profile path succeeds
-            if calexp is not None:
-                # Build a set of fiber IDs to restrict calexp sampling to.
-                # When pfsConfig is available, use only FLUXSTD fibers with
-                # GOOD status — these are bright continuum sources that give
-                # reliable profile width measurements even when most fibers are
-                # dark (sky/science fibers below S/N threshold).  Without
-                # pfsConfig the full detector is sampled and the
-                # maxCalexpFlagRate guard distinguishes sparse (IIS) from dense
-                # (quartz/continuum) illumination.
-                fluxstd_ids: set | None = None
-                if pfsConfig is not None:
-                    good_mask = (
-                        (pfsConfig.targetType == TargetType.FLUXSTD)
-                        & (pfsConfig.fiberStatus == FiberStatus.GOOD)
-                    )
-                    fluxstd_ids = set(int(f) for f in pfsConfig.fiberId[good_mask])
-                    self.log.info(
-                        "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d);"
-                        " attempting calexp-based profile widths using %d FLUXSTD fibers.",
-                        n_good_arc, dataId, self.config.minGoodLines, len(fluxstd_ids),
-                    )
-                else:
-                    self.log.info(
-                        "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d);"
-                        " attempting calexp-based profile widths.",
-                        n_good_arc, dataId, self.config.minGoodLines,
-                    )
-                calexp_data = self._buildImageWidthData(calexp, detectorMap, fiberIds=fluxstd_ids)
+        dense_data = False
+        using_fluxstd_filter = False
+        # force_sparse bypasses the n_good_arc check for visit types where we
+        # know the arc catalog will not match (IIS arcs/traces).
+        force_sparse = False
+
+        if obs_type == "arc" and not is_iis:
+            # Regular arc (all 600 fibers, arc lamp): primary path is the
+            # arc-line shape measurements.  Fall back to calexp only when too
+            # few good catalog matches are found (e.g. b arm on sky fields
+            # where arc lines are not in the catalog).
+            if n_good_arc >= self.config.minGoodLines:
+                self.log.debug(
+                    "Regular arc %s: using %d good arc-line measurements.",
+                    dataId, n_good_arc,
+                )
+            elif calexp is not None:
+                self.log.info(
+                    "Regular arc %s: only %d good arc lines (< minGoodLines=%d);"
+                    " trying calexp fallback.",
+                    dataId, n_good_arc, self.config.minGoodLines,
+                )
+                calexp_data = self._buildImageWidthData(calexp, detectorMap)
                 n_good_calexp = int((calexp_data["fwhm"].notna() & ~calexp_data["flag"]).sum())
-                n_total_calexp = len(calexp_data)
-                calexp_good_frac = n_good_calexp / max(n_total_calexp, 1)
-                # Choose acceptance threshold depending on whether we are
-                # sampling FLUXSTD fibers or the full detector.
-                # - Full detector: accept if < maxCalexpFlagRate flagged.
-                # - FLUXSTD path: flag rate is always high (stars don't
-                #   continuously illuminate the fiber), so use
-                #   minFluxstdGoodFrac instead to require a minimum fraction
-                #   of high-S/N rows.  Below that threshold the FWHM estimate
-                #   is too noisy to be useful (e.g. sky frames with faint
-                #   standard stars).
-                if fluxstd_ids is not None:
-                    min_good_frac = self.config.minFluxstdGoodFrac
-                else:
-                    min_good_frac = 1.0 - self.config.maxCalexpFlagRate
-                if n_good_calexp > 0 and calexp_good_frac >= min_good_frac:
+                calexp_good_frac = n_good_calexp / max(len(calexp_data), 1)
+                if n_good_calexp > 0 and (1.0 - calexp_good_frac) < self.config.maxCalexpFlagRate:
                     self.log.info(
-                        "calexp path gave %d good profile measurements"
-                        " (%.1f%% good) for %s.",
+                        "Regular arc calexp fallback: %d good samples (%.1f%% good) for %s.",
                         n_good_calexp, 100.0 * calexp_good_frac, dataId,
                     )
                     data = calexp_data
                     dense_data = True
-                    using_fluxstd_filter = fluxstd_ids is not None
-                elif fluxstd_ids is not None:
-                    # FLUXSTD good fraction below threshold — not enough
-                    # reliable samples.  Treat as sparse (NaN FWHM) so no
-                    # pass/fail is issued rather than reporting a noisy value.
-                    self.log.info(
-                        "FLUXSTD calexp path gave too few good measurements for %s"
-                        " (%d/%d = %.1f%% < minFluxstdGoodFrac=%.0f%%); FWHM will be sparse.",
-                        dataId, n_good_calexp, n_total_calexp,
-                        100.0 * calexp_good_frac,
-                        100.0 * self.config.minFluxstdGoodFrac,
-                    )
                 else:
-                    # Too many samples flagged: sparse illumination (e.g. IIS
-                    # arc frame).  Scattered light from the few bright fibers
-                    # can pass the S/N gate at neighbouring positions and
-                    # produce a spuriously large FWHM (~7 px).  Reject and
-                    # keep the sparse arc-line data instead.
-                    self.log.info(
-                        "calexp path is too sparse for %s"
-                        " (%d good, %.1f%% flagged >= maxCalexpFlagRate=%.0f%%);"
-                        " retaining %d arc-line measurements.",
+                    self.log.warning(
+                        "Regular arc calexp fallback too sparse for %s"
+                        " (%d good, %.1f%% flagged); keeping %d arc-line measurements.",
                         dataId, n_good_calexp,
                         100.0 * (1.0 - calexp_good_frac),
-                        100.0 * self.config.maxCalexpFlagRate,
                         n_good_arc,
+                    )
+            else:
+                self.log.warning(
+                    "Regular arc %s: only %d good arc lines (< minGoodLines=%d)"
+                    " and no calexp; FWHM will be sparse.",
+                    dataId, n_good_arc, self.config.minGoodLines,
+                )
+
+        elif obs_type == "arc" and is_iis:
+            # IIS arc (16 engineering fibers): the science arc-line catalog
+            # does not match the engineering fiber positions, so n_good_arc is
+            # always near zero.  Skip calexp too — scattered light from the 16
+            # bright fibers produces a spuriously large (~7 px) FWHM.
+            force_sparse = True
+            self.log.info(
+                "IIS arc %s: science arc catalog does not match engineering"
+                " fibers; reporting sparse (no FWHM).",
+                dataId,
+            )
+
+        elif obs_type == "trace" and not is_iis:
+            # Regular quartz/trace (all fibers, quartz lamp): no arc lines to
+            # fit, so use calexp cross-dispersion moments as the primary path.
+            if calexp is not None:
+                self.log.info(
+                    "Regular trace/quartz %s: measuring FWHM from calexp.", dataId,
+                )
+                calexp_data = self._buildImageWidthData(calexp, detectorMap)
+                n_good_calexp = int((calexp_data["fwhm"].notna() & ~calexp_data["flag"]).sum())
+                calexp_good_frac = n_good_calexp / max(len(calexp_data), 1)
+                if n_good_calexp > 0 and (1.0 - calexp_good_frac) < self.config.maxCalexpFlagRate:
+                    self.log.info(
+                        "Quartz calexp: %d good samples (%.1f%% good) for %s.",
+                        n_good_calexp, 100.0 * calexp_good_frac, dataId,
+                    )
+                    data = calexp_data
+                    dense_data = True
+                else:
+                    self.log.warning(
+                        "Quartz calexp too sparse for %s"
+                        " (%d good, %.1f%% flagged); FWHM will be sparse.",
+                        dataId, n_good_calexp,
+                        100.0 * (1.0 - calexp_good_frac),
                     )
             elif fiberProfiles is not None:
                 self.log.info(
-                    "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d);"
-                    " falling back to fiber profile calibration widths.",
-                    n_good_arc, dataId, self.config.minGoodLines,
+                    "Regular trace/quartz %s: no calexp; falling back to"
+                    " fiber profile calibration widths.",
+                    dataId,
                 )
                 data = self._buildProfileData(fiberProfiles, detectorMap)
                 dense_data = True
             else:
                 self.log.warning(
-                    "Only %d good arc-line FWHM measurements for %s (< minGoodLines=%d)"
-                    " and neither calexp nor fiberProfiles available; FWHM will be sparse.",
-                    n_good_arc, dataId, self.config.minGoodLines,
+                    "Regular trace/quartz %s: no calexp and no fiberProfiles;"
+                    " FWHM will be sparse.",
+                    dataId,
                 )
+
+        elif obs_type == "trace" and is_iis:
+            # IIS quartz (16 engineering fibers): too few fibers for a
+            # reliable full-detector calexp measurement.
+            force_sparse = True
+            self.log.info("IIS trace/quartz %s: too few fibers; reporting sparse.", dataId)
+
+        elif obs_type in ("science", "allsky"):
+            # Science or all-sky plate: no arc lamp, fibers point at sky or
+            # targets.  Use FLUXSTD fibers (bright standard stars) sampled
+            # from calexp for FWHM when pfsConfig is available.
+            if calexp is not None and pfsConfig is not None:
+                good_mask = (
+                    (pfsConfig.targetType == TargetType.FLUXSTD)
+                    & (pfsConfig.fiberStatus == FiberStatus.GOOD)
+                )
+                fluxstd_ids: set = set(int(f) for f in pfsConfig.fiberId[good_mask])
+                self.log.info(
+                    "%s %s: measuring FWHM from %d FLUXSTD fibers in calexp.",
+                    obs_type.capitalize(), dataId, len(fluxstd_ids),
+                )
+                calexp_data = self._buildImageWidthData(calexp, detectorMap, fiberIds=fluxstd_ids)
+                n_good_calexp = int((calexp_data["fwhm"].notna() & ~calexp_data["flag"]).sum())
+                n_total_calexp = len(calexp_data)
+                calexp_good_frac = n_good_calexp / max(n_total_calexp, 1)
+                if n_good_calexp > 0 and calexp_good_frac >= self.config.minFluxstdGoodFrac:
+                    self.log.info(
+                        "FLUXSTD calexp: %d good samples (%.1f%% good) for %s.",
+                        n_good_calexp, 100.0 * calexp_good_frac, dataId,
+                    )
+                    data = calexp_data
+                    dense_data = True
+                    using_fluxstd_filter = True
+                else:
+                    self.log.info(
+                        "FLUXSTD calexp too sparse for %s"
+                        " (%d/%d = %.1f%% < minFluxstdGoodFrac=%.0f%%); FWHM will be sparse.",
+                        dataId, n_good_calexp, n_total_calexp,
+                        100.0 * calexp_good_frac,
+                        100.0 * self.config.minFluxstdGoodFrac,
+                    )
+            else:
+                self.log.info(
+                    "%s %s: no calexp or pfsConfig available; FWHM will be sparse.",
+                    obs_type.capitalize(), dataId,
+                )
+
+        else:
+            # obs_type == "unknown": W_SEQTYP header absent or unrecognised.
+            # Fall back to heuristic: try arc-line path; if too few good lines,
+            # try calexp (FLUXSTD-filtered if pfsConfig is available), then
+            # fiberProfiles.
+            self.log.debug(
+                "Visit type unknown for %s; using heuristic fallback (n_good_arc=%d).",
+                dataId, n_good_arc,
+            )
+            if n_good_arc < self.config.minGoodLines:
+                if calexp is not None:
+                    fluxstd_ids_unk: set | None = None
+                    if pfsConfig is not None:
+                        good_mask = (
+                            (pfsConfig.targetType == TargetType.FLUXSTD)
+                            & (pfsConfig.fiberStatus == FiberStatus.GOOD)
+                        )
+                        fluxstd_ids_unk = set(int(f) for f in pfsConfig.fiberId[good_mask])
+                        self.log.info(
+                            "Unknown type %s: %d good arc lines (< %d); trying calexp"
+                            " with %d FLUXSTD fibers.",
+                            dataId, n_good_arc, self.config.minGoodLines, len(fluxstd_ids_unk),
+                        )
+                    else:
+                        self.log.info(
+                            "Unknown type %s: %d good arc lines (< %d); trying calexp.",
+                            dataId, n_good_arc, self.config.minGoodLines,
+                        )
+                    calexp_data = self._buildImageWidthData(
+                        calexp, detectorMap, fiberIds=fluxstd_ids_unk
+                    )
+                    n_good_calexp = int((calexp_data["fwhm"].notna() & ~calexp_data["flag"]).sum())
+                    n_total_calexp = len(calexp_data)
+                    calexp_good_frac = n_good_calexp / max(n_total_calexp, 1)
+                    min_good_frac = (
+                        self.config.minFluxstdGoodFrac
+                        if fluxstd_ids_unk is not None
+                        else 1.0 - self.config.maxCalexpFlagRate
+                    )
+                    if n_good_calexp > 0 and calexp_good_frac >= min_good_frac:
+                        self.log.info(
+                            "Unknown type calexp path: %d good samples (%.1f%% good) for %s.",
+                            n_good_calexp, 100.0 * calexp_good_frac, dataId,
+                        )
+                        data = calexp_data
+                        dense_data = True
+                        using_fluxstd_filter = fluxstd_ids_unk is not None
+                    elif fluxstd_ids_unk is not None:
+                        self.log.info(
+                            "Unknown type FLUXSTD calexp too sparse for %s"
+                            " (%d/%d = %.1f%% < %.0f%%); FWHM will be sparse.",
+                            dataId, n_good_calexp, n_total_calexp,
+                            100.0 * calexp_good_frac,
+                            100.0 * self.config.minFluxstdGoodFrac,
+                        )
+                    else:
+                        self.log.info(
+                            "Unknown type calexp too sparse for %s"
+                            " (%d good, %.1f%% flagged); keeping arc-line data.",
+                            dataId, n_good_calexp,
+                            100.0 * (1.0 - calexp_good_frac),
+                        )
+                elif fiberProfiles is not None:
+                    self.log.info(
+                        "Unknown type %s: %d good arc lines (< %d); using fiberProfiles.",
+                        dataId, n_good_arc, self.config.minGoodLines,
+                    )
+                    data = self._buildProfileData(fiberProfiles, detectorMap)
+                    dense_data = True
+                else:
+                    self.log.warning(
+                        "Unknown type %s: %d good arc lines (< %d) and no calexp or"
+                        " fiberProfiles; FWHM will be sparse.",
+                        dataId, n_good_arc, self.config.minGoodLines,
+                    )
 
         for key in ("visit", "arm", "spectrograph"):
             if key in dataId:
@@ -557,18 +688,15 @@ class ImageQualityQaTask(PipelineTask):
 
         # pctFlagged is only meaningful when data coverage is dense (calexp,
         # fiber-profile path, or ≥ minGoodLines arc lines with full-detector
-        # illumination).  For sparse illumination (IIS, lamp-mismatched arc
-        # frames) the arc-line catalog denominator contains many coincidental
-        # flagged candidates; the resulting flag rate reflects catalog quality
-        # rather than optical/detector quality, and is set to NaN so the
-        # flag-rate check is suppressed.
+        # illumination).  For sparse illumination (IIS arcs/traces, or
+        # lamp-mismatched arc frames) pctFlagged reflects catalog quality
+        # rather than optical quality and is set to NaN.
         #
         # The FLUXSTD calexp path also suppresses pctFlagged: stellar fibers
-        # only reach S/N threshold at a small fraction of sampled rows (the
-        # flag rate is ~87–95% even for a healthy science arc), so the flag
-        # rate reflects exposure depth rather than optical quality.  FWHM
+        # only reach S/N threshold at a small fraction of sampled rows, so the
+        # flag rate reflects exposure depth rather than optical quality.  FWHM
         # is still reported when the good-fraction threshold is met.
-        sparse_fallback = (n_good_arc < self.config.minGoodLines) and not dense_data
+        sparse_fallback = force_sparse or ((n_good_arc < self.config.minGoodLines) and not dense_data)
         if sparse_fallback or using_fluxstd_filter:
             pct_flagged = np.nan
         else:
@@ -633,6 +761,72 @@ class ImageQualityQaTask(PipelineTask):
         pdf = self._makePlots(data, title=title)
 
         return Struct(iqQaData=data, iqQaMetrics=metrics, iqQaPlot=pdf)
+
+    def _classifyVisit(
+        self,
+        calexp: lsst.afw.image.Exposure | None,
+        pfsConfig: PfsConfig | None,
+    ) -> tuple[str, bool]:
+        """Classify the observation type from FITS header metadata.
+
+        Reads ``W_SEQTYP`` and ``W_SEQNAM`` from either ``calexp`` metadata or
+        ``pfsConfig.header``, and determines whether the illumination is IIS
+        (engineering fibers) or regular (all 600 science fibers) by inspecting
+        lamp headers via `~lsst.obs.pfs.utils.getLamps`.
+
+        Parameters
+        ----------
+        calexp : `lsst.afw.image.Exposure` or `None`
+            Post-ISR calibrated image for this quantum.
+        pfsConfig : `PfsConfig` or `None`
+            Fiber configuration for this visit.
+
+        Returns
+        -------
+        obs_type : `str`
+            One of ``"arc"``, ``"trace"``, ``"science"``, ``"allsky"``,
+            or ``"unknown"`` (when ``W_SEQTYP`` is absent or unrecognised).
+        is_iis : `bool`
+            True when the illumination comes from the 16 IIS engineering
+            fibers (lamp names end with ``"_eng"``).
+        """
+        # Prefer calexp metadata; fall back to pfsConfig header.
+        metadata = None
+        if calexp is not None:
+            metadata = calexp.getMetadata()
+        elif pfsConfig is not None and getattr(pfsConfig, "header", None) is not None:
+            metadata = pfsConfig.header
+
+        if metadata is None:
+            return "unknown", False
+
+        seq_typ = (metadata.get("W_SEQTYP") or "").strip()
+        seq_nam = (metadata.get("W_SEQNAM") or "").strip()
+
+        if seq_typ == "scienceArc":
+            obs_type = "arc"
+        elif seq_typ == "scienceTrace":
+            obs_type = "trace"
+        elif seq_typ in ("scienceObject", "scienceObject_windowed", "scienceDark"):
+            obs_type = "allsky" if seq_nam.lower().startswith("sky") else "science"
+        else:
+            if seq_typ:
+                self.log.debug("Unrecognised W_SEQTYP=%r; using heuristic fallback.", seq_typ)
+            obs_type = "unknown"
+
+        # Distinguish IIS (engineering fiber) illumination from regular (all
+        # 600 science fibers).  IIS lamp header names end with "_eng"
+        # (e.g. "Ar_eng", "Quartz_eng") while regular lamps do not.
+        is_iis = False
+        try:
+            from lsst.obs.pfs.utils import getLamps  # noqa: PLC0415
+
+            lamps = getLamps(metadata)
+            is_iis = any(name.endswith("_eng") for name in lamps)
+        except Exception:
+            pass  # obs_pfs unavailable or headers missing; assume regular
+
+        return obs_type, is_iis
 
     def _buildProfileData(self, fiberProfiles: FiberProfileSet, detectorMap: DetectorMap) -> pd.DataFrame:
         """Build an image-quality DataFrame from fiber profile trace widths.
