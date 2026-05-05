@@ -217,6 +217,23 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " roughly 50 % of the time and corrupt the FWHM distribution."
         ),
     )
+    maxCalexpFlagRate = Field(
+        dtype=float,
+        default=0.5,
+        doc=(
+            "Maximum fraction of calexp profile samples that may be flagged"
+            " before the calexp path is considered unreliable and discarded."
+            " Continuum/quartz frames illuminate all fibers uniformly so the"
+            " post-S/N-filter flag rate is low (< 10 %).  Arc-illuminated"
+            " frames — including IIS — illuminate only a small number of"
+            " fibers at discrete wavelengths; scattered light from those"
+            " bright fibers can pass the S/N gate at many neighbouring"
+            " positions and produce a large spurious FWHM (~7 px).  The"
+            " resulting flag rate is typically > 90 %, well above the"
+            " default threshold of 50 %, so the calexp results are rejected"
+            " and the sparse arc-line data are kept instead."
+        ),
+    )
     writeIqQaData = Field(
         dtype=bool,
         default=False,
@@ -376,21 +393,30 @@ class ImageQualityQaTask(PipelineTask):
                 )
                 calexp_data = self._buildImageWidthData(calexp, detectorMap)
                 n_good_calexp = int((calexp_data["fwhm"].notna() & ~calexp_data["flag"]).sum())
-                if n_good_calexp > 0:
+                n_total_calexp = len(calexp_data)
+                calexp_good_frac = n_good_calexp / max(n_total_calexp, 1)
+                min_good_frac = 1.0 - self.config.maxCalexpFlagRate
+                if n_good_calexp > 0 and calexp_good_frac >= min_good_frac:
                     self.log.info(
-                        "calexp path gave %d good profile measurements for %s.",
-                        n_good_calexp, dataId,
+                        "calexp path gave %d good profile measurements"
+                        " (%.1f%% good) for %s.",
+                        n_good_calexp, 100.0 * calexp_good_frac, dataId,
                     )
                     data = calexp_data
                 else:
-                    # calexp produced nothing useful (e.g. IIS lamp provides no
-                    # continuous illumination on this arm).  Keep the sparse
-                    # arc-line data — even a handful of real lines is better
-                    # than all-NaN from the calexp path.
+                    # Too many samples flagged: sparse illumination (e.g. IIS
+                    # arc frame).  Scattered light from the few bright fibers
+                    # can pass the S/N gate at neighbouring positions and
+                    # produce a spuriously large FWHM (~7 px).  Reject and
+                    # keep the sparse arc-line data instead.
                     self.log.info(
-                        "calexp path gave no good measurements for %s;"
+                        "calexp path is too sparse for %s"
+                        " (%d good, %.1f%% flagged >= maxCalexpFlagRate=%.0f%%);"
                         " retaining %d arc-line measurements.",
-                        dataId, n_good_arc,
+                        dataId, n_good_calexp,
+                        100.0 * (1.0 - calexp_good_frac),
+                        100.0 * self.config.maxCalexpFlagRate,
+                        n_good_arc,
                     )
             elif fiberProfiles is not None:
                 self.log.info(
