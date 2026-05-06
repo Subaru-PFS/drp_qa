@@ -322,23 +322,6 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " Set to 100 to disable."
         ),
     )
-    minCatalogCoverage = Field(
-        dtype=float,
-        default=0.25,
-        doc=(
-            "Minimum fraction of catalog arc lines that must be successfully"
-            " measured before ``pctFlagged`` is reported.  When fewer than"
-            " this fraction of catalog entries have good measurements"
-            " (flag=False, finite FWHM, catalog-GOOD status), the flag rate"
-            " reflects the physical lamp spectrum rather than optical quality"
-            " and is suppressed (set to NaN).  This primarily affects b-arm"
-            " arc visits for lamps with little blue emission (Ar: ~8-15%"
-            " measurable, Xe: ~17-22%), preventing false FAIL flags."
-            " Kr b-arm (~50% measurable) and Ne b-arm (~65% measurable) are"
-            " above the default threshold and continue to report pctFlagged."
-            " Set to 0.0 to disable."
-        ),
-    )
 
 
 class ImageQualityQaTask(PipelineTask):
@@ -457,7 +440,6 @@ class ImageQualityQaTask(PipelineTask):
         if "status" in data.columns:
             good_arc &= data["status"] == 0
         n_good_arc = int(good_arc.sum())
-        n_arc_catalog = len(data)  # total catalog entries before any calexp replacement
 
         dense_data = False
         using_fluxstd_filter = False
@@ -710,31 +692,12 @@ class ImageQualityQaTask(PipelineTask):
         # lamp-mismatched arc frames) pctFlagged reflects catalog quality
         # rather than optical quality and is set to NaN.
         #
-        # Additionally, suppress pctFlagged when the fraction of successfully
-        # measured catalog lines is below minCatalogCoverage.  A low fraction
-        # indicates that the arc lamp has few or no bright lines in this arm
-        # (e.g. Ar b-arm: ~8-15% measurable, Xe b-arm: ~17-22%), so the high
-        # flag rate reflects physical lamp limitations, not optical quality.
-        #
         # The FLUXSTD calexp path also suppresses pctFlagged: stellar fibers
         # only reach S/N threshold at a small fraction of sampled rows, so the
         # flag rate reflects exposure depth rather than optical quality.  FWHM
         # is still reported when the good-fraction threshold is met.
         sparse_fallback = force_sparse or ((n_good_arc < self.config.minGoodLines) and not dense_data)
-        catalog_coverage = n_good_arc / max(n_arc_catalog, 1)
-        low_coverage = (
-            not dense_data
-            and not sparse_fallback
-            and catalog_coverage < self.config.minCatalogCoverage
-        )
-        if low_coverage:
-            self.log.info(
-                "Suppressing pctFlagged for %s: only %.0f%% of catalog lines"
-                " measurable (< minCatalogCoverage=%.0f%%)."
-                " Lamp spectrum not well-matched to this arm.",
-                dataId, 100.0 * catalog_coverage, 100.0 * self.config.minCatalogCoverage,
-            )
-        if sparse_fallback or low_coverage or using_fluxstd_filter:
+        if sparse_fallback or using_fluxstd_filter:
             pct_flagged = np.nan
         else:
             pct_flagged = 100.0 * data["flag"].sum() / max(len(data), 1)
