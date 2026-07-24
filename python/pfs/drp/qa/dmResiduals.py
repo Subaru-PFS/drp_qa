@@ -393,7 +393,7 @@ def getGoodLines(
     numArcLines = len(set(lines[lineIndex].fiberId))
 
     isTrace = lineIndex.sum() == 0
-    isArc = isTrace == False
+    isArc = not isTrace
 
     log.debug(f"{traceIndex.sum()} line centroids for {numTraceLines} traces")
     log.debug(f"{lineIndex.sum()} line centroids for {numArcLines} traces")

@@ -1075,7 +1075,14 @@ def plot_vs_sky_brightness(spectras: dict, method="median") -> Figure:
 
                 skySpectra = spectras[spec_key]
                 rank0 = getSkyPercentile(skySpectra, column=col)
-                plotPercentile(rank0, ax_dict[ax_name], skySpectra.identity.arm, method=method, column=col, rasterized=False)
+                plotPercentile(
+                    rank0,
+                    ax_dict[ax_name],
+                    skySpectra.identity.arm,
+                    method=method,
+                    column=col,
+                    rasterized=False,
+                )
 
                 i += 1
 
@@ -1140,7 +1147,12 @@ def getSkyPercentile(skySpectra: PfsArm, column: str = "chi", binsize: int = 10)
 
 
 def plotPercentile(
-    data: DataFrame, ax: Axes, arm: str, column: str = "chi", method: str | Callable = "median", rasterized: bool = True
+    data: DataFrame,
+    ax: Axes,
+    arm: str,
+    column: str = "chi",
+    method: str | Callable = "median",
+    rasterized: bool = True,
 ):
     """Plot percentile data against a specified column.
 
@@ -1176,7 +1188,16 @@ def plotPercentile(
 
     ax.errorbar(x=X, xerr=Xerr, y=Y, marker="o", mfc=plot_color, c="k", linewidth=2, capsize=5, capthick=3)
 
-    ax.scatter(data[column], data.ranked, c=plot_color, marker="o", alpha=0.25, zorder=-100, s=4, rasterized=rasterized)
+    ax.scatter(
+        data[column],
+        data.ranked,
+        c=plot_color,
+        marker="o",
+        alpha=0.25,
+        zorder=-100,
+        s=4,
+        rasterized=rasterized,
+    )
 
     ax.axvline(0, c="k", ls="--")
 
