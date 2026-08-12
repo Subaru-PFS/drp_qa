@@ -1,4 +1,4 @@
-from typing import Iterable, Optional
+from collections.abc import Iterable
 
 import pandas as pd
 import seaborn as sb
@@ -30,9 +30,9 @@ def scatterplot_with_outliers(
     hue: str = "status_name",
     ymin: float = -0.1,
     ymax: float = 0.1,
-    palette: Optional[dict] = None,
-    ax: Optional[Axes] = None,
-    refline: Optional[Iterable[float]] = None,
+    palette: dict | None = None,
+    ax: Axes | None = None,
+    refline: Iterable[float] | None = None,
     vertical: bool = False,
     rasterized: bool = False,
     showUnusedOutliers: bool = False,
