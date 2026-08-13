@@ -845,6 +845,25 @@ class ExtractionQaTask(PipelineTask):
         qaImagePdf.append(fig, dpi=self.config.figureDpi, bbox_inches="tight")
         plt.close(fig)
 
+        # a single plot of chiimage (fixed color range defined in the config)
+        fig, ax = plt.subplots(figsize=(10, 10))
+        titleStr = "chi image\n"
+        titleStr += "visit=%(visit)d arm=%(arm)s spectrograph=%(spectrograph)d\n" % dataId
+        titleStr += "RUN=%(run)s" % dataId
+        ax.set_title(titleStr)
+        im = ax.imshow(
+            imagearray, vmin=self.config.plotMinChiMed, vmax=self.config.plotMaxChiMed, origin="lower"
+        )
+        plt.colorbar(im, shrink=0.8, format="%.2f")
+        ax.text(
+            0.0, 0.015, f"mean={mean:.3} median={med:.3} sigma={sigma:.3}",
+            bbox=dict(facecolor="white", alpha=0.5), transform=ax.transAxes
+        )
+        ax.set_xlabel("X pixel")
+        ax.set_ylabel("Y pixel")
+        qaImagePdf.append(fig, dpi=self.config.figureDpi, bbox_inches="tight")
+        plt.close(fig)
+
         # zoom-in plot of chiimage (25-75%) for each grid on the detector
 
         xc = [500, 2000, 3500]
