@@ -53,6 +53,50 @@ ArmId = Literal["b", "r", "m", "n"]
 """Arm ID in PFS
 """
 
+SM_COLORS: dict[int, str] = {
+    1: "#2a78d6",
+    2: "#008300",
+    3: "#e87ba4",
+    4: "#eda100",
+}
+"""Colour of each spectrograph in the plots.
+
+These four hues stay apart from one another under protanopia and deuteranopia,
+as well as under normal vision. ``SM_COLOR_NAMES`` names them for the caption.
+"""
+
+SM_COLOR_NAMES: dict[int, str] = {
+    1: "blue",
+    2: "green",
+    3: "pink",
+    4: "orange",
+}
+"""Name of the colour of each spectrograph, as written in the caption."""
+
+PERCENTILES: list[int] = [1, 10, 25, 50, 75, 90, 99]
+"""Percentiles of the per-fiber median quartz ratio, tracked across visits.
+
+``QuartzPercentiles`` has one field per entry, named after it.
+"""
+
+QUARTZ_RATIO_KINDS: dict[str, str] = {
+    "flux": "ratio",
+    "flattened": "flattened_ratio",
+}
+"""The quartz ratios whose trend across visits is tracked.
+
+Maps the name used in the output file names to the `PfsArmRatio` property.
+"flux" is the ratio of the fluxes alone, which still carries the
+fiber-to-fiber throughput; "flattened" divides each flux by its norm first,
+taking that throughput out. Each gets its own figure and CSV.
+"""
+
+QUARTZ_RATIO_TITLES: dict[str, str] = {
+    "flux": "pfsArm.flux",
+    "flattened": "pfsArm.flux/pfsArm.norm",
+}
+"""What each of ``QUARTZ_RATIO_KINDS`` is a ratio of, for the plot titles."""
+
 
 def main() -> int:
     """FiberNorms QA.
@@ -242,17 +286,23 @@ def main() -> int:
 
     success_count = 0
     error_count = 0
+    percentiles: list[QuartzPercentiles] = []
 
-    with unordered_parallel_map(args.jobs, _main_threadproc, arglist) as statuses:
-        for status in statuses:
-            if status == _ThreadProcStatus.SUCCESS:
+    with unordered_parallel_map(args.jobs, _main_threadproc, arglist) as results:
+        for result in results:
+            if result.status == _ThreadProcStatus.SUCCESS:
                 success_count += 1
+                percentiles.extend(result.percentiles)
             else:
                 error_count += 1
-            if status == _ThreadProcStatus.FATAL:
+            if result.status == _ThreadProcStatus.FATAL:
                 break
-            if args.fail_fast and status == _ThreadProcStatus.ERROR:
+            if args.fail_fast and result.status == _ThreadProcStatus.ERROR:
                 break
+
+    if percentiles:
+        log.info("Writing trend plots...")
+        write_percentile_trend(percentiles, args.output, config, log)
 
     num_remainders = num_groups - success_count - error_count
 
@@ -267,6 +317,98 @@ def main() -> int:
             num_remainders,
         )
         return 1
+
+
+def write_percentile_trend(
+    percentiles: list["QuartzPercentiles"],
+    output: str,
+    config: "FiberNormsQaConfig",
+    log: logging.Logger,
+) -> None:
+    """Plot how the spread of the quartz ratio moves from visit to visit.
+
+    One figure per kind of ratio per arm, with one panel per spectrograph. A
+    CSV of the plotted numbers is written next to each figure.
+
+    Parameters
+    ----------
+    percentiles : `list` [`QuartzPercentiles`]
+        Percentiles of every (visit, arm, spectrograph) to plot.
+    output : `str`
+        Output directory.
+    config : `FiberNormsQaConfig`
+        Configuration.
+    log : `logging.Logger`
+        Logger.
+    """
+    matplotlib.use("agg")
+
+    df = pd.DataFrame([dataclasses.asdict(p) for p in percentiles])
+    os.makedirs(output, exist_ok=True)
+
+    for (kind, arm), arm_df in df.groupby(["kind", "arm"]):
+        spectrographs = sorted(arm_df["spectrograph"].unique())
+        ref_visit = arm_df["ref_visit"].iloc[0]
+        stem = f"quartzPercentiles_{kind}_{arm}_over_{ref_visit}"
+
+        csv_path = os.path.join(output, f"{stem}.csv")
+        log.info("Writing %s...", csv_path)
+        arm_df.sort_values(["spectrograph", "visit"]).to_csv(csv_path, index=False)
+
+        figure_path = os.path.join(output, f"{stem}.png")
+        try:
+            fig, axes = plt.subplots(
+                len(spectrographs),
+                1,
+                figsize=(10, 2.5 * len(spectrographs)),
+                sharex=True,
+                layout="constrained",
+                squeeze=False,
+                facecolor="white",
+            )
+            for i, spectrograph in enumerate(spectrographs):
+                ax = axes[i][0]
+                spec_df = arm_df[arm_df["spectrograph"] == spectrograph].sort_values("visit")
+
+                ax.fill_between(
+                    spec_df.visit, spec_df.p01, spec_df.p99, color="C0", alpha=0.2, label="1-99%"
+                )
+                ax.fill_between(
+                    spec_df.visit, spec_df.p10, spec_df.p90, color="C0", alpha=0.5, label="10-90%"
+                )
+                ax.fill_between(
+                    spec_df.visit, spec_df.p25, spec_df.p75, color="C0", alpha=0.8, label="25-75%"
+                )
+                ax.plot(
+                    spec_df.visit, spec_df.p50, ls="dashed", lw=1, color="k", alpha=1.0, label="50%"
+                )
+                ax.set_xlabel("visit", fontsize=12)
+                ax.set_ylabel("Normalized ratio", fontsize=12)
+                ax.set_title(
+                    f"Quartz {QUARTZ_RATIO_TITLES[kind]} normalized to visit={ref_visit}"
+                    f" ({arm}{spectrograph})",
+                    fontsize=12
+                )
+                ax.set_ylim(config.trend_vmin, config.trend_vmax)
+
+                ax.minorticks_on()
+                ax.tick_params(
+                    axis="both", which="major", direction="in",
+                    top=True, bottom=True, left=True, right=True,
+                    length=8.0, width=1.0, labelsize=12
+                )
+                ax.tick_params(
+                    axis="both", which="minor", direction="in",
+                    top=True, bottom=True, left=True, right=True,
+                    length=4.0, width=0.7
+                )
+                if i == 0:
+                    ax.legend(loc="upper left", fontsize=10)
+
+            log.info("Writing %s...", figure_path)
+            fig.savefig(figure_path, bbox_inches="tight", dpi=150)
+        finally:
+            plt.close(fig)
 
 
 class _ThreadProcArgs(typing.TypedDict):
@@ -300,14 +442,31 @@ class _ThreadProcArgs(typing.TypedDict):
 
 
 class _ThreadProcStatus(enum.Enum):
-    """Return value of ``_main_threadproc()``"""
+    """Status of ``_main_threadproc()``"""
 
     SUCCESS = 0
     ERROR = 1
     FATAL = 2
 
 
-def _main_threadproc(args: _ThreadProcArgs) -> _ThreadProcStatus:
+class _ThreadProcResult(typing.NamedTuple):
+    """Return value of ``_main_threadproc()``
+
+    Attributes
+    ----------
+    status : `_ThreadProcStatus`
+        ``SUCCESS`` on success, and ``ERROR`` on error.
+        ``FATAL`` if the main function should exit immediately.
+    percentiles : `list` [`QuartzPercentiles`]
+        Percentiles of this job, to be collected by ``main()`` into the trend
+        plot. Empty unless ``status`` is ``SUCCESS``.
+    """
+
+    status: _ThreadProcStatus
+    percentiles: list["QuartzPercentiles"]
+
+
+def _main_threadproc(args: _ThreadProcArgs) -> _ThreadProcResult:
     """Threading part of ``main()`` function.
 
     This function runs a single ``FiberNormsQa``.
@@ -320,15 +479,15 @@ def _main_threadproc(args: _ThreadProcArgs) -> _ThreadProcStatus:
 
     Returns
     -------
-    status : `_ThreadProcStatus`
-        ``SUCCESS`` on success, and ``ERROR`` on error.
-        ``FATAL`` if the main function should exit immediately.
+    result : `_ThreadProcResult`
+        Status of the job, and the percentiles it measured.
     """
     log = args.get("log") or logging.getLogger()
     job_id = args.get("job_id", 0)
     num_jobs = args.get("num_jobs", 0)
 
     status = _ThreadProcStatus.SUCCESS
+    percentiles: list[QuartzPercentiles] = []
 
     try:
         butler = args["butler"]
@@ -339,6 +498,7 @@ def _main_threadproc(args: _ThreadProcArgs) -> _ThreadProcStatus:
         log.info("[%d/%d] Starting a new job...", job_id, num_jobs)
         task = FiberNormsQa(butler, output, input, config=config, log=log)
         task.run()
+        percentiles = task.get_percentiles()
         log.info("[%d/%d] Job done", job_id, num_jobs)
     except Exception:
         log.error("[%d/%d] %s", job_id, num_jobs, traceback.format_exc())
@@ -347,7 +507,7 @@ def _main_threadproc(args: _ThreadProcArgs) -> _ThreadProcStatus:
         log.error("[%d/%d] %s", job_id, num_jobs, traceback.format_exc())
         status = _ThreadProcStatus.FATAL
 
-    return status
+    return _ThreadProcResult(status, percentiles)
 
 
 def argtype_comma_separated(
@@ -892,6 +1052,47 @@ def ignore_numpy_warnings(func: Callable[P, R]) -> Callable[P, R]:
 
 
 @dataclasses.dataclass
+class QuartzPercentiles:
+    """Spread of the quartz ratio over the fibers of one spectrograph.
+
+    Each fiber is reduced to the median over wavelength of its ratio to the
+    reference quartz. The fields below are percentiles of that quantity over
+    the fibers.
+
+    One instance describes a single (kind, visit, arm, spectrograph). Collected
+    over the visits of a run, they make the trend plot.
+
+    Parameters
+    ----------
+    kind : `str`
+        Which ratio this measures. A key of ``QUARTZ_RATIO_KINDS``.
+    arm : `ArmId`
+        Arm name.
+    spectrograph : `SpectrographId`
+        Spectrograph ID.
+    visit : `int`
+        Visit of the target quartz.
+    ref_visit : `int`
+        Visit of the reference quartz.
+    p01, p10, p25, p50, p75, p90, p99 : `float`
+        Percentiles of the per-fiber median quartz ratio, over the fibers.
+    """
+
+    kind: str
+    arm: str
+    spectrograph: int
+    visit: int
+    ref_visit: int
+    p01: float
+    p10: float
+    p25: float
+    p50: float
+    p75: float
+    p90: float
+    p99: float
+
+
+@dataclasses.dataclass
 class FiberNormsQaStat:
     """Statistics.
 
@@ -989,6 +1190,13 @@ class FiberNormsQaConfig:
     vmin2: float = dataclasses.field(default=0.0, metadata={"doc": "min limit of sigma in plots"})
     vmax2: float = dataclasses.field(default=0.02, metadata={"doc": "max limit of sigma in plots"})
 
+    trend_vmin: float = dataclasses.field(
+        default=0.971, metadata={"doc": "min limit of normalized ratio in the visit trend plot"}
+    )
+    trend_vmax: float = dataclasses.field(
+        default=1.029, metadata={"doc": "max limit of normalized ratio in the visit trend plot"}
+    )
+
     wavelength_range_b: tuple[float, float] = dataclasses.field(
         default=(450, 650), metadata={"doc": "Wavelength range to use (b-arm)"}
     )
@@ -1021,6 +1229,29 @@ class FiberNormsQaConfig:
     subtract_error: bool = dataclasses.field(
         default=True,
         metadata={"doc": "subtract pfsArm variance in sigma calculation"},
+    )
+    normalize_2d: bool = dataclasses.field(
+        default=True,
+        metadata={
+            "doc": "normalize every quartz ratio. Turning this off leaves the raw ratio, which"
+            " need not sit near 1, so vmin/vmax and trend-vmin/trend-vmax will want re-setting."
+            " This is the master switch over normalize-over-fiber and normalize-over-wavelength"
+        },
+    )
+    normalize_over_fiber: bool = dataclasses.field(
+        default=True,
+        metadata={
+            "doc": "when normalizing, divide by the median over the fibers, taken at each"
+            " wavelength. This is what takes out a pattern common to every fiber"
+        },
+    )
+    normalize_over_wavelength: bool = dataclasses.field(
+        default=False,
+        metadata={
+            "doc": "when normalizing, divide by the median over the wavelengths, taken for each"
+            " fiber. This takes out each fiber's overall throughput relative to the reference"
+            " quartz, which is the very thing this QA watches, so it is off by default"
+        },
     )
 
     @functools.cached_property
@@ -1230,7 +1461,7 @@ class FiberNormsQa:
             pfsArmRatio = self._get_pfsArmRatio(spec)
 
             pfsArm = pfsArmRatio.pfsArm
-            ratio = pfsArmRatio.ratio
+            ratio = pfsArmRatio.flattened_ratio
 
             df.loc[df["fiberId"].isin(pfsArm.fiberId), "SM"] = spec
 
@@ -1263,6 +1494,39 @@ class FiberNormsQa:
             sigma_iqr=float(np.nanmedian(df["sigma"])),
             df=df,
         )
+
+    @ignore_numpy_warnings
+    def get_percentiles(self) -> list[QuartzPercentiles]:
+        """Get the spread of the quartz ratio over the fibers.
+
+        One element per spectrograph per kind of ratio.
+        See `QuartzPercentiles` and ``QUARTZ_RATIO_KINDS``.
+
+        Returns
+        -------
+        percentiles : `list` [`QuartzPercentiles`]
+            Percentiles.
+        """
+        percentiles: list[QuartzPercentiles] = []
+
+        for spec in self.spectrographs:
+            pfsArmRatio = self._get_pfsArmRatio(spec)
+            for kind, attribute in QUARTZ_RATIO_KINDS.items():
+                ratio = getattr(pfsArmRatio, attribute)
+                median_per_fiber = np.nanmedian(ratio, axis=1)
+                values = np.nanpercentile(median_per_fiber, PERCENTILES)
+                percentiles.append(
+                    QuartzPercentiles(
+                        kind=kind,
+                        arm=self.arm,
+                        spectrograph=spec,
+                        visit=self.visit,
+                        ref_visit=self.ref_visit,
+                        **{f"p{p:02d}": float(v) for p, v in zip(PERCENTILES, values)},
+                    )
+                )
+
+        return percentiles
 
     def _get_metadata(self, key: str) -> Any:
         """Get pfsArm's metadata.
@@ -1301,7 +1565,13 @@ class FiberNormsQa:
         pfsArmRatio = self._cache_pfsArmRatio.get(spec)
         if pfsArmRatio is None:
             pfsArmRatio = self._cache_pfsArmRatio[spec] = PfsArmRatio(
-                self.refArmDict[spec], self.pfsArmDict[spec], self.pfsConfig, self.wavelength_range
+                self.refArmDict[spec],
+                self.pfsArmDict[spec],
+                self.pfsConfig,
+                self.wavelength_range,
+                normalize=self.config.normalize_2d,
+                normalize_over_fiber=self.config.normalize_over_fiber,
+                normalize_over_wavelength=self.config.normalize_over_wavelength,
             )
 
         return pfsArmRatio
@@ -1417,6 +1687,10 @@ class FiberNormsQa:
             Figure.
         """
         df = df[df["mtpGroup"].str.contains("U") | df["mtpGroup"].str.contains("D")]
+        # Every MTP group, whether or not any of its fibers is used by this
+        # dataset. [4] shows them all, so that a missing group is visible as
+        # an empty column rather than by its absence.
+        mtp_groups = df["mtpGroup"].drop_duplicates().tolist()
         df = df[df["SM"] != 0]
         df = df.reset_index()
         ins = self._get_metadata("INSROT")
@@ -1430,7 +1704,7 @@ class FiberNormsQa:
         # Number of columns of odd fibers shown.
         ncols_odd = 5
         # Number of rows of odd fibers shown.
-        nrows_odd = 3
+        nrows_odd = 2
 
         # extract odd MTPs/fibers
         df_odd = df[df["sigma"] > self.sigma_flag_entire]
@@ -1453,65 +1727,68 @@ class FiberNormsQa:
         ax9 = fig.add_subplot(gs_master[3, 0], aspect="equal")  # --For PFI image with fiberNorms
         ax10 = fig.add_subplot(gs_master[3, 1])  # --For PFI image with fiberNorms
         # For 2D spectral image
-        ax13 = fig.add_subplot(gs_master[1:3, 2:5])
+        ax13 = fig.add_subplot(gs_master[1:3, 2:6])
+        # The cell is much wider than it is tall. Keep the plot itself square:
+        # its height is what limits it, so this costs no size, only the margin
+        # either side.
+        ax13.set_box_aspect(1)
         # For sigma per fiber
-        ax14 = fig.add_subplot(gs_master[3, 2:5])
-        # MTP group vs. spectrograph ID
-        ax15 = fig.add_subplot(gs_master[1:4, 5])
+        ax14 = fig.add_subplot(gs_master[3, 2:6])
 
-        # [5] Measured sigma for each fiber.
-        self._make_plot_sigma_per_fiber(ax14, df)
-
-        # [3] Used MTPs compared with corresponding spectrograph ID
-        self._make_plot_used_mtps(ax15, df)
+        # [4] Measured sigma for each fiber.
+        self._make_plot_sigma_per_fiber(ax14, df, mtp_groups)
 
         # [2] 2D spectrum of quartz ratio.
         self._make_plot_quartz_ratio_by_wavelength(ax13, df)
 
         # [1] PFI IMAGES (pfsArm.flux/pfsArm.norm)
-        fig.text(0.15, 0.78, "[1] Quartz ratio measured from pfsArm", fontsize=self.config.fontsize)
+        fig.text(
+            0.15,
+            0.78,
+            "[1] Quartz ratio measured from pfsArm.flux / pfsArm.norm",
+            fontsize=self.config.fontsize,
+        )
         self._make_plot_quartz_ratio_by_position_n_sigma(ax5, df, n=2)
         self._make_plot_quartz_ratio_by_position_median(ax6)
         self._make_plot_quartz_ratio_by_position_at_pixel(ax7, pixel_index=1500)
         self._make_plot_quartz_ratio_by_position_at_pixel(ax8, pixel_index=3500)
 
-        # [4] PFI IMAGES (fiberNorms)
-        fig.text(0.15, 0.59, "[4] fiberNorms.values of target quartz", fontsize=self.config.fontsize)
+        # [3] PFI IMAGES (fiberNorms)
+        fig.text(0.15, 0.59, "[3] fiberNorms.values of target quartz", fontsize=self.config.fontsize)
         self._make_plot_fiberNorms_by_position(ax9)
         self._make_plot_fiberNorms_by_wavelength(ax10)
 
         is_dirty = (self.visit != self.ref_visit) and (len(df_odd) > 0)
 
         if is_dirty:
-            # [6] 1D spectra measured from pfsArm
+            # [5] 1D spectra measured from pfsArm
             gs_spec = gridspec.GridSpecFromSubplotSpec(
-                nrows=nrows_odd, ncols=ncols_odd, subplot_spec=gs_master[4:7, :], wspace=0.3, hspace=0.5
+                nrows=nrows_odd, ncols=ncols_odd, subplot_spec=gs_master[4:6, :], wspace=0.3, hspace=0.5
             )
             fig.text(
                 0.35,
                 0.49,
-                "[6] Example spectra for flagged fibers with large flux scatters (red marked in [2])",
+                "[5] Example spectra for flagged fibers with large flux scatters (red marked in [2])",
                 fontsize=self.config.fontsize,
             )
             for i in range(n_odd):
                 axs = fig.add_subplot(gs_spec[i // ncols_odd, i % ncols_odd])
                 self._make_plot_1d_spectra(axs, df_odd.iloc[i])
 
-            # [7] 1D spectra measured from fiberNorms
+            # [6] 1D spectra measured from fiberNorms, for the fibers of [5],
+            # panel for panel.
             gs_spec2 = gridspec.GridSpecFromSubplotSpec(
-                nrows=1, ncols=ncols_odd, subplot_spec=gs_master[7:, :], wspace=0.3, hspace=0.5
+                nrows=nrows_odd, ncols=ncols_odd, subplot_spec=gs_master[6:8, :], wspace=0.3, hspace=0.5
             )
             fig.text(
                 0.35,
-                0.19,
-                "[7] Randomly selected spectra obtained by fiberNorms.values",
+                0.29,
+                "[6] fiberNorms.values of the same fibers as [5], in the same order",
                 fontsize=self.config.fontsize,
             )
-            # extract fiberIds for plotting example spectra
-            list_ex_fibernorms = sorted(self.random.sample(list(df["fiberId"]), ncols_odd))
-            for i in range(ncols_odd):
+            for i in range(n_odd):
                 axs = fig.add_subplot(gs_spec2[i // ncols_odd, i % ncols_odd])
-                self._make_plot_example_fiberNorm(axs, df, list_ex_fibernorms[i])
+                self._make_plot_example_fiberNorm(axs, df, df_odd.iloc[i]["fiberId"])
 
         sigma_typ = np.nanmedian(df["sigma"])
 
@@ -1563,9 +1840,9 @@ class FiberNormsQa:
             "fiberNormsQA is to monitor fiber throughput variation. "
             "We took quartz flux ratios for some of the figures "
             "to investigate how much quartz flux\n varies with time, "
-            "i.e., quartz ratio = pfsArm.flux(visit_target)/pfsArm.flux(visit_reference). "
-            "Referenced quartz is the first one in the data set \n basically "
-            "(see visit number above).\n"
+            "i.e., quartz ratio = (pfsArm.flux/pfsArm.norm)(visit_target)"
+            "/(pfsArm.flux/pfsArm.norm)(visit_reference).\n"
+            " Referenced quartz is the first one in the data set basically (see visit number above).\n"
             f"Sigma is measured from 0.741*(Q75-Q25){sub_text}\n"
             "Descriptions for each sub-fig component are as follows.\n"
             "[1] PFI image of quartz ratios. "
@@ -1574,13 +1851,14 @@ class FiberNormsQa:
             "We also represent median flux ratios at two different wavelength point via PFI images.\n"
             "[2] 2D spectrum of quartz ratio. If measure sigma of a fiber is larger than "
             f"{self.sigma_flag_entire}, red closs marks fiber Id in the left side.\n"
-            "[3] Used MTPs compared with corresponding spectrograph ID. "
-            "The MTP groups in which all MTPs were used are represented in green.\n"
-            "[4] fiberNorms.values of target quartz. "
+            "[3] fiberNorms.values of target quartz. "
             "Plotting bounds are 2.5$\\sigma$\n"
-            "[5] Measured sigma for each fiber. "
-            "The median values in all MTP groups represent in blue dashed line "
-            "and 4 sigma \nrepresent in red dashed line. "
+            "[4] Measured sigma for each fiber. "
+            f"Each fiber is coloured by its spectrograph: {self._get_sm_colour_caption()}. "
+            "Every MTP group is \n shown, so a group none of whose fibers is used "
+            "appears as an empty column. "
+            "The median values in all MTP groups represent in blue dashed line \n"
+            "and 4 sigma represent in red dashed line. "
             "This figure is to check flux variation with MTP unit. "
             "MTP groups above the red dashed line, \n "
             "indicating that the MTP group has a large flux variation. \n"
@@ -1588,7 +1866,7 @@ class FiberNormsQa:
 
         if is_dirty:
             footnote += (
-                "[6] Spectra of FIBER with large sigma with a maximum of 15. "
+                f"[5] Spectra of FIBER with large sigma with a maximum of {ncols_odd * nrows_odd}. "
                 "Blue plots represent normalized spectra obtained by quartz ratio \n "
                 "(i.e. pfsArm.flux(target)/pfsArm.norm(target)/"
                 "pfsArm.flux(reference)/pfsArm.norm(reference)) "
@@ -1596,7 +1874,8 @@ class FiberNormsQa:
                 "FiberId are shown in upper left. "
                 "Mesured sigma per fiber are shown in upper right. "
                 "Red dashed lines represent 2sigma lines of median filtered spectra.\n"
-                "[7] Randomly selected spectra obtained from fiberNorms.values of target quartz"
+                "[6] fiberNorms.values of target quartz, for the same fibers as [5] and in the same \n"
+                " order, so each panel sits below its counterpart"
             )
 
         if is_dirty:
@@ -1617,7 +1896,21 @@ class FiberNormsQa:
         fig.tight_layout()
         return fig
 
-    def _make_plot_sigma_per_fiber(self, ax: matplotlib.axes.Axes, df: pd.DataFrame) -> None:
+    def _get_sm_colour_caption(self) -> str:
+        """Describe the colour given to each spectrograph, for the caption.
+
+        Only the spectrographs present in this dataset are described.
+
+        Returns
+        -------
+        caption : `str`
+            Text like ``"SM1 blue, SM2 green"``.
+        """
+        return ", ".join(f"SM{spec} {SM_COLOR_NAMES[spec]}" for spec in self.spectrographs)
+
+    def _make_plot_sigma_per_fiber(
+        self, ax: matplotlib.axes.Axes, df: pd.DataFrame, mtp_groups: list[str]
+    ) -> None:
         """Plot measured sigma for each fiber
 
         Parameters
@@ -1631,11 +1924,30 @@ class FiberNormsQa:
                 Fiber ID.
             - mtpGroup : `str`
                 MTP group.
+            - SM : `SpectrographId` | `Literal` [0]
+                Spectrograph name. (Invalid if zero)
             - sigma : `float`
                 Per-fiber standard deviation with respect to wavelength.
+        mtp_groups : `list` [`str`]
+            Every MTP group to show on the x axis, in the order to show them.
+            Groups without any fiber in ``df`` are shown as empty columns.
         """
-        ax.set_title("[5] Sigma per fiber", fontsize=self.config.fontsize)
-        ax.scatter(df["mtpGroup"], df["sigma"], c="black", rasterized=True)
+        ax.set_title("[4] Sigma per fiber", fontsize=self.config.fontsize)
+        # Register the whole list as the categories of the x axis, so that the
+        # groups missing from `df` still get a tick.
+        ax.xaxis.update_units(mtp_groups)
+        # One call per spectrograph, so that each gets its own colour. The
+        # caption tells the reader which colour is which.
+        for spec in self.spectrographs:
+            selected = df["SM"] == spec
+            ax.scatter(
+                df["mtpGroup"][selected],
+                df["sigma"][selected],
+                c=SM_COLORS[spec],
+                label=f"SM{spec}",
+                rasterized=True,
+            )
+        ax.set_xlim(-0.5, len(mtp_groups) - 0.5)
 
         sigma_median = np.nanmedian(df["sigma"])
         ax.axhline(sigma_median, ls="dashed", c="blue", zorder=0)
@@ -1674,32 +1986,6 @@ class FiberNormsQa:
         ax.set_ylabel(r"$\sigma$ (0.741*(Q75-Q25))", fontsize=self.config.fontsize_x_small)
         ax.tick_params("x", labelrotation=90)
 
-    def _make_plot_used_mtps(self, ax: matplotlib.axes.Axes, df: pd.DataFrame) -> None:
-        """Plot used MTPs compared with corresponding spectrograph ID.
-
-        Parameters
-        ----------
-        ax : `matplotlib.axes.Axes`
-            Axes.
-        df : `pd.DataFrame`
-            Data frame. The following columns must exist:
-
-            - fiberId : `int`
-                Fiber ID.
-            - mtpGroup : `str`
-                MTP group.
-            - SM : `SpectrographId` | `Literal` [0]
-                Spectrograph name. (Invalid if zero)
-        """
-        ax.set_title("[3] Used MTPs", fontsize=self.config.fontsize)
-        xdata, ydata = df["SM"][df["SM"] != 0], df["mtpGroup"][df["SM"] != 0]
-        ax.scatter(xdata, ydata, c="olivedrab", rasterized=True)
-
-        ax.grid(axis="both", which="both", linestyle="--", linewidth=0.5)
-        ax.set_xticks([0, 1, 2, 3, 4])
-        ax.set_xlabel("spectrograph ID", fontsize=self.config.fontsize)
-        ax.set_ylabel("MTP group", fontsize=self.config.fontsize_x_small)
-
     def _make_plot_quartz_ratio_by_wavelength(self, ax: matplotlib.axes.Axes, df: pd.DataFrame) -> None:
         """Plot 2D spectrum of quartz ratio.
 
@@ -1719,7 +2005,8 @@ class FiberNormsQa:
         """
         # [2] 2D spec of quartz ratio
         ax.set_title(
-            "[2] 2D spectrum of quartz ratio measured from pfsArm.flux", fontsize=self.config.fontsize
+            "[2] 2D spectrum of quartz ratio measured from pfsArm.flux/pfsArm.norm",
+            fontsize=self.config.fontsize,
         )
         ax.set_xlabel("wavelength [nm]", fontsize=self.config.fontsize_large)
         ax.set_ylabel("fiberId", fontsize=self.config.fontsize_large)
@@ -1729,7 +2016,7 @@ class FiberNormsQa:
         for spec in self.spectrographs:
             pfsArmRatio = self._get_pfsArmRatio(spec)
             pfsArm = pfsArmRatio.pfsArm
-            ratio = pfsArmRatio.ratio
+            ratio = pfsArmRatio.flattened_ratio
             fibs = np.array(
                 [
                     np.full_like(pfsArm.wavelength[np.where(pfsArm.fiberId == f)[0][0]], f)
@@ -1745,6 +2032,10 @@ class FiberNormsQa:
                 vmin=self.config.vmin,
                 vmax=self.config.vmax,
                 s=0.6,
+                # Without this, every marker is stroked with a 1.5pt edge,
+                # which is wider than the marker itself and dominates the
+                # rendering time of the millions of points plotted here.
+                linewidths=0,
                 alpha=1.0,
                 label="quartz",
                 rasterized=True
@@ -1754,12 +2045,53 @@ class FiberNormsQa:
             for i_fib in oddfib:
                 ax.scatter(wmin, i_fib, marker="+", color="red", s=150, alpha=0.8)
 
-        divider = make_axes_locatable(ax)  # AxesDivider related to ax
-        cax = divider.append_axes("right", size="2%", pad=0.1)  # create new axes
+        # Placed in axes fractions, so that it follows the box of `ax`, which set_box_aspect squares
+        # and thereby makes narrower than its cell. An AxesDivider would measure from the cell
+        # instead, leaving the colorbar detached from the plot.
+        cax = ax.inset_axes((1.01, 0.0, 0.02, 1.0))
 
         fig = ax.figure
         if fig is not None:
             fig.colorbar(sc, cax=cax)
+
+    def _attach_colorbar(self, ax: matplotlib.axes.Axes, mappable: Any) -> None:
+        """Attach a colorbar to the right of ``ax``.
+
+        The colorbar is anchored to the drawn box of ``ax``, so that it keeps
+        the height of the box even when ``ax`` has a fixed aspect ratio.
+
+        Parameters
+        ----------
+        ax : `matplotlib.axes.Axes`
+            Axes.
+        mappable : `Any`
+            Mappable (typically the return value of ``ax.scatter``).
+        """
+        fig = ax.figure
+        if fig is None:
+            return
+
+        cax = make_axes_locatable(ax).append_axes("right", size="4%", pad=0.1)
+        colorbar = fig.colorbar(mappable, cax=cax)
+        colorbar.ax.tick_params(labelsize=self.config.fontsize_xx_small)
+
+    def _set_pfi_axes_decorations(self, ax: matplotlib.axes.Axes, title: str) -> None:
+        """Set the title, the axis labels and the axis ranges of a PFI image.
+
+        Parameters
+        ----------
+        ax : `matplotlib.axes.Axes`
+            Axes.
+        title : `str`
+            Title of the axes.
+        """
+        ax.set_xlim(xmin=-250, xmax=250)
+        ax.set_ylim(ymin=-250, ymax=250)
+        ax.yaxis.set_ticks_position("left")
+        ax.set_title(title, fontsize=self.config.fontsize_small)
+        ax.set_xlabel("X(PFI) [mm]", fontsize=self.config.fontsize_x_small)
+        ax.set_ylabel("Y(PFI) [mm]", fontsize=self.config.fontsize_x_small)
+        ax.tick_params(labelsize=self.config.fontsize_xx_small)
 
     def _make_plot_quartz_ratio_by_position_n_sigma(
         self, ax: matplotlib.axes.Axes, df: pd.DataFrame, n: float
@@ -1790,21 +2122,14 @@ class FiberNormsQa:
                 c=np.array(df["sigma"][df["SM"] == spec]) * n,
                 vmin=self.config.vmin2,
                 vmax=self.config.vmax2,
-                s=30.0,
+                s=5.0,
                 alpha=1.0,
                 label=f"{n}sigma",
                 rasterized=True
             )
-            ax.set_xlim(xmin=-250, xmax=250)
-            ax.set_ylim(ymin=-250, ymax=250)
-            ax.yaxis.set_ticks_position("left")
-            ax.set_title(f"{n}sigma", fontsize=self.config.fontsize)
-            ax.set_xlabel("X(PFI) [mm]", fontsize=self.config.fontsize)
-            ax.set_ylabel("Y(PFI) [mm]", fontsize=self.config.fontsize)
+            self._set_pfi_axes_decorations(ax, f"{n}sigma")
 
-        fig = ax.figure
-        if fig is not None:
-            fig.colorbar(sc, ax=ax, location="right", fraction=0.04, alpha=1.0)
+        self._attach_colorbar(ax, sc)
 
     def _make_plot_quartz_ratio_by_position_median(self, ax: matplotlib.axes.Axes) -> None:
         """Plot PFI image of quartz ratios (median flux ratio per fiber).
@@ -1816,7 +2141,7 @@ class FiberNormsQa:
         """
         for spec in self.spectrographs:
             pfsArmRatio = self._get_pfsArmRatio(spec)
-            ratio = pfsArmRatio.ratio
+            ratio = pfsArmRatio.flattened_ratio
             pfsconfig = pfsArmRatio.pfsConfig
 
             # Plot median
@@ -1827,21 +2152,14 @@ class FiberNormsQa:
                 c=median_array,
                 vmin=self.config.vmin,
                 vmax=self.config.vmax,
-                s=30.0,
+                s=5.0,
                 alpha=1.0,
                 label="median per fiber",
                 rasterized=True
             )
-            ax.set_xlim(xmin=-250, xmax=250)
-            ax.set_ylim(ymin=-250, ymax=250)
-            ax.yaxis.set_ticks_position("left")
-            ax.set_title("median per fiber", fontsize=self.config.fontsize)
-            ax.set_xlabel("X(PFI) [mm]", fontsize=self.config.fontsize)
-            ax.set_ylabel("Y(PFI) [mm]", fontsize=self.config.fontsize)
+            self._set_pfi_axes_decorations(ax, "median per fiber")
 
-        fig = ax.figure
-        if fig is not None:
-            fig.colorbar(sc, ax=ax, location="right", fraction=0.04, alpha=1.0)
+        self._attach_colorbar(ax, sc)
 
     def _make_plot_quartz_ratio_by_position_at_pixel(
         self, ax: matplotlib.axes.Axes, pixel_index: int
@@ -1857,7 +2175,7 @@ class FiberNormsQa:
         """
         for spec in self.spectrographs:
             pfsArmRatio = self._get_pfsArmRatio(spec)
-            ratio = pfsArmRatio.ratio
+            ratio = pfsArmRatio.flattened_ratio
             pfsconfig = pfsArmRatio.pfsConfig
             pfsArm = pfsArmRatio.pfsArm
 
@@ -1868,21 +2186,14 @@ class FiberNormsQa:
                 c=ratio_lam,
                 vmin=self.config.vmin,
                 vmax=self.config.vmax,
-                s=30.0,
+                s=5.0,
                 alpha=1.0,
                 rasterized=True
             )
-            ax.set_xlim(xmin=-250, xmax=250)
-            ax.set_ylim(ymin=-250, ymax=250)
-            ax.yaxis.set_ticks_position("left")
             lam_point = np.round(pfsArm.wavelength[0][pixel_index], 3)
-            ax.set_title(f"at {lam_point} [nm]", fontsize=self.config.fontsize)
-            ax.set_xlabel("X(PFI) [mm]", fontsize=self.config.fontsize)
-            ax.set_ylabel("Y(PFI) [mm]", fontsize=self.config.fontsize)
+            self._set_pfi_axes_decorations(ax, f"at {lam_point} [nm]")
 
-        fig = ax.figure
-        if fig is not None:
-            fig.colorbar(sc, ax=ax, location="right", fraction=0.04, alpha=1.0)
+        self._attach_colorbar(ax, sc)
 
     def _make_plot_fiberNorms_by_position(self, ax: matplotlib.axes.Axes) -> None:
         """Plot fiberNorms of the target quartz (median per fiber).
@@ -1908,7 +2219,7 @@ class FiberNormsQa:
         ax : `matplotlib.axes.Axes`
             Axes.
         """
-        # [4] 2D image of fiberNorms.values
+        # [3] 2D image of fiberNorms.values
         fiberNorms = self._get_cleaned_fiberNorms()
 
         values = np.nanmedian(fiberNorms.values, axis=1)
@@ -1984,8 +2295,9 @@ class FiberNormsQa:
         ax.scatter(xdata_m, ydata_m, color="limegreen", s=10, label=f"{fib}(mf)", rasterized=True)
 
         ax.text(
-            0.68,
-            0.9,
+            0.02,
+            0.03,
+            f"median ={np.nanmedian(ydata):.4f}\n"
             rf'$\sigma$ ={df_row["sigma"]:.4f}',
             transform=ax.transAxes,
             fontsize=self.config.fontsize_small,
@@ -2002,7 +2314,7 @@ class FiberNormsQa:
             linestyle="dashed",
         )
 
-        ax.set(xlabel="wavelength [nm]", ylabel="normalized flux")
+        ax.set(xlabel="wavelength [nm]", ylabel="Normalized Flux Ratio")
 
         ax.set_ylim(
             ymin=np.nanmedian(ydata_m) - (n_sigma + 6) * std,
@@ -2049,6 +2361,16 @@ class FiberNormsQa:
         std = np.nanstd(ydata_m)
         ax.scatter(xdata_m, ydata_m, color="limegreen", s=10, label=f"{fiber_id}(mf)", rasterized=True)
 
+        ax.text(
+            0.02,
+            0.03,
+            f"median ={np.nanmedian(fiberNorms.values[inx_nrm]):.4f}\n"
+            rf"$\sigma$ ={std:.4f}",
+            transform=ax.transAxes,
+            fontsize=self.config.fontsize_small,
+            bbox=dict(facecolor="yellow", alpha=1.0),
+        )
+
         n_sigma = 2
 
         ax.axhline(y=np.nanmedian(ydata_m) + n_sigma * std, color="red", linestyle="dashed")
@@ -2081,6 +2403,16 @@ class PfsArmRatio:
         Top-end fiber configuration.
     wavelength_range : `tuple` [`float`, `float`]
         Wavelength range to use.
+    normalize : `bool`
+        Whether to normalize each ratio at all. If False, ``ratio``,
+        ``flattened_ratio`` and ``filtered_flattened_ratio`` are the naive
+        ratios, which need not sit near 1. Overrides the two arguments below.
+    normalize_over_fiber : `bool`
+        When normalizing, divide by the median over the fibers, taken at each
+        wavelength.
+    normalize_over_wavelength : `bool`
+        When normalizing, divide by the median over the wavelengths, taken for
+        each fiber.
 
     Attributes
     ----------
@@ -2097,7 +2429,14 @@ class PfsArmRatio:
     """
 
     def __init__(
-        self, refArm: PfsArm, pfsArm: PfsArm, pfsConfig: PfsConfig, wavelength_range: tuple[float, float]
+        self,
+        refArm: PfsArm,
+        pfsArm: PfsArm,
+        pfsConfig: PfsConfig,
+        wavelength_range: tuple[float, float],
+        normalize: bool = True,
+        normalize_over_fiber: bool = True,
+        normalize_over_wavelength: bool = True,
     ) -> None:
         pfsConfig = pfsConfig.select(targetType=~TargetType.ENGINEERING)
         pfsConfig = pfsConfig.select(fiberStatus=FiberStatus.GOOD)
@@ -2113,6 +2452,9 @@ class PfsArmRatio:
         self.pfsArm = pfsArm
         self._wmin = wmin
         self._wmax = wmax
+        self._normalize = normalize
+        self._normalize_over_fiber = normalize_over_fiber
+        self._normalize_over_wavelength = normalize_over_wavelength
 
     @functools.cached_property
     @ignore_numpy_warnings
@@ -2129,12 +2471,15 @@ class PfsArmRatio:
             naive[fiber][lam]
                 = pfsArm.flux[fiber][lam] / refArm.flux[fiber][lam].
 
+        If the ``normalize`` argument of the constructor was False, the naive
+        ratio is returned as it is.
+
         Returns
         -------
         ratio : `np.ndarray` [`tuple` [`int`, `int`], `np.dtype` [`np.floating`]]
             Normalized flux ratio. Shape (``num_fibers``, ``num_wavelengths``).
         """
-        return self._normalize_2d_array(self._naive_ratio)
+        return self._normalize_if_enabled(self._naive_ratio)
 
     @functools.cached_property
     @ignore_numpy_warnings
@@ -2153,13 +2498,16 @@ class PfsArmRatio:
                 = (pfsArm.flux[fiber][lam] / norm)
                     / (refArm.flux[fiber][lam] / norm).
 
+        If the ``normalize`` argument of the constructor was False, the naive
+        ratio is returned as it is.
+
         Returns
         -------
         flattened_ratio : `np.ndarray` [`tuple` [`int`, `int`], `np.dtype` [`np.floating`]]
             Normalized ratio of (flux / norm).
             Shape (``num_fibers``, ``num_wavelengths``).
         """
-        return self._normalize_2d_array(self._naive_flattened_ratio)
+        return self._normalize_if_enabled(self._naive_flattened_ratio)
 
     @functools.cached_property
     @ignore_numpy_warnings
@@ -2182,6 +2530,9 @@ class PfsArmRatio:
 
         with median filter applied.
 
+        If the ``normalize`` argument of the constructor was False, the naive
+        ratio is returned with only the median filter applied.
+
         Returns
         -------
         filtered_flattened_ratio : `np.ndarray` [`tuple` [`int`, `int`], `np.dtype` [`np.floating`]]
@@ -2189,7 +2540,7 @@ class PfsArmRatio:
             Shape (``num_fibers``, ``num_wavelengths``).
         """
         ratio = medfilt(self._naive_flattened_ratio, kernel_size=(1, 15))
-        return self._normalize_2d_array(ratio)
+        return self._normalize_if_enabled(ratio)
 
     @functools.cached_property
     @ignore_numpy_warnings
@@ -2230,17 +2581,10 @@ class PfsArmRatio:
         ratio = np.where(np.isinf(ratio), np.nan, ratio)
         return ratio
 
-    @staticmethod
-    @ignore_numpy_warnings
-    def _normalize_2d_array(
-        arr: np.ndarray[tuple[int, int], np.dtype[np.floating]],
+    def _normalize_if_enabled(
+        self, arr: np.ndarray[tuple[int, int], np.dtype[np.floating]]
     ) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
-        """Normalize 2D array ``arr``.
-
-            arr'[i][j] = arr[i][j] * mean(arr)
-                            / (mean_over_i(arr)[j] * mean_over_j(arr)[i])
-
-        Means are computed robustly.
+        """Normalize ``arr``, unless normalization is turned off.
 
         Parameters
         ----------
@@ -2249,13 +2593,71 @@ class PfsArmRatio:
 
         Returns
         -------
-        normalized_arr : `np.ndarray` [`tuple` [`int`, `int`], `np.dtype` [`np.floating`]]
-            Normalized 2D array.
+        arr : `np.ndarray` [`tuple` [`int`, `int`], `np.dtype` [`np.floating`]]
+            ``_normalize_2d_array(arr)``, or ``arr`` itself if the ``normalize``
+            argument of the constructor was False.
         """
-        mean_over_i = np.nanmedian(arr, axis=0, keepdims=True)
-        mean_over_j = np.nanmedian(arr, axis=1, keepdims=True)
-        mean_over_j /= np.nanmedian(arr, keepdims=True)
-        return arr / (mean_over_i * mean_over_j)
+        if not self._normalize:
+            return arr
+        return self._normalize_2d_array(
+            arr, self._normalize_over_fiber, self._normalize_over_wavelength
+        )
+
+    @staticmethod
+    @ignore_numpy_warnings
+    def _normalize_2d_array(
+        arr: np.ndarray[tuple[int, int], np.dtype[np.floating]],
+        over_fiber: bool = True,
+        over_wavelength: bool = True,
+    ) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
+        """Normalize 2D array ``arr``.
+
+        With both directions enabled:
+
+            arr'[i][j] = arr[i][j] * mean(arr)
+                            / (mean_over_i(arr)[j] * mean_over_j(arr)[i])
+
+        With one direction only, ``arr`` is divided by that direction's mean
+        alone. Both means are taken from ``arr`` itself, so the two divisions
+        are one simultaneous correction rather than a sequence -- dividing by
+        one and then taking the other direction's mean of the result would give
+        a different answer, and would depend on the order.
+
+        The mean over all of ``arr`` appears only when both directions are on:
+        each of the two means carries the overall level, so without it that
+        level would be divided out twice.
+
+        Means are computed robustly.
+
+        Parameters
+        ----------
+        arr : `np.ndarray` [`tuple` [`int`, `int`], `np.dtype` [`np.floating`]]
+            2D array.
+        over_fiber : `bool`
+            Divide by the mean over the fibers, taken at each wavelength.
+        over_wavelength : `bool`
+            Divide by the mean over the wavelengths, taken for each fiber.
+
+        Returns
+        -------
+        normalized_arr : `np.ndarray` [`tuple` [`int`, `int`], `np.dtype` [`np.floating`]]
+            Normalized 2D array. ``arr`` itself if both directions are off.
+        """
+        divisor = None
+
+        if over_fiber:
+            divisor = np.nanmedian(arr, axis=0, keepdims=True)
+
+        if over_wavelength:
+            mean_over_j = np.nanmedian(arr, axis=1, keepdims=True)
+            if over_fiber:
+                mean_over_j = mean_over_j / np.nanmedian(arr, keepdims=True)
+            divisor = mean_over_j if divisor is None else divisor * mean_over_j
+
+        if divisor is None:
+            return arr
+
+        return arr / divisor
 
 
 def utc2hst(utc_str: str) -> str:
