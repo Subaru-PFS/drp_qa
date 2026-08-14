@@ -27,7 +27,7 @@ from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
 from pfs.drp.stella.applyExclusionZone import getExclusionZone
-from pfs.drp.stella.fitDistortedDetectorMap import getDescriptionCounts
+from pfs.drp.stella.fitDetectorMap import getDescriptionCounts
 from pfs.drp.stella.utils.math import robustRms
 from pfs.utils.fiberids import FiberIds
 from scipy.optimize import bisect
