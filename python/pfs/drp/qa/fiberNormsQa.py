@@ -1,18 +1,3 @@
-import eups
-from lsst.daf.butler import Butler, DatasetRef
-from pfs.datamodel import FiberStatus, TargetType
-from pfs.drp.stella.datamodel import PfsConfig, PfsFiberNorms, PfsArm
-from pfs.utils.fiberids import FiberIds
-
-import matplotlib
-import matplotlib.gridspec as gridspec
-import matplotlib.pyplot as plt
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-import numpy as np
-import pandas as pd
-import pytz
-from scipy.signal import medfilt
-
 import argparse
 import contextlib
 import dataclasses
@@ -33,11 +18,23 @@ import textwrap
 import traceback
 import typing
 import warnings
-
 from collections.abc import Callable, Generator, Iterable
-from typing import Any, Literal
-from typing import ParamSpec, TypeVar  # These won't be necessary in future pythons.
+from typing import Any, Literal, ParamSpec, TypeVar  # These won't be necessary in future pythons.
 
+import eups
+import matplotlib
+import matplotlib.gridspec as gridspec
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import pytz
+from lsst.daf.butler import Butler, DatasetRef
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from scipy.signal import medfilt
+
+from pfs.datamodel import FiberStatus, TargetType
+from pfs.drp.stella.datamodel import PfsArm, PfsConfig, PfsFiberNorms
+from pfs.utils.fiberids import FiberIds
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -254,7 +251,7 @@ def main() -> int:
 
         # Redefine `group["pfsArm"]` so that it will contain
         # only those spectrographs for which references exist.
-        pfsArmRefs = [arm for arm, refs in zip(group["pfsArm"], refArmRefs) if refs]
+        pfsArmRefs = [arm for arm, refs in zip(group["pfsArm"], refArmRefs, strict=False) if refs]
         if not pfsArmRefs:
             continue
 
@@ -412,7 +409,7 @@ def write_percentile_trend(
 
 
 class _ThreadProcArgs(typing.TypedDict):
-    """Argument of ``_main_threadproc()``
+    """Argument of ``_main_threadproc()``.
 
     Keys
     ----
@@ -442,7 +439,7 @@ class _ThreadProcArgs(typing.TypedDict):
 
 
 class _ThreadProcStatus(enum.Enum):
-    """Status of ``_main_threadproc()``"""
+    """Status of ``_main_threadproc()``."""
 
     SUCCESS = 0
     ERROR = 1
@@ -510,10 +507,10 @@ def _main_threadproc(args: _ThreadProcArgs) -> _ThreadProcResult:
     return _ThreadProcResult(status, percentiles)
 
 
-def argtype_comma_separated(
+def argtype_comma_separated[T](
     type: Callable[[str], T], *, nargs: int | Literal["*", "+"], restype: type = list
 ) -> Callable[[str], Iterable[T]]:
-    """Comma-separated list
+    """Comma-separated list.
 
     The return value of this function is intended to be used as the ``type``
     argument of `argtype.ArgumentParser.add_argument`
@@ -536,7 +533,7 @@ def argtype_comma_separated(
     """
 
     def _argtype_comma_separated(s: str) -> Iterable[T]:
-        """Comma-separated list
+        """Comma-separated list.
 
         This function is intended to be used as the ``type`` argument of
         `argtype.ArgumentParser.add_argument`
@@ -630,7 +627,7 @@ class DataclassStoreAction(argparse.Action):
 def add_dataclass_to_argparser(
     dataclass: Any, parser: argparse._ActionsContainer, *, prefix: str = ""
 ) -> None:
-    """Add members of a dataclass to argparser
+    """Add members of a dataclass to argparser.
 
     The types of the members of ``dataclass`` must be `str`, `int`, `float`,
     `tuple` [`str`, ...], `tuple` [`int`, ...], or `tuple` [`float`, ...].
@@ -651,7 +648,6 @@ def add_dataclass_to_argparser(
         String to be prefixed to member names. For example, if prefix="config",
         then member "x" is exposed as a command line option "--config-x".
     """
-
     store_in_dataclass = typing.cast(
         type[argparse.Action],
         lambda *args, **kwargs: DataclassStoreAction(dataclass, prefix, *args, **kwargs),
@@ -753,7 +749,7 @@ def unordered_parallel_map(
         """Yield ``func(t)`` for ``t`` in ``arglist``.
 
         Yields
-        -------
+        ------
         result : `U`
             Result of ``func(t)``, where ``t`` belongs to ``arglist``.
         """
@@ -840,7 +836,7 @@ class Multiplicity(enum.Enum):
 def get_datasets(
     butler: Butler, where: str, dimensions: list[str], dataset_types: list[tuple[str, Multiplicity]]
 ) -> list[dict[str, DatasetRef | list[DatasetRef]]]:
-    """Get datasets grouped by ``dimensions``
+    """Get datasets grouped by ``dimensions``.
 
     At least one group is returned.
     If no group is found, this function raises an exception.
@@ -882,10 +878,10 @@ def get_datasets(
 
     groupkeys = set[DatasetCoord]()
     for refs in refsdict.values():
-        groupkeys = set(coordinates_get(ref, dimensions) for ref in refs)
+        groupkeys = {coordinates_get(ref, dimensions) for ref in refs}
         break
     for refs in refsdict.values():
-        groupkeys = coordinates_intersect(groupkeys, set(coordinates_get(ref, dimensions) for ref in refs))
+        groupkeys = coordinates_intersect(groupkeys, {coordinates_get(ref, dimensions) for ref in refs})
 
     groups = [
         {
@@ -908,7 +904,7 @@ def get_datasets(
                     f"multiple '{dataset_type}' are found (maybe database or program is broken hopelessly)."
                 )
 
-    multiplicities = {dataset_type: multiplicity for dataset_type, multiplicity in dataset_types}
+    multiplicities = dict(dataset_types)
 
     return [
         {
@@ -985,13 +981,13 @@ def coordinates_intersect(coords1: set[DatasetCoord], coords2: set[DatasetCoord]
         Intersection of the two sets.
     """
     for coord in coords1:
-        dims1 = set(key for key, value in coord)
+        dims1 = {key for key, value in coord}
         break
     else:
         return set()
 
     for coord in coords2:
-        dims2 = set(key for key, value in coord)
+        dims2 = {key for key, value in coord}
         break
     else:
         return set()
@@ -1024,7 +1020,7 @@ def coordinates_intersect(coords1: set[DatasetCoord], coords2: set[DatasetCoord]
     return intersection
 
 
-def ignore_numpy_warnings(func: Callable[P, R]) -> Callable[P, R]:
+def ignore_numpy_warnings[**P, R](func: Callable[P, R]) -> Callable[P, R]:
     """Ignore numpy warnings caused by NaN and division by zero.
 
     This is a function decorator.
@@ -1143,7 +1139,7 @@ class FiberNormsQaStat:
 
 
 class FiberNormsQaInput(typing.TypedDict):
-    """Input dataset references for `FiberNormsQa`
+    """Input dataset references for `FiberNormsQa`.
 
     Keys
     ----
@@ -1365,7 +1361,7 @@ class FiberNormsQa:
         self._validate_input(input)
 
         self.log = self.log.getChild(
-            f'[visit={input["pfsArm"][0].dataId["visit"]} arm={input["pfsArm"][0].dataId["arm"]}]'
+            f"[visit={input['pfsArm'][0].dataId['visit']} arm={input['pfsArm'][0].dataId['arm']}]"
         )
 
         self.log.info("Reading datasets...")
@@ -1452,7 +1448,7 @@ class FiberNormsQa:
         # MTP group of, say, mtp_A="D3-3-4-28-26" is ""D3-3-4" (first 6 chars)
         df["mtpGroup"] = df["mtp_A"].apply(lambda mtp_A: mtp_A[0:6])
         df["arm"] = self.arm
-        df["SM"] = int(0)
+        df["SM"] = 0
         df["sigma"] = np.nan
 
         sigma_list: list[np.ndarray[tuple[int], np.dtype[np.floating]]] = []
@@ -1652,11 +1648,11 @@ class FiberNormsQa:
         if any(ref_visit != ref.dataId["visit"] for ref in input["refArm"]):
             raise RuntimeError("reference visits of input datasets are not unique.")
 
-        specs = set(ref.dataId["spectrograph"] for ref in input["pfsArm"])
+        specs = {ref.dataId["spectrograph"] for ref in input["pfsArm"]}
         if len(specs) != len(input["pfsArm"]):
             raise RuntimeError("there are duplicate pfsArms in the input.")
 
-        ref_specs = set(ref.dataId["spectrograph"] for ref in input["refArm"])
+        ref_specs = {ref.dataId["spectrograph"] for ref in input["refArm"]}
         if specs != ref_specs:
             raise RuntimeError("set of spectrographs of pfsArms is different from that of refArms.")
 
@@ -1808,7 +1804,7 @@ class FiberNormsQa:
             f"Flag for fiber throughput variation={flag}",
             color=strcolor,
             fontsize=self.config.fontsize_large,
-            bbox=dict(facecolor="yellow", alpha=1.0),
+            bbox={"facecolor": "yellow", "alpha": 1.0},
         )
         fig.text(
             0.1,
@@ -1834,7 +1830,8 @@ class FiberNormsQa:
 
         sub_text = (
             ", where sqrt(2/pfsArm.variance) is subtracted in quadrature."
-            if self.config.subtract_error else "."
+            if self.config.subtract_error
+            else "."
         )
         footnote: str = (
             "fiberNormsQA is to monitor fiber throughput variation. "
@@ -1911,7 +1908,7 @@ class FiberNormsQa:
     def _make_plot_sigma_per_fiber(
         self, ax: matplotlib.axes.Axes, df: pd.DataFrame, mtp_groups: list[str]
     ) -> None:
-        """Plot measured sigma for each fiber
+        """Plot measured sigma for each fiber.
 
         Parameters
         ----------
@@ -1969,7 +1966,7 @@ class FiberNormsQa:
             color="red",
             transform=ax.transAxes,
             fontsize=self.config.fontsize_small,
-            bbox=dict(facecolor="white", alpha=0.5),
+            bbox={"facecolor": "white", "alpha": 0.5},
         )
         ax.text(
             0.85,
@@ -1978,7 +1975,7 @@ class FiberNormsQa:
             color="blue",
             transform=ax.transAxes,
             fontsize=self.config.fontsize_small,
-            bbox=dict(facecolor="white", alpha=0.5),
+            bbox={"facecolor": "white", "alpha": 0.5},
         )
 
         ax.grid(axis="both", which="both", linestyle="--", linewidth=0.5)
@@ -2011,7 +2008,7 @@ class FiberNormsQa:
         ax.set_xlabel("wavelength [nm]", fontsize=self.config.fontsize_large)
         ax.set_ylabel("fiberId", fontsize=self.config.fontsize_large)
 
-        wmin, wmax = self.wavelength_range
+        wmin, _wmax = self.wavelength_range
 
         for spec in self.spectrographs:
             pfsArmRatio = self._get_pfsArmRatio(spec)
@@ -2038,7 +2035,7 @@ class FiberNormsQa:
                 linewidths=0,
                 alpha=1.0,
                 label="quartz",
-                rasterized=True
+                rasterized=True,
             )
 
             oddfib = df["fiberId"][(df["SM"] == spec) & (df["sigma"] > self.sigma_flag_entire)].values
@@ -2125,7 +2122,7 @@ class FiberNormsQa:
                 s=5.0,
                 alpha=1.0,
                 label=f"{n}sigma",
-                rasterized=True
+                rasterized=True,
             )
             self._set_pfi_axes_decorations(ax, f"{n}sigma")
 
@@ -2155,7 +2152,7 @@ class FiberNormsQa:
                 s=5.0,
                 alpha=1.0,
                 label="median per fiber",
-                rasterized=True
+                rasterized=True,
             )
             self._set_pfi_axes_decorations(ax, "median per fiber")
 
@@ -2188,7 +2185,7 @@ class FiberNormsQa:
                 vmax=self.config.vmax,
                 s=5.0,
                 alpha=1.0,
-                rasterized=True
+                rasterized=True,
             )
             lam_point = np.round(pfsArm.wavelength[0][pixel_index], 3)
             self._set_pfi_axes_decorations(ax, f"at {lam_point} [nm]")
@@ -2241,7 +2238,7 @@ class FiberNormsQa:
             vmax=upper,
             s=10,
             cmap="coolwarm",
-            rasterized=True
+            rasterized=True,
         )
         divider = make_axes_locatable(ax)  # AxesDivider related to ax
         cax = divider.append_axes("right", size="5%", pad=0.1)  # create new axes
@@ -2298,10 +2295,10 @@ class FiberNormsQa:
             0.02,
             0.03,
             f"median ={np.nanmedian(ydata):.4f}\n"
-            rf'$\sigma$ ={df_row["sigma"]:.4f}',
+            rf"$\sigma$ ={df_row['sigma']:.4f}",
             transform=ax.transAxes,
             fontsize=self.config.fontsize_small,
-            bbox=dict(facecolor="yellow", alpha=1.0),
+            bbox={"facecolor": "yellow", "alpha": 1.0},
         )
         ax.axhline(
             y=np.nanmedian(ydata_m) + n_sigma * df_row["sigma"],
@@ -2323,7 +2320,7 @@ class FiberNormsQa:
         ax.legend(loc="upper left", fontsize=self.config.fontsize_x_small)
         ax.grid(axis="y", which="both", linestyle="--", linewidth=0.5)
 
-        ax.set_title(f'{df_row["mtp_A"]}', fontsize=self.config.fontsize)
+        ax.set_title(f"{df_row['mtp_A']}", fontsize=self.config.fontsize)
 
     def _make_plot_example_fiberNorm(self, ax: matplotlib.axes.Axes, df: pd.DataFrame, fiber_id: int) -> None:
         """Plot a spectrum in fiberNorms.
@@ -2351,7 +2348,7 @@ class FiberNormsQa:
             color="navy",
             s=10,
             label=f"{fiber_id}",
-            rasterized=True
+            rasterized=True,
         )
 
         xdata_m = fiberNorms.wavelength[inx_nrm]
@@ -2385,7 +2382,7 @@ class FiberNormsQa:
         ax.grid(axis="y", which="both", linestyle="--", linewidth=0.5)
 
         ax.set_title(
-            f'{df["mtp_A"][df["fiberId"] == fiber_id].to_string(index=False)}',
+            f"{df['mtp_A'][df['fiberId'] == fiber_id].to_string(index=False)}",
             fontsize=self.config.fontsize,
         )
 
@@ -2661,7 +2658,7 @@ class PfsArmRatio:
 
 
 def utc2hst(utc_str: str) -> str:
-    """Convert UTC to HST
+    """Convert UTC to HST.
 
     Parameters
     ----------

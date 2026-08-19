@@ -1,4 +1,3 @@
-setupRequired(display_matplotlib)
 setupRequired(drp_stella)
 setupRequired(pfs_utils)
 

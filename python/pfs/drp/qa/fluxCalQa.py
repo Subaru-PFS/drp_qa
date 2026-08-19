@@ -1,5 +1,3 @@
-from typing import Dict
-
 import lsstDebug
 import numpy as np
 import pandas as pd
@@ -17,24 +15,26 @@ from lsst.pipe.base import (
 )
 from lsst.pipe.base.connectionTypes import (
     Output as OutputConnection,
+)
+from lsst.pipe.base.connectionTypes import (
     PrerequisiteInput as PrerequisiteConnection,
 )
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+
 from pfs.datamodel import PfsConfig, PfsSingle, TargetType
+from pfs.drp.qa.utils.plotting import div_palette, spectrograph_plot_markers
 from pfs.drp.stella.datamodel import PfsCalibratedSpectra
 from pfs.drp.stella.fitReference import FilterCurve, TransmissionCurve
 from pfs.drp.stella.utils.math import robustRms
-
-from pfs.drp.qa.utils.plotting import div_palette, spectrograph_plot_markers
 
 
 class FluxCalQaConnections(
     PipelineTaskConnections,
     dimensions=("instrument", "visit"),
 ):
-    """Connections for fluxCalQaTask"""
+    """Connections for fluxCalQaTask."""
 
     pfsConfig = PrerequisiteConnection(
         name="pfsConfig",
@@ -69,7 +69,7 @@ class FluxCalQaConnections(
 
 
 class FluxCalQaConfig(PipelineTaskConfig, pipelineConnections=FluxCalQaConnections):
-    """Configuration for fluxCalQaTask"""
+    """Configuration for fluxCalQaTask."""
 
     filterSet = Field(dtype=str, default="ps1", doc="Filter set to use, e.g. 'ps1'")
     includeFakeJ = Field(dtype=bool, default=False, doc="Include the fake narrow J filter")
@@ -132,8 +132,8 @@ class FluxCalQaTask(PipelineTask):
 
         fluxstd_objs = {k.objId: v for k, v in pfsCalibrated.items() if k.objId in pfsConfigFluxStd.objId}
 
-        pfsSingles = dict()
-        for fiber_id, obj_id in zip(pfsConfigFluxStd.fiberId, pfsConfigFluxStd.objId):
+        pfsSingles = {}
+        for fiber_id, obj_id in zip(pfsConfigFluxStd.fiberId, pfsConfigFluxStd.objId, strict=False):
             try:
                 pfsSingles[fiber_id] = fluxstd_objs[obj_id]
             except KeyError:
@@ -146,7 +146,7 @@ class FluxCalQaTask(PipelineTask):
             pfsConfigFluxStd.psfFlux = [
                 np.append(a, a[-1] - narrow_j_offset) for a in pfsConfigFluxStd.psfFlux
             ]
-            pfsConfigFluxStd.filterNames = [fn + ["fakeJ_ps1"] for fn in pfsConfigFluxStd.filterNames]
+            pfsConfigFluxStd.filterNames = [[*fn, "fakeJ_ps1"] for fn in pfsConfigFluxStd.filterNames]
 
         diff_filter = self.config.diffFilter
 
@@ -172,8 +172,8 @@ class FluxCalQaTask(PipelineTask):
 
 def get_flux_info(
     pfs_config: PfsConfig,
-    pfs_singles: Dict[str, PfsSingle],
-    filter_curves: Dict[str, TransmissionCurve],
+    pfs_singles: dict[str, PfsSingle],
+    filter_curves: dict[str, TransmissionCurve],
     diff_filter: str = "g_ps1",
 ) -> pd.DataFrame:
     """Get the flux information for the given pfsConfig and pfsSingles.
@@ -210,7 +210,7 @@ def get_flux_info(
 
 
 def get_magnitude_diffs(
-    design_flux_df: pd.DataFrame, filter_curves: Dict[str, TransmissionCurve], diff_filter: str = "g_ps1"
+    design_flux_df: pd.DataFrame, filter_curves: dict[str, TransmissionCurve], diff_filter: str = "g_ps1"
 ) -> None:
     """Get the magnitude differences for the given design fluxes.
 
@@ -224,21 +224,21 @@ def get_magnitude_diffs(
         Filter to use for the magnitude difference. Defaults to 'g_ps1'.
     """
     # Get the magnitude differences for each filter.
-    for fc_name in filter_curves.keys():
+    for fc_name in filter_curves:
         design_mag = design_flux_df[f"design.ABMag.{fc_name}"]
         single_mag = design_flux_df[f"single.ABMag.{fc_name}"]
         design_flux_df[f"single-design.ABMag.{fc_name}"] = single_mag - design_mag
 
     # Get the color difference for given filter.
     if diff_filter is not None:
-        for filter_name, fc in filter_curves.items():
+        for filter_name, _fc in filter_curves.items():
             design_flux_df[f"single-single.ABMag.{diff_filter}-{filter_name}"] = (
                 design_flux_df[f"single.ABMag.{diff_filter}"] - design_flux_df[f"single.ABMag.{filter_name}"]
             )
 
 
 def get_comparison_flux_table(
-    filter_curves: Dict[str, TransmissionCurve], pfs_singles: Dict[str, PfsSingle]
+    filter_curves: dict[str, TransmissionCurve], pfs_singles: dict[str, PfsSingle]
 ) -> pd.DataFrame:
     """Get the comparison filter fluxes for the given pfsSingles.
 
@@ -255,7 +255,7 @@ def get_comparison_flux_table(
         Comparison filter fluxes.
     """
     # Get the comparison filter fluxes.
-    fluxes = list()
+    fluxes = []
     for fiberId, pfs_single in pfs_singles.items():
         # Remove masked values.
         good_index = pfs_single.fluxTable.mask == 0
@@ -265,7 +265,7 @@ def get_comparison_flux_table(
         pfs_single.fluxTable.error = pfs_single.fluxTable.error[good_index]
 
         # Get the magnitude for the filter.
-        for i, fc in enumerate(filter_curves.values()):
+        for _i, fc in enumerate(filter_curves.values()):
             try:
                 # Get the flux and magnitude for the filter.
                 filter_flux = fc.photometer(pfs_single.fluxTable) * u.nJy
@@ -337,7 +337,7 @@ def get_design_flux_table(pfs_config: PfsConfig) -> pd.DataFrame:
 
 def plot_flux_cal_mag_diff(
     plot_data: pd.DataFrame,
-    filter_set: Dict[str, TransmissionCurve],
+    filter_set: dict[str, TransmissionCurve],
     pfsConfig: PfsConfig,
     column_prefix: str = "single-design",
     title: str = "Magnitude differences",
@@ -420,7 +420,7 @@ def plot_flux_cal_mag_diff(
         except IndexError:
             rms = "N/A"
         ax.set_title(
-            f"{filter_name} ({wl_min}-{wl_max}nm)\n" f"median={med:.03f}mag rms={rms}mag",
+            f"{filter_name} ({wl_min}-{wl_max}nm)\nmedian={med:.03f}mag rms={rms}mag",
             fontfamily="monospace",
         )
 
@@ -456,7 +456,7 @@ def plot_flux_cal_mag_diff(
     return fig
 
 
-def get_filter_curves(filter_set="ps1", include_fake_j=False) -> Dict[str, TransmissionCurve]:
+def get_filter_curves(filter_set="ps1", include_fake_j=False) -> dict[str, TransmissionCurve]:
     """Get the filter curves for the given filter set.
 
     Parameters
@@ -471,8 +471,8 @@ def get_filter_curves(filter_set="ps1", include_fake_j=False) -> Dict[str, Trans
     filter_curves : dict[str, TransmissionCurve]
         Filter curves.
     """
-    filter_curves = dict()
-    for filter_name in FilterCurve.filenames.keys():
+    filter_curves = {}
+    for filter_name in FilterCurve.filenames:
         if not filter_name.endswith(filter_set.lower()):
             continue
 
