@@ -20,3 +20,5 @@ tests/.tests
 
 .junie/memory
 .junie/plans
+
+docker-compose.yml
