@@ -1,4 +1,5 @@
 import io
+from typing import Union
 
 from lsst.daf.butler import StorageClass
 from matplotlib.backends.backend_pdf import PdfPages
@@ -52,7 +53,7 @@ class MultipagePdfFigure(StorageClass):
         with open(fname, "wb") as f:
             f.write(content)
 
-    def append(self, figure: Figure | int | None = None, **kwargs) -> None:
+    def append(self, figure: Union[Figure, int, None] = None, **kwargs) -> None:
         """Append a page.
 
         Parameters

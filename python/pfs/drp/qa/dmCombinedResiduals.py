@@ -1,6 +1,6 @@
 import itertools
-from collections.abc import Iterable
 from itertools import product
+from typing import Dict, Iterable, Optional
 
 import pandas as pd
 import seaborn as sb
@@ -16,23 +16,21 @@ from lsst.pipe.base import (
 )
 from lsst.pipe.base.connectionTypes import (
     Input as InputConnection,
-)
-from lsst.pipe.base.connectionTypes import (
     Output as OutputConnection,
 )
 from matplotlib.figure import Figure
+from pfs.drp.stella import DetectorMap
 
 from pfs.drp.qa.dmResiduals import plot_detectormap_residuals
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
 from pfs.drp.qa.utils.plotting import description_palette, detector_palette
-from pfs.drp.stella import DetectorMap
 
 
 class DetectorMapCombinedResidualsConnections(
     PipelineTaskConnections,
     dimensions=("instrument",),
 ):
-    """Connections for DetectorMapCombinedQaTask."""
+    """Connections for DetectorMapCombinedQaTask"""
 
     detectorMaps = InputConnection(
         name="detectorMap",
@@ -91,13 +89,13 @@ class DetectorMapCombinedResidualsConnections(
 class DetectorMapCombinedResidualsConfig(
     PipelineTaskConfig, pipelineConnections=DetectorMapCombinedResidualsConnections
 ):
-    """Configuration for DetectorMapCombinedQaTask."""
+    """Configuration for DetectorMapCombinedQaTask"""
 
     useSigmaRange = Field(dtype=bool, default=False, doc="Use ±2.5 sigma as range")
 
 
 class DetectorMapCombinedResidualsTask(PipelineTask):
-    """Task for QA of detectorMap."""
+    """Task for QA of detectorMap"""
 
     ConfigClass = DetectorMapCombinedResidualsConfig
     _DefaultName = "dmCombinedResiduals"
@@ -149,7 +147,7 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
             Statistics of the residual analysis.
         """
         # Put the DetectorMaps in a dict by CCD.
-        self.log.debug(f"Visits: { {dm.getVisitInfo().id for dm in detectorMaps} }")
+        self.log.debug(f"Visits: {set([dm.getVisitInfo().id for dm in detectorMaps])}")
 
         # Small helper to use while https://pfspipe.ipmu.jp/jira/browse/PIPE2D-1423
         def get_ccd(dm: DetectorMap) -> str:
@@ -179,7 +177,7 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
 def make_report(
     residual_stats: pd.DataFrame,
     residual_data: pd.DataFrame,
-    detectorMaps: dict[str, DetectorMap],
+    detectorMaps: Dict[str, DetectorMap],
     run_name: str,
     log: object,
 ) -> MultipagePdfFigure:
@@ -387,10 +385,10 @@ def plot_detector_summary_per_desc(stats: pd.DataFrame) -> Figure:
 
 def plot_visits(
     plotData: pd.DataFrame,
-    palette: dict | list | None = None,
+    palette: Optional[dict | list] = None,
     spatialRange: float = 0.1,
     wavelengthRange: float = 0.1,
-    fig: Figure | None = None,
+    fig: Optional[Figure] = None,
 ) -> Figure:
     """Plot the visit statistics.
 
@@ -424,7 +422,7 @@ def plot_visits(
 
     palette = palette or description_palette
 
-    for ax, metric in zip([ax0, ax1], ["spatial", "wavelength"], strict=False):
+    for ax, metric in zip([ax0, ax1], ["spatial", "wavelength"]):
         metricData = plotData.copy()
         if metric == "spatial":
             metricData = metricData.query("description == 'Trace'")
@@ -458,8 +456,8 @@ def plot_visits(
         ax.axvline(lower_range, c="g", ls="--", zorder=101)
         ax.set_title(
             f"{metric.upper()}: "
-            f"median={summary_stats[f'{metric}.median']:5.04f} "
-            f"rms={summary_stats[f'{metric}.weightedRms']:5.04f}"
+            f'median={summary_stats[f"{metric}.median"]:5.04f} '
+            f'rms={summary_stats[f"{metric}.weightedRms"]:5.04f}'
         )
 
         ax.grid(which="major", color="k", axis="y", zorder=-100)
@@ -476,9 +474,9 @@ def plot_visits(
             ax.set_xlim(-wavelengthRange, wavelengthRange)
 
     # Only label a visit the first time it's seen.
-    labeled_ticks = {}
-    all_ticks = []
-    for _idx, row in plotData.reset_index().iterrows():
+    labeled_ticks = dict()
+    all_ticks = list()
+    for idx, row in plotData.reset_index().iterrows():
         if row.visit not in labeled_ticks.values():
             all_ticks.append(f"{row.visit}")
             labeled_ticks[row.visit_idx] = row.visit

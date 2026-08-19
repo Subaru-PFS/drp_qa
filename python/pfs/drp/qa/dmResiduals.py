@@ -1,9 +1,8 @@
-import contextlib
 import warnings
-from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import partial
 from logging import Logger
+from typing import Iterable, Optional
 
 import numpy as np
 import pandas as pd
@@ -21,30 +20,27 @@ from lsst.pipe.base import (
 )
 from lsst.pipe.base.connectionTypes import (
     Input as InputConnection,
-)
-from lsst.pipe.base.connectionTypes import (
     Output as OutputConnection,
 )
-from matplotlib import colors
-from matplotlib import pyplot as plt
+from matplotlib import colors, pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.gridspec import GridSpec
-from scipy.optimize import bisect
-
-from pfs.drp.qa.utils.math import getChi2, getWeightedRMS
-from pfs.drp.qa.utils.plotting import div_palette, scatterplot_with_outliers
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
 from pfs.drp.stella.applyExclusionZone import getExclusionZone
 from pfs.drp.stella.fitDistortedDetectorMap import getDescriptionCounts
 from pfs.drp.stella.utils.math import robustRms
 from pfs.utils.fiberids import FiberIds
+from scipy.optimize import bisect
+
+from pfs.drp.qa.utils.math import getChi2, getWeightedRMS
+from pfs.drp.qa.utils.plotting import div_palette, scatterplot_with_outliers
 
 
 class DetectorMapResidualsConnections(
     PipelineTaskConnections,
     dimensions=("instrument", "visit", "arm", "spectrograph"),
 ):
-    """Connections for DetectorMapQaTask."""
+    """Connections for DetectorMapQaTask"""
 
     visitInfo = InputConnection(
         name="raw.visitInfo",
@@ -94,7 +90,7 @@ class DetectorMapResidualsConnections(
 
 
 class DetectorMapResidualsConfig(PipelineTaskConfig, pipelineConnections=DetectorMapResidualsConnections):
-    """Configuration for DetectorMapQaTask."""
+    """Configuration for DetectorMapQaTask"""
 
     generatePlot = Field(dtype=bool, default=False, doc="Generate 2D residual plot for visit, default False.")
     useSigmaRange = Field(dtype=bool, default=False, doc="Use ±2.5 sigma as range")
@@ -110,7 +106,7 @@ class DetectorMapResidualsConfig(PipelineTaskConfig, pipelineConnections=Detecto
 
 
 class DetectorMapResidualsTask(PipelineTask):
-    """Task for QA of detectorMap."""
+    """Task for QA of detectorMap"""
 
     ConfigClass = DetectorMapResidualsConfig
     _DefaultName = "dmResiduals"
@@ -179,9 +175,10 @@ class DetectorMapResidualsTask(PipelineTask):
         -------
         arc_data : `pandas.DataFrame`
         """
+
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
         self.log.info("Getting and scrubbing the data")
-        adjustDM_config = {} if reduceExposure_config is None else reduceExposure_config.adjustDetectorMap
+        adjustDM_config = dict() if reduceExposure_config is None else reduceExposure_config.adjustDetectorMap
 
         arc_data, stats = get_data_and_stats(
             dataId,
@@ -241,13 +238,13 @@ class FitStats:
 
     def to_dict(self):
         """Output as dict."""
-        return {
-            "dof": self.dof,
-            "chi2X": self.chi2X,
-            "chi2Y": self.chi2Y,
-            "spatial": self.spatial.__dict__,
-            "wavelength": self.wavelength.__dict__,
-        }
+        return dict(
+            dof=self.dof,
+            chi2X=self.chi2X,
+            chi2Y=self.chi2Y,
+            spatial=self.spatial.__dict__,
+            wavelength=self.wavelength.__dict__,
+        )
 
     @classmethod
     def from_dataframe(cls, df: pd.DataFrame):
@@ -284,6 +281,7 @@ def get_data_and_stats(
     log=None,
     **kwargs,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+
     is_science = visitInfo.observationReason == "science"
 
     good_lines_idx = getGoodLines(
@@ -331,7 +329,7 @@ def get_data_and_stats(
     arc_data["visit"] = dataId["visit"]
 
     log.info("Getting residual stats")
-    stats = []
+    stats = list()
     for (status_type, description), rows in arc_data.groupby(["status_type", "description"]):
         visit_stats = pd.json_normalize(get_fit_stats(rows).to_dict())
         visit_stats["status_type"] = status_type
@@ -363,6 +361,7 @@ def getGoodLines(
 
     Parameters
     ----------
+
     lines : `ArcLineSet`
         The arc lines.
     dispersion : `float`, optional
@@ -401,7 +400,7 @@ def getGoodLines(
     log.debug(f"{lineIndex.sum() + traceIndex.sum()} lines in list")
 
     def getCounts():
-        """Provide a list of counts of different species."""
+        """Provide a list of counts of different species"""
         return getDescriptionCounts(lines.description, good)
 
     good = lines.flag == 0
@@ -543,8 +542,10 @@ def scrub_data(
         arc_data = arc_data.dropna(subset=["x", "y"])
 
     # Change some of the dtypes explicitly.
-    with contextlib.suppress(AttributeError):
+    try:
         arc_data.y = arc_data.y.astype(np.float64)
+    except AttributeError:
+        pass
 
     # Replace inf with nans.
     arc_data = arc_data.replace([np.inf, -np.inf], np.nan)
@@ -700,7 +701,7 @@ def plot_detectormap_residuals(
     (x_fig, y_fig) = main_fig.subfigures(1, 2, wspace=0)
 
     try:
-        for sub_fig, column in zip([x_fig, y_fig], ["xResid", "yResid"], strict=False):
+        for sub_fig, column in zip([x_fig, y_fig], ["xResid", "yResid"]):
             if column == "xResid":
                 plot_stats = visit_stats.query("description == 'Trace'")
             else:
@@ -736,19 +737,19 @@ def plot_residual(
     data: pd.DataFrame,
     visit_stats: pd.DataFrame,
     column: str = "xResid",
-    dataRange: float | None = None,
+    dataRange: float = None,
     sigmaRange: int = 2.5,
-    sigmaLines: Iterable[float] | None = None,
-    goodRange: float | None = None,
-    binWavelength: float | None = None,
+    sigmaLines: Optional[Iterable[float]] = None,
+    goodRange: float = None,
+    binWavelength: Optional[float] = None,
     useDMLayout: bool = True,
     dmWidth: int = 4096,
     dmHeight: int = 4176,
-    fiberIdMin: int | None = None,
-    fiberIdMax: int | None = None,
-    wavelengthMin: float | None = None,
-    wavelengthMax: float | None = None,
-    fig: Figure | None = None,
+    fiberIdMin: Optional[int] = None,
+    fiberIdMax: Optional[int] = None,
+    wavelengthMin: Optional[float] = None,
+    wavelengthMax: Optional[float] = None,
+    fig: Optional[Figure] = None,
 ) -> Figure:
     """Plot the 1D and 2D residuals on a single figure.
 
@@ -861,7 +862,7 @@ def plot_residual(
 
     fiber_avg.sort_values(["fiberId", "status"], inplace=True)
 
-    pal = dict(zip(sorted(fiber_avg.status.unique()), plt.cm.tab10.colors, strict=False))
+    pal = dict(zip(sorted(fiber_avg.status.unique()), plt.cm.tab10.colors))
     pal_colors = [pal[x] for x in fiber_avg.status]
 
     # Just the errors, no markers
@@ -921,7 +922,7 @@ def plot_residual(
                         clip_on=True,
                         weight="bold",
                         zorder=100,
-                        bbox={"boxstyle": "round", "ec": "k", "fc": "wheat", "alpha": 0.75},
+                        bbox=dict(boxstyle="round", ec="k", fc="wheat", alpha=0.75),
                     )
 
         if sigmaLines is not None:
@@ -945,7 +946,7 @@ def plot_residual(
                             clip_on=True,
                             weight="bold",
                             zorder=100,
-                            bbox={"boxstyle": "round", "ec": "k", "fc": "wheat", "alpha": 0.75},
+                            bbox=dict(boxstyle="round", ec="k", fc="wheat", alpha=0.75),
                         )
 
     drawRefLines(ax0, goodRange, sigmaRange)
@@ -953,7 +954,7 @@ def plot_residual(
     ax0.legend(
         loc="lower right",
         shadow=True,
-        prop={"family": "monospace", "weight": "bold"},
+        prop=dict(family="monospace", weight="bold"),
         bbox_to_anchor=(1.2, 0),
     )
 
@@ -969,7 +970,7 @@ def plot_residual(
         f"1σ: {num_sig_outliers} "
         f"{sigmaRange}σ: {num_siglimit_outliers}",
         transform=ax0.transAxes,
-        bbox={"boxstyle": "round", "ec": "k", "fc": "wheat"},
+        bbox=dict(boxstyle="round", ec="k", fc="wheat"),
         fontsize="small",
         zorder=100,
     )
@@ -1002,7 +1003,7 @@ def plot_residual(
         fontfamily="monospace",
         fontsize="small",
         fontweight="bold",
-        bbox={"boxstyle": "round", "alpha": 0.5, "facecolor": "white"},
+        bbox=dict(boxstyle="round", alpha=0.5, facecolor="white"),
     )
     ax1.set_xticks([])
     ax1.set_yticks([])

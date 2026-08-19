@@ -1,23 +1,22 @@
-from collections.abc import Iterable
+from typing import Iterable
 
 import lsstDebug
 import numpy as np
 from lsst.pex.config import Config
 from lsst.pipe.base import Struct, Task
 from matplotlib import pyplot as plt
-from scipy.stats import iqr
-
 from pfs.drp.stella import ArcLineSet, DetectorMap, PfsArm
+from scipy.stats import iqr
 
 
 class OverlapRegionLinesConfig(Config):
-    """Configuration for OverlapRegionLinesTask."""
+    """Configuration for OverlapRegionLinesTask"""
 
     pass
 
 
 class OverlapRegionLinesTask(Task):
-    """Task for QA of detectorMap."""
+    """Task for QA of detectorMap"""
 
     ConfigClass = OverlapRegionLinesConfig
     _DefaultName = "overlapRegionLines"
@@ -49,6 +48,7 @@ class OverlapRegionLinesTask(Task):
         -------
         plot : `overlapLines-{:06}-{}{}{}.png`
         """
+
         visit = pfsArm[0].identity.visit
         arm = [pp.identity.arm for pp in pfsArm]
         spectrograph = pfsArm[0].identity.spectrograph
@@ -103,7 +103,7 @@ class OverlapRegionLinesTask(Task):
             if len(wav) > 0:
                 wav.sort()
                 for w in wav:
-                    if f"{w:.2f}" in goodLines:
+                    if "{:.2f}".format(w) in goodLines:
                         if w not in wcommon:
                             wcommon.append(w)
                             fibers[w] = []
