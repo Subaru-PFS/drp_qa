@@ -297,21 +297,25 @@ def assess(
         if qr.errors:
             _flag(qr, "BAD", f"Logged {len(qr.errors)} ERROR/CRITICAL message(s)")
 
-        # yRMS thresholds
+        # yRMS thresholds.  A non-finite residual is not "within threshold":
+        # the fit produced no usable number, so the gate must fail it rather
+        # than let it through as OK.
         yr = qr.final_yRMS
-        if not math.isnan(yr):
-            if yr > yrms_bad:
-                _flag(qr, "BAD", f"yRMS={yr:.4f} px > {yrms_bad} px threshold")
-            elif yr > yrms_warn:
-                _flag(qr, "WARN", f"yRMS={yr:.4f} px > {yrms_warn} px threshold")
+        if math.isnan(yr):
+            _flag(qr, "BAD", "yRMS=nan in Final result — no usable wavelength residual")
+        elif yr > yrms_bad:
+            _flag(qr, "BAD", f"yRMS={yr:.4f} px > {yrms_bad} px threshold")
+        elif yr > yrms_warn:
+            _flag(qr, "WARN", f"yRMS={yr:.4f} px > {yrms_warn} px threshold")
 
         # xRMS thresholds
         xr = qr.final_xRMS
-        if not math.isnan(xr):
-            if xr > XRMS_BAD:
-                _flag(qr, "BAD", f"xRMS={xr:.4f} px > {XRMS_BAD} px threshold")
-            elif xr > XRMS_WARN:
-                _flag(qr, "WARN", f"xRMS={xr:.4f} px > {XRMS_WARN} px threshold")
+        if math.isnan(xr):
+            _flag(qr, "BAD", "xRMS=nan in Final result — no usable spatial residual")
+        elif xr > XRMS_BAD:
+            _flag(qr, "BAD", f"xRMS={xr:.4f} px > {XRMS_BAD} px threshold")
+        elif xr > XRMS_WARN:
+            _flag(qr, "WARN", f"xRMS={xr:.4f} px > {XRMS_WARN} px threshold")
 
         # NaN ySoften indicates the softening calculation blew up (dof ≤ 0)
         if math.isnan(qr.final_ySoften):

@@ -350,12 +350,16 @@ def _plotMetricPanel(
 
 
 def _plotFlagBreakdown(ax, df, visits, visitIdx):
-    """Per-arm stacked bars of status-bit flag percentages.
+    """Per-arm grouped bars of status-bit flag percentages.
 
-    Each visit gets one stacked bar per arm, showing the fraction of
-    lines with each reference-line status bit set.  Bars are grouped
-    by visit with arms side-by-side.  Arms are identified by a small
-    colored tick at the base of each bar group.
+    Each visit gets one group of bars per arm, showing the fraction of
+    lines with each reference-line status bit set.  Arms are identified
+    by a small colored tick at the base of each arm slot.
+
+    The bars are drawn side-by-side rather than stacked: a line can carry
+    several status bits at once, and ``pctLowSN``/``pctMeasFail`` overlap
+    with those same bits, so the percentages are not parts of a whole and
+    stacking them would produce totals above 100 %.
     """
     presentBits = [(col, label, color) for col, label, color in _FLAG_BITS if col in df.columns]
     if not presentBits:
@@ -364,11 +368,12 @@ def _plotFlagBreakdown(ax, df, visits, visitIdx):
     presentArms = [a for a in _ARM_ORDER if a in df["arm"].values]
     nArms = len(presentArms)
     groupWidth = 0.8
-    barWidth = groupWidth / max(nArms, 1)
+    armWidth = groupWidth / max(nArms, 1)
+    barWidth = armWidth / len(presentBits)
 
     for aIdx, arm in enumerate(presentArms):
         armDf = df[df["arm"] == arm]
-        offset = -groupWidth / 2 + barWidth * (aIdx + 0.5)
+        armLeft = -groupWidth / 2 + armWidth * aIdx
 
         armMean = armDf.groupby("visitIdx")[[col for col, _, _ in presentBits]].mean()
 
@@ -376,25 +381,22 @@ def _plotFlagBreakdown(ax, df, visits, visitIdx):
             if vIdx not in armMean.index:
                 continue
             row = armMean.loc[vIdx]
-            bottom = 0.0
-            for col, _label, color in presentBits:
+            for bIdx, (col, _label, color) in enumerate(presentBits):
                 val = row.get(col, 0.0)
                 if pd.isna(val):
                     val = 0.0
                 ax.bar(
-                    vIdx + offset,
+                    vIdx + armLeft + barWidth * (bIdx + 0.5),
                     val,
                     barWidth,
-                    bottom=bottom,
                     color=color,
                     edgecolor="none",
                 )
-                bottom += val
 
-            # Arm-colored marker at the base of each group.
+            # Arm-colored marker at the base of each arm slot.
             armColor = detector_palette.get(arm, "gray")
             ax.plot(
-                vIdx + offset,
+                vIdx + armLeft + armWidth / 2,
                 0,
                 marker="^",
                 ms=4,

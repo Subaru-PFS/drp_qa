@@ -349,10 +349,13 @@ class ImageQualityQaTask(PipelineTask):
         inputs = butlerQC.get(inputRefs)
         inputs["dataId"] = dataId
         try:
+            # Perform the actual processing.
             outputs = self.run(**inputs)
-        except Exception as e:
+        except ValueError as e:
+            # An expected processing failure is logged and the outputs are
+            # omitted, so one bad quantum does not abort the QA pipeline.
+            # Unexpected exceptions are left to propagate.
             self.log.error("ImageQualityQaTask failed for %s: %s", dataId, e)
-            raise
         else:
             butlerQC.put(outputs.iqQaData, outputRefs.iqQaData)
             butlerQC.put(outputs.iqQaMetrics, outputRefs.iqQaMetrics)
@@ -529,6 +532,10 @@ class ImageQualityQaTask(PipelineTask):
         elif obs_type == "trace" and not is_iis:
             # Regular quartz/trace (all fibers, quartz lamp): no arc lines to
             # fit, so use calexp cross-dispersion moments as the primary path.
+            # Any arc-line rows still held in ``data`` describe a catalog that
+            # does not apply to a quartz frame, so the visit stays sparse
+            # unless one of the two measurement paths succeeds.
+            force_sparse = True
             if calexp is not None:
                 self.log.info(
                     "Regular trace/quartz %s: measuring FWHM from calexp.",
@@ -546,6 +553,7 @@ class ImageQualityQaTask(PipelineTask):
                     )
                     data = calexp_data
                     dense_data = True
+                    force_sparse = False
                 else:
                     self.log.warning(
                         "Quartz calexp too sparse for %s (%d good, %.1f%% flagged); FWHM will be sparse.",
@@ -560,6 +568,7 @@ class ImageQualityQaTask(PipelineTask):
                 )
                 data = self._buildProfileData(fiberProfiles, detectorMap)
                 dense_data = True
+                force_sparse = False
             else:
                 self.log.warning(
                     "Regular trace/quartz %s: no calexp and no fiberProfiles; FWHM will be sparse.",
@@ -576,6 +585,12 @@ class ImageQualityQaTask(PipelineTask):
             # Science or all-sky plate: no arc lamp, fibers point at sky or
             # targets.  Use FLUXSTD fibers (bright standard stars) sampled
             # from calexp for FWHM when pfsConfig is available.
+            #
+            # There is no arc lamp, so whatever arc-line rows survived in
+            # ``data`` are incidental catalog matches that say nothing about
+            # the optics.  Start sparse and only clear that once the FLUXSTD
+            # calexp measurement has been accepted.
+            force_sparse = True
             if calexp is not None and pfsConfig is not None:
                 good_mask = (pfsConfig.targetType == TargetType.FLUXSTD) & (
                     pfsConfig.fiberStatus == FiberStatus.GOOD
@@ -603,6 +618,7 @@ class ImageQualityQaTask(PipelineTask):
                     data = calexp_data
                     dense_data = True
                     using_fluxstd_filter = True
+                    force_sparse = False
                 else:
                     self.log.info(
                         "FLUXSTD calexp too sparse for %s"
@@ -745,6 +761,13 @@ class ImageQualityQaTask(PipelineTask):
         good = ~data["flag"] & data["fwhm"].notna()
         if "status" in data.columns:
             good &= data["status"] == 0
+        if force_sparse:
+            # The visit type rules out every row that is left: on IIS frames
+            # the arc catalog does not describe the illuminated fibers, and on
+            # quartz/science frames without a usable calexp the surviving arc
+            # lines are incidental.  The rows are still written to ``iqQaData``
+            # for inspection, but no summary metric may be derived from them.
+            good = pd.Series(False, index=data.index)
         trace_only = bool(data["traceOnly"].all()) if "traceOnly" in data.columns else False
         med_fwhm = float(data.loc[good, "fwhm"].median())
 
@@ -963,16 +986,25 @@ class ImageQualityQaTask(PipelineTask):
 
         re_bad_pixels = re.compile(r"Set (\d+) BAD pixels to")
         re_cr = re.compile(r"(?:Found|Identified) (\d+) cosmic rays (?:\(|covering )(\d+) pixels")
+        # Newer drp_stella prefixes its fit summary messages with the detector
+        # they belong to ("Final result: arm=b spectrograph=1 chi2=...").  The
+        # prefix is optional so that both log formats parse; see
+        # ``bin.src/fitDetectorMapLogQa.py``, which does the same.
+        armSpec = r"(?:arm=\S+ spectrograph=\d+ )?"
         re_fit_result = re.compile(
-            r"Final result: chi2=(\S+) dof=(\d+) xRMS=(\S+) yRMS=(\S+) xSoften=(\S+) ySoften=(\S+) from (\d+) lines"
+            r"Final result: "
+            + armSpec
+            + r"chi2=(\S+) dof=(\d+) xRMS=(\S+) yRMS=(\S+) xSoften=(\S+) ySoften=(\S+) from (\d+) lines"
         )
         re_fit_lines = re.compile(r"Final fit:.*from (\d+)/(\d+) lines")
         re_reserved_fit = re.compile(
             r"Fit quality from reserved lines:\s*chi2=(\S+)\s+xRMS=(\S+)\s+yRMS=(\S+)(?:\s+\([^\)]+\))?\s+xSoften=(\S+)\s+ySoften=(\S+)\s+from\s+(\d+)\s+lines"
         )
-        re_species_stats = re.compile(r"Stats for (\w+): chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+)")
+        re_species_stats = re.compile(
+            r"Stats for (\w+): " + armSpec + r"chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+)"
+        )
         re_fiber = re.compile(
-            r"Stats for fiberId=(\d+): chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+).*from (\d+) lines"
+            r"Stats for fiberId=(\d+): " + armSpec + r"chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+).*from (\d+) lines"
         )
         re_task_time = re.compile(r"Execution of task '(\w+)' on quantum .* took ([\d\.]+) seconds")
 
@@ -1260,7 +1292,8 @@ class ImageQualityQaTask(PipelineTask):
         `pandas.DataFrame`
             Columns: ``fiberId``, ``x``, ``y``, ``lam``, ``fwhm``, ``theta``,
             ``flux``, ``fluxErr``, ``flag``, ``traceOnly``, ``peakRatio``,
-            ``dxCenter``.
+            ``dxCenter``.  ``traceOnly`` is `False`: these are live
+            measurements of the exposure, not calibration trace widths.
         """
         image = calexp.image.array.astype(np.float64)
         mask_arr = calexp.mask.array
@@ -1377,7 +1410,10 @@ class ImageQualityQaTask(PipelineTask):
                 "flux": np.array(all_flux),
                 "fluxErr": np.ones(n),
                 "flag": np.array(all_flag, dtype=bool),
-                "traceOnly": True,
+                # These are measurements of the exposure itself, not widths
+                # read back from a fiber profile calibration, so the FWHM
+                # thresholds apply to them.
+                "traceOnly": False,
                 "peakRatio": np.array(all_peakRatio),
                 "dxCenter": np.array(all_dxCenter),
             }
