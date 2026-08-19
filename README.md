@@ -55,9 +55,10 @@ See [documentation](https://pipelines.lsst.io/modules/lsst.pipe.base/creating-a-
 
 Also see the example notebook [`examples/QA Pipelines.ipynb`](examples/QA%20Pipelines.ipynb).
 
-`drpQA.yaml` currently wires up `dmResiduals`, `dmCombinedResiduals`, and
-`imageQualityQa`. The remaining tasks below are implemented and importable but are not
-registered in the pipeline; run them by referencing their task class directly.
+`drpQA.yaml` currently wires up `dmResiduals`, `dmCombinedResiduals`,
+`extractionQa`, `extractionQaCombined`, and `imageQualityQa`. The remaining tasks
+below are implemented and importable but are not registered in the pipeline; run them
+by referencing their task class directly.
 
 ### Tasks
 
@@ -123,7 +124,7 @@ after the fact by `bin.src/plotIqQaTimeSeries.py` (see
 | `cosmicrayLog`       | `cosmicray_log`      | No          | Cosmic-ray task log. Parsed for CR counts, affected pixels, and runtime. |
 | `reduceExposureLog` | `reduceExposure_log` | No          | `reduceExposure` log. Parsed for `fitDetectorMap` chi², RMS, softening, per-species and per-fiber statistics. |
 
-All four optional connections are declared `minimum=0`, so the task still runs when they
+All five optional connections are declared `minimum=0`, so the task still runs when they
 are absent from the input collection.
 
 ##### Measurement Paths

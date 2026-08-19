@@ -4,8 +4,8 @@ Quality Assurance tools for the **Subaru Prime Focus Spectrograph (PFS)** Data R
 Pipeline (DRP), built on the **LSST Science Pipelines** `PipelineTask` framework.
 
 This is the single source of instructions for all AI coding assistants working in this
-repository. `CLAUDE.md`, `GEMINI.md`, `.github/copilot-instructions.md`, and
-`.junie/guidelines.md` are symlinks to this file — edit this file only.
+repository. `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md` are symlinks 
+to this file — edit this file only.
 
 Contents:
 

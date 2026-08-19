@@ -18,4 +18,5 @@ examples/*
 .sconf_temp
 tests/.tests
 
-.junie
+.junie/memory
+.junie/plans
