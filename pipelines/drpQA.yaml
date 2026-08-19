@@ -8,3 +8,5 @@ tasks:
     class: pfs.drp.qa.extractionQa.ExtractionQaTask
   extractionQaCombined:
     class: pfs.drp.qa.extractionQaCombined.ExtractionQaCombinedTask
+  imageQualityQa:
+    class: pfs.drp.qa.imageQualityQa.ImageQualityQaTask
