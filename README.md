@@ -9,6 +9,39 @@ pipeline. The QA tasks are implementations of the `PipelineTask` class in the LS
 Science Pipelines. The tasks are run on the output of the DRP pipeline to assess
 the quality of the data products.
 
+## Installation
+
+`drp_qa` is a `pyproject.toml`-based package with no compiled components, so there is
+nothing to build:
+
+```bash
+pip install -e .          # or: uv sync
+```
+
+Within the LSST stack, EUPS setup still works and is the usual route — `drp_stella`
+must be set up first:
+
+```bash
+source /path/to/stack/loadLSST.bash
+setup -r ../drp_stella
+setup -r .
+```
+
+`ups/drp_qa.table` only manipulates `PATH`/`PYTHONPATH`; there is no SCons build step.
+The `bin/` directory that SCons used to generate is therefore not created, and the
+scripts under `bin.src/` are invoked directly (see [Command-line tools](#command-line-tools)).
+
+### Development
+
+```bash
+ruff format .          # formatting
+ruff check --fix .     # linting and import sorting
+pytest tests/
+```
+
+Ruff configuration, pytest configuration, and package metadata all live in
+`pyproject.toml`; there are no standalone per-tool config files.
+
 ## QA Pipeline
 
 The QA pipelines is located at `pipelines/drpQA.yaml`, which runs all of the QA
@@ -166,3 +199,17 @@ If config options are not passed, the default values come from `mergeArms_config
 | DataSet Type           | Dimensions               | Description                                                                                 |
 |------------------------|--------------------------|---------------------------------------------------------------------------------------------| 
 | `skySubtractionQaPlot` | `instrument, visit, arm` | PDF of various plots related to sky subtraction <br/>built from all the arms for the visit. |
+
+## Command-line tools
+
+Scripts live in `bin.src/` and are run directly — there is no SCons step to copy them
+into a `bin/` directory on `PATH`:
+
+```bash
+python bin.src/<script>.py --help
+```
+
+### `fiberNormsQa.py`
+
+Thin entry point for `pfs.drp.qa.fiberNormsQa.main`, which plots fiber normalizations
+from a Butler collection.
