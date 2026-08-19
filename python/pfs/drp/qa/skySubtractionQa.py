@@ -1,7 +1,7 @@
 import contextlib
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from numbers import Number
-from typing import Callable, Iterable, List
 
 import matplotlib
 import matplotlib as mpl
@@ -21,6 +21,8 @@ from lsst.pipe.base import (
 )
 from lsst.pipe.base.connectionTypes import (
     Input as InputConnection,
+)
+from lsst.pipe.base.connectionTypes import (
     Output as OutputConnection,
 )
 from matplotlib.axes import Axes
@@ -28,14 +30,14 @@ from matplotlib.colors import SymLogNorm
 from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pandas import DataFrame
+
+from pfs.drp.qa.storageClasses import MultipagePdfFigure
+from pfs.drp.qa.utils.plotting import detector_palette, div_palette
 from pfs.drp.stella import PfsArm, PfsConfig
 from pfs.drp.stella.fitFocalPlane import FitBlockedOversampledSplineConfig, FitBlockedOversampledSplineTask
 from pfs.drp.stella.selectFibers import SelectFibersTask
 from pfs.drp.stella.subtractSky1d import subtractSky1d
 from pfs.drp.stella.utils.math import robustRms
-
-from pfs.drp.qa.storageClasses import MultipagePdfFigure
-from pfs.drp.qa.utils.plotting import detector_palette, div_palette
 
 matplotlib.rcParams["font.size"] = 8
 
@@ -64,7 +66,7 @@ class SkyArmSubtractionConnections(
     PipelineTaskConnections,
     dimensions=("instrument", "visit", "arm", "spectrograph"),
 ):
-    """Connections for SkySubtractionTask"""
+    """Connections for SkySubtractionTask."""
 
     pfsArm = InputConnection(
         name="pfsArm",
@@ -96,7 +98,7 @@ class SkyArmSubtractionConnections(
 
 
 class SkyArmSubtractionConfig(PipelineTaskConfig, pipelineConnections=SkyArmSubtractionConnections):
-    """Configuration for SkySubtractionTask"""
+    """Configuration for SkySubtractionTask."""
 
     blockSize = Field(dtype=int, default=None, optional=True, doc="Block size for sky model fitting.")
     rejIterations = Field(dtype=int, default=None, optional=True, doc="Number of rejection iterations.")
@@ -106,7 +108,7 @@ class SkyArmSubtractionConfig(PipelineTaskConfig, pipelineConnections=SkyArmSubt
 
 
 class SkyArmSubtractionTask(PipelineTask):
-    """Task for QA of sky subtraction for a single PfsArm"""
+    """Task for QA of sky subtraction for a single PfsArm."""
 
     ConfigClass = SkyArmSubtractionConfig
     _DefaultName = "skyArmSubtraction"
@@ -191,7 +193,7 @@ class SkyArmSubtractionTask(PipelineTask):
         # Perform sky subtraction on PFS spectra while excluding a specific fiber.
         # This loop selects sky fibers, fits a sky model, subtracts it,
         # and returns only the spectrum of the excluded fiber.
-        spectras = list()
+        spectras = []
         for excludeFiberId in skyConfig.fiberId:
             skyConfig0 = skyConfig[skyConfig.fiberId != excludeFiberId]
             skySpectra = pfsArm.select(pfsConfig, fiberId=skyConfig0.fiberId)
@@ -220,7 +222,7 @@ class SkySubtractionConnections(
     PipelineTaskConnections,
     dimensions=("instrument", "visit", "spectrograph"),
 ):
-    """Connections for SkySubtractionTask"""
+    """Connections for SkySubtractionTask."""
 
     skySubtraction_mergedSpectra = InputConnection(
         name="skySubtraction_mergedSpectra",
@@ -246,11 +248,11 @@ class SkySubtractionConnections(
 
 
 class SkySubtractionConfig(PipelineTaskConfig, pipelineConnections=SkySubtractionConnections):
-    """Configuration for SkySubtractionTask"""
+    """Configuration for SkySubtractionTask."""
 
 
 class SkySubtractionQaTask(PipelineTask):
-    """Task for QA of skySubtraction"""
+    """Task for QA of skySubtraction."""
 
     ConfigClass = SkySubtractionConfig
     _DefaultName = "skySubtraction"
@@ -261,7 +263,6 @@ class SkySubtractionQaTask(PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ):
-
         run_name = inputRefs.skySubtraction_mergedSpectra[0].run
 
         inputs = butlerQC.get(inputRefs)
@@ -280,7 +281,7 @@ class SkySubtractionQaTask(PipelineTask):
         self,
         skySubtraction_mergedSpectra: Iterable[PfsArm],
         make_pdf: bool = True,
-        run_name: str = None,
+        run_name: str | None = None,
         **kwargs,
     ) -> Struct:
         """Perform QA on sky subtraction.
@@ -301,15 +302,15 @@ class SkySubtractionQaTask(PipelineTask):
             A struct containing the plots if `store_results` is True else None.
         """
         spectras, spectraFibers, stats = getSpectraData(skySubtraction_mergedSpectra)
-        arms = [arm for (_, arm) in spectras.keys()]
-        identity = list(skySubtraction_mergedSpectra)[0].identity
+        arms = [arm for (_, arm) in spectras]
+        identity = next(iter(skySubtraction_mergedSpectra)).identity
         visit = identity.visit
         spectrograph = identity.spectrograph
 
         self.log.info(f"Plotting 1D spectra for arms {arms}.")
         fig_1d = plot_1d_spectrograph(spectraFibers, stats)
         fig_1d.suptitle(
-            f"Sky Subtraction QA - {visit} SM{spectrograph}\n" f"Chi (flux / std) of Sky Fibers\n{run_name}",
+            f"Sky Subtraction QA - {visit} SM{spectrograph}\nChi (flux / std) of Sky Fibers\n{run_name}",
             fontsize=16,
         )
 
@@ -383,9 +384,8 @@ def getSpectraData(skySubtraction_mergedSpectra: Iterable[PfsArm]) -> tuple[dict
     stats : `pandas.DataFrame`
         DataFrame containing statistics for each arm.
     """
-
-    spectras = dict()
-    arms = list()
+    spectras = {}
+    arms = []
     blockSize = None
     for subtracted_pfsArm in skySubtraction_mergedSpectra:
         spectrograph = subtracted_pfsArm.identity.spectrograph
@@ -460,8 +460,8 @@ def getFiberData(spectraFibers: dict) -> DataFrame:
     df : `pandas.DataFrame`
         DataFrame containing the flattened spectral data.
     """
-    dfs = list()
-    for spec, arm in spectraFibers.keys():
+    dfs = []
+    for spec, arm in spectraFibers:
         for fiberId, data in spectraFibers[(spec, arm)].items():
             df = pd.DataFrame(data)
             df["fiberId"] = fiberId
@@ -522,9 +522,9 @@ def extractFibers(spectras: dict):
         spectraDict[(spectrograph, arm)] = {}
 
         # Process each fiber
-        for iFib, fiberId in enumerate(spectra.fiberId):
+        for _iFib, fiberId in enumerate(spectra.fiberId):
             # Extract spectral data
-            wave, flux, std, sky, chi, std_poisson, chi_poisson, C = extractFiberInfo(
+            wave, flux, std, sky, chi, std_poisson, chi_poisson, _C = extractFiberInfo(
                 spectra, fiberId=fiberId, finite=True
             )
 
@@ -580,7 +580,7 @@ def summarizeSpectrograph(
     - Compares mean, median, standard deviation, and IQR across arms.
     - Uses `skySubtractionQaPlot` for visualization.
     """
-    arms = [arm for (_, arm) in spectraFibers.keys()]
+    arms = [arm for (_, arm) in spectraFibers]
 
     all_axs = {arm: [f"{arm}_HIST", f"{arm}_AVG", f"{arm}_ERR"] for arm in "brmn" if arm in arms}
     fig, ax_dict = get_mosaic(all_axs.values(), figsize=(10, 5), sharex=True)
@@ -599,7 +599,7 @@ def summarizeSpectrograph(
             plot_color = detector_palette[arm]
 
             # Process each fiber.
-            for fib in fibers.keys():
+            for fib in fibers:
                 chi = fibers[fib]["chi"]
                 chi_poisson = fibers[fib]["chi_poisson"]
 
@@ -637,7 +637,7 @@ def summarizeSpectrograph(
             stdev = stats.loc[stats.spectrograph == spectrograph, ["fiberChiStd", "fiberChiIQR"]].values
 
             # Iterate over mean/median and stdev/IQR plots
-            for j, x, ax, rnge in zip(range(2), [means, stdev], all_axs[arm][1:], rnge_options):
+            for j, x, ax, rnge in zip(range(2), [means, stdev], all_axs[arm][1:], rnge_options, strict=False):
                 ref_line = [PlotLayer("vert", X=0 if j == 0 else 1, linestyle="--")]
 
                 # Generate the histogram layers for statistical metrics
@@ -708,8 +708,8 @@ def plot_1d_spectrograph(
     yp = scipy.stats.norm.pdf(xp, loc=0, scale=1)
 
     # Update axis labels and add Gaussian reference.
-    for specKey in spectraFibers.keys():
-        spectrograph, arm = specKey
+    for specKey in spectraFibers:
+        _spectrograph, arm = specKey
         ax = ax_dict[f"{arm}_HIST"]
         ax.set_ylabel(f"{label_lookup[arm]} arm")
         ax.plot(xp, yp, color="k", linewidth=4, linestyle="--")
@@ -732,8 +732,8 @@ def plot_1d_spectrograph(
 def plot_2d_chi(
     spectraFibers: dict,
     plotCol: str = "chi",
-    wave_lims: tuple[float, float] = None,
-    vlims: tuple[float, float] = None,
+    wave_lims: tuple[float, float] | None = None,
+    vlims: tuple[float, float] | None = None,
     aggfunc: str | Callable = "mean",
 ) -> Figure:
     """
@@ -776,7 +776,7 @@ def plot_2d_chi(
 
     fig, ax_dict = get_mosaic("".join(availableArms), figsize=(10, 5), sharey=True)
 
-    plotData = dict()
+    plotData = {}
     for i, arm in enumerate(availableArms):
         ax = ax_dict[arm]
         rows = fd0.query(f"arm == '{arm}'")
@@ -796,12 +796,12 @@ def plot_2d_chi(
         ax.set_title(f"{arm} arm")
 
         cax = None
-        cbar_kws = dict()
+        cbar_kws = {}
         cbar = False
         if i == len(availableArms) - 1:
             divider = make_axes_locatable(ax)
             cax = divider.append_axes("right", size="3%", pad=0.1)
-            cbar_kws = dict(orientation="vertical", extend="both", ticklocation="left")
+            cbar_kws = {"orientation": "vertical", "extend": "both", "ticklocation": "left"}
             cbar = True
 
         sb.heatmap(
@@ -998,7 +998,7 @@ def plot_vs_sky_brightness_all(spectraFibers, method="median", binsize=10) -> Fi
         sharey=True,
     )
 
-    for row, row_name in enumerate(["chi", "chi_poisson"]):
+    for _row, row_name in enumerate(["chi", "chi_poisson"]):
         i = 0
         for arm in ["b", "r", "m", "n"]:
             for spectrograph in [1, 2, 3, 4]:
@@ -1061,7 +1061,7 @@ def plot_vs_sky_brightness(spectras: dict, method="median") -> Figure:
     )
 
     # Loop through each spectral arm.
-    for row, col in enumerate(["chi", "chi_poisson"]):
+    for _row, col in enumerate(["chi", "chi_poisson"]):
         i = 0
         for arm in ["b", "r", "m", "n"]:
             for spectrograph in [1, 2, 3, 4]:
@@ -1249,7 +1249,7 @@ def buildReference(spectra: PfsArm, func: Callable | None = np.mean, model: str 
 
     # Process each fiber.
     for fiberId in spectra.fiberId:
-        wave, flux, std, sky, chi, stdPoisson, chi_poisson, C = extractFiberInfo(
+        wave, flux, std, sky, chi, _stdPoisson, chi_poisson, _C = extractFiberInfo(
             spectra, fiberId=fiberId, finite=True
         )
 
@@ -1279,7 +1279,7 @@ def buildReference(spectra: PfsArm, func: Callable | None = np.mean, model: str 
     wave_ref = x[np.argmax([len(xi) for xi in x])]
 
     # Interpolate all spectra to the reference wavelength grid.
-    sky_ref = [np.interp(wave_ref, wave, sky) for wave, sky in zip(x, y)]
+    sky_ref = [np.interp(wave_ref, wave, sky) for wave, sky in zip(x, y, strict=False)]
 
     # Apply the aggregation function to compute the final reference spectrum.
     if func:
@@ -1414,8 +1414,8 @@ def extractFiberInfo(spectra: PfsArm, fiberId: int, finite: bool = True):
 @dataclass
 class PlotLayer:
     version: str = "scatter"
-    X: Number | List[Number] | None = None
-    W: List[Number] | None = None
+    X: Number | list[Number] | None = None
+    W: list[Number] | None = None
     rnge: tuple[Number, Number] | None = None
     label: str | None = None
     color: str = "k"
@@ -1432,7 +1432,7 @@ def make_plot(
     xlabel: str | None = None,
     ylabel: str | None = None,
     fontsize: int = 12,
-    title: str = None,
+    title: str | None = None,
     xlim: tuple[int, int] | None = None,
     ylim: tuple[int, int] | None = None,
     legend: bool = False,
@@ -1457,7 +1457,8 @@ def make_plot(
     including axis labels, font sizes, ticks, log scales, legends, titles, and
     more. It also supports optional axis reversal and aspect ratio adjustments.
 
-    Parameters:
+    Parameters
+    ----------
         layers (Iterable[PlotLayer]): A collection of plot layers to be added to the
             plot. Each layer represents an individual component of the plot.
         ax (Axes | None, optional): An optional Axes instance where the plot will

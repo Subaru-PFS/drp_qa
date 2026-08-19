@@ -1,6 +1,5 @@
 from lsst.daf.butler.formatters.matplotlib import MatplotlibFormatter
 
-
 __all__ = ["PdfMatplotlibFormatter"]
 
 
