@@ -85,12 +85,6 @@ class DetectorMapResidualsConnections(
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
-    dmQaResidualPlot = OutputConnection(
-        name="dmQaResidualPlot",
-        doc="The 1D and 2D residual plots of the detectormap with the arclines for a given visit.",
-        storageClass="Plot",
-        dimensions=("instrument", "visit", "arm", "spectrograph"),
-    )
 
 
 class DetectorMapResidualsConfig(PipelineTaskConfig, pipelineConnections=DetectorMapResidualsConnections):
@@ -107,6 +101,15 @@ class DetectorMapResidualsConfig(PipelineTaskConfig, pipelineConnections=Detecto
         doc="Wavelegnth range for the residual plot, implies useSigmaRange is False.",
     )
     binWavelength = Field(dtype=float, default=0.1, doc="Wavelength bin for residual plot.")
+    spatialRmsWarn = Field(dtype=float, default=0.03, doc="Spatial RMS (px) above which qaStatus is WARN.")
+    spatialRmsFail = Field(dtype=float, default=0.05, doc="Spatial RMS (px) above which qaStatus is FAIL.")
+    wavelengthRmsWarn = Field(dtype=float, default=0.003, doc="Wavelength RMS (nm) above which qaStatus is WARN.")
+    wavelengthRmsFail = Field(dtype=float, default=0.005, doc="Wavelength RMS (nm) above which qaStatus is FAIL.")
+    minLineYieldFrac = Field(dtype=float, default=0.85, doc="Line yield fraction below which qaStatus is WARN.")
+    minFiberPitchWarn = Field(dtype=float, default=4.0, doc="Min fiber pitch (px) below which qaStatus is WARN.")
+    minFiberPitchFail = Field(dtype=float, default=3.5, doc="Min fiber pitch (px) below which qaStatus is FAIL.")
+    maxCrossTalkWarn = Field(dtype=float, default=0.0005, doc="Max cross-talk ratio above which qaStatus is WARN.")
+    maxCrossTalkFail = Field(dtype=float, default=0.001, doc="Max cross-talk ratio above which qaStatus is FAIL.")
 
 
 class DetectorMapResidualsTask(PipelineTask):
@@ -177,7 +180,8 @@ class DetectorMapResidualsTask(PipelineTask):
 
         Returns
         -------
-        arc_data : `pandas.DataFrame`
+        Struct
+            Dataframe of residuals and statistics.
         """
         # Get dataframe for arc lines and add detectorMap information, then calculate residuals.
         self.log.info("Getting and scrubbing the data")
@@ -192,23 +196,13 @@ class DetectorMapResidualsTask(PipelineTask):
             log=self.log,
         )
 
-        self.log.info("Making residual plots")
-        residFig = plot_detectormap_residuals(
-            arc_data,
-            stats,
-            detectorMap,
-            spatialRange=self.config.spatialRange,
-            wavelengthRange=self.config.wavelengthRange,
-        )
-
-        # Update the title with the detector name.
-        suptitle = "DetectorMap Residuals\n{visit} {arm}{spectrograph}\n{run}".format(**dataId)
-        residFig.suptitle(suptitle, weight="bold")
+        ext = get_extended_stats(arc_data, arcLines, detectorMap, dataId, self.config, self.log)
+        for col, val in ext.items():
+            stats[col] = val
 
         return Struct(
             dmQaResidualData=arc_data,
             dmQaResidualStats=stats,
-            dmQaResidualPlot=residFig,
         )
 
 
@@ -273,6 +267,123 @@ class FitStats:
             print(f"Error: {e!r}")
         else:
             return fs
+
+
+def get_extended_stats(arc_data, arcLines, detectorMap, dataId, config, log=None):
+    """Compute extended QA metrics appended to dmQaResidualStats.
+
+    Parameters
+    ----------
+    arc_data : pd.DataFrame
+        Cleaned arc line data from get_data_and_stats.
+    arcLines : ArcLineSet
+        Raw arc lines.
+    detectorMap : DetectorMap
+        The detector map.
+    dataId : dict
+        Data identifier.
+    config : DetectorMapResidualsConfig
+        Task configuration.
+    log : Logger, optional
+        Logger.
+
+    Returns
+    -------
+    dict
+        Extended metrics to merge into stats DataFrame.
+    """
+    nGood = int((arcLines.flag == 0).sum())
+    nTotal = len(arcLines)
+    lineYieldFrac = nGood / nTotal if nTotal > 0 else np.nan
+
+    xResids = arc_data.loc[arc_data.get("isLine", False) == True, "xResid"].dropna()
+    spatialRms = float(robustRms(xResids)) if len(xResids) >= 2 else np.nan
+
+    line_rows = arc_data[
+        arc_data.get("isLine", ~arc_data.get("isTrace", pd.Series(False, index=arc_data.index)))
+    ].dropna(subset=["yResid", "dispersion"])
+    if len(line_rows) >= 2:
+        wavelengthRms = float(robustRms(line_rows["yResid"] * line_rows["dispersion"]))
+    else:
+        wavelengthRms = np.nan
+
+    medWl = float(arc_data["wavelength"].median()) if "wavelength" in arc_data.columns else np.nan
+    velocityRms = (wavelengthRms / medWl * 3e5) if (not np.isnan(wavelengthRms) and medWl > 0) else np.nan
+
+    medResolution = np.nan
+    if hasattr(arcLines, "yy"):
+        yy = arcLines.yy
+        wl = arcLines.wavelength
+        good = (arcLines.flag == 0) & np.isfinite(yy) & (yy > 0) & np.isfinite(wl) & (wl > 0)
+        if good.sum() >= 2:
+            disp = detectorMap.getDispersion(
+                arcLines.fiberId[good].astype(np.int32), arcLines.wavelength[good].astype(np.float64)
+            )
+            R = wl[good] / (2.35482 * np.sqrt(yy[good]) * np.abs(disp))
+            medResolution = float(np.nanmedian(R))
+
+    minFiberPitch = np.nan
+    try:
+        fiberIds = detectorMap.fiberId
+        if len(fiberIds) >= 2:
+            midRow = detectorMap.getBBox().getHeight() // 2
+            xCenters = np.array([detectorMap.getXCenter(int(fid), float(midRow)) for fid in sorted(fiberIds)])
+            xCenters = np.sort(xCenters)
+            pitches = np.diff(xCenters)
+            if len(pitches) > 0:
+                minFiberPitch = float(np.min(pitches))
+    except Exception:
+        pass
+
+    maxCrossTalk = np.nan
+    try:
+        if hasattr(arcLines, "flux") and hasattr(arcLines, "x"):
+            good = (arcLines.flag == 0) & np.isfinite(arcLines.flux) & np.isfinite(arcLines.x)
+            if good.sum() >= 4:
+                fluxes = arcLines.flux[good]
+                sorted_flux = np.sort(fluxes)
+                peak = float(np.median(sorted_flux[-max(1, len(sorted_flux) // 10) :]))
+                valley = float(np.median(sorted_flux[: max(1, len(sorted_flux) // 10)]))
+                if peak > 0:
+                    maxCrossTalk = valley / peak
+    except Exception:
+        pass
+
+    _level = {"PASS": 0, "WARN": 1, "FAIL": 2}
+    status = "PASS"
+    if not np.isnan(spatialRms):
+        if spatialRms >= config.spatialRmsFail:
+            status = max(status, "FAIL", key=lambda s: _level[s])
+        elif spatialRms >= config.spatialRmsWarn:
+            status = max(status, "WARN", key=lambda s: _level[s])
+    if not np.isnan(wavelengthRms):
+        if wavelengthRms >= config.wavelengthRmsFail:
+            status = max(status, "FAIL", key=lambda s: _level[s])
+        elif wavelengthRms >= config.wavelengthRmsWarn:
+            status = max(status, "WARN", key=lambda s: _level[s])
+    if not np.isnan(lineYieldFrac) and lineYieldFrac < config.minLineYieldFrac:
+        status = max(status, "WARN", key=lambda s: _level[s])
+    if not np.isnan(minFiberPitch):
+        if minFiberPitch < config.minFiberPitchFail:
+            status = max(status, "FAIL", key=lambda s: _level[s])
+        elif minFiberPitch < config.minFiberPitchWarn:
+            status = max(status, "WARN", key=lambda s: _level[s])
+    if not np.isnan(maxCrossTalk):
+        if maxCrossTalk >= config.maxCrossTalkFail:
+            status = max(status, "FAIL", key=lambda s: _level[s])
+        elif maxCrossTalk >= config.maxCrossTalkWarn:
+            status = max(status, "WARN", key=lambda s: _level[s])
+
+    return {
+        "lineYieldFrac": lineYieldFrac,
+        "spatialRms": spatialRms,
+        "wavelengthRms": wavelengthRms,
+        "velocityRms": velocityRms,
+        "medResolution": medResolution,
+        "minFiberPitch": minFiberPitch,
+        "maxCrossTalk": maxCrossTalk,
+        "qaStatus": status,
+    }
 
 
 def get_data_and_stats(
