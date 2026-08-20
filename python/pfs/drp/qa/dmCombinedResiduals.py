@@ -17,8 +17,9 @@ from lsst.pipe.base.connectionTypes import (
 from lsst.pipe.base.connectionTypes import (
     Output as OutputConnection,
 )
-
 from pfs.drp.stella import DetectorMap
+
+from pfs.drp.qa.storageClasses import MultipagePdfFigure
 
 
 class DetectorMapCombinedResidualsConnections(
