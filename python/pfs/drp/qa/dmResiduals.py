@@ -197,8 +197,8 @@ class DetectorMapResidualsTask(PipelineTask):
         )
 
         ext = get_extended_stats(arc_data, arcLines, detectorMap, dataId, self.config, self.log)
-        for col, val in ext.items():
-            stats[col] = val
+        if not ext.empty:
+            stats = stats.merge(ext, on=["status_type", "description"], how="left")
 
         return Struct(
             dmQaResidualData=arc_data,
@@ -270,14 +270,24 @@ class FitStats:
 
 
 def get_extended_stats(arc_data, arcLines, detectorMap, dataId, config, log=None):
-    """Compute extended QA metrics appended to dmQaResidualStats.
+    """Compute extended QA metrics per species, to be merged into dmQaResidualStats.
+
+    Metrics that are species-independent (minFiberPitch, maxCrossTalk) are
+    computed once and broadcast to every row.  Metrics that depend on the line
+    population (spatialRms, wavelengthRms, velocityRms, medResolution,
+    lineYieldFrac, qaStatus) are computed per ``(status_type, description)``
+    group so that, e.g., HgI and CdI residuals are reported separately, and
+    science-frame OI and OH sky lines are reported separately.
 
     Parameters
     ----------
     arc_data : pd.DataFrame
-        Cleaned arc line data from get_data_and_stats.
+        Cleaned arc line data from get_data_and_stats.  Must contain columns
+        ``status_type``, ``description``, ``isLine``, ``isTrace``, ``xResid``,
+        ``yResid``, ``dispersion``, and ``wavelength``.
     arcLines : ArcLineSet
-        Raw arc lines.
+        Raw arc lines (before good-line filtering) used for lineYieldFrac and
+        medResolution.
     detectorMap : DetectorMap
         The detector map.
     dataId : dict
@@ -289,39 +299,17 @@ def get_extended_stats(arc_data, arcLines, detectorMap, dataId, config, log=None
 
     Returns
     -------
-    dict
-        Extended metrics to merge into stats DataFrame.
+    pd.DataFrame
+        One row per ``(status_type, description)`` with columns
+        ``lineYieldFrac``, ``spatialRms``, ``wavelengthRms``, ``velocityRms``,
+        ``medResolution``, ``minFiberPitch``, ``maxCrossTalk``, ``qaStatus``.
+        Caller merges this into the stats DataFrame on those two keys.
     """
-    nGood = int((arcLines.flag == 0).sum())
-    nTotal = len(arcLines)
-    lineYieldFrac = nGood / nTotal if nTotal > 0 else np.nan
+    _level = {"PASS": 0, "WARN": 1, "FAIL": 2}
 
-    xResids = arc_data.loc[arc_data.get("isLine", False) == True, "xResid"].dropna()
-    spatialRms = float(robustRms(xResids)) if len(xResids) >= 2 else np.nan
-
-    line_rows = arc_data[
-        arc_data.get("isLine", ~arc_data.get("isTrace", pd.Series(False, index=arc_data.index)))
-    ].dropna(subset=["yResid", "dispersion"])
-    if len(line_rows) >= 2:
-        wavelengthRms = float(robustRms(line_rows["yResid"] * line_rows["dispersion"]))
-    else:
-        wavelengthRms = np.nan
-
-    medWl = float(arc_data["wavelength"].median()) if "wavelength" in arc_data.columns else np.nan
-    velocityRms = (wavelengthRms / medWl * 3e5) if (not np.isnan(wavelengthRms) and medWl > 0) else np.nan
-
-    medResolution = np.nan
-    if hasattr(arcLines, "yy"):
-        yy = arcLines.yy
-        wl = arcLines.wavelength
-        good = (arcLines.flag == 0) & np.isfinite(yy) & (yy > 0) & np.isfinite(wl) & (wl > 0)
-        if good.sum() >= 2:
-            disp = detectorMap.getDispersion(
-                arcLines.fiberId[good].astype(np.int32), arcLines.wavelength[good].astype(np.float64)
-            )
-            R = wl[good] / (2.35482 * np.sqrt(yy[good]) * np.abs(disp))
-            medResolution = float(np.nanmedian(R))
-
+    # ------------------------------------------------------------------ #
+    # Detector-level metrics (species-independent)                         #
+    # ------------------------------------------------------------------ #
     minFiberPitch = np.nan
     try:
         fiberIds = detectorMap.fiberId
@@ -349,41 +337,109 @@ def get_extended_stats(arc_data, arcLines, detectorMap, dataId, config, log=None
     except Exception:
         pass
 
-    _level = {"PASS": 0, "WARN": 1, "FAIL": 2}
-    status = "PASS"
-    if not np.isnan(spatialRms):
-        if spatialRms >= config.spatialRmsFail:
-            status = max(status, "FAIL", key=lambda s: _level[s])
-        elif spatialRms >= config.spatialRmsWarn:
-            status = max(status, "WARN", key=lambda s: _level[s])
-    if not np.isnan(wavelengthRms):
-        if wavelengthRms >= config.wavelengthRmsFail:
-            status = max(status, "FAIL", key=lambda s: _level[s])
-        elif wavelengthRms >= config.wavelengthRmsWarn:
-            status = max(status, "WARN", key=lambda s: _level[s])
-    if not np.isnan(lineYieldFrac) and lineYieldFrac < config.minLineYieldFrac:
-        status = max(status, "WARN", key=lambda s: _level[s])
-    if not np.isnan(minFiberPitch):
-        if minFiberPitch < config.minFiberPitchFail:
-            status = max(status, "FAIL", key=lambda s: _level[s])
-        elif minFiberPitch < config.minFiberPitchWarn:
-            status = max(status, "WARN", key=lambda s: _level[s])
-    if not np.isnan(maxCrossTalk):
-        if maxCrossTalk >= config.maxCrossTalkFail:
-            status = max(status, "FAIL", key=lambda s: _level[s])
-        elif maxCrossTalk >= config.maxCrossTalkWarn:
-            status = max(status, "WARN", key=lambda s: _level[s])
+    # Build a description→total-catalog-count map for lineYieldFrac.
+    # arcLines here is the *raw* (pre-filter) set passed in by the caller.
+    descCounts = {}
+    if hasattr(arcLines, "description"):
+        for desc in np.unique(arcLines.description):
+            mask = arcLines.description == desc
+            descCounts[desc] = int(mask.sum())
 
-    return {
-        "lineYieldFrac": lineYieldFrac,
-        "spatialRms": spatialRms,
-        "wavelengthRms": wavelengthRms,
-        "velocityRms": velocityRms,
-        "medResolution": medResolution,
-        "minFiberPitch": minFiberPitch,
-        "maxCrossTalk": maxCrossTalk,
-        "qaStatus": status,
-    }
+    # Build a description→(fiberId, wavelength, yy) map for medResolution.
+    arcHasYY = hasattr(arcLines, "yy")
+    arcDescriptions = arcLines.description if hasattr(arcLines, "description") else np.array([])
+
+    # ------------------------------------------------------------------ #
+    # Per-species metrics                                                  #
+    # ------------------------------------------------------------------ #
+    rows = []
+    group_keys = ["status_type", "description"]
+    for (status_type, description), grp in arc_data.groupby(group_keys):
+        # --- lineYieldFrac ---
+        totalForDesc = descCounts.get(description, 0)
+        nGoodForDesc = int((grp["isLine"] | grp["isTrace"]).sum()) if "isLine" in grp.columns else len(grp)
+        lineYieldFrac = nGoodForDesc / totalForDesc if totalForDesc > 0 else np.nan
+
+        # --- spatialRms (x residuals for arc lines) ---
+        xResids = grp.loc[grp.get("isLine", pd.Series(False, index=grp.index)), "xResid"].dropna()
+        spatialRms = float(robustRms(xResids)) if len(xResids) >= 2 else np.nan
+
+        # --- wavelengthRms (y residuals × dispersion, converted to nm) ---
+        lineRows = grp[grp.get("isLine", pd.Series(False, index=grp.index))].dropna(
+            subset=["yResid", "dispersion"]
+        )
+        if len(lineRows) >= 2:
+            wavelengthRms = float(robustRms(lineRows["yResid"] * lineRows["dispersion"]))
+        else:
+            wavelengthRms = np.nan
+
+        # --- velocityRms ---
+        medWl = float(grp["wavelength"].median()) if "wavelength" in grp.columns else np.nan
+        velocityRms = (wavelengthRms / medWl * 3e5) if (not np.isnan(wavelengthRms) and medWl > 0) else np.nan
+
+        # --- medResolution (from arcLines second moments, filtered to this species) ---
+        medResolution = np.nan
+        if arcHasYY and len(arcDescriptions) > 0:
+            specMask = (arcDescriptions == description) & (arcLines.flag == 0)
+            specMask &= np.isfinite(arcLines.yy) & (arcLines.yy > 0)
+            specMask &= np.isfinite(arcLines.wavelength) & (arcLines.wavelength > 0)
+            if specMask.sum() >= 2:
+                disp = detectorMap.getDispersion(
+                    arcLines.fiberId[specMask].astype(np.int32),
+                    arcLines.wavelength[specMask].astype(np.float64),
+                )
+                R = arcLines.wavelength[specMask] / (2.35482 * np.sqrt(arcLines.yy[specMask]) * np.abs(disp))
+                medResolution = float(np.nanmedian(R))
+
+        # --- qaStatus (worst-of for this species) ---
+        status = "PASS"
+        if not np.isnan(spatialRms):
+            if spatialRms >= config.spatialRmsFail:
+                status = max(status, "FAIL", key=lambda s: _level[s])
+            elif spatialRms >= config.spatialRmsWarn:
+                status = max(status, "WARN", key=lambda s: _level[s])
+        if not np.isnan(wavelengthRms):
+            if wavelengthRms >= config.wavelengthRmsFail:
+                status = max(status, "FAIL", key=lambda s: _level[s])
+            elif wavelengthRms >= config.wavelengthRmsWarn:
+                status = max(status, "WARN", key=lambda s: _level[s])
+        if not np.isnan(lineYieldFrac) and lineYieldFrac < config.minLineYieldFrac:
+            status = max(status, "WARN", key=lambda s: _level[s])
+        if not np.isnan(minFiberPitch):
+            if minFiberPitch < config.minFiberPitchFail:
+                status = max(status, "FAIL", key=lambda s: _level[s])
+            elif minFiberPitch < config.minFiberPitchWarn:
+                status = max(status, "WARN", key=lambda s: _level[s])
+        if not np.isnan(maxCrossTalk):
+            if maxCrossTalk >= config.maxCrossTalkFail:
+                status = max(status, "FAIL", key=lambda s: _level[s])
+            elif maxCrossTalk >= config.maxCrossTalkWarn:
+                status = max(status, "WARN", key=lambda s: _level[s])
+
+        rows.append(
+            {
+                "status_type": status_type,
+                "description": description,
+                "lineYieldFrac": lineYieldFrac,
+                "spatialRms": spatialRms,
+                "wavelengthRms": wavelengthRms,
+                "velocityRms": velocityRms,
+                "medResolution": medResolution,
+                "minFiberPitch": minFiberPitch,
+                "maxCrossTalk": maxCrossTalk,
+                "qaStatus": status,
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame(
+            columns=[
+                "status_type", "description", "lineYieldFrac", "spatialRms",
+                "wavelengthRms", "velocityRms", "medResolution", "minFiberPitch",
+                "maxCrossTalk", "qaStatus",
+            ]
+        )
+    return pd.DataFrame(rows)
 
 
 def get_data_and_stats(

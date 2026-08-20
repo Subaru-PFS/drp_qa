@@ -111,7 +111,14 @@ class DmDriftMonitorTask(PipelineTask):
             butlerQC.put(outputs, outputRefs)
 
     def run(self, arcLines: ArcLineSet, detectorMap: DetectorMap, dataId: dict) -> Struct:
-        """Compute drift metrics between daily arc centroids and detectormap predictions.
+        """Compute per-species drift metrics between daily arc centroids and detectormap predictions.
+
+        One row is written per arc species (``description`` value) present in
+        ``arcLines``.  Trace lines are treated as a species named ``"Trace"``
+        and contribute ``deltaX`` and ``deltaWx``; emission-line species (e.g.
+        ``"NeI"``, ``"OI"``, ``"OH"``) contribute ``deltaY``.  This ensures
+        that, for example, neon and sky OH lines are reported separately for
+        science frames, and HgI / CdI are reported separately for HgCd arcs.
 
         Parameters
         ----------
@@ -124,108 +131,117 @@ class DmDriftMonitorTask(PipelineTask):
 
         Returns
         -------
-        Struct with dmDriftMetrics DataFrame.
+        Struct with dmDriftMetrics DataFrame (one row per species).
         """
-        self.log.info("Computing drift metrics for %s", dataId)
+        self.log.info("Computing per-species drift metrics for %s", dataId)
 
-        isTrace = arcLines.description == "Trace"
-        isLine = ~isTrace
+        _level = {"PASS": 0, "WARN": 1, "FAIL": 2}
         goodMask = arcLines.flag == 0
+        hasXX = hasattr(arcLines, "xx")
+        descriptions = arcLines.description if hasattr(arcLines, "description") else np.array([])
+        allSpecies = np.unique(descriptions) if len(descriptions) > 0 else np.array([])
 
-        # --- deltaX: mean spatial shift from trace lines ---
-        traceGood = goodMask & isTrace & np.isfinite(arcLines.x) & np.isfinite(arcLines.y)
-        deltaX = np.nan
-        if traceGood.sum() >= self.config.minLines:
-            xPredicted = detectorMap.getXCenter(
-                arcLines.fiberId[traceGood].astype(np.int32),
-                arcLines.y[traceGood].astype(np.float64),
+        rows = []
+        for species in allSpecies:
+            specMask = goodMask & (descriptions == species)
+            isTraceSp = species == "Trace"
+
+            # --- deltaX and deltaWx: from trace lines ---
+            deltaX = np.nan
+            deltaWx = np.nan
+            if isTraceSp:
+                traceGood = specMask & np.isfinite(arcLines.x) & np.isfinite(arcLines.y)
+                if traceGood.sum() >= self.config.minLines:
+                    xPredicted = detectorMap.getXCenter(
+                        arcLines.fiberId[traceGood].astype(np.int32),
+                        arcLines.y[traceGood].astype(np.float64),
+                    )
+                    deltaX = float(np.mean(arcLines.x[traceGood] - xPredicted))
+                else:
+                    self.log.warning(
+                        "Too few Trace lines (%d < minLines=%d) for deltaX in %s",
+                        int(traceGood.sum()), self.config.minLines, dataId,
+                    )
+                if hasXX:
+                    xxGood = specMask & np.isfinite(arcLines.xx) & (arcLines.xx > 0)
+                    if xxGood.sum() >= self.config.minLines:
+                        wxMeasured = _FWHM_FACTOR * np.sqrt(arcLines.xx[xxGood])
+                        wxRef = float(np.median(wxMeasured))
+                        deltaWx = float(np.mean(wxMeasured - wxRef))
+
+            # --- deltaY: from emission-line species ---
+            deltaY = np.nan
+            if not isTraceSp:
+                arcGood = (
+                    specMask
+                    & np.isfinite(arcLines.x)
+                    & np.isfinite(arcLines.y)
+                    & np.isfinite(arcLines.wavelength)
+                )
+                if arcGood.sum() >= self.config.minLines:
+                    predicted = detectorMap.findPoint(
+                        arcLines.fiberId[arcGood].astype(np.int32),
+                        arcLines.wavelength[arcGood].astype(np.float64),
+                    )
+                    yPredicted = predicted[:, 1]
+                    deltaY = float(np.mean(arcLines.y[arcGood] - yPredicted))
+                else:
+                    self.log.warning(
+                        "Too few %s lines (%d < minLines=%d) for deltaY in %s",
+                        species, int(arcGood.sum()), self.config.minLines, dataId,
+                    )
+
+            driftMag = (
+                float(np.sqrt(deltaX**2 + deltaY**2))
+                if (np.isfinite(deltaX) and np.isfinite(deltaY))
+                else np.nan
             )
-            deltaX = float(np.mean(arcLines.x[traceGood] - xPredicted))
-        else:
-            self.log.warning(
-                "Too few trace lines (%d < minLines=%d) for deltaX in %s",
-                int(traceGood.sum()), self.config.minLines, dataId,
-            )
 
-        # --- deltaY: mean spectral shift from arc lines ---
-        arcGood = (
-            goodMask & isLine & np.isfinite(arcLines.x) & np.isfinite(arcLines.y)
-            & np.isfinite(arcLines.wavelength)
-        )
-        deltaY = np.nan
-        if arcGood.sum() >= self.config.minLines:
-            predicted = detectorMap.findPoint(
-                arcLines.fiberId[arcGood].astype(np.int32),
-                arcLines.wavelength[arcGood].astype(np.float64),
-            )
-            yPredicted = predicted[:, 1]
-            deltaY = float(np.mean(arcLines.y[arcGood] - yPredicted))
-        else:
-            self.log.warning(
-                "Too few arc lines (%d < minLines=%d) for deltaY in %s",
-                int(arcGood.sum()), self.config.minLines, dataId,
-            )
-
-        driftMag = (
-            float(np.sqrt(deltaX**2 + deltaY**2))
-            if (np.isfinite(deltaX) and np.isfinite(deltaY))
-            else np.nan
-        )
-
-        # --- deltaWx: profile width change from xx second moment ---
-        deltaWx = np.nan
-        if hasattr(arcLines, "xx"):
-            xxGood = goodMask & np.isfinite(arcLines.xx) & (arcLines.xx > 0)
-            if xxGood.sum() >= self.config.minLines:
-                wxMeasured = _FWHM_FACTOR * np.sqrt(arcLines.xx[xxGood])
-                # detectormap does not store profile widths directly; use median measured width
-                # as the reference (drift is relative to the run-level median)
-                wxRef = float(np.median(wxMeasured))
-                deltaWx = float(np.mean(wxMeasured - wxRef))
-
-        # --- qaStatus and recommendedAction ---
-        if np.isnan(driftMag) and np.isnan(deltaWx):
-            qaStatus = "UNKNOWN"
-            recommendedAction = "INSUFFICIENT_DATA"
-        else:
-            _level = {"PASS": 0, "WARN": 1, "FAIL": 2}
-            status = "PASS"
-            if np.isfinite(driftMag):
-                if driftMag >= self.config.driftFailThreshold:
-                    status = "FAIL"
-                elif driftMag >= self.config.driftWarnThreshold:
-                    status = max(status, "WARN", key=lambda s: _level[s])
-            if np.isfinite(deltaWx):
-                absDeltaWx = abs(deltaWx)
-                if absDeltaWx >= self.config.profileFailThreshold:
-                    status = "FAIL"
-                elif absDeltaWx >= self.config.profileWarnThreshold:
-                    status = max(status, "WARN", key=lambda s: _level[s])
-            qaStatus = status
-            if status == "FAIL":
-                recommendedAction = "RECALIBRATE"
-            elif status == "WARN":
-                recommendedAction = "APPLY_SHIFT"
+            # --- qaStatus and recommendedAction ---
+            if np.isnan(driftMag) and np.isnan(deltaWx):
+                qaStatus = "UNKNOWN"
+                recommendedAction = "INSUFFICIENT_DATA"
             else:
-                recommendedAction = "NOMINAL"
+                status = "PASS"
+                if np.isfinite(driftMag):
+                    if driftMag >= self.config.driftFailThreshold:
+                        status = "FAIL"
+                    elif driftMag >= self.config.driftWarnThreshold:
+                        status = max(status, "WARN", key=lambda s: _level[s])
+                if np.isfinite(deltaWx):
+                    if abs(deltaWx) >= self.config.profileFailThreshold:
+                        status = "FAIL"
+                    elif abs(deltaWx) >= self.config.profileWarnThreshold:
+                        status = max(status, "WARN", key=lambda s: _level[s])
+                qaStatus = status
+                recommendedAction = (
+                    "RECALIBRATE" if status == "FAIL" else "APPLY_SHIFT" if status == "WARN" else "NOMINAL"
+                )
 
-        self.log.info(
-            "Drift monitor %s: deltaX=%.4f deltaY=%.4f driftMag=%.4f deltaWx=%.4f -> %s (%s)",
-            dataId, deltaX, deltaY, driftMag if np.isfinite(driftMag) else float("nan"),
-            deltaWx if np.isfinite(deltaWx) else float("nan"),
-            qaStatus, recommendedAction,
-        )
+            self.log.info(
+                "Drift monitor %s species=%s: deltaX=%.4f deltaY=%.4f driftMag=%.4f deltaWx=%.4f -> %s (%s)",
+                dataId, species,
+                deltaX if np.isfinite(deltaX) else float("nan"),
+                deltaY if np.isfinite(deltaY) else float("nan"),
+                driftMag if np.isfinite(driftMag) else float("nan"),
+                deltaWx if np.isfinite(deltaWx) else float("nan"),
+                qaStatus, recommendedAction,
+            )
 
-        metrics = pd.DataFrame({
-            "visit": [dataId.get("visit")],
-            "arm": [dataId.get("arm")],
-            "spectrograph": [dataId.get("spectrograph")],
-            "deltaX": [deltaX],
-            "deltaY": [deltaY],
-            "driftMag": [driftMag],
-            "deltaWx": [deltaWx],
-            "qaStatus": [qaStatus],
-            "recommendedAction": [recommendedAction],
-        })
+            rows.append({
+                "visit": dataId.get("visit"),
+                "arm": dataId.get("arm"),
+                "spectrograph": dataId.get("spectrograph"),
+                "description": species,
+                "deltaX": deltaX,
+                "deltaY": deltaY,
+                "driftMag": driftMag,
+                "deltaWx": deltaWx,
+                "qaStatus": qaStatus,
+                "recommendedAction": recommendedAction,
+            })
 
-        return Struct(dmDriftMetrics=metrics)
+        if not rows:
+            raise ValueError(f"No arc line species found in arcLines for {dataId}; cannot compute drift metrics.")
+
+        return Struct(dmDriftMetrics=pd.DataFrame(rows))
