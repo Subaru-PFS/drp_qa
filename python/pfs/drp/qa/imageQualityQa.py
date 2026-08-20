@@ -120,7 +120,7 @@ class ImageQualityQaConnections(
         minimum=0,
     )
 
-    pfsConfig = InputConnection(
+    pfsConfig = PrerequisiteConnection(
         name="pfsConfig",
         doc=(
             "Fiber configuration for this visit.  When provided alongside"
@@ -130,7 +130,6 @@ class ImageQualityQaConnections(
         ),
         storageClass="PfsConfig",
         dimensions=("instrument", "visit"),
-        minimum=0,
     )
 
     isrLog = InputConnection(
@@ -366,8 +365,16 @@ class ImageQualityQaTask(PipelineTask):
         outputRefs: OutputQuantizedConnection,
     ):
         dataId = dict(**inputRefs.arcLines.dataId.mapping)
+        # Fetch pfsConfig separately before the bulk get so that a missing
+        # dataset degrades gracefully to None rather than aborting the quantum.
+        pfsConfig = None
+        try:
+            pfsConfig = butlerQC.get(inputRefs.pfsConfig)
+        except Exception:
+            pass
         inputs = butlerQC.get(inputRefs)
         inputs["dataId"] = dataId
+        inputs["pfsConfig"] = pfsConfig
         try:
             # Perform the actual processing.
             outputs = self.run(**inputs)
