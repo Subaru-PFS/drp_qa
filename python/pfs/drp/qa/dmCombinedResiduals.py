@@ -1,10 +1,7 @@
 import itertools
 from collections.abc import Iterable
-from itertools import product
 
 import pandas as pd
-import seaborn as sb
-from lsst.pex.config import Field
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -20,11 +17,7 @@ from lsst.pipe.base.connectionTypes import (
 from lsst.pipe.base.connectionTypes import (
     Output as OutputConnection,
 )
-from matplotlib.figure import Figure
 
-from pfs.drp.qa.dmResiduals import plot_detectormap_residuals
-from pfs.drp.qa.storageClasses import MultipagePdfFigure
-from pfs.drp.qa.utils.plotting import description_palette, detector_palette
 from pfs.drp.stella import DetectorMap
 
 
@@ -73,11 +66,18 @@ class DetectorMapCombinedResidualsConnections(
         multiple=True,
     )
 
-    dmQaCombinedResidualPlot = OutputConnection(
-        name="dmQaCombinedResidualPlot",
-        doc="The 1D and 2D residual plots of the detectormap with the arclines for all detectors.",
-        storageClass="MultipagePdfFigure",
-        dimensions=("instrument",),
+    iqQaMetrics = InputConnection(
+        name="iqQaMetrics",
+        doc="Per-quantum image quality summary metrics from ImageQualityQaTask.",
+        storageClass="DataFrame",
+        dimensions=(
+            "instrument",
+            "visit",
+            "arm",
+            "spectrograph",
+        ),
+        multiple=True,
+        minimum=0,
     )
 
     dmQaDetectorStats = OutputConnection(
@@ -93,8 +93,6 @@ class DetectorMapCombinedResidualsConfig(
 ):
     """Configuration for DetectorMapCombinedQaTask."""
 
-    useSigmaRange = Field(dtype=bool, default=False, doc="Use ±2.5 sigma as range")
-
 
 class DetectorMapCombinedResidualsTask(PipelineTask):
     """Task for QA of detectorMap."""
@@ -108,10 +106,7 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ):
-        run_name = inputRefs.dmQaResidualStats[0].run
-
         inputs = butlerQC.get(inputRefs)
-        inputs["run_name"] = run_name
 
         # Perform the actual processing.
         outputs = self.run(**inputs)
@@ -124,56 +119,77 @@ class DetectorMapCombinedResidualsTask(PipelineTask):
         detectorMaps: Iterable[DetectorMap],
         dmQaResidualData: Iterable[pd.DataFrame],
         dmQaResidualStats: Iterable[pd.DataFrame],
-        run_name: str,
+        iqQaMetrics: Iterable[pd.DataFrame] | None = None,
+        **kwargs,
     ) -> Struct:
-        """Create detector level residual_stats and plots.
+        """Aggregate per-detector residual stats into a cross-detector summary.
 
         Parameters
         ----------
         detectorMaps : Iterable[DetectorMap]
-            An iterable of detector maps. Used for plotting metadata.
+            An iterable of detector maps.
         dmQaResidualData : Iterable[DataFrame]
-            An iterable of DataFrames containing DM QA residual data. These
-            are combined into a single DataFrame for processing.
+            An iterable of DataFrames containing DM QA residual data.
         dmQaResidualStats : Iterable[DataFrame]
-            An iterable of DataFrames containing DM QA residual statistics. These
-            are combined into a single DataFrame for processing.
-        run_name : str
-            The name of the collection that was used for the residual_stats.
+            An iterable of DataFrames containing DM QA residual statistics.
+        iqQaMetrics : Iterable[DataFrame], optional
+            Per-quantum image quality summary metrics from ImageQualityQaTask.
+            When provided, IQ columns are joined into dmQaDetectorStats.
 
         Returns
         -------
-        dmQaCombinedResidualPlot : `MultipagePdfFigure`
-            1D and 2D plots of the residual between the detectormap and the arclines for the entire detector.
         dmQaDetectorStats : `pd.DataFrame`
-            Statistics of the residual analysis.
+            Aggregated per-detector statistics including DM residual metrics
+            and, when available, IQ gate results.
         """
-        # Put the DetectorMaps in a dict by CCD.
-        self.log.debug(f"Visits: { {dm.getVisitInfo().id for dm in detectorMaps} }")
-
-        # Small helper to use while https://pfspipe.ipmu.jp/jira/browse/PIPE2D-1423
-        def get_ccd(dm: DetectorMap) -> str:
-            return "".join([x.split("=")[1] for x in dm.metadata["CALIB_ID"].split(" ")[:2]])
-
-        detectorMaps = {get_ccd(detectorMap): detectorMap for detectorMap in detectorMaps}
-        self.log.debug(f"DetectorMap CCDs: {detectorMaps.keys()}")
-
-        residual_data = pd.concat(dmQaResidualData)
         residual_stats = pd.concat(dmQaResidualStats)
         residual_stats.sort_values(by=["visit", "arm", "spectrograph", "description"], inplace=True)
 
-        # Put the CCD column in a wavelength sorted order.
-        residual_stats.ccd = residual_stats.ccd.astype("category")
-        spec_order = [1, 2, 3, 4]
-        arm_order = ["b", "r", "m", "n"]
-        detector_order = [f"{arm}{spec}" for arm, spec in itertools.product(arm_order, spec_order)]
-        detector_order = [d for d in detector_order if d in residual_stats.ccd.cat.categories]
-        residual_stats.ccd = residual_stats.ccd.cat.reorder_categories(detector_order, ordered=True)
+        # Aggregate extended metrics per (visit, arm, spectrograph) — take the
+        # median of scalar summary columns across description groups.
+        _extended_cols = [
+            "lineYieldFrac", "spatialRms", "wavelengthRms", "velocityRms",
+            "medResolution", "minFiberPitch", "maxCrossTalk",
+        ]
+        _id_cols = ["visit", "arm", "spectrograph"]
+        available_extended = [c for c in _extended_cols if c in residual_stats.columns]
 
-        self.log.info("Making combined report")
-        pdf = make_report(residual_stats, residual_data, detectorMaps, run_name=run_name, log=self.log)
+        if available_extended:
+            agg_cols = _id_cols + available_extended
+            agg_cols = [c for c in agg_cols if c in residual_stats.columns]
+            detector_stats = (
+                residual_stats[agg_cols]
+                .groupby(_id_cols, as_index=False)
+                .median(numeric_only=True)
+            )
+            # Worst qaStatus per detector
+            if "qaStatus" in residual_stats.columns:
+                _level = {"PASS": 0, "WARN": 1, "FAIL": 2, "UNKNOWN": -1}
+                qa_worst = (
+                    residual_stats.groupby(_id_cols)["qaStatus"]
+                    .agg(lambda s: max(s, key=lambda v: _level.get(v, -1)))
+                    .reset_index()
+                )
+                detector_stats = detector_stats.merge(qa_worst, on=_id_cols, how="left")
+        else:
+            detector_stats = residual_stats
 
-        return Struct(dmQaCombinedResidualPlot=pdf, dmQaDetectorStats=residual_stats)
+        # Optionally join IQ metrics.
+        if iqQaMetrics is not None:
+            iq_list = list(iqQaMetrics)
+            if iq_list:
+                iq_df = pd.concat(iq_list)
+                _iq_cols = [c for c in iq_df.columns if c not in detector_stats.columns or c in _id_cols]
+                iq_subset = iq_df[[c for c in _iq_cols if c in iq_df.columns]]
+                detector_stats = detector_stats.merge(
+                    iq_subset,
+                    on=[c for c in _id_cols if c in iq_subset.columns],
+                    how="left",
+                )
+                self.log.info("Joined iqQaMetrics into dmQaDetectorStats (%d rows)", len(iq_df))
+
+        self.log.info("dmQaDetectorStats: %d rows, columns: %s", len(detector_stats), list(detector_stats.columns))
+        return Struct(dmQaDetectorStats=detector_stats)
 
 
 def make_report(
