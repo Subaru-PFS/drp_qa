@@ -320,8 +320,9 @@ def get_extended_stats(arc_data, arcLines, detectorMap, dataId, config, log=None
             pitches = np.diff(xCenters)
             if len(pitches) > 0:
                 minFiberPitch = float(np.min(pitches))
-    except Exception:
-        pass
+    except Exception as e:
+        if log is not None:
+            log.warning("minFiberPitch computation failed: %s", e)
 
     maxCrossTalk = np.nan
     try:
@@ -334,8 +335,9 @@ def get_extended_stats(arc_data, arcLines, detectorMap, dataId, config, log=None
                 valley = float(np.median(sorted_flux[: max(1, len(sorted_flux) // 10)]))
                 if peak > 0:
                     maxCrossTalk = valley / peak
-    except Exception:
-        pass
+    except Exception as e:
+        if log is not None:
+            log.warning("maxCrossTalk computation failed: %s", e)
 
     # Build a description→total-catalog-count map for lineYieldFrac.
     # arcLines here is the *raw* (pre-filter) set passed in by the caller.
@@ -360,8 +362,14 @@ def get_extended_stats(arc_data, arcLines, detectorMap, dataId, config, log=None
         nGoodForDesc = int((grp["isLine"] | grp["isTrace"]).sum()) if "isLine" in grp.columns else len(grp)
         lineYieldFrac = nGoodForDesc / totalForDesc if totalForDesc > 0 else np.nan
 
-        # --- spatialRms (x residuals for arc lines) ---
-        xResids = grp.loc[grp.get("isLine", pd.Series(False, index=grp.index)), "xResid"].dropna()
+        # --- spatialRms (x residuals) ---
+        # For arc/emission lines use isLine rows; for trace-only groups fall back
+        # to isTrace rows so that trace visits still report a spatial RMS.
+        isLineMask = grp.get("isLine", pd.Series(False, index=grp.index))
+        isTraceMask = grp.get("isTrace", pd.Series(False, index=grp.index))
+        xResids = grp.loc[isLineMask, "xResid"].dropna()
+        if len(xResids) < 2:
+            xResids = grp.loc[isTraceMask, "xResid"].dropna()
         spatialRms = float(robustRms(xResids)) if len(xResids) >= 2 else np.nan
 
         # --- wavelengthRms (y residuals × dispersion, converted to nm) ---
