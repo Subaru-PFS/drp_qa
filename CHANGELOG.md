@@ -25,6 +25,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   columns and optionally joins `iqQaMetrics` (IQ gate results) via a new optional `multiple=True`
   input connection. The `dmQaCombinedResidualPlot` output has been removed (DataFrame-only outputs).
 - **`drpQA.yaml`** — `dmDriftMonitor` task added to the pipeline graph.
+- **`bin.src/qaVisitSummary.py`** — new CLI tool and Python API (`VisitSummary` / `VisitSummaryResult`)
+  for querying per-visit QA results from the Butler. Prints a formatted summary of `dmQaDetectorStats`,
+  `iqQaMetrics`, `dmQaResidualStats`, and `dmDriftMetrics`; supports multiple visits and file output.
+  Exit code reflects the worst `qaStatus` across all datasets (0=PASS, 1=WARN, 2=FAIL, 3=no data).
 - Added a new `imageQualityQa` workflow that writes `iqQaData`/`iqQaMetrics` with per-quantum status and supports
   post-hoc time-series plotting via `iqQaPlots` and `bin.src/plotIqQaTimeSeries.py`.
 - Added stack-free log QA/report tools (`bin.src/fitDetectorMapLogQa.py`, `bin.src/imageQualityLogQa.py`) and associated
