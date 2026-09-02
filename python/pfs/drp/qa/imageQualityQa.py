@@ -120,7 +120,7 @@ class ImageQualityQaConnections(
         minimum=0,
     )
 
-    pfsConfig = InputConnection(
+    pfsConfig = PrerequisiteConnection(
         name="pfsConfig",
         doc=(
             "Fiber configuration for this visit.  When provided alongside"
@@ -130,7 +130,6 @@ class ImageQualityQaConnections(
         ),
         storageClass="PfsConfig",
         dimensions=("instrument", "visit"),
-        minimum=0,
     )
 
     isrLog = InputConnection(
@@ -325,6 +324,26 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " positions above which the per-quantum status is set to FAIL."
         ),
     )
+    maxFluxJitterPct = Field(
+        dtype=float,
+        default=15.0,
+        doc=(
+            "Maximum allowed flux jitter percentage (fluxStd/medFlux*100) for"
+            " non-flagged arc lines before qaStatus is degraded to WARN."
+            " Values above twice this threshold yield FAIL."
+            " Set to a large value (e.g. 999) to disable."
+        ),
+    )
+    maxSaturatedLines = Field(
+        dtype=int,
+        default=50,
+        doc=(
+            "Maximum number of arc lines with flux above the saturation proxy"
+            " threshold (95th percentile of the flux distribution) before"
+            " qaStatus is degraded to WARN."
+            " Set to a large value (e.g. 99999) to disable."
+        ),
+    )
 
 
 class ImageQualityQaTask(PipelineTask):
@@ -346,8 +365,16 @@ class ImageQualityQaTask(PipelineTask):
         outputRefs: OutputQuantizedConnection,
     ):
         dataId = dict(**inputRefs.arcLines.dataId.mapping)
+        # Fetch pfsConfig separately before the bulk get so that a missing
+        # dataset degrades gracefully to None rather than aborting the quantum.
+        pfsConfig = None
+        try:
+            pfsConfig = butlerQC.get(inputRefs.pfsConfig)
+        except Exception:
+            pass
         inputs = butlerQC.get(inputRefs)
         inputs["dataId"] = dataId
+        inputs["pfsConfig"] = pfsConfig
         try:
             # Perform the actual processing.
             outputs = self.run(**inputs)
@@ -853,8 +880,62 @@ class ImageQualityQaTask(PipelineTask):
                     f"|dxCenter|={absDx:.3f}px >= warn threshold {self.config.dxCenterWarnThreshold}px"
                 )
 
+        # Compute arc flux jitter and saturation metrics from non-flagged lines,
+        # broken down per arc species (description).  Overall (all-species) values
+        # are also stored for backward compatibility.  Guard against all-NaN flux
+        # (e.g. trace frames) — emit NaN without crashing.
+        flux_jitter_pct = np.nan
+        n_saturated = np.nan
+        flux_status = "PASS"
+        # Per-species flux metrics: {species: (fluxJitterPct, nSaturated)}
+        species_flux_metrics: dict[str, tuple[float, float]] = {}
+        if not force_sparse and hasattr(arcLines, "flux") and hasattr(arcLines, "description"):
+            good_base = (arcLines.flag == 0) & np.isfinite(arcLines.flux)
+            # Overall (all-species combined)
+            if good_base.sum() >= 2:
+                good_flux = arcLines.flux[good_base]
+                med_flux = float(np.median(good_flux))
+                flux_std = float(np.std(good_flux))
+                if med_flux > 0:
+                    flux_jitter_pct = flux_std / med_flux * 100.0
+                sat_threshold = float(np.percentile(good_flux, 95))
+                n_saturated = int((good_flux > sat_threshold).sum())
+            # Per-species breakdown
+            for sp in np.unique(arcLines.description):
+                sp_mask = good_base & (arcLines.description == sp)
+                if sp_mask.sum() < 2:
+                    species_flux_metrics[sp] = (np.nan, np.nan)
+                    continue
+                sp_flux = arcLines.flux[sp_mask]
+                sp_med = float(np.median(sp_flux))
+                sp_std = float(np.std(sp_flux))
+                sp_jitter = sp_std / sp_med * 100.0 if sp_med > 0 else np.nan
+                sp_sat_thresh = float(np.percentile(sp_flux, 95))
+                sp_nsat = int((sp_flux > sp_sat_thresh).sum())
+                species_flux_metrics[sp] = (sp_jitter, sp_nsat)
+            # Evaluate qaStatus from overall metrics
+            if not np.isnan(flux_jitter_pct):
+                if flux_jitter_pct >= 2.0 * self.config.maxFluxJitterPct:
+                    flux_status = "FAIL"
+                    reasons.append(
+                        f"fluxJitterPct={flux_jitter_pct:.1f}% >= fail threshold"
+                        f" {2.0 * self.config.maxFluxJitterPct:.1f}%"
+                    )
+                elif flux_jitter_pct >= self.config.maxFluxJitterPct:
+                    flux_status = "WARN"
+                    reasons.append(
+                        f"fluxJitterPct={flux_jitter_pct:.1f}% >= warn threshold"
+                        f" {self.config.maxFluxJitterPct:.1f}%"
+                    )
+            if not np.isnan(n_saturated) and n_saturated > self.config.maxSaturatedLines:
+                if flux_status != "FAIL":
+                    flux_status = "WARN"
+                reasons.append(
+                    f"nSaturated={n_saturated} > threshold {self.config.maxSaturatedLines}"
+                )
+
         _level = {"PASS": 0, "WARN": 1, "FAIL": 2}
-        qa_status = max((fwhm_status, flag_status, dx_status), key=lambda s: _level[s])
+        qa_status = max((fwhm_status, flag_status, dx_status, flux_status), key=lambda s: _level[s])
 
         reason_str = "; ".join(reasons) if reasons else "all metrics nominal"
         dxStr = f"{medDxCenter:+.3f}px" if np.isfinite(medDxCenter) else "NaN"
@@ -909,6 +990,9 @@ class ImageQualityQaTask(PipelineTask):
             "fitReservedNLines": [logMetrics["fitReservedNLines"]],
             "fitTraceXRms": [logMetrics["fitTraceXRms"]],
             "fitTraceYRms": [logMetrics["fitTraceYRms"]],
+            # Arc flux gatekeeping metrics
+            "fluxJitterPct": [flux_jitter_pct],
+            "nSaturated": [n_saturated],
             # Fiber arrays
             "fiberIds": [logMetrics["fiberIds"]],
             "fiberXRms": [logMetrics["fiberXRms"]],
@@ -922,6 +1006,11 @@ class ImageQualityQaTask(PipelineTask):
         for sp, (x_rms, y_rms) in logMetrics["speciesStats"].items():
             metricsDict[f"fitSpeciesXRms_{sp}"] = [x_rms]
             metricsDict[f"fitSpeciesYRms_{sp}"] = [y_rms]
+
+        # Per-species flux jitter and saturation columns (e.g. fluxJitterPct_HgI, nSaturated_CdI)
+        for sp, (sp_jitter, sp_nsat) in species_flux_metrics.items():
+            metricsDict[f"fluxJitterPct_{sp}"] = [sp_jitter]
+            metricsDict[f"nSaturated_{sp}"] = [sp_nsat]
 
         metrics = pd.DataFrame(metricsDict)
         for key in ("visit", "arm", "spectrograph"):

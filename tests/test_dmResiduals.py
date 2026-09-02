@@ -1,3 +1,4 @@
+# Note: This test requires the LSST/PFS stack and cannot run in CI without it.
 import logging
 
 import lsst.log
@@ -11,5 +12,12 @@ class TestDetectorMapResiduals(lsst.utils.tests.TestCase):
         lsst.log.setLevel("", lsst.log.DEBUG)
 
     def testResiduals(self):
-        """Test the residuals of the detector map."""
+        """Test the residuals of the detector map.
+
+        Note: This test requires the LSST/PFS stack and cannot run in CI without it.
+        When fully implemented with data, it would verify that the extended QA metrics
+        (lineYieldFrac, spatialRms, wavelengthRms, velocityRms, medResolution,
+        minFiberPitch, maxCrossTalk, and qaStatus) are correctly calculated and
+        appended to the dmQaResidualStats DataFrame.
+        """
         pass
