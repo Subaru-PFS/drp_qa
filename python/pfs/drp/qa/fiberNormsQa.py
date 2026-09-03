@@ -23,6 +23,7 @@ from typing import Any, Literal, ParamSpec, TypeVar  # These won't be necessary 
 
 import eups
 import matplotlib
+import matplotlib.dates as mdates
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
@@ -324,8 +325,9 @@ def write_percentile_trend(
 ) -> None:
     """Plot how the spread of the quartz ratio moves from visit to visit.
 
-    One figure per kind of ratio per arm, with one panel per spectrograph. A
-    CSV of the plotted numbers is written next to each figure.
+    Two figures per kind of ratio per arm, with one panel per spectrograph:
+    one against the visit number, and one against the observation date. A
+    CSV of the plotted numbers is written next to them.
 
     Parameters
     ----------
@@ -341,6 +343,7 @@ def write_percentile_trend(
     matplotlib.use("agg")
 
     df = pd.DataFrame([dataclasses.asdict(p) for p in percentiles])
+    df["obstime"] = pd.to_datetime(df["obstime"], errors="coerce")
     os.makedirs(output, exist_ok=True)
 
     for (kind, arm), arm_df in df.groupby(["kind", "arm"]):
@@ -352,60 +355,113 @@ def write_percentile_trend(
         log.info("Writing %s...", csv_path)
         arm_df.sort_values(["spectrograph", "visit"]).to_csv(csv_path, index=False)
 
-        figure_path = os.path.join(output, f"{stem}.png")
-        try:
-            fig, axes = plt.subplots(
-                len(spectrographs),
-                1,
-                figsize=(10, 2.5 * len(spectrographs)),
-                sharex=True,
-                layout="constrained",
-                squeeze=False,
-                facecolor="white",
-            )
-            for i, spectrograph in enumerate(spectrographs):
-                ax = axes[i][0]
-                spec_df = arm_df[arm_df["spectrograph"] == spectrograph].sort_values("visit")
+        for x_column, x_label, suffix in [
+            ("visit", "visit", ""),
+            ("obstime", "Observation date (HST)", "_datetime"),
+        ]:
+            if arm_df[x_column].isna().all():
+                log.warning("No %s available: skipping %s%s.png", x_column, stem, suffix)
+                continue
 
-                ax.fill_between(
-                    spec_df.visit, spec_df.p01, spec_df.p99, color="C0", alpha=0.2, label="1-99%"
-                )
-                ax.fill_between(
-                    spec_df.visit, spec_df.p10, spec_df.p90, color="C0", alpha=0.5, label="10-90%"
-                )
-                ax.fill_between(
-                    spec_df.visit, spec_df.p25, spec_df.p75, color="C0", alpha=0.8, label="25-75%"
-                )
-                ax.plot(
-                    spec_df.visit, spec_df.p50, ls="dashed", lw=1, color="k", alpha=1.0, label="50%"
-                )
-                ax.set_xlabel("visit", fontsize=12)
-                ax.set_ylabel("Normalized ratio", fontsize=12)
-                ax.set_title(
-                    f"Quartz {QUARTZ_RATIO_TITLES[kind]} normalized to visit={ref_visit}"
-                    f" ({arm}{spectrograph})",
-                    fontsize=12
-                )
-                ax.set_ylim(config.trend_vmin, config.trend_vmax)
-
-                ax.minorticks_on()
-                ax.tick_params(
-                    axis="both", which="major", direction="in",
-                    top=True, bottom=True, left=True, right=True,
-                    length=8.0, width=1.0, labelsize=12
-                )
-                ax.tick_params(
-                    axis="both", which="minor", direction="in",
-                    top=True, bottom=True, left=True, right=True,
-                    length=4.0, width=0.7
-                )
-                if i == 0:
-                    ax.legend(loc="upper left", fontsize=10)
-
+            figure_path = os.path.join(output, f"{stem}{suffix}.png")
             log.info("Writing %s...", figure_path)
-            fig.savefig(figure_path, bbox_inches="tight", dpi=150)
-        finally:
-            plt.close(fig)
+            fig = make_percentile_trend_figure(
+                arm_df, spectrographs, kind, arm, ref_visit, x_column, x_label, config
+            )
+            try:
+                fig.savefig(figure_path, bbox_inches="tight", dpi=150)
+            finally:
+                plt.close(fig)
+
+
+def make_percentile_trend_figure(
+    arm_df: pd.DataFrame,
+    spectrographs: list[int],
+    kind: str,
+    arm: str,
+    ref_visit: int,
+    x_column: str,
+    x_label: str,
+    config: "FiberNormsQaConfig",
+) -> plt.Figure:
+    """Make one trend figure, with one panel per spectrograph.
+
+    Parameters
+    ----------
+    arm_df : `pd.DataFrame`
+        Percentiles of a single (kind, arm), as made by
+        ``write_percentile_trend()``.
+    spectrographs : `list` [`int`]
+        Spectrographs to plot, one panel each.
+    kind : `str`
+        Which ratio is plotted. A key of ``QUARTZ_RATIO_KINDS``.
+    arm : `ArmId`
+        Arm name.
+    ref_visit : `int`
+        Visit of the reference quartz.
+    x_column : `str`
+        Column of ``arm_df`` to put on the abscissa. "visit" or "obstime".
+    x_label : `str`
+        Label of the abscissa.
+    config : `FiberNormsQaConfig`
+        Configuration.
+
+    Returns
+    -------
+    fig : `plt.Figure`
+        The figure. The caller is responsible for closing it.
+    """
+    is_date_axis = x_column == "obstime"
+
+    fig, axes = plt.subplots(
+        len(spectrographs),
+        1,
+        figsize=(10, 2.5 * len(spectrographs)),
+        sharex=True,
+        layout="constrained",
+        squeeze=False,
+        facecolor="white",
+    )
+    for i, spectrograph in enumerate(spectrographs):
+        ax = axes[i][0]
+        spec_df = arm_df[arm_df["spectrograph"] == spectrograph].sort_values(x_column)
+        x = spec_df[x_column]
+
+        ax.fill_between(x, spec_df.p01, spec_df.p99, color="C0", alpha=0.2, label="1-99%")
+        ax.fill_between(x, spec_df.p10, spec_df.p90, color="C0", alpha=0.5, label="10-90%")
+        ax.fill_between(x, spec_df.p25, spec_df.p75, color="C0", alpha=0.8, label="25-75%")
+        ax.plot(x, spec_df.p50, ls="dashed", lw=1, color="k", alpha=1.0, label="50%")
+        ax.set_xlabel(x_label, fontsize=12)
+        ax.set_ylabel("Normalized ratio", fontsize=12)
+        ax.set_title(
+            f"Quartz {QUARTZ_RATIO_TITLES[kind]} normalized to visit={ref_visit}"
+            f" ({arm}{spectrograph})",
+            fontsize=12
+        )
+        ax.set_ylim(config.trend_vmin, config.trend_vmax)
+
+        ax.minorticks_on()
+        if is_date_axis:
+            # minorticks_on() puts an AutoMinorLocator on the abscissa, which
+            # knows nothing of dates. Replace both locators with date ones.
+            major_locator = mdates.AutoDateLocator()
+            ax.xaxis.set_major_locator(major_locator)
+            ax.xaxis.set_major_formatter(mdates.ConciseDateFormatter(major_locator))
+            ax.xaxis.set_minor_locator(mdates.AutoDateLocator(minticks=10, maxticks=40))
+        ax.tick_params(
+            axis="both", which="major", direction="in",
+            top=True, bottom=True, left=True, right=True,
+            length=8.0, width=1.0, labelsize=12
+        )
+        ax.tick_params(
+            axis="both", which="minor", direction="in",
+            top=True, bottom=True, left=True, right=True,
+            length=4.0, width=0.7
+        )
+        if i == 0:
+            ax.legend(loc="upper left", fontsize=10)
+
+    return fig
 
 
 class _ThreadProcArgs(typing.TypedDict):
@@ -1070,6 +1126,9 @@ class QuartzPercentiles:
         Visit of the target quartz.
     ref_visit : `int`
         Visit of the reference quartz.
+    obstime : `str`
+        Date of observation of the target quartz, Hawaii standard time,
+        in ISO format (``YYYY-mm-ddTHH:MM:SS.S``).
     p01, p10, p25, p50, p75, p90, p99 : `float`
         Percentiles of the per-fiber median quartz ratio, over the fibers.
     """
@@ -1079,6 +1138,7 @@ class QuartzPercentiles:
     spectrograph: int
     visit: int
     ref_visit: int
+    obstime: str
     p01: float
     p10: float
     p25: float
@@ -1504,6 +1564,7 @@ class FiberNormsQa:
             Percentiles.
         """
         percentiles: list[QuartzPercentiles] = []
+        obstime = utc2hst(self.fiberNorms.metadata["DATEOBS"])
 
         for spec in self.spectrographs:
             pfsArmRatio = self._get_pfsArmRatio(spec)
@@ -1518,6 +1579,7 @@ class FiberNormsQa:
                         spectrograph=spec,
                         visit=self.visit,
                         ref_visit=self.ref_visit,
+                        obstime=obstime,
                         **{f"p{p:02d}": float(v) for p, v in zip(PERCENTILES, values)},
                     )
                 )
