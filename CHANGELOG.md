@@ -17,6 +17,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **`AGENTS.md`** — single source of instructions for AI coding assistants, with
   `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md` as symlinks to it.
 
+### Fixed
+
+- **`dmResiduals` import** — `getDescriptionCounts` is now imported from
+  `pfs.drp.stella.fitDetectorMap`. The former `pfs.drp.stella.fitDistortedDetectorMap` module no longer
+  exists in `drp_stella`, so `DetectorMapResidualsTask` failed to import and the `dmResiduals` pipeline
+  task could not run.
+
 ### Changed
 
 - **Build and packaging** — `pyproject.toml` is now the single source of build, lint, and test configuration. Ruff

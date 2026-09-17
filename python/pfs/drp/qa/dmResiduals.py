@@ -35,7 +35,7 @@ from pfs.drp.qa.utils.math import getChi2, getWeightedRMS
 from pfs.drp.qa.utils.plotting import div_palette, scatterplot_with_outliers
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
 from pfs.drp.stella.applyExclusionZone import getExclusionZone
-from pfs.drp.stella.fitDistortedDetectorMap import getDescriptionCounts
+from pfs.drp.stella.fitDetectorMap import getDescriptionCounts
 from pfs.drp.stella.utils.math import robustRms
 from pfs.utils.fiberids import FiberIds
 
