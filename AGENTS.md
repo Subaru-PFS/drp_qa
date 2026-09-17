@@ -17,7 +17,7 @@ Contents:
 6. [Git Commit Convention](#git-commit-convention)
 7. [Domain Knowledge: `imageQualityQa`](#domain-knowledge-imagequalityqa)
 8. [Arc Lamp Physics and b-arm `pctFlagged` Failures](#arc-lamp-physics-and-b-arm-pctflagged-failures)
-9. [Butler / Pipeline Data Flow for IQ QA](#butler--pipeline-data-flow-for-iq-qa)
+9. [Butler / Pipeline Data Flow for DM & IQ QA](#butler--pipeline-data-flow-for-dm--iq-qa)
 10. [Common Failure Patterns](#common-failure-patterns)
 11. [Cross-repo Dependency Notes](#cross-repo-dependency-notes)
 
@@ -31,15 +31,26 @@ the pipeline/config glue to run them.
 
 ### Key components
 
-- **QA pipeline (`pipelines/drpQA.yaml`)** — defines the sequence of QA tasks.
-- **Tasks (`python/pfs/drp/qa/`)**:
+- **QA pipeline (`pipelines/drpQA.yaml`)** — defines the sequence of QA tasks. It
+  currently registers **six** task labels, and only these run under `pipetask`:
+  `dmResiduals`, `dmCombinedResiduals`, `dmDriftMonitor`, `extractionQa`,
+  `extractionQaCombined`, `imageQualityQa`.
+- **Tasks in the pipeline (`python/pfs/drp/qa/`)**:
   - `imageQualityQa.py` — image quality (FWHM, flag rates); plots in `iqQaPlots.py`
   - `dmResiduals.py`, `dmCombinedResiduals.py` — detector map residuals (per-detector
     and cross-visit combined)
-  - `extractionQa.py` — fiber extraction quality
-  - `skySubtractionQa.py` — sky subtraction accuracy
-  - `fiberNormsQa.py` — fiber normalization plots
+  - `dmDriftMonitorTask.py` — compares daily trace/neon centroids against the static
+    per-run `detectorMap` to measure centroid drift and recommend recalibration
+  - `extractionQa.py`, `extractionQaCombined.py` — fiber extraction quality
+    (per-detector, and combined per `(instrument, visit, arm)`)
+- **QA modules *not* wired into `drpQA.yaml`** — these exist as `PipelineTask`s or CLIs
+  but must be run via their own pipeline/entry point:
+  - `skySubtractionQa.py` — sky subtraction accuracy (`SkyArmSubtractionTask`,
+    `SkySubtractionQaTask`)
   - `fluxCalQa.py`, `fluxCal/fluxCalQA.py` — flux calibration validation
+  - `fiberNormsQa.py` — **not** a `PipelineTask`; a standalone Butler-driven CLI module
+    whose `main()` is invoked from `bin.src/fiberNormsQa.py`
+- **Support modules (`python/pfs/drp/qa/`)**:
   - `storageClasses.py`, `formatters.py` — custom Butler storage classes / formatters
   - `utils/` — shared helpers (`math.py`, `plotting.py`)
   - `tasks/` — auxiliary task helpers (e.g. `overlapRegionLines.py`)
@@ -49,9 +60,16 @@ the pipeline/config glue to run them.
   - `imageQualityLogQa.py` — per-visit report from `reduceExposure`/`imageQualityQa`
     logs or a direct Butler query; dashboard plot, markdown report, JSON dump
   - `plotIqQaTimeSeries.py` — cross-visit `iqQaMetrics` time series via `iqQaPlots.py`
+  - `qaVisitSummary.py` — per-visit QA rollup from the Butler. Both a CLI and a Python
+    API (`VisitSummary` / `VisitSummaryResult`) that gathers `dmQaDetectorStats`,
+    `iqQaMetrics`, `dmQaResidualStats` and `dmDriftMetrics` into DataFrames. Exit code
+    encodes the worst `qaStatus` across all datasets: `0`=PASS, `1`=WARN, `2`=FAIL,
+    `3`=no data.
   - `fiberNormsQa.py` — entry point for `fiberNormsQa.main`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),
-  which contains the core reduction logic and C++ primitives.
+  which contains the core reduction logic and C++ primitives, and on `pfs_utils`. Both
+  are `setupRequired` in `ups/drp_qa.table`; `pfs-utils` is also a hard `pyproject.toml`
+  dependency (installed from git).
 
 ### Key files & directories
 
@@ -60,7 +78,8 @@ the pipeline/config glue to run them.
 - `bin.src/` — command-line scripts, run directly as `python bin.src/<name>.py`.
   There is no SCons `shebang()` step and no generated `bin/` directory.
 - `ups/` — EUPS configuration (`drp_qa.table`, dependencies and `PATH`/`PYTHONPATH`)
-- `tests/` — pytest-based tests (may rely on the LSST/PFS stack)
+- `tests/` — pytest-based tests (may rely on the LSST/PFS stack). `tests/SConscript` is
+  the one surviving SCons file; it is vestigial and not exercised by `pytest`.
 - `pyproject.toml` — build config (setuptools) and **all** tool configs (Ruff, pytest).
   Keep it that way: don't add standalone per-tool config files.
 - `README.md` — project overview and usage notes
@@ -83,9 +102,13 @@ setup -r ../drp_stella   # drp_stella must be set up first
 setup -r .
 ```
 
+`ups/drp_qa.table` declares `setupRequired(drp_stella)` and `setupRequired(pfs_utils)`,
+so both must be available.
+
 EUPS is still used for dependency resolution via `ups/drp_qa.table`, but **there is no
 SCons build** — `SConstruct` and `bin.src/SConscript` were removed. `setup -r .` only
-prepends `PATH` and `PYTHONPATH`; nothing is compiled or generated.
+prepends `PATH` and `PYTHONPATH`; nothing is compiled or generated. (`tests/SConscript`
+still exists but is vestigial.)
 
 ### Install
 
@@ -111,6 +134,10 @@ pytest tests/test_fitDetectorMapLogQa.py
 # Single test
 pytest tests/test_dmResiduals.py::TestDetectorMapResiduals::testResiduals
 ```
+
+`pyproject.toml` sets `addopts = "-ra --import-mode=importlib"`. Note the `importlib`
+import mode: test modules are not added to `sys.path`, so they can't import each other
+by bare module name.
 
 `tests/test_fitDetectorMapLogQa.py` is stdlib-only and runs without the stack — keep it
 that way when editing `bin.src/fitDetectorMapLogQa.py`. Other tests use
@@ -149,8 +176,9 @@ Ruff is the only style tool; there is no separate type checker.
 - **Excludes**: none configured; Ruff respects `.gitignore`, which already covers `bin/`
   and `tests/.tests/`.
 
-The codebase is not currently Ruff-clean (~470 findings, mostly `E501`, `D4xx`, `UP`,
-and `F401`). Lint your own changes; don't bulk-reformat unrelated files in a feature PR.
+The codebase is not currently Ruff-clean (~284 findings as of the last sweep, mostly
+`E501`, `D4xx`, `UP`, and `F401`). Lint your own changes; don't bulk-reformat unrelated
+files in a feature PR.
 
 ---
 
@@ -367,6 +395,8 @@ fallback is preferred in that case.
 | `fwhmWarnThreshold` / `fwhmFailThreshold` (3.2/3.5 px) | FWHM pass/warn/fail thresholds |
 | `dxCenterWarnThreshold` / `dxCenterFailThreshold` (1.0/2.0 px) | `\|medDxCenter\|` flexure thresholds |
 | `flagRateWarnThreshold` / `flagRateFailThreshold` | `pctFlagged` thresholds; DictField keyed by `arm` **or** `arm:species` |
+| `maxFluxJitterPct` (default 15.0) | `fluxJitterPct` above this → WARN; above **twice** this → FAIL. Set to e.g. 999 to disable |
+| `maxSaturatedLines` (default 50) | `nSaturated` above this → WARN. Set to e.g. 99999 to disable |
 
 Flag-rate thresholds are looked up as `arm:species` → `arm` → 15.0/20.0, where the
 species is the part of `W_SEQNAM` after the colon (`"Arc: HgCd"` → `HgCd`). Blue-arm
@@ -398,15 +428,39 @@ dict as a Python literal:
 - `nLines`: number of measurements used
 - `traceOnly`: True when falling back to fiber-profile widths
 - `obsType` / `seqName`: visit classification and raw `W_SEQNAM`
-- `qaStatus`: `"PASS"`, `"WARN"`, or `"FAIL"` — the worst of the FWHM, flag-rate, and
-  `|medDxCenter|` checks
+- `fluxJitterPct`: `fluxStd / medFlux * 100` over non-flagged arc lines — lamp stability
+- `nSaturated`: count of lines above the saturation proxy (95th percentile of the flux
+  distribution)
+- `qaStatus`: `"PASS"`, `"WARN"`, or `"FAIL"` — the **worst** of the FWHM, flag-rate,
+  `|medDxCenter|`, `fluxJitterPct` and `nSaturated` checks
 
 Additional columns are added dynamically: a per-status-bit flag breakdown
 (`pctNotVisible`, `pctBlend`, `pctSuspect`, `pctRejected`, `pctBroad`, plus `pctLowSN` /
-`pctMeasFail` on the arc-line path), and — when the optional `isr_log`, `cosmicray_log`,
-and `reduceExposure_log` connections are present — ISR, cosmic-ray, and `fitDetectorMap`
-statistics (`fitChi2`, `fitXRms`, `fitYRms`, `fitReserved*`, `fitSpecies*Rms_<species>`,
-per-fiber arrays).
+`pctMeasFail` on the arc-line path), per-species flux columns
+(`fluxJitterPct_<species>`, `nSaturated_<species>`, e.g. `fluxJitterPct_HgI`), and —
+when the optional `isr_log`, `cosmicray_log`, and `reduceExposure_log` connections are
+present — ISR, cosmic-ray, and `fitDetectorMap` statistics (`fitChi2`, `fitXRms`,
+`fitYRms`, `fitReserved*`, `fitSpecies*Rms_<species>`, per-fiber arrays).
+
+### DM residual metrics
+
+`dmResiduals` writes `dmQaResidualData` and `dmQaResidualStats`. Beyond the residual
+columns, `dmQaResidualStats` carries: `lineYieldFrac`, `spatialRms` (px, x residuals),
+`wavelengthRms` (nm, y residuals × dispersion), `velocityRms` (km/s), `medResolution`,
+`minFiberPitch` (px), `maxCrossTalk`, and `qaStatus`. Most are computed **per
+`(status_type, description)`** group; `minFiberPitch` and `maxCrossTalk` are
+species-independent and computed once per detector. The corresponding thresholds live on
+`DetectorMapResidualsConfig`: `spatialRmsWarn`/`Fail` (0.03/0.05 px),
+`wavelengthRmsWarn`/`Fail` (0.003/0.005 nm), `minLineYieldFrac` (0.85),
+`minFiberPitchWarn`/`Fail` (4.0/3.5 px), `maxCrossTalkWarn`/`Fail` (0.0005/0.001).
+
+`dmCombinedResiduals` aggregates these into `dmQaDetectorStats` (one row per
+`(arm, spectrograph)`) and optionally joins `iqQaMetrics` through a `multiple=True`
+input connection. **Its only output is the DataFrame** — the former
+`dmQaCombinedResidualPlot` dataset has been removed.
+
+`dmDriftMonitor` writes `dmDriftMetrics` with `deltaX`, `deltaY`, `driftMag`, `deltaWx`,
+`qaStatus`, and `recommendedAction` (`NOMINAL` / `APPLY_SHIFT` / `RECALIBRATE`).
 
 The task writes **data only**. Plotting lives in `iqQaPlots.py` and is driven after the
 fact by `bin.src/plotIqQaTimeSeries.py`; there is no `iqQaPlot` dataset.
@@ -496,22 +550,43 @@ call.
 
 ---
 
-## Butler / Pipeline Data Flow for IQ QA
+## Butler / Pipeline Data Flow for DM & IQ QA
 
 ```
 detectorMap.yaml#fitDetectorMap
     → outputs: detectorMap, lines (=arcLines)
 
-drpQA.yaml#imageQualityQa
+drpQA.yaml#imageQualityQa            dims: (instrument, visit, arm, spectrograph)
     ← reads: arcLines, detectorMap,
              fiberProfiles, detectorMap_calib (calibrations),
              calexp, pfsConfig (optional),
              isr_log, cosmicray_log, reduceExposure_log (optional)
     → writes: iqQaData, iqQaMetrics
 
+drpQA.yaml#dmResiduals               dims: (instrument, visit, arm, spectrograph)
+    ← reads: raw.visitInfo, detectorMap, lines, reduceExposure_config
+    → writes: dmQaResidualData, dmQaResidualStats
+
+drpQA.yaml#dmDriftMonitor            dims: (instrument, visit, arm, spectrograph)
+    ← reads: lines, detectorMap (the static per-run map)
+    → writes: dmDriftMetrics
+
+drpQA.yaml#dmCombinedResiduals       dims: (instrument,)   [multiple=True inputs]
+    ← reads: detectorMap, dmQaResidualData, dmQaResidualStats,
+             iqQaMetrics (optional)
+    → writes: dmQaDetectorStats        (no plot dataset — removed)
+
+drpQA.yaml#extractionQa              → extQaStats, extQaImage, extQaImage_pickle
+drpQA.yaml#extractionQaCombined      ← extQaImage_pickle (multiple)
+                                     → extQaStatsCombined
+
 bin.src/plotIqQaTimeSeries.py
     ← reads: iqQaMetrics (all quanta in a collection)
     → writes: time-series PNG via pfs.drp.qa.iqQaPlots.plotIqTimeSeries
+
+bin.src/qaVisitSummary.py
+    ← reads: dmQaDetectorStats, iqQaMetrics, dmQaResidualStats, dmDriftMetrics
+    → prints a per-visit rollup; exit code = worst qaStatus (0/1/2/3)
 ```
 
 `reduceExposure` is **not** required between `fitDetectorMap` and `imageQualityQa`. The
@@ -549,6 +624,9 @@ From engineering run data:
 
 - **`drp_stella`** must be set up before `drp_qa`
   (`setup -r ../drp_stella; setup -r .`).
+- **`pfs_utils`** is the other `setupRequired` entry in `ups/drp_qa.table`, and
+  `pfs-utils` is a hard `pyproject.toml` dependency pulled straight from GitHub —
+  a plain `pip install -e .` will try to clone it.
 - Key types from `drp_stella` used by `imageQualityQa`:
   - `ArcLineSet` — per-line measurements including `ixx`, `iyy`, `flux`, `fluxErr`,
     `flag`, `description` (species name), `status`

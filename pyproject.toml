@@ -115,11 +115,8 @@ known-first-party = ["pfs"]
 # ==============================================================================
 [tool.pytest.ini_options]
 minversion = "8.0"
-addopts = "-ra --import-mode=importlib -m 'not database'"
+addopts = "-ra --import-mode=importlib"
 testpaths = ["tests"]
-markers = [
-    "database: tests that require access to the PFS database",
-]
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
