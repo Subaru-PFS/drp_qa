@@ -1,0 +1,80 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stack-free:
+    name: Stack-free tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # pyproject.toml requires >=3.12. Keep the lowest supported version in
+        # the matrix so we notice if something starts depending on a newer one.
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # The package itself is deliberately NOT installed.
+      #
+      # The suite that can run here is stack-free and imports only the standard
+      # library. `pip install -e .` would pull pfs-utils (and transitively
+      # pfs-datamodel and pfs-instdata) from GitHub, making every run depend on
+      # three other repositories being reachable, for no gain.
+      #
+      # `uv sync --frozen` is not an option either: uv.lock is stale with
+      # respect to pyproject.toml (`uv lock --check` fails), so it cannot
+      # reproduce the declared environment. Refresh the lockfile before relying
+      # on it here.
+      #
+      # Tests needing the LSST/PFS stack are skipped by tests/conftest.py.
+      # See the stack-tests job below.
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+
+      - name: Run tests
+        run: pytest -v
+
+  stack-tests:
+    name: Stack tests (LSST/PFS)
+    runs-on: ubuntu-latest
+    # No stack container is available to this repository yet. When one is,
+    # drop this guard and fill in the image and drp_stella location below.
+    if: false
+    container: "" # e.g. ghcr.io/<org>/pfs-stack:<tag>
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests with the stack
+        run: |
+          source /opt/lsst/software/stack/loadLSST.bash
+          setup -r /path/to/drp_stella
+          setup -r .
+          pytest -v
+
+# ---------------------------------------------------------------------------
+# Why so little runs here
+# ---------------------------------------------------------------------------
+# Most of this package imports pfs.drp.stella, which is not pip-installable, so
+# only the stack-free suite runs in CI today. The way to increase coverage is
+# not a bigger CI image but more logic in pure functions that take arrays and
+# DataFrames, which need no stack to test. See doc/qa-rebuild-plan.md.

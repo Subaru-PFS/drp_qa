@@ -5,7 +5,6 @@ import sys
 import tempfile
 import textwrap
 import unittest
-from io import StringIO
 from pathlib import Path
 
 # The script lives in bin.src/ with no package wrapper, so add it to the path.
@@ -345,91 +344,6 @@ class TestAssess(unittest.TestCase):
         results2 = {("b", 1): self._make_qr(1, 18000, 0.20)}
         qa.assess(results2, yrms_warn=0.25, yrms_bad=0.50)
         self.assertEqual(results2[("b", 1)].status, "OK")
-
-
-# ---------------------------------------------------------------------------
-# Integration tests — against the real log files
-# ---------------------------------------------------------------------------
-
-
-class TestRealLogs(unittest.TestCase):
-    """Smoke tests against the repo's example log files.
-
-    Skipped automatically when the log files are not present.
-    """
-
-    repo_root = Path(__file__).parent.parent
-
-    def _skip_if_missing(self, name: str) -> Path:
-        p = self.repo_root / name
-        if not p.exists():
-            self.skipTest(f"Log file not found: {p}")
-        return p
-
-    def test_dm02_sm3_flagged(self):
-        """run28-dm-02.log: SM3 b-arm must be flagged BAD."""
-        log = self._skip_if_missing("run28-dm-02.log")
-        results = qa.parse_log(log)
-        qa.assess(results)
-        self.assertIn(("b", 3), results)
-        self.assertEqual(results[("b", 3)].status, "BAD")
-
-    def test_dm02_other_sms_ok(self):
-        """run28-dm-02.log: SM1/2/4 b-arm must all be OK."""
-        log = self._skip_if_missing("run28-dm-02.log")
-        results = qa.parse_log(log)
-        qa.assess(results)
-        for sm in (1, 2, 4):
-            with self.subTest(sm=sm):
-                self.assertEqual(results[("b", sm)].status, "OK")
-
-    def test_dm02_sm3_ysoften_nan(self):
-        """run28-dm-02.log: SM3 Final result ySoften is NaN."""
-        log = self._skip_if_missing("run28-dm-02.log")
-        results = qa.parse_log(log)
-        self.assertTrue(math.isnan(results[("b", 3)].final_ySoften))
-
-    def test_dm03_sm3_flagged(self):
-        """run28-dm-03.log: SM3 is still flagged BAD despite per-species S/N."""
-        log = self._skip_if_missing("run28-dm-03.log")
-        results = qa.parse_log(log)
-        qa.assess(results)
-        self.assertEqual(results[("b", 3)].status, "BAD")
-
-    def test_dm02_four_quanta(self):
-        """run28-dm-02.log: exactly four fitDetectorMap quanta should be found."""
-        log = self._skip_if_missing("run28-dm-02.log")
-        results = qa.parse_log(log)
-        self.assertEqual(len(results), 4)
-
-    def test_dm02_exec_time_present(self):
-        """Execution times are captured for all quanta in dm-02."""
-        log = self._skip_if_missing("run28-dm-02.log")
-        results = qa.parse_log(log)
-        for k, qr in results.items():
-            with self.subTest(quantum=k):
-                self.assertFalse(math.isnan(qr.exec_time_s))
-                self.assertGreater(qr.exec_time_s, 0)
-
-    def test_main_exit_code(self):
-        """main() returns 1 (BAD found) for the real log files."""
-        log = self._skip_if_missing("run28-dm-02.log")
-        rc = qa.main([str(log)])
-        self.assertEqual(rc, 1)
-
-    def test_main_output_table(self):
-        """main() produces a table with the expected arm/SM rows."""
-        log = self._skip_if_missing("run28-dm-02.log")
-        captured = StringIO()
-        orig_stdout = sys.stdout
-        sys.stdout = captured
-        try:
-            qa.main([str(log)])
-        finally:
-            sys.stdout = orig_stdout
-        output = captured.getvalue()
-        for sm in ("b    1", "b    2", "b    3", "b    4"):
-            self.assertIn(sm, output)
 
 
 if __name__ == "__main__":

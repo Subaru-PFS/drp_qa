@@ -77,10 +77,10 @@ class FluxCalQA:
         with fits.open(path) as hdul:
             header = hdul[0].header
             for key in keys:
-                if self.isGen3:
-                    if key == "OBJECT":  # this card is missing from pfsMerged in gen3
-                        info[key] = self.getObjectGen3(visit)
-                        continue
+                # OBJECT is missing from pfsMerged in gen3.
+                if self.isGen3 and key == "OBJECT":
+                    info[key] = self.getObjectGen3(visit)
+                    continue
                 info[key] = header[key]
 
         return info
@@ -409,7 +409,10 @@ class FluxCalQA:
     def drawPfsMergedColor(self, ax, pfsConfig, color, SN):
         scatter = np.nanpercentile(color, (25, 50, 75))
         ax.set_title(
-            f"{self.synthmag.filters[self.psfColorIndex[0]]} - {self.synthmag.filters[self.psfColorIndex[1]]}, median={scatter[1]:2.2f}, scatter={(scatter[2] - scatter[0]) / 1.35:1.3f}mag",
+            (
+                f"{self.synthmag.filters[self.psfColorIndex[0]]} - {self.synthmag.filters[self.psfColorIndex[1]]}, "
+                f"median={scatter[1]:2.2f}, scatter={(scatter[2] - scatter[0]) / 1.35:1.3f}mag"
+            ),
             fontsize=9,
         )
         color -= scatter[1]  # subtract the median
@@ -725,7 +728,10 @@ class FluxCalQA:
         ax.text(
             pfsConfig.raBoresight,
             pfsConfig.decBoresight + 0.7,
-            f"{self.synthmag.filters[self.psfColorIndex[0]]}-{self.synthmag.filters[self.psfColorIndex[1]]} color difference",
+            (
+                f"{self.synthmag.filters[self.psfColorIndex[0]]}-{self.synthmag.filters[self.psfColorIndex[1]]} "
+                f"color difference"
+            ),
             horizontalalignment="center",
             fontsize=9,
         )
@@ -1070,7 +1076,7 @@ class FluxCalQA:
                 ax.set_ylim(0, 2)
                 ax.set_xlabel("wavelength [nm]")
                 ax.set_ylabel("flux in arbitrary units")
-                ax.set_title("fiberId = %d, SN=%2.1f" % (pfsConfig.fiberId[index], SN[index]))
+                ax.set_title(f"fiberId = {pfsConfig.fiberId[index]}, SN={SN[index]:2.1f}")
 
                 # need to update to accept Gaia and HSC filters
                 if (self.refCat == "PS1") and (self.flagNoColor is False):

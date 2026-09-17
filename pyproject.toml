@@ -57,6 +57,9 @@ write_to = "python/pfs/drp/qa/version.py"
 target-version = "py312"
 line-length = 110
 src = ["python"]
+# Exploratory notebooks: out-of-order imports (E402), unused imports and
+# cross-cell names (F401/F821) are inherent to the format, not defects.
+extend-exclude = ["examples"]
 
 [tool.ruff.lint]
 # Selected rule sets (https://docs.astral.sh/ruff/rules/)
@@ -97,6 +100,17 @@ ignore = [
     # Reserved for the EM/TRY rule sets, which are not selected above.
     "EM101",
     "TRY003",
+    # Greek letters and typographic dashes are intentional in plot labels and
+    # docstrings for a scientific package (e.g. "2.5σ", "b–r").
+    "RUF001",
+    "RUF002",
+    "RUF003",
+    # `ruff format` already enforces `line-length` for code. What E501 still
+    # catches is what the formatter deliberately will not split: long regex
+    # patterns, report/plot-title strings and URLs. Breaking those up hurts
+    # readability and, for regexes, invites transcription errors. Ruff's own
+    # docs recommend disabling E501 when the formatter is in use.
+    "E501",
 ]
 
 [tool.ruff.lint.pydocstyle]

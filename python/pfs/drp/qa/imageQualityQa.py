@@ -1004,7 +1004,9 @@ class ImageQualityQaTask(PipelineTask):
             r"Stats for (\w+): " + armSpec + r"chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+)"
         )
         re_fiber = re.compile(
-            r"Stats for fiberId=(\d+): " + armSpec + r"chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+).*from (\d+) lines"
+            r"Stats for fiberId=(\d+): "
+            + armSpec
+            + r"chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+).*from (\d+) lines"
         )
         re_task_time = re.compile(r"Execution of task '(\w+)' on quantum .* took ([\d\.]+) seconds")
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot imageQualityQa metrics across visits.
+r"""Plot imageQualityQa metrics across visits.
 
 Reads ``iqQaMetrics`` datasets from a butler collection and produces a
 multi-panel time-series figure showing FWHM, flexure (dxCenter), and
@@ -35,11 +35,13 @@ def main():
         description="Plot imageQualityQa metrics across visits.",
     )
     parser.add_argument(
-        "-b", "--butler",
+        "-b",
+        "--butler",
         help="Path to the butler repository (required unless --csv is provided).",
     )
     parser.add_argument(
-        "-c", "--collection",
+        "-c",
+        "--collection",
         help="Butler collection containing iqQaMetrics datasets (required unless --csv is provided).",
     )
     parser.add_argument(
@@ -51,26 +53,34 @@ def main():
         help="Filter to specific arms (comma-separated, e.g. 'b,r').",
     )
     parser.add_argument(
-        "--spectrograph", "--spec",
+        "--spectrograph",
+        "--spec",
         help="Filter to specific spectrographs (comma-separated integers, e.g. '1,3').",
     )
     parser.add_argument(
-        "--obs-type", "--obsType",
+        "--obs-type",
+        "--obsType",
         help="Filter to specific observation types (comma-separated, e.g. 'arc,trace').",
     )
     parser.add_argument(
-        "-o", "--output", default="iq_qa_timeseries.png",
+        "-o",
+        "--output",
+        default="iq_qa_timeseries.png",
         help="Output file path (default: iq_qa_timeseries.png).",
     )
     parser.add_argument(
-        "-w", "--where", default="",
+        "-w",
+        "--where",
+        default="",
         help=(
             "Optional butler query expression to filter quanta"
-            " (e.g. \"arm='r'\" or \"visit > 140000\"). Only used with Butler query."
+            ' (e.g. "arm=\'r\'" or "visit > 140000"). Only used with Butler query.'
         ),
     )
     parser.add_argument(
-        "--dpi", type=int, default=150,
+        "--dpi",
+        type=int,
+        default=150,
         help="Output resolution in DPI (default: 150).",
     )
     args = parser.parse_args()
@@ -81,31 +91,23 @@ def main():
     if args.csv:
         print(f"Loading metrics from CSV: {args.csv}")
         metrics = pd.read_csv(args.csv)
-        print(
-            f"Loaded {len(metrics)} rows spanning"
-            f" {metrics['visit'].nunique()} visits."
-        )
+        print(f"Loaded {len(metrics)} rows spanning {metrics['visit'].nunique()} visits.")
     else:
         try:
             from lsst.daf.butler import Butler
         except ImportError:
             print(
-                "Error: lsst.daf.butler not available."
-                "  Run this script within the LSST stack environment.",
+                "Error: lsst.daf.butler not available.  Run this script within the LSST stack environment.",
                 file=sys.stderr,
             )
             sys.exit(1)
 
         butler = Butler(args.butler, collections=[args.collection])
-        refs = set(
-            butler.registry.queryDatasets("iqQaMetrics", where=args.where)
-        )
+        refs = set(butler.registry.queryDatasets("iqQaMetrics", where=args.where))
         if not refs:
             print(
                 f"No iqQaMetrics datasets found in collection"
-                f" '{args.collection}'"
-                + (f" with where='{args.where}'" if args.where else "")
-                + ".",
+                f" '{args.collection}'" + (f" with where='{args.where}'" if args.where else "") + ".",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -116,10 +118,7 @@ def main():
             df = butler.get(ref)
             frames.append(df)
         metrics = pd.concat(frames, ignore_index=True)
-        print(
-            f"Loaded {len(metrics)} rows spanning"
-            f" {metrics['visit'].nunique()} visits."
-        )
+        print(f"Loaded {len(metrics)} rows spanning {metrics['visit'].nunique()} visits.")
 
     # Apply command-line filters (arm / spectrograph)
     if args.arm:

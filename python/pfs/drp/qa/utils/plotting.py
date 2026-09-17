@@ -95,7 +95,7 @@ def scatterplot_with_outliers(
         # Positive outliers.
         pos = data.query(f"{X if vertical else Y} >= @ymax").copy()
         pos[X if vertical else Y] = ymax
-        marker = "X" if vertical is True else "X"
+        marker = "X"
         sb.scatterplot(
             data=pos,
             x=X,
@@ -116,7 +116,7 @@ def scatterplot_with_outliers(
         # Negative outliers.
         neg = data.query(f"{X if vertical else Y} <= @ymin").copy()
         neg[X if vertical else Y] = ymin
-        marker = "X" if vertical is True else "X"
+        marker = "X"
         sb.scatterplot(
             data=neg,
             x=X,

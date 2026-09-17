@@ -916,7 +916,7 @@ def plot_outlier_summary(spectras: dict, spectraFibers: dict, thresholds=None) -
 
 
 def plot_sky_reference(spectras: dict) -> Figure:
-    """Plots the sky reference spectrum and flux residuals.
+    """Plot the sky reference spectrum and flux residuals.
 
     Parameters
     ----------
@@ -981,7 +981,7 @@ def plot_sky_reference(spectras: dict) -> Figure:
 
 
 def plot_vs_sky_brightness_all(spectraFibers, method="median", binsize=10) -> Figure:
-    """Plots all data."""
+    """Plot all data."""
     fd0 = getFiberData(spectraFibers)
     fd0["totalFlux"] = fd0.eval("flux + sky")
     fd0["wave_rank"] = fd0.groupby(["arm", "fiberId"], observed=False).wave.rank()
@@ -1208,10 +1208,10 @@ def plotPercentile(
 
 
 def buildReference(spectra: PfsArm, func: Callable | None = np.mean, model: str = "residuals"):
-    """
-    Build a reference spectrum by aggregating spectral data from multiple fibers.
-    The reference spectrum is constructed by applying a specified aggregation function
-    (e.g., mean, median) to the selected model across all fibers.
+    """Build a reference spectrum by aggregating data from multiple fibers.
+
+    The reference spectrum is constructed by applying a specified aggregation
+    function (e.g. mean, median) to the selected model across all fibers.
 
     Notes
     -----
@@ -1576,7 +1576,7 @@ def get_mosaic(mosaic="A", figsize=(10, 10), **kwargs):
 
 
 def add_layer(ax: Axes, layer: PlotLayer):
-    """Adds a layer to the plot based on the specified version.
+    """Add a layer to the plot based on the specified version.
 
     The bulk of the plotting options and work is done in this function.
 

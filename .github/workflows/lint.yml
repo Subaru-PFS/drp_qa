@@ -1,0 +1,45 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  # Pinned deliberately. A newer Ruff can introduce rules that fail code which
+  # was clean when it was written; bump this in its own commit so the resulting
+  # findings get reviewed on their own.
+  RUFF_VERSION: "0.14.13"
+
+jobs:
+  ruff:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install Ruff
+        run: python -m pip install "ruff==${RUFF_VERSION}"
+
+      # The repository is Ruff-clean, so both of these gate the whole tree.
+      # Keep it that way: fix findings in the code you touch rather than
+      # widening the ignore list in pyproject.toml.
+      - name: Lint
+        run: ruff check .
+
+      - name: Format
+        run: ruff format --check .

@@ -367,37 +367,46 @@ def write_percentile_trend(
                 ax = axes[i][0]
                 spec_df = arm_df[arm_df["spectrograph"] == spectrograph].sort_values("visit")
 
-                ax.fill_between(
-                    spec_df.visit, spec_df.p01, spec_df.p99, color="C0", alpha=0.2, label="1-99%"
-                )
+                ax.fill_between(spec_df.visit, spec_df.p01, spec_df.p99, color="C0", alpha=0.2, label="1-99%")
                 ax.fill_between(
                     spec_df.visit, spec_df.p10, spec_df.p90, color="C0", alpha=0.5, label="10-90%"
                 )
                 ax.fill_between(
                     spec_df.visit, spec_df.p25, spec_df.p75, color="C0", alpha=0.8, label="25-75%"
                 )
-                ax.plot(
-                    spec_df.visit, spec_df.p50, ls="dashed", lw=1, color="k", alpha=1.0, label="50%"
-                )
+                ax.plot(spec_df.visit, spec_df.p50, ls="dashed", lw=1, color="k", alpha=1.0, label="50%")
                 ax.set_xlabel("visit", fontsize=12)
                 ax.set_ylabel("Normalized ratio", fontsize=12)
                 ax.set_title(
                     f"Quartz {QUARTZ_RATIO_TITLES[kind]} normalized to visit={ref_visit}"
                     f" ({arm}{spectrograph})",
-                    fontsize=12
+                    fontsize=12,
                 )
                 ax.set_ylim(config.trend_vmin, config.trend_vmax)
 
                 ax.minorticks_on()
                 ax.tick_params(
-                    axis="both", which="major", direction="in",
-                    top=True, bottom=True, left=True, right=True,
-                    length=8.0, width=1.0, labelsize=12
+                    axis="both",
+                    which="major",
+                    direction="in",
+                    top=True,
+                    bottom=True,
+                    left=True,
+                    right=True,
+                    length=8.0,
+                    width=1.0,
+                    labelsize=12,
                 )
                 ax.tick_params(
-                    axis="both", which="minor", direction="in",
-                    top=True, bottom=True, left=True, right=True,
-                    length=4.0, width=0.7
+                    axis="both",
+                    which="minor",
+                    direction="in",
+                    top=True,
+                    bottom=True,
+                    left=True,
+                    right=True,
+                    length=4.0,
+                    width=0.7,
                 )
                 if i == 0:
                     ax.legend(loc="upper left", fontsize=10)
@@ -447,7 +456,7 @@ class _ThreadProcStatus(enum.Enum):
 
 
 class _ThreadProcResult(typing.NamedTuple):
-    """Return value of ``_main_threadproc()``
+    """Return value of ``_main_threadproc()``.
 
     Attributes
     ----------
@@ -756,9 +765,11 @@ def unordered_parallel_map(
         if processes is not None and processes <= 1:
             yield from map(func, arglist)
         else:
-            with install_centralized_logger():
-                with multiprocessing.Pool(processes, initializer=_poolworker_ignore_signal) as pool:
-                    yield from pool.imap_unordered(func, arglist)
+            with (
+                install_centralized_logger(),
+                multiprocessing.Pool(processes, initializer=_poolworker_ignore_signal) as pool,
+            ):
+                yield from pool.imap_unordered(func, arglist)
 
     # `pool` variable in _generator() is closed only if the return value of
     # _generator() is iterated thoroughly or is closed. If it were not for
@@ -898,11 +909,10 @@ def get_datasets(
         raise RuntimeError(f'no dataset group matching the query ("{where}") is found.')
 
     for dataset_type, multiplicity in dataset_types:
-        if multiplicity == Multiplicity.SIMPLE:
-            if any(len(group[dataset_type]) > 1 for group in groups):
-                raise RuntimeError(
-                    f"multiple '{dataset_type}' are found (maybe database or program is broken hopelessly)."
-                )
+        if multiplicity == Multiplicity.SIMPLE and any(len(group[dataset_type]) > 1 for group in groups):
+            raise RuntimeError(
+                f"multiple '{dataset_type}' are found (maybe database or program is broken hopelessly)."
+            )
 
     multiplicities = dict(dataset_types)
 
@@ -1350,9 +1360,13 @@ class FiberNormsQa:
         output: str,
         input: FiberNormsQaInput,
         *,
-        config=FiberNormsQaConfig(),
+        config: FiberNormsQaConfig | None = None,
         log: logging.Logger | None = None,
     ) -> None:
+        # Constructed per call rather than in the signature: a default built at
+        # import time would be shared by every instance.
+        if config is None:
+            config = FiberNormsQaConfig()
         if log is not None:
             self.log = log.getChild(type(self).__qualname__)
         else:
@@ -1518,7 +1532,7 @@ class FiberNormsQa:
                         spectrograph=spec,
                         visit=self.visit,
                         ref_visit=self.ref_visit,
-                        **{f"p{p:02d}": float(v) for p, v in zip(PERCENTILES, values)},
+                        **{f"p{p:02d}": float(v) for p, v in zip(PERCENTILES, values, strict=False)},
                     )
                 )
 
@@ -2365,7 +2379,7 @@ class FiberNormsQa:
             rf"$\sigma$ ={std:.4f}",
             transform=ax.transAxes,
             fontsize=self.config.fontsize_small,
-            bbox=dict(facecolor="yellow", alpha=1.0),
+            bbox={"facecolor": "yellow", "alpha": 1.0},
         )
 
         n_sigma = 2
@@ -2481,8 +2495,7 @@ class PfsArmRatio:
     @functools.cached_property
     @ignore_numpy_warnings
     def flattened_ratio(self) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
-        """Ratio of a pfsArm (divided by norm)
-        to another pfsArm (divided by norm).
+        """Ratio of a pfsArm to another pfsArm, each divided by norm.
 
         The return value is not a naive ratio but is:
 
@@ -2509,8 +2522,7 @@ class PfsArmRatio:
     @functools.cached_property
     @ignore_numpy_warnings
     def filtered_flattened_ratio(self) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
-        """Ratio of a pfsArm (divided by norm)
-        to another pfsArm (divided by norm).
+        """Ratio of a pfsArm to another pfsArm, each divided by norm.
 
         A median filter is applied.
 
@@ -2561,8 +2573,7 @@ class PfsArmRatio:
     @functools.cached_property
     @ignore_numpy_warnings
     def _naive_flattened_ratio(self) -> np.ndarray[tuple[int, int], np.dtype[np.floating]]:
-        """Naive ratio of a pfsArm (divided by norm)
-        to another pfsArm (divided by norm).
+        """Naive ratio of a pfsArm to another pfsArm, each divided by norm.
 
         Returns
         -------
@@ -2596,9 +2607,7 @@ class PfsArmRatio:
         """
         if not self._normalize:
             return arr
-        return self._normalize_2d_array(
-            arr, self._normalize_over_fiber, self._normalize_over_wavelength
-        )
+        return self._normalize_2d_array(arr, self._normalize_over_fiber, self._normalize_over_wavelength)
 
     @staticmethod
     @ignore_numpy_warnings
