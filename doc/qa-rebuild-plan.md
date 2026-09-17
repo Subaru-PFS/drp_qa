@@ -212,12 +212,14 @@ Small, independently mergeable. Do this before any feature work.
    ```
 2. **Confirm the pipeline builds a QuantumGraph** against a real repo:
    ```bash
-   pipetask build -b /path/to/butler -p pipelines/drpQA.yaml --show tasks
+   pipetask build -b /path/to/butler -p pipelines/drpQA.yaml --show pipeline-graph
    ```
-   `-b` is not optional. The PFS dimensions `arm` and `spectrograph` come from the
-   repository's dimension config, not from the default universe, so without it the graph
-   fails to resolve with `KeyError: 'spectrograph'` — which looks like a pipeline defect
-   and is not one.
+   Both parts matter. `-b` is needed because the PFS dimensions `arm` and `spectrograph`
+   come from the repository's dimension config rather than the default universe, and
+   without it the graph fails to resolve with `KeyError: 'spectrograph'` — which looks
+   like a pipeline defect and is not one. And it has to be a `--show` form that consumes
+   the butler (`pipeline-graph`, `task-graph`, or `--pipeline-dot`); `--show tasks` does
+   not, so passing `-b` alongside it is rejected outright.
 3. **Establish the golden visit set** (see Phase 1). Nothing else proceeds without it.
 
 ---
