@@ -100,6 +100,63 @@ class TestCheckedInSet:
                 assert entry.visits == ()
 
 
+class TestReferenceSection:
+    """Entries that are tracked but assert nothing."""
+
+    def testReferenceEntriesCarryNoExpectation(self):
+        """The Run30 calib block is what is under test, not a premise."""
+        golden = loadGoldenVisits()
+        assert golden.reference
+        assert all(entry.expect is None for entry in golden.reference)
+        assert golden.expectationFor(148312, arm="b", spectrograph=1) is None
+
+    def testReferenceEntriesAreStillTracked(self):
+        """No expectation is not the same as not being in the set."""
+        golden = loadGoldenVisits()
+        assert len(golden.find(148312, arm="b", spectrograph=1)) == 1
+
+    def testBothEpochsHaveACalibBlockToCompare(self):
+        """The cross-run comparison needs a block on each side of it."""
+        golden = loadGoldenVisits()
+        assert golden.epochs == ("Run25", "Run30")
+        assert golden.withRole("calibBlock", "Run25")
+        assert golden.withRole("calibBlock", "Run30")
+
+    def testDriftSeriesIsTrackedButNotKnownGood(self):
+        """It is measured across, not gated on; it must constrain no threshold."""
+        golden = loadGoldenVisits()
+        drift = golden.withRole("driftSeries")
+        assert drift
+        assert all(entry.expect is None for entry in drift)
+        assert not any(entry.role == "driftSeries" for entry in golden.knownGood)
+
+    def testAReferenceEntryMayNotAssertAVerdict(self, writeYaml):
+        path = writeYaml("version: 1\nreference:\n  - {visit: 1, expect: PASS}\n")
+        with pytest.raises(ValueError, match="must not state 'expect'"):
+            loadGoldenVisits(path)
+
+
+class TestRun30KnownBad:
+    def testObstructedFramesFail(self):
+        golden = loadGoldenVisits()
+        assert golden.expectationFor(150115, arm="b", spectrograph=1) == "FAIL"
+        assert golden.expectationFor(150641, arm="b", spectrograph=1) == "FAIL"
+
+    def testPartialIlluminationWarnsOnTheLineCount(self):
+        """The defect is how many fibers were measured, not their shape."""
+        golden = loadGoldenVisits()
+        (entry,) = [e for e in golden.knownBad if 149398 in e.visits]
+        assert entry.expect == "WARN"
+        assert entry.metric == "nLines"
+
+    def testFlexureCaseIsAttributedToTheCalibComparison(self):
+        """Phase 2's reference case: a real offset against detectorMap_calib."""
+        golden = loadGoldenVisits()
+        flexure = golden.withRole("flexure")
+        assert len(flexure) == 2
+        assert all(entry.metric == "medDxCenter" for entry in flexure)
+
+
 class TestEntryMatching:
     def testMatchesRespectsSelectors(self):
         entry = GoldenVisit(visits=(100, 101), expect="FAIL", arms=("b",), spectrographs=(1,))

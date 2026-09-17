@@ -670,7 +670,10 @@ metric to exist:
       blocks, 2025-11-10 and 2025-12-01) and two clear twilight-sky sets as `known_good`;
       the SM1 focus range (140005–140138) and a cloudy twilight set as `known_bad`. Two
       `known_bad` placeholders remain — the stale-calib and saturated-frame reference
-      cases for Phases 2 and 3.
+      cases for Phases 2 and 3. Run30 is recorded in a third `reference` section: its
+      per-run calibration block and nightly drift series are tracked but assert no
+      verdict, because `detectorMap_calib` is rebuilt from that block each run, so
+      whether it is good is what the comparison against Run25 is meant to establish.
 - [x] `bin.src/calibrateQaThresholds.py` runs the procedure and prints suggested
       thresholds with their provenance sentence. Exercised end to end against a CSV;
       **not yet run against a Butler collection.**
