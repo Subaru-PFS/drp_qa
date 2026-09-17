@@ -212,8 +212,12 @@ Small, independently mergeable. Do this before any feature work.
    ```
 2. **Confirm the pipeline builds a QuantumGraph** against a real repo:
    ```bash
-   pipetask build -p pipelines/drpQA.yaml --show tasks
+   pipetask build -b /path/to/butler -p pipelines/drpQA.yaml --show tasks
    ```
+   `-b` is not optional. The PFS dimensions `arm` and `spectrograph` come from the
+   repository's dimension config, not from the default universe, so without it the graph
+   fails to resolve with `KeyError: 'spectrograph'` — which looks like a pipeline defect
+   and is not one.
 3. **Establish the golden visit set** (see Phase 1). Nothing else proceeds without it.
 
 ---
@@ -664,8 +668,8 @@ This ticket is done when all of the following hold. Note that none of these requ
 metric to exist:
 
 - [x] `PIPE2D-1392` is merged and `dmResiduals` imports.
-      **`pipetask build -p pipelines/drpQA.yaml` has not been run** — no Butler or stack
-      was available to the session that did this work. Run it before merging.
+      **`pipetask build -b <repo> -p pipelines/drpQA.yaml` has not been run** — no Butler
+      or stack was available to the session that did this work. Run it before merging.
 - [x] `tests/data/goldenVisits.yaml` holds the Run25 stable calibration sequence (three
       blocks, 2025-11-10 and 2025-12-01) and two clear twilight-sky sets as `known_good`;
       the SM1 focus range (140005–140138) and a cloudy twilight set as `known_bad`. Two
@@ -726,7 +730,7 @@ verdict, removal of the rendered plot datasets, and the dashboard.
 
 The rebuild as a whole is done when all of the following hold:
 
-- [ ] `pipetask build -p pipelines/drpQA.yaml` succeeds; every task imports.
+- [ ] `pipetask build -b <repo> -p pipelines/drpQA.yaml` succeeds; every task imports.
 - [ ] Every `known_good` visit in the golden set reports `PASS` on every metric.
 - [ ] Every `known_bad` visit reports the expected `WARN`/`FAIL`, **for the expected
       reason** — the failing metric's name identifies the actual fault.
