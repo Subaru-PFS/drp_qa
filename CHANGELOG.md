@@ -10,6 +10,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **GitHub Actions CI** — `.github/workflows/tests.yml` runs the stack-free test suite on Python 3.12 and
+  3.13; `.github/workflows/lint.yml` runs Ruff. Linting is blocking but scoped to the lines a change
+  touches, via `.github/scripts/ruff_changed_lines.py`, so pre-existing findings in a touched file do not
+  fail unrelated pull requests. Formatting is reported but not yet enforced.
+- **`tests/conftest.py`** — skips test modules that import the LSST/PFS stack at module scope when the
+  stack is unavailable, so the stack-free suite can be collected and run in CI. Add new stack-dependent
+  modules to `_STACK_MODULES`.
 - Added a new `imageQualityQa` workflow that writes `iqQaData`/`iqQaMetrics` with per-quantum status and supports
   post-hoc time-series plotting via `iqQaPlots` and `bin.src/plotIqQaTimeSeries.py`.
 - Added stack-free log QA/report tools (`bin.src/fitDetectorMapLogQa.py`, `bin.src/imageQualityLogQa.py`) and associated

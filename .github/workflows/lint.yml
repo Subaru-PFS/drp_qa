@@ -1,0 +1,85 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  # Pinned deliberately. A newer Ruff can introduce rules that fail files which
+  # were clean when they were written; bump this in its own commit so the
+  # resulting findings get reviewed on their own.
+  RUFF_VERSION: "0.14.13"
+
+jobs:
+  ruff:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install Ruff
+        run: python -m pip install "ruff==${RUFF_VERSION}"
+
+      - name: Resolve base ref
+        id: base
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin \
+              "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+            base="$(git merge-base "origin/${{ github.base_ref }}" HEAD)"
+          else
+            base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+          fi
+          echo "Base ref: ${base}"
+          echo "ref=${base}" >> "$GITHUB_OUTPUT"
+
+      # Blocking, but only for findings on lines this change actually touched.
+      #
+      # The repository is not Ruff-clean, so gating on whole files would fail
+      # pull requests over findings they did not introduce: a one-line import
+      # fix in a 1200-line module would be blocked by seven pre-existing
+      # violations elsewhere in that file. CI that fails for reasons the author
+      # cannot act on gets ignored, and then it gates nothing.
+      - name: Lint changed lines
+        run: python .github/scripts/ruff_changed_lines.py "${{ steps.base.outputs.ref }}"
+
+      # Informational for now. Eight files in the repository are not
+      # ruff-format clean, and enforcing this would force whole-file reformats
+      # that AGENTS.md explicitly discourages inside a feature PR. Make it
+      # blocking once `ruff format --check .` passes repo-wide.
+      - name: Check formatting of changed files (informational)
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          git diff --name-only --diff-filter=ACMR \
+            "${{ steps.base.outputs.ref }}" HEAD -- '*.py' > changed.txt || true
+          if [ -s changed.txt ]; then
+            xargs ruff format --check --force-exclude -- < changed.txt
+          else
+            echo "No changed Python files."
+          fi
+
+      # Informational only: tracks the repo-wide backlog without gating merges.
+      # When this reaches zero, drop the changed-files logic above and lint
+      # everything.
+      - name: Repo-wide baseline (informational)
+        if: always()
+        run: ruff check --exit-zero --statistics .

@@ -139,6 +139,37 @@ external data. If a test cannot run without that environment, validate the logic
 unit-testable components and document the constraint in the test, the update note, or
 the PR.
 
+### Continuous integration
+
+Two GitHub Actions workflows run on every pull request:
+
+| Workflow | Job | Blocking | What it does |
+|---|---|---|---|
+| `.github/workflows/tests.yml` | `stack-free` | yes | `pytest -v` on Python 3.12 and 3.13 |
+| `.github/workflows/lint.yml` | `ruff` | yes, changed lines only | Ruff over lines the change touched |
+
+Two constraints shape this, and both are worth understanding before editing the
+workflows:
+
+- **The package is not installed in CI.** `pip install -e .` would pull `pfs-utils`
+  (and transitively `pfs-datamodel`, `pfs-instdata`) from GitHub, making every run depend
+  on three other repositories. `uv sync --frozen` is also unavailable: `uv.lock` is stale
+  with respect to `pyproject.toml` and `uv lock --check` fails. Only the stack-free suite
+  runs, and it imports nothing beyond the standard library.
+- **Linting is scoped to changed lines**, via `.github/scripts/ruff_changed_lines.py`.
+  The repository is not Ruff-clean, so gating on whole files would fail pull requests over
+  pre-existing findings the author did not introduce. New code is held to the full rule
+  set; old code is left for deliberate cleanup. `ruff format --check` is reported but not
+  enforced, because eight files are not format-clean and fixing them inside a feature PR
+  is exactly the bulk reformat this file warns against.
+
+**Tests that need the stack** cannot be collected without it — a module-level
+`import lsst.utils.tests` fails during collection and aborts the whole run, so an in-test
+`try/except ImportError` never gets the chance to skip. `tests/conftest.py` lists those
+modules in `_STACK_MODULES` and ignores them when the stack is absent. Add new ones there,
+or better, keep the logic under test in pure functions that take arrays and DataFrames so
+no stack is needed at all.
+
 ### Running pipelines
 
 ```bash
