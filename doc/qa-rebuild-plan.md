@@ -716,6 +716,12 @@ metric to exist:
 Explicitly **not** in this ticket: any new QA metric, any change to an existing QA
 verdict, removal of the rendered plot datasets, and the dashboard.
 
+**Verdict parity is measured, not asserted.** Putting the metric values stored in
+`qaActor/reductions` through both the gating ladder as it stood on `main` and the new
+registry gives the same verdict for all 666 quanta. See
+`examples/verify_PIPE2D-1391-01.ipynb` section 3a; it reads only the measured values,
+which this branch does not touch, so it needs no pipeline run.
+
 #### Remaining work on this ticket
 
 1. **Fill in the remaining `known_bad` entries** of `tests/data/goldenVisits.yaml` — the
