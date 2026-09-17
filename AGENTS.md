@@ -37,7 +37,7 @@ the pipeline/config glue to run them.
   `dmResiduals`, `dmCombinedResiduals`, `extractionQa`, `extractionQaCombined`,
   `imageQualityQa`.
 - **Tasks in the pipeline (`python/pfs/drp/qa/`)**:
-  - `imageQualityQa.py` — image quality (FWHM, flag rates); plots in `iqQaPlots.py`
+  - `imageQualityQa.py` — image quality (FWHM, flag rates); plots in `plotting/iqQa.py`
   - `dmResiduals.py`, `dmCombinedResiduals.py` — detector map residuals (per-detector
     and cross-visit combined)
   - `extractionQa.py`, `extractionQaCombined.py` — fiber extraction quality
@@ -58,7 +58,7 @@ the pipeline/config glue to run them.
     exits non-zero on BAD. Keep it stack-free.
   - `imageQualityLogQa.py` — per-visit report from `reduceExposure`/`imageQualityQa`
     logs or a direct Butler query; dashboard plot, markdown report, JSON dump
-  - `plotIqQaTimeSeries.py` — cross-visit `iqQaMetrics` time series via `iqQaPlots.py`
+  - `plotIqQaTimeSeries.py` — cross-visit `iqQaMetrics` time series via `plotting/iqQa.py`
   - `fiberNormsQa.py` — entry point for `fiberNormsQa.main`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),
   which contains the core reduction logic and C++ primitives, and on `pfs_utils`. Both
@@ -323,7 +323,35 @@ cannot express, extend `MetricDef`.
   it via `storageClass="Plot"` using `PdfMatplotlibFormatter`.
 - Multi-page tasks: return a `MultipagePdfFigure`; call `.append(fig)` for each page.
 
-### Shared plotting utilities (`utils/plotting.py`)
+### Plotting lives in `pfs.drp.qa.plotting`
+
+Every plotting function takes DataFrames (and plain numbers) and returns a
+`matplotlib.figure.Figure`. **None of them may import the Butler or a task class** —
+`tests/test_plotting.py` checks this statically over the whole subpackage, so the rule
+cannot quietly rot. That constraint is what gives three consumers (dashboard, on-demand
+report, notebooks) one implementation, and what makes the plots testable at all.
+
+| Module | Contents |
+|---|---|
+| `plotting/palettes.py` | `div_palette`, `detector_palette`, `description_palette`, `spectrograph_plot_markers`, `scatterplot_with_outliers` |
+| `plotting/dmResiduals.py` | `DetectorGeometry`, `plot_detectormap_residuals`, `plot_residual` |
+| `plotting/dmCombined.py` | `plot_detector_summary`, `plot_detector_summary_per_desc`, `plot_visits`, `plot_title`, `reportFigures` |
+| `plotting/iqQa.py` | `plotIqTimeSeries` |
+
+Two consequences worth knowing:
+
+- **`plot_detectormap_residuals` takes a `DetectorGeometry`**, not a `DetectorMap`. A
+  `DetectorMap` is still accepted and reduced to one via `DetectorGeometry.coerce`, so
+  existing callers are unaffected — but passing the geometry is what lets the function be
+  called without the stack.
+- **Assembling figures into a Butler artifact is the task's job.** `reportFigures` yields
+  pages; `dmCombinedResiduals.make_report` binds them to `MultipagePdfFigure`. Do not push
+  a storage class back into the plotting package.
+
+`pfs.drp.qa.utils.plotting` and `pfs.drp.qa.iqQaPlots` remain as re-export shims for
+notebooks and external callers; prefer the new paths in new code.
+
+### Shared plotting utilities (`utils/plotting.py` — re-export shim)
 
 - `div_palette` — diverging colormap with over/under/bad colors for residual plots.
 - `detector_palette` — arm color mapping: `{"b": blue, "r": red, "n": goldenrod, "m": pink}`.
@@ -575,9 +603,11 @@ a robust variant (`robustRms`); `softenFit` is solved by bisection. Prefer these
 adding parallel unweighted metrics.
 
 `dmCombinedResiduals` aggregates across detectors into `dmQaDetectorStats` and renders a
-multi-page `dmQaCombinedResidualPlot` via `make_report`.
+multi-page `dmQaCombinedResidualPlot` via `make_report`, which is now a thin wrapper that
+binds the pages yielded by `pfs.drp.qa.plotting.dmCombined.reportFigures` to the Butler
+storage class.
 
-The task writes **data only**. Plotting lives in `iqQaPlots.py` and is driven after the
+The task writes **data only**. Plotting lives in `pfs.drp.qa.plotting` and is driven after the
 fact by `bin.src/plotIqQaTimeSeries.py`; there is no `iqQaPlot` dataset.
 
 ---
@@ -692,7 +722,7 @@ drpQA.yaml#extractionQaCombined      ← extQaImage_pickle (multiple)
 
 bin.src/plotIqQaTimeSeries.py
     ← reads: iqQaMetrics (all quanta in a collection)
-    → writes: time-series PNG via pfs.drp.qa.iqQaPlots.plotIqTimeSeries
+    → writes: time-series PNG via pfs.drp.qa.plotting.plotIqTimeSeries
 ```
 
 `reduceExposure` is **not** required between `fitDetectorMap` and `imageQualityQa`. The

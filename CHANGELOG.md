@@ -20,6 +20,17 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
+- **Plotting moved to `pfs.drp.qa.plotting`.** `palettes`, `dmResiduals`, `dmCombined` and `iqQa`.
+  Every function takes DataFrames and returns a `matplotlib.figure.Figure`, and none imports the
+  Butler or a task class — `tests/test_plotting.py` checks that statically and smoke-tests each
+  function against a synthetic frame. `pfs.drp.qa.utils.plotting` and `pfs.drp.qa.iqQaPlots` remain
+  as re-export shims, so existing imports keep working.
+- **`plot_detectormap_residuals` accepts a `DetectorGeometry`** as well as a `DetectorMap`; the
+  detector map is reduced to one via `DetectorGeometry.coerce`, so callers are unaffected.
+- **`make_report` is now a thin wrapper** over `pfs.drp.qa.plotting.dmCombined.reportFigures`, which
+  yields the report pages; only the binding to `MultipagePdfFigure` stays with the task.
+- **`FitStat`/`FitStats` moved to `pfs.drp.qa.metrics.fitStats`**, re-exported from
+  `pfs.drp.qa.dmResiduals`.
 - **`imageQualityQa` gates through the metric registry.** Thresholds still come from the config, so
   command-line overrides work as before, and the verdict boundaries and reason strings are unchanged.
 - **Per-species metrics are long-format.** The ragged `fitSpeciesXRms_<species>` /

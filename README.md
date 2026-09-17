@@ -100,7 +100,7 @@ Measures image quality (FWHM), spatial flexure, and arc-line flag rates on a per
 `W_SEQNAM`) and routes it to the appropriate measurement path. When `reduceExposure` logs are available it also folds
 ISR, cosmic-ray, and `fitDetectorMap` statistics into the metrics table.
 
-The task writes data only; plotting lives in `pfs.drp.qa.iqQaPlots` and is driven after the fact by
+The task writes data only; plotting lives in `pfs.drp.qa.plotting` and is driven after the fact by
 `bin.src/plotIqQaTimeSeries.py` (see
 [Command-line tools](#command-line-tools)).
 
@@ -424,7 +424,7 @@ reparsing.
 
 Reads `iqQaMetrics` datasets across a collection and produces the multi-panel time-series figure (FWHM, flexure, flag
 breakdown, pass/fail heatmap) implemented in
-`pfs.drp.qa.iqQaPlots.plotIqTimeSeries`. This is the plotting that used to live inside
+`pfs.drp.qa.plotting.plotIqTimeSeries`. This is the plotting that used to live inside
 `imageQualityQa` itself. Requires the LSST stack for the Butler query; `--csv` bypasses it.
 
 ```bash
