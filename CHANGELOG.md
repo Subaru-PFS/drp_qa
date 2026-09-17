@@ -10,6 +10,21 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Golden visit set** (`tests/data/goldenVisits.yaml`) — a fixed list of visits with known verdicts,
+  against which every threshold and every new metric is validated. Loaded with
+  `pfs.drp.qa.metrics.goldenVisits.loadGoldenVisits`, which is stack-free and Butler-free. Entries
+  marked `placeholder: true` are excluded by default so an unfilled entry cannot silently validate a
+  threshold. The documented SM1 focus range (visits 140005-140138) is the anchor `known_bad` entry.
+- **`pfs.drp.qa.metrics.thresholds`** — the threshold derivation procedure as pure functions
+  (`deriveThresholds`, `verifyKnownBad`, `formatProvenance`, `roundToReadable`): WARN at p95 and
+  FAIL at p99 of the known-good distribution, or a physical limit where one exists, with the
+  provenance sentence required for the config field's `doc` string.
+- **`bin.src/calibrateQaThresholds.py`** — CLI that runs the procedure over a Butler collection (or
+  an exported CSV) and prints suggested config values. Exits non-zero when a suggestion rests on
+  fewer than 20 samples or when the known-bad data does not cross the suggested FAIL.
+- **AGENTS.md: "Golden Visit Set and Threshold Derivation"** — documents the procedure that every
+  threshold must follow.
+
 - **GitHub Actions CI** — `.github/workflows/tests.yml` runs the stack-free test suite on Python 3.12 and
   3.13; `.github/workflows/lint.yml` runs `ruff check .` and `ruff format --check .` over the whole tree.
   Both are blocking.

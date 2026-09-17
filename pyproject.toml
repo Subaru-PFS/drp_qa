@@ -26,6 +26,7 @@ dependencies = [
     "pandas",
     "matplotlib",
     "seaborn",
+    "pyyaml",
     "pfs-utils @ git+https://github.com/Subaru-PFS/pfs_utils.git",
 ]
 

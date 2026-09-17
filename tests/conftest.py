@@ -23,6 +23,7 @@ that takes arrays or DataFrames so the test needs no stack at all — see
 
 import ast
 import importlib.util
+import sys
 from pathlib import Path
 
 # Test modules that import the LSST/PFS stack at module scope.
@@ -31,6 +32,13 @@ _STACK_MODULES = [
 ]
 
 _HERE = Path(__file__).parent
+
+# The package is deliberately not installed in CI (see .github/workflows/tests.yml),
+# and `setup -r .` only puts `python/` on PYTHONPATH for an EUPS shell. Put it on
+# sys.path here so the stack-free tests can import `pfs.drp.qa.*` either way.
+_SOURCE = _HERE.parent / "python"
+if str(_SOURCE) not in sys.path:
+    sys.path.insert(0, str(_SOURCE))
 
 
 def _moduleLevelImports(path: Path) -> set[str]:

@@ -34,10 +34,16 @@ jobs:
 
       # The package itself is deliberately NOT installed.
       #
-      # The suite that can run here is stack-free and imports only the standard
-      # library. `pip install -e .` would pull pfs-utils (and transitively
-      # pfs-datamodel and pfs-instdata) from GitHub, making every run depend on
-      # three other repositories being reachable, for no gain.
+      # `pip install -e .` would pull pfs-utils (and transitively pfs-datamodel
+      # and pfs-instdata) from GitHub, making every run depend on three other
+      # repositories being reachable, for no gain. tests/conftest.py puts
+      # `python/` on sys.path instead, so the stack-free suite imports
+      # `pfs.drp.qa.*` straight from the checkout.
+      #
+      # The third-party packages below are ordinary PyPI wheels with no PFS
+      # dependency. They are what the stack-free modules under
+      # `pfs.drp.qa.metrics` and `pfs.drp.qa.plotting` need; nothing here pulls
+      # in the LSST stack.
       #
       # `uv sync --frozen` is not an option either: uv.lock is stale with
       # respect to pyproject.toml (`uv lock --check` fails), so it cannot
@@ -49,7 +55,7 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest
+          python -m pip install pytest numpy pandas matplotlib seaborn pyyaml
 
       - name: Run tests
         run: pytest -v

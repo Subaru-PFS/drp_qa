@@ -1,0 +1,95 @@
+# Golden visit set for drp_qa
+# =============================================================================
+#
+# A small, fixed list of visits with *known* verdicts. Every threshold and every
+# new metric is validated against this set:
+#
+#   * a metric that flags a ``known_good`` visit does not merge;
+#   * a metric that passes a ``known_bad`` visit does not merge.
+#
+# See doc/qa-rebuild-plan.md section 1.1. Load it with
+# ``pfs.drp.qa.metrics.goldenVisits.loadGoldenVisits``, and derive thresholds
+# from it with ``bin.src/calibrateQaThresholds.py``.
+#
+# Entry schema
+# ------------
+# Exactly one of:
+#   visit:        int          a single visit
+#   visitRange:   [first, last]  an inclusive range of visits
+#
+# Optional selectors (omitted means "every value"):
+#   arms:           list of str, e.g. [b, r, n, m]
+#   spectrographs:  list of int, e.g. [1, 2, 3, 4]
+#   seqType:        str, the W_SEQNAM value, e.g. "Arc: HgCd"
+#
+# Verdict:
+#   expect:   PASS | WARN | FAIL   (defaults to PASS in known_good, and is
+#                                   required in known_bad)
+#   metric:   str, optional. The metric whose name should identify the fault.
+#             The full-rebuild acceptance criterion is that a known_bad visit
+#             fails *for the expected reason*, not merely that it fails.
+#   reason:   str, why this verdict is expected.
+#   note:     str, free-form context.
+#
+# Bookkeeping:
+#   placeholder: true   marks an entry that has not yet been filled in with a
+#                       real visit number. Placeholders are excluded by the
+#                       loader unless ``includePlaceholders=True`` is passed, so
+#                       that an unfilled entry can never silently validate a
+#                       threshold.
+# =============================================================================
+
+version: 1
+
+known_good:
+  # TODO(PIPE2D-1391): replace with a real visit from the archive. Wanted: a
+  # nominal-focus HgCd arc taken shortly after a calibration, where HgCd gives
+  # dense, well-measured b-arm coverage (see AGENTS.md, arc lamp physics).
+  - placeholder: true
+    visit: null
+    arms: [b, r, n, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: HgCd"
+    expect: PASS
+    note: "Nominal focus, taken shortly after a calibration."
+
+  # TODO(PIPE2D-1391): replace with a real quartz/trace visit. Needed because
+  # the trace path through imageQualityQa (traceOnly) is gated by the same
+  # thresholds but exercises different code.
+  - placeholder: true
+    visit: null
+    arms: [b, r, n, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Quartz"
+    expect: PASS
+    note: "Nominal trace/flat exposure; exercises the fiber-profile path."
+
+known_bad:
+  # Documented genuine optics failure: SM1 showed FWHM 3.83-4.86 px across all
+  # lamp types over this visit range, independent of species, which rules out
+  # the lamp-physics explanation that covers high b-arm flag rates elsewhere.
+  # See AGENTS.md, "SM1 exception".
+  - visitRange: [140005, 140138]
+    arms: [b, r, n, m]
+    spectrographs: [1]
+    expect: FAIL
+    metric: medFwhm
+    reason: "SM1 focus/mirror alignment; FWHM 3.83-4.86 px across all lamp types."
+
+  # TODO(PIPE2D-1391): find a visit reduced against an out-of-date
+  # detectorMap_calib. This is the reference case for the Phase 2 drift
+  # metrics: large drift against a stale calib must be attributed to the calib,
+  # not to the instrument.
+  - placeholder: true
+    visit: null
+    expect: WARN
+    metric: medDxCenter
+    reason: "Reduced against a stale detectorMap_calib; bulk spatial offset."
+
+  # TODO(PIPE2D-1391): find a saturated frame if one exists in the archive.
+  # This is the reference case for the Phase 3 real-saturation metric.
+  - placeholder: true
+    visit: null
+    expect: FAIL
+    metric: pctSaturatedPixels
+    reason: "Saturated exposure; peak pixels flagged SAT."

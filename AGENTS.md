@@ -14,12 +14,13 @@ Contents:
 3. [Architecture](#architecture)
 4. [Key Conventions](#key-conventions)
 5. [How to Work in This Repo](#how-to-work-in-this-repo)
-6. [Git Commit Convention](#git-commit-convention)
-7. [Domain Knowledge: `imageQualityQa`](#domain-knowledge-imagequalityqa)
-8. [Arc Lamp Physics and b-arm `pctFlagged` Failures](#arc-lamp-physics-and-b-arm-pctflagged-failures)
-9. [Butler / Pipeline Data Flow for DM & IQ QA](#butler--pipeline-data-flow-for-dm--iq-qa)
-10. [Common Failure Patterns](#common-failure-patterns)
-11. [Cross-repo Dependency Notes](#cross-repo-dependency-notes)
+6. [Golden Visit Set and Threshold Derivation](#golden-visit-set-and-threshold-derivation)
+7. [Git Commit Convention](#git-commit-convention)
+8. [Domain Knowledge: `imageQualityQa`](#domain-knowledge-imagequalityqa)
+9. [Arc Lamp Physics and b-arm `pctFlagged` Failures](#arc-lamp-physics-and-b-arm-pctflagged-failures)
+10. [Butler / Pipeline Data Flow for DM & IQ QA](#butler--pipeline-data-flow-for-dm--iq-qa)
+11. [Common Failure Patterns](#common-failure-patterns)
+12. [Cross-repo Dependency Notes](#cross-repo-dependency-notes)
 
 ---
 
@@ -333,6 +334,76 @@ on Butler/LSST objects are documentation rather than something a tool will check
 8. Include concise docstrings describing purpose, inputs, outputs, and any assumptions —
    especially about LSST data structures.
 9. Prefer small, focused PRs with clear descriptions of the change and its QA impact.
+
+---
+
+## Golden Visit Set and Threshold Derivation
+
+**No threshold enters the codebase before it has been computed from a known-good visit
+range.** A number invented at the keyboard cannot be defended when it fires at 03:00, and
+a metric compared against a threshold derived from its own sample is pinned near a
+constant and measures nothing. See `doc/qa-rebuild-plan.md` sections 1.1 and 1.2.
+
+### The golden visit set
+
+`tests/data/goldenVisits.yaml` is a small, fixed list of visits with known verdicts:
+`known_good` entries must PASS every metric, `known_bad` entries must WARN or FAIL, and
+each `known_bad` entry names the `metric` whose value identifies the fault. The file's
+own header documents the entry schema.
+
+Load it with `pfs.drp.qa.metrics.goldenVisits.loadGoldenVisits`, which is stack-free and
+Butler-free:
+
+```python
+from pfs.drp.qa.metrics.goldenVisits import loadGoldenVisits
+
+golden = loadGoldenVisits()
+golden.expectationFor(140005, arm="b", spectrograph=1)   # -> "FAIL"
+golden.expectationFor(999999)                            # -> None, i.e. no expectation
+```
+
+Two properties to keep in mind:
+
+- **Absence is not a PASS.** `expectationFor` returns `None` for a visit the set does not
+  cover. Never treat that as an expectation.
+- **Placeholders are excluded by default.** Entries marked `placeholder: true` have no
+  real visit number yet; the loader drops them unless `includePlaceholders=True` is
+  passed, so an unfilled entry can never silently validate a threshold.
+
+**Every threshold and every new metric is validated against this set.** A metric that
+flags a `known_good` visit, or passes a `known_bad` one, does not merge.
+
+### Threshold derivation procedure
+
+Follow this for every threshold:
+
+1. Run the metric over the `known_good` visits with **no gating**.
+2. Take the distribution of the metric across all good detectors.
+3. `WARN` at the 95th percentile, `FAIL` at the 99th, rounded to a readable value — or,
+   where a physical limit exists (saturation, fiber pitch), use the physical limit.
+4. Verify the `known_bad` visits exceed `FAIL`.
+5. Record the visit range and the derivation date in the config field's `doc` string.
+
+`bin.src/calibrateQaThresholds.py` does steps 1-4 and prints the provenance sentence for
+step 5:
+
+```bash
+python bin.src/calibrateQaThresholds.py -b /path/to/butler -c u/you/qa/run12 \
+    --metric medFwhm --metric pctFlagged --group-by arm
+```
+
+It exits non-zero when a suggestion rests on too few samples (< 20) or when the
+known-bad data does not cross the suggested `FAIL` — either way, do not commit the
+numbers. A known_bad entry that names `medFwhm` is only checked against `medFwhm`;
+it asserts nothing about the other metrics.
+
+Group with `--group-by arm` (and `--group-by description` once metrics are long-format)
+wherever the physics differs per group. Blue-arm flag rates are the standing example: a
+single blended threshold is dominated by the species mix, not by the instrument.
+
+The pure functions behind the CLI live in `pfs.drp.qa.metrics.thresholds`
+(`deriveThresholds`, `verifyKnownBad`, `formatProvenance`, `roundToReadable`) and are
+unit-tested without the stack in `tests/test_thresholds.py`.
 
 ---
 
