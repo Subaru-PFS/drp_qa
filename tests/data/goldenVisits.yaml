@@ -25,28 +25,22 @@
 # Sections:
 #   known_good:  expected to PASS every metric.
 #   known_bad:   expected to WARN or FAIL, for a stated reason.
-#   reference:   tracked, but asserts no verdict. These are the sequences whose
-#                quality is the open question rather than the premise -- the
-#                per-run calibration block that `detectorMap_calib` is rebuilt
-#                from, and the drift series a metric is measured across. A
-#                reference entry may not state `expect`; `expectationFor`
-#                returns None for one, so it can never validate a threshold.
+#
+# Every entry carries a verdict. That is the whole content of this file: a
+# visit earns a place here because a metric that gets it wrong must not merge.
+# Visits with no verdict do not belong -- a per-run calibration block, a nightly
+# drift series, the inputs to a run-to-run comparison. Those are selected by
+# querying the Butler on sequence type, lamp and date at the time the job runs,
+# which stays correct for the next run without anyone editing this file.
 #
 # Verdict:
-#   expect:   PASS | WARN | FAIL   (defaults to PASS in known_good, required in
-#                                   known_bad, forbidden in reference)
+#   expect:   PASS | WARN | FAIL   (defaults to PASS in known_good, and is
+#                                   required in known_bad)
 #   metric:   str, optional. The metric whose name should identify the fault.
 #             The full-rebuild acceptance criterion is that a known_bad visit
 #             fails *for the expected reason*, not merely that it fails.
 #   reason:   str, why this verdict is expected.
 #   note:     str, free-form context.
-#
-# Grouping:
-#   role:     what the entry is for, e.g. calibBlock, driftSeries, flexure,
-#             skyFrame, iisDetectorMapTest. `GoldenVisitSet.withRole` selects by
-#             it, which is how a cross-run comparison pairs like with like.
-#   epoch:    the observing run, e.g. Run25 or Run30. A comparison needs to know
-#             which visits belong to which run.
 #
 # Bookkeeping:
 #   placeholder: true   marks an entry that has not yet been filled in with a
@@ -68,36 +62,26 @@ known_good:
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Argon"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 stable set, block A. 10 s exposures."
   - visitRange: [133028, 133030]
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Xenon"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 stable set, block A. 45 s exposures."
   - visitRange: [133031, 133033]
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 stable set, block A. 5 s exposures."
   - visitRange: [133034, 133036]
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Krypton"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 stable set, block A. 70 s exposures."
   - visitRange: [133037, 133039]
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: HgCd"
-    role: calibBlock
-    epoch: Run25
     note: >-
       Run25 stable set, block A. 45 s exposures. The only HgCd in the set, and
       so the only dense, well-measured b-arm coverage: b-arm flag rates here are
@@ -106,8 +90,6 @@ known_good:
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 stable set, block A. 20 s scienceTrace; exercises the fiber-profile path."
 
   # Block B -- b and m arms, spectrographs 1-4. No HgCd was taken in this block.
@@ -115,36 +97,26 @@ known_good:
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Argon"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 stable set, block B. 10 s exposures."
   - visitRange: [133045, 133047]
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Xenon"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 stable set, block B. 45 s exposures."
   - visitRange: [133048, 133050]
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 stable set, block B. 5 s exposures."
   - visitRange: [133051, 133053]
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Krypton"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 stable set, block B. 45 s exposures."
   - visitRange: [133054, 133055]
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 stable set, block B. 20 s scienceTrace."
 
   # Block C -- 2025-12-01, the Nov-10 sequence repeated at azimuth 168 rather
@@ -157,78 +129,56 @@ known_good:
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 block C, az 168. 20 s scienceTrace."
   - visitRange: [135830, 135831]
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Argon"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 block C, az 168. 10 s exposures."
   - visitRange: [135832, 135833]
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Xenon"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 block C, az 168. 45 s exposures."
   - visitRange: [135834, 135835]
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 block C, az 168. 5 s exposures."
   - visitRange: [135836, 135837]
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Krypton"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 block C, az 168. 70 s exposures."
   - visitRange: [135838, 135840]
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: HgCd"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 block C, az 168. 45 s exposures. The second HgCd block; see above."
   - visitRange: [135841, 135842]
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Argon"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 block C, az 168, m arm. 10 s exposures."
   - visitRange: [135843, 135844]
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Xenon"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 block C, az 168, m arm. 45 s exposures."
   - visitRange: [135845, 135846]
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 block C, az 168, m arm. 5 s exposures."
   - visitRange: [135847, 135848]
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Krypton"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 block C, az 168, m arm. 45 s exposures."
   - visitRange: [135849, 135850]
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
-    role: calibBlock
-    epoch: Run25
     note: "Run25 block C, az 168, m arm. 20 s scienceTrace."
 
   # Twilight sky, 2025-11-25. These are sky frames rather than true science
@@ -240,15 +190,11 @@ known_good:
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Twilight sky"
-    role: skyFrame
-    epoch: Run25
     note: "Run25 twilight sky, 180 s. Reference case for the O2/OH sky-line check."
   - visitRange: [134884, 134886]
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Twilight sky"
-    role: skyFrame
-    epoch: Run25
     note: "Run25 twilight sky, 180 s. Reference case for the O2/OH sky-line check."
 
 known_bad:
@@ -299,14 +245,12 @@ known_bad:
   - visitRange: [150115, 150116]
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
-    epoch: Run30
     expect: FAIL
     metric: pctFlagged
     reason: "M1 cover closed."
   - visitRange: [150641, 150642]
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
-    epoch: Run30
     expect: FAIL
     metric: pctFlagged
     reason: "Mirror cover and top screen both closed; flagged at the telescope as to be ignored."
@@ -314,7 +258,6 @@ known_bad:
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
-    epoch: Run30
     expect: FAIL
     reason: >-
       Mirror cover open but the screen in the wrong position. The metric that
@@ -327,7 +270,6 @@ known_bad:
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
-    epoch: Run30
     expect: WARN
     metric: nLines
     reason: "Only group 2 was illuminated."
@@ -335,7 +277,6 @@ known_bad:
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
-    epoch: Run30
     expect: WARN
     metric: nLines
     reason: "Only group 3 was illuminated."
@@ -343,7 +284,6 @@ known_bad:
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
-    epoch: Run30
     expect: WARN
     metric: nLines
     reason: "Only group 2 was illuminated."
@@ -351,7 +291,6 @@ known_bad:
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
-    epoch: Run30
     expect: WARN
     metric: nLines
     reason: "Only group 4 was illuminated."
@@ -359,7 +298,6 @@ known_bad:
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
-    epoch: Run30
     expect: WARN
     metric: nLines
     reason: "Only group 1 was illuminated."
@@ -373,8 +311,6 @@ known_bad:
     arms: [b, m, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "DetectorMap test pre-exposure (Helium)"
-    role: flexure
-    epoch: Run30
     expect: WARN
     metric: medDxCenter
     reason: "Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib."
@@ -382,387 +318,6 @@ known_bad:
     arms: [b, m, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "DetectorMap test post-exposure (Helium)"
-    role: flexure
-    epoch: Run30
     expect: WARN
     metric: medDxCenter
     reason: "Alt 49, az 53, insrot 5; flexure against a zenith-derived detectorMap_calib."
-
-reference:
-  # The per-run calibration block, 2026-09-01, az 304. `detectorMap_calib` is
-  # rebuilt from a block like this at the start of every run, so whether the
-  # block is good is the question under test, not a premise: recording it as
-  # known_good would assume the answer. The comparison to make is against the
-  # Run25 blocks, both whole-block and visit by visit.
-  - visitRange: [148302, 148311]
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 30 s."
-  - visitRange: [148312, 148314]
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Argon"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 15 s."
-  - visitRange: [148315, 148317]
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Xenon"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 45 s."
-  - visitRange: [148318, 148320]
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Krypton"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 70 s."
-  - visitRange: [148321, 148323]
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: HgCd"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 45 s."
-  - visitRange: [148324, 148326]
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 5 s."
-  - visitRange: [148334, 148335]
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Argon"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 10 s."
-  - visitRange: [148336, 148337]
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Xenon"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 45 s."
-  - visitRange: [148338, 148339]
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 5 s."
-  - visitRange: [148340, 148341]
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Krypton"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 45 s."
-  - visit: 148342
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Argon"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 10 s, repeat."
-  - visit: 148343
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Xenon"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 45 s, repeat."
-  - visit: 148344
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 5 s, repeat."
-  - visit: 148345
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Krypton"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 45 s, repeat."
-  - visitRange: [148346, 148347]
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 20 s."
-  - visit: 148348
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: calibBlock
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. 20 s, repeat."
-
-  # IIS frames from the same block, kept separate: only the 16 engineering
-  # fibers are lit, so the science arc catalog does not match and a sparse
-  # result is the expected outcome rather than a fault.
-  - visitRange: [148327, 148329]
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "DetectorMap test (Ne)"
-    role: iisDetectorMapTest
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. IIS: only the 16 engineering fibers are lit, so a sparse arc-line result is expected rather than a fault. 46 s."
-  - visitRange: [148330, 148332]
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "DetectorMap test (Helium)"
-    role: iisDetectorMapTest
-    epoch: Run30
-    note: "Run30 calib block, 2026-09-01, az 304. IIS: only the 16 engineering fibers are lit, so a sparse arc-line result is expected rather than a fault. 156 s."
-
-  # The nightly Trace + Neon series, 2026-09-03 to 2026-09-16, azimuth 90-314.
-  # Tracked as the drift series the Phase 2 metrics are measured across, and
-  # deliberately not known_good: it constrains no threshold.
-  - visit: 148766
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-03, az 208."
-  - visit: 148767
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-03, az 208."
-  - visitRange: [148768, 148769]
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-03, az 208."
-  - visit: 148912
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-04, az 290."
-  - visit: 148913
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-04, az 290."
-  - visit: 148914
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-04, az 290."
-  - visit: 149028
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-05, az 198."
-  - visit: 149029
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-05, az 198."
-  - visit: 149030
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-05, az 198."
-  - visit: 149215
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-06, az 314."
-  - visit: 149216
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-06, az 314."
-  - visit: 149352
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-07, az 90."
-  - visit: 149353
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-07, az 90."
-  - visit: 149416
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-07, az 90."
-  - visit: 149488
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-08, az 241."
-  - visit: 149489
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-08, az 241."
-  - visit: 149536
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-08, az 241."
-  - visit: 149692
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-09, az 230."
-  - visit: 149693
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-09, az 230."
-  - visit: 149739
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-09, az 230."
-  - visit: 149829
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-10, az 90."
-  - visit: 149830
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-10, az 90."
-  - visit: 149978
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-11, az 90."
-  - visit: 149979
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-11, az 90."
-  - visit: 150024
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-11, az 90."
-  - visit: 150162
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-12, az 90."
-  - visit: 150163
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-12, az 90."
-  - visit: 150320
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-13, az 90."
-  - visit: 150321
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-13, az 90."
-  - visit: 150552
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-14, az 90."
-  - visit: 150553
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-14, az 90."
-  - visit: 150554
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-14, az 90."
-  - visit: 150845
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-16, az 179. Its trace (150846) was taken at az 131, so the two are not a matched pair."
-  - visit: 150846
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    role: driftSeries
-    epoch: Run30
-    note: "Run30 nightly drift series, 2026-09-16, az 131. Its arc (150845) was taken at az 179, so the two are not a matched pair."

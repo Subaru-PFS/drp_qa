@@ -45,9 +45,8 @@ class GoldenVisit:
     ----------
     visits : `tuple` [`int`]
         The visits this entry covers, expanded from ``visit``/``visitRange``.
-    expect : `str` or `None`
-        The expected verdict, one of ``PASS``, ``WARN`` or ``FAIL``. ``None`` for
-        a ``reference`` entry, which is tracked but asserts no verdict.
+    expect : `str`
+        The expected verdict, one of ``PASS``, ``WARN`` or ``FAIL``.
     arms : `tuple` [`str`]
         Arms the entry applies to; empty means all arms.
     spectrographs : `tuple` [`int`]
@@ -62,26 +61,18 @@ class GoldenVisit:
         Why this verdict is expected.
     note : `str` or `None`
         Free-form context.
-    role : `str` or `None`
-        What this entry is for, e.g. ``calibBlock`` or ``driftSeries``. Lets a
-        comparison pair up the same kind of sequence across epochs.
-    epoch : `str` or `None`
-        Which observing run the entry belongs to, e.g. ``Run25``. A cross-run
-        comparison needs to know which visits to compare against which.
     placeholder : `bool`
         True when the entry is a template awaiting a real visit number.
     """
 
     visits: tuple[int, ...]
-    expect: str | None = None
+    expect: str
     arms: tuple[str, ...] = ()
     spectrographs: tuple[int, ...] = ()
     seqType: str | None = None
     metric: str | None = None
     reason: str | None = None
     note: str | None = None
-    role: str | None = None
-    epoch: str | None = None
     placeholder: bool = False
 
     def matches(
@@ -128,30 +119,22 @@ class GoldenVisitSet:
         Entries expected to pass every metric.
     knownBad : `tuple` [`GoldenVisit`]
         Entries expected to WARN or FAIL, for a stated reason.
-    reference : `tuple` [`GoldenVisit`]
-        Entries that are tracked but assert no verdict: the sequences under
-        test, and the series a metric is compared across. A per-run calibration
-        block is the standing example -- ``detectorMap_calib`` is rebuilt from
-        it each run, so whether it is good is the question, not the premise.
-        Recording such a block as ``known_good`` would assume the answer.
     path : `pathlib.Path` or `None`
         Where the set was loaded from, for error messages and provenance.
     """
 
     knownGood: tuple[GoldenVisit, ...] = ()
     knownBad: tuple[GoldenVisit, ...] = ()
-    reference: tuple[GoldenVisit, ...] = ()
     path: Path | None = field(default=None, compare=False)
 
     def __iter__(self) -> Iterator[GoldenVisit]:
-        """Iterate over every entry: good, then bad, then reference."""
+        """Iterate over every entry, good then bad."""
         yield from self.knownGood
         yield from self.knownBad
-        yield from self.reference
 
     def __len__(self) -> int:
         """Return the total number of entries."""
-        return len(self.knownGood) + len(self.knownBad) + len(self.reference)
+        return len(self.knownGood) + len(self.knownBad)
 
     @property
     def visits(self) -> tuple[int, ...]:
@@ -162,32 +145,6 @@ class GoldenVisitSet:
     def goodVisits(self) -> tuple[int, ...]:
         """Every ``known_good`` visit number, sorted and deduplicated."""
         return tuple(sorted({visit for entry in self.knownGood for visit in entry.visits}))
-
-    def withRole(self, role: str, epoch: str | None = None) -> tuple[GoldenVisit, ...]:
-        """Return every entry with the given role, optionally within one epoch.
-
-        Parameters
-        ----------
-        role : `str`
-            The role to match, e.g. ``"calibBlock"``.
-        epoch : `str`, optional
-            Restrict to one observing run, e.g. ``"Run25"``.
-
-        Returns
-        -------
-        `tuple` [`GoldenVisit`]
-            Matching entries, across all three sections. This is how a
-            cross-run comparison finds the blocks to compare.
-        """
-        return tuple(
-            entry for entry in self if entry.role == role and (epoch is None or entry.epoch == epoch)
-        )
-
-    @property
-    def epochs(self) -> tuple[str, ...]:
-        """The observing runs the set mentions, in first-seen order."""
-        seen = {entry.epoch: None for entry in self if entry.epoch}
-        return tuple(seen)
 
     def find(
         self,
@@ -243,12 +200,10 @@ class GoldenVisitSet:
             ``PASS``, ``WARN`` or ``FAIL``, or ``None`` when the set records no
             expectation for this detector-visit.
         """
-        expectations = [
-            entry.expect for entry in self.find(visit, arm, spectrograph, seqType) if entry.expect is not None
-        ]
-        if not expectations:
+        matches = self.find(visit, arm, spectrograph, seqType)
+        if not matches:
             return None
-        return max(expectations, key=VALID_EXPECTATIONS.index)
+        return max((entry.expect for entry in matches), key=VALID_EXPECTATIONS.index)
 
 
 def defaultGoldenVisitsPath() -> Path:
@@ -309,17 +264,13 @@ def loadGoldenVisits(
         raise ValueError(f"{path}: unsupported schema version {version!r}, expected {SCHEMA_VERSION}")
 
     sections = {}
-    for section, defaultExpect, allowExpect in (
-        ("known_good", "PASS", True),
-        ("known_bad", None, True),
-        ("reference", None, False),
-    ):
+    for section, defaultExpect in (("known_good", "PASS"), ("known_bad", None)):
         raw = doc.get(section) or []
         if not isinstance(raw, list):
             raise ValueError(f"{path}: '{section}' must be a list, got {type(raw).__name__}")
         entries = []
         for index, item in enumerate(raw):
-            entry = _parseEntry(item, defaultExpect, f"{path}: {section}[{index}]", allowExpect)
+            entry = _parseEntry(item, defaultExpect, f"{path}: {section}[{index}]")
             if entry.placeholder and not includePlaceholders:
                 continue
             entries.append(entry)
@@ -328,17 +279,11 @@ def loadGoldenVisits(
     return GoldenVisitSet(
         knownGood=sections["known_good"],
         knownBad=sections["known_bad"],
-        reference=sections["reference"],
         path=path,
     )
 
 
-def _parseEntry(
-    item: Any,
-    defaultExpect: str | None,
-    where: str,
-    allowExpect: bool = True,
-) -> GoldenVisit:
+def _parseEntry(item: Any, defaultExpect: str | None, where: str) -> GoldenVisit:
     """Parse and validate one entry.
 
     Parameters
@@ -350,10 +295,6 @@ def _parseEntry(
         ``expect`` mandatory, which is the case for ``known_bad``.
     where : `str`
         Human-readable location, used in error messages.
-    allowExpect : `bool`, optional
-        Whether the entry may state a verdict at all. False for ``reference``
-        entries, which exist precisely because their verdict is the open
-        question; one that asserts a verdict belongs in another section.
 
     Returns
     -------
@@ -371,21 +312,14 @@ def _parseEntry(
     placeholder = bool(item.get("placeholder", False))
     visits = _parseVisits(item, where, placeholder)
 
-    if not allowExpect:
-        if "expect" in item:
-            raise ValueError(
-                f"{where}: a reference entry must not state 'expect'; move it to known_good or known_bad"
-            )
-        expect = None
-    else:
-        expect = item.get("expect", defaultExpect)
-        if expect is None:
-            raise ValueError(f"{where}: 'expect' is required (one of {', '.join(VALID_EXPECTATIONS)})")
-        expect = str(expect).upper()
-        if expect not in VALID_EXPECTATIONS:
-            raise ValueError(
-                f"{where}: invalid expect {expect!r}, must be one of {', '.join(VALID_EXPECTATIONS)}"
-            )
+    expect = item.get("expect", defaultExpect)
+    if expect is None:
+        raise ValueError(f"{where}: 'expect' is required (one of {', '.join(VALID_EXPECTATIONS)})")
+    expect = str(expect).upper()
+    if expect not in VALID_EXPECTATIONS:
+        raise ValueError(
+            f"{where}: invalid expect {expect!r}, must be one of {', '.join(VALID_EXPECTATIONS)}"
+        )
 
     arms = _parseSequence(item.get("arms"), str, "arms", where)
     spectrographs = _parseSequence(item.get("spectrographs"), int, "spectrographs", where)
@@ -399,8 +333,6 @@ def _parseEntry(
         metric=_optionalStr(item.get("metric")),
         reason=_optionalStr(item.get("reason")),
         note=_optionalStr(item.get("note")),
-        role=_optionalStr(item.get("role")),
-        epoch=_optionalStr(item.get("epoch")),
         placeholder=placeholder,
     )
 

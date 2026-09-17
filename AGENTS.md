@@ -444,6 +444,13 @@ Two properties to keep in mind:
 **Every threshold and every new metric is validated against this set.** A metric that
 flags a `known_good` visit, or passes a `known_bad` one, does not merge.
 
+**Every entry carries a verdict, and only entries with verdicts belong.** A visit earns
+its place because a metric that gets it wrong must not merge. Visits with no verdict — a
+per-run calibration block, a nightly drift series, the inputs to a run-to-run comparison —
+do not go here. Select those by querying the Butler on sequence type, lamp and date when
+the job runs: that stays correct for the next run without anyone editing the file, whereas
+a transcribed list is stale the moment observing continues.
+
 ### Threshold derivation procedure
 
 Follow this for every threshold:

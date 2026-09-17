@@ -15,9 +15,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   (two blocks on 2025-11-10 and one on 2025-12-01) plus two clear twilight-sky sets;
   `known_bad` is the SM1 focus range (140005-140138) and a cloudy twilight set.
   Placeholder entries are excluded by default, so an unfilled entry cannot validate a threshold.
-  A third `reference` section holds visits that are tracked but assert no verdict — the Run30 per-run
-  calibration block and nightly drift series, whose quality is the question rather than the premise.
-  `role` and `epoch` group entries so a cross-run comparison can pair like with like.
+  Every entry carries a verdict: visits with none — a per-run calibration block, a drift series, the
+  inputs to a run-to-run comparison — are selected by querying the Butler when the job runs, not
+  transcribed here.
 - **`pfs.drp.qa.metrics.thresholds`** — the threshold derivation procedure as pure functions: WARN at
   p95 and FAIL at p99 of the known-good distribution, or a physical limit, plus the provenance
   sentence for the config field's `doc`.
