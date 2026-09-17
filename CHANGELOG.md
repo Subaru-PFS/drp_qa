@@ -33,3 +33,6 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   directory is no longer generated; scripts are run as `python bin.src/<name>.py`.
 - **`setup.cfg`** and **`mypy.ini`** — superseded by `pyproject.toml`. No static type checker is configured for this
   repository.
+- **Unused `database` pytest marker** — the marker declaration and the `-m 'not database'` filter in
+  `addopts` are removed from `pyproject.toml`. No test in the repository was ever marked with it, so the
+  filter was a no-op.
