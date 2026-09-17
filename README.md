@@ -363,18 +363,6 @@ Scripts live in `bin.src/` and are run directly — there is no SCons step to co
 python bin.src/<script>.py --help
 ```
 
-### `fiberNormsQa.py`
-
-Thin entry point for `pfs.drp.qa.fiberNormsQa.main`, which plots fiber normalizations from a Butler collection.
-
-## Command-line tools
-
-Scripts live in `bin.src/` and are run directly — there is no SCons step to copy them into a `bin/` directory on `PATH`:
-
-```bash
-python bin.src/<script>.py --help
-```
-
 ### `fitDetectorMapLogQa.py`
 
 Parses `pipetask run` log files from the detectorMap pipeline and reports a per-quantum
@@ -436,6 +424,38 @@ python bin.src/plotIqQaTimeSeries.py --csv metrics.csv --arm b,r --obs-type arc
 
 Filters: `--arm`, `--spectrograph`, `--obs-type` (all comma-separated), plus `--where`
 for an arbitrary Butler query expression.
+
+### `calibrateQaThresholds.py`
+
+Derives QA thresholds from the golden visit set, so that no threshold enters the codebase
+without having been computed from a known-good visit range. Reads a metrics dataset from a
+Butler collection (or a CSV exported earlier) and prints suggested config values together
+with the provenance sentence to paste into the config field's `doc` string.
+
+```bash
+python bin.src/calibrateQaThresholds.py \
+    -b /path/to/butler -c u/user/run30 \
+    --metric medFwhm --metric pctFlagged --group-by arm
+
+python bin.src/calibrateQaThresholds.py --csv metrics.csv --metric medFwhm
+```
+
+WARN is the 95th percentile of the known-good distribution and FAIL the 99th, rounded to a
+readable value, or a physical limit where one exists. Group with `--group-by` wherever the
+physics differs per group — `arm` is the standing example, because a single blended
+blue-arm flag-rate threshold tracks the lamp species mix rather than the instrument.
+
+**It exits non-zero** when a suggestion rests on fewer than 20 samples, or when the
+known-bad visits do not cross the suggested FAIL. Either way the numbers are not ready to
+commit: a threshold the known-bad data never crosses is a number in a config file, not a
+gate. A `known_bad` entry that names a metric is only checked against that metric, and
+entries marked `unconfirmed` are reported but never gate.
+
+The set itself is `tests/data/goldenVisits.yaml` — visits with known verdicts, loaded by
+`pfs.drp.qa.metrics.goldenVisits.loadGoldenVisits`. Every entry carries a verdict; visits
+with none (a per-run calibration block, a drift series) are selected by querying the Butler
+when a job runs, not transcribed there. See the file's own header for the entry schema and
+`AGENTS.md` for the full derivation procedure.
 
 ### `fiberNormsQa.py`
 
