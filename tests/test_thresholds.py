@@ -76,6 +76,12 @@ class TestDeriveThresholds:
         assert not result.reliable
         assert "UNRELIABLE" in str(result)
 
+    def testProvenanceRecordsTheQuantilesActuallyUsed(self):
+        """A metric that fails low is derived from p5/p1, and must say so."""
+        result = deriveThresholds(np.linspace(0.0, 10.0, 100), metric="nLines", higherIsWorse=False)
+        assert "p5" in result.provenance and "p1" in result.provenance
+        assert "p95" not in result.provenance and "p99" not in result.provenance
+
     def testProvenanceRecordsVisitRangeAndDate(self):
         result = deriveThresholds(
             np.linspace(0.0, 10.0, 100),

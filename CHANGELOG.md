@@ -80,6 +80,24 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Fixed
 
+- **Partial flag-rate overrides no longer change verdicts.** A species key present in only one of
+  `flagRateWarnThreshold` / `flagRateFailThreshold` now resolves the missing side through its arm
+  entry before the global fallback, as the task's original lookup did. Previously
+  `warn={"b": 50, "b:Argon": 93}` with `fail={"b": 60}` gave `b:Argon` a FAIL of 20 rather than 60.
+- **Threshold provenance records the quantiles actually used.** For a metric with
+  `higherIsWorse=False` the thresholds come from p5/p1; the provenance said p95/p99.
+- **`calibrateQaThresholds.py` no longer reports success without producing a threshold.** A metric
+  named on the command line but absent from the data is an error, long-format input is pivoted so
+  `iqQaSpeciesMetrics` can be calibrated against, a `verifyKnownBad` failure sets the exit status,
+  and metrics for which step 4 never ran are listed explicitly instead of passing silently.
+- **`imageQualityLogQa.py` reads per-species residuals again.** It reconstructed them from the
+  `fitSpeciesXRms_*` columns that moved to `iqQaSpeciesMetrics`, so Butler-sourced reports silently
+  omitted every species; it now merges that dataset, keeping the legacy path for older collections.
+- **`get_fit_stats` survives `dof <= 0`.** The softening solve divided by zero and handed
+  `scipy.optimize.bisect` a NaN endpoint, which raises. Matches the guard in `drp_stella`'s
+  `calculateSoftening`.
+- **The golden-visit loader rejects non-boolean `placeholder` / `unconfirmed`.** `placeholder:
+  "false"` is a string, and truthiness silently dropped the entry.
 - **`dmResiduals` import** — `getDescriptionCounts` is now imported from
   `pfs.drp.stella.fitDetectorMap`. The former `pfs.drp.stella.fitDistortedDetectorMap` module no longer
   exists in `drp_stella`, so `DetectorMapResidualsTask` failed to import and the `dmResiduals` pipeline

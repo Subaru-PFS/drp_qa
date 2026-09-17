@@ -44,6 +44,7 @@ from pfs.drp.qa.metrics.goldenVisits import (
     defaultGoldenVisitsPath,
     loadGoldenVisits,
 )
+from pfs.drp.qa.metrics.longFormat import LONG_COLUMNS, widen
 from pfs.drp.qa.metrics.thresholds import (
     deriveThresholds,
     verifyKnownBad,
@@ -76,7 +77,7 @@ def loadMetrics(args: argparse.Namespace) -> pd.DataFrame:
     collection name and a genuinely absent detector must not look the same.
     """
     if args.csv:
-        return pd.read_csv(args.csv)
+        return _asWide(pd.read_csv(args.csv))
 
     try:
         from lsst.daf.butler import Butler
@@ -101,7 +102,32 @@ def loadMetrics(args: argparse.Namespace) -> pd.DataFrame:
         raise SystemExit(1)
 
     print(f"Found {len(refs)} {args.dataset_type} datasets. Loading...", file=sys.stderr)
-    return pd.concat([butler.get(ref) for ref in refs], ignore_index=True)
+    return _asWide(pd.concat([butler.get(ref) for ref in refs], ignore_index=True))
+
+
+def _asWide(metrics: pd.DataFrame) -> pd.DataFrame:
+    """Pivot a long-format metrics table, leaving a wide one untouched.
+
+    ``iqQaSpeciesMetrics`` stores metric names in a ``metric`` column and the
+    numbers in ``value``. Calibrating against it without this would look for a
+    column named after the metric, fail to find one, and skip -- reporting
+    success while producing no threshold at all.
+
+    Parameters
+    ----------
+    metrics : `pandas.DataFrame`
+        Either schema.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        One column per metric, with ``description`` preserved so that
+        ``--group-by description`` works.
+    """
+    if not set(LONG_COLUMNS).issubset(metrics.columns):
+        return metrics
+    print("Long-format input detected; pivoting to one column per metric.", file=sys.stderr)
+    return widen(metrics)
 
 
 def selectVisits(
@@ -275,9 +301,15 @@ def main() -> int:
         print(f"WARNING: ignoring --group-by columns absent from the data: {', '.join(missing)}\n")
 
     ok = True
+    requested = bool(args.metrics)
+    unverified: list[str] = []
     for metric in args.metrics or DEFAULT_METRICS:
         if metric not in good.columns:
-            print(f"{metric}: not a column in {args.dataset_type}; skipping.")
+            # Asked for explicitly but absent: an error, not a skip. Skipping
+            # would let the command exit 0 having produced no threshold.
+            print(f"{metric}: not a column in {args.dataset_type}.", file=sys.stderr)
+            if requested:
+                ok = False
             continue
 
         higherIsWorse = metric not in LOWER_IS_WORSE
@@ -309,12 +341,22 @@ def main() -> int:
                 ok = False
 
             badSubset = _matchGroup(badForMetric, groupBy, key)
-            if not badSubset.empty and metric in badSubset.columns:
+            if badSubset.empty or metric not in badSubset.columns:
+                # Step 4 of the procedure did not run for this metric. Most
+                # metrics have no known_bad entry naming them, so this is not a
+                # failure -- but it must be visible, or the run looks verified
+                # when nothing was verified.
+                print("    step 4 NOT CHECKED: no known-bad rows name this metric")
+                unverified.append(label)
+            else:
                 values = badSubset[metric].abs() if metric == "medDxCenter" else badSubset[metric]
                 try:
                     crossed, message = verifyKnownBad(values, suggestion)
                 except ValueError as exc:
+                    # Known-bad rows exist but carry no usable value. Unlike an
+                    # absent entry this is a broken check, so it fails the run.
                     print(f"    {exc}")
+                    ok = False
                 else:
                     print(f"    {message}")
                     ok = ok and crossed
@@ -330,10 +372,17 @@ def main() -> int:
                     print(f"    unconfirmed: visit {visit} {metric}={value:.4g} ({verdict} FAIL)")
             print()
 
+    if unverified:
+        print(
+            f"Step 4 was not checked for: {', '.join(unverified)}.\n"
+            "Those thresholds rest on the known-good distribution alone; nothing has shown\n"
+            "that a bad detector crosses them. Add a known_bad entry naming the metric.",
+            file=sys.stderr,
+        )
     if not ok:
         print(
-            "One or more thresholds are unreliable or fail to separate the known-bad data.\n"
-            "Do not commit them as-is.",
+            "One or more thresholds are unreliable, could not be verified, or fail to\n"
+            "separate the known-bad data. Do not commit them as-is.",
             file=sys.stderr,
         )
     return 0 if ok else 1

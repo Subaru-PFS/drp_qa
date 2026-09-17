@@ -217,6 +217,11 @@ class TestParsing:
             ("version: 1\nknown_good:\n  - {visit: 1, expect: MAYBE}\n", "invalid expect"),
             ("version: 1\nknown_good:\n  - {visit: 1, arms: b}\n", "must be a list"),
             ("version: 1\nknown_bad:\n  - {visit: 1}\n", "'expect' is required"),
+            ('version: 1\nknown_good:\n  - {visit: 1, placeholder: "false"}\n', "must be true or false"),
+            (
+                "version: 1\nknown_bad:\n  - {visit: 1, expect: FAIL, unconfirmed: yes please}\n",
+                "must be true or false",
+            ),
         ],
     )
     def testMalformedEntriesRaise(self, writeYaml, body, message):

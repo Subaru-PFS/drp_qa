@@ -374,7 +374,10 @@ class VisitQA:
         if cr_count > 0 or cr_pixels > 0:
             vqa.cosmic_rays = [(int(cr_count), int(cr_pixels))]
 
-        # Reconstruct fit_species_stats from dynamic columns
+        # Reconstruct fit_species_stats from the legacy wide columns. Current
+        # collections carry these in iqQaSpeciesMetrics instead (merged in by
+        # _merge_species_metrics); this path still reads collections reduced
+        # before the split, and the --json-in replay format.
         for k, v in data.items():
             if k.startswith("fitSpeciesXRms_"):
                 sp = k[len("fitSpeciesXRms_") :]
@@ -831,10 +834,58 @@ def get_visit_metrics(
         row["spectrograph"] = spectrograph
 
         vqa = VisitQA.from_metrics(row)
+
+        # Per-species fit statistics moved out of iqQaMetrics into the
+        # long-format iqQaSpeciesMetrics dataset. Without this the report would
+        # silently omit every per-species residual rather than fail visibly.
+        _merge_species_metrics(butler, dataId, vqa)
+
         vqa.collection = collection
         vqa_list.append(vqa)
 
     return vqa_list
+
+
+def _merge_species_metrics(butler, dataId: dict, vqa) -> None:
+    """Fold ``iqQaSpeciesMetrics`` into a `VisitQA` read from ``iqQaMetrics``.
+
+    The per-species residuals used to be wide ``fitSpeciesXRms_<species>``
+    columns on ``iqQaMetrics``. They are now rows of a long-format dataset, one
+    per ``(description, metric)``, so a reader that only knows the old columns
+    finds nothing and reports no species at all.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        An open Butler.
+    dataId : `dict`
+        The data ID of the quantum whose species metrics to fetch.
+    vqa : `VisitQA`
+        Updated in place. Left untouched when the dataset is absent, which is
+        the normal case for a collection reduced before the split.
+    """
+    try:
+        species = butler.get("iqQaSpeciesMetrics", dataId=dataId)
+    except LookupError:
+        return
+    if species is None or len(species) == 0:
+        return
+
+    wanted = {"fitSpeciesXRms": 0, "fitSpeciesYRms": 1}
+    stats: dict[str, list[float]] = {}
+    for row in species.itertuples(index=False):
+        index = wanted.get(getattr(row, "metric", None))
+        if index is None:
+            continue
+        pair = stats.setdefault(str(row.description), [float("nan"), float("nan")])
+        pair[index] = float(row.value)
+
+    for name, (xRms, yRms) in stats.items():
+        vqa.fit_species_stats[name] = (xRms, yRms)
+        # Match from_metrics: the last species seen is the scalar fallback.
+        vqa.fit_species_name = name
+        vqa.fit_species_x_rms = xRms
+        vqa.fit_species_y_rms = yRms
 
 
 def get_visit_logs(repo: str, collection: str, visit: int, spectrograph: int, arms: tuple[str, ...]):

@@ -115,6 +115,17 @@ class TestGetFitStats:
         assert clipped.spatial.median == pytest.approx(0.0, abs=1e-12)
         assert unclipped.spatial.num_lines >= clipped.spatial.num_lines
 
+    def testZeroDofDoesNotCrashTheSofteningSolve(self):
+        """Zero dof divides by zero; bisect cannot start from a NaN endpoint.
+
+        Reachable whenever the parameter count eats the whole sample -- a fiber
+        left with one surviving line after an S/N cut. The same guard exists in
+        drp_stella's calculateSoftening, for the same reason.
+        """
+        data = makeArcData(numFibers=2, numLines=1)
+        stats = dmResiduals.get_fit_stats(data, numParams=4)
+        assert stats.wavelength.softenFit == pytest.approx(0.0)
+
     def testNoLinesLeavesTheWavelengthBlockEmptyRatherThanWrong(self):
         """A trace-only frame must report no lines, not a fabricated statistic."""
         data = makeArcData(numLines=0)

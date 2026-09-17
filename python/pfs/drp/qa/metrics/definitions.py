@@ -199,14 +199,28 @@ def _pairOverrides(warn: Mapping[str, float], fail: Mapping[str, float]) -> dict
     Returns
     -------
     `dict` [`str`, `Thresholds`]
-        One entry per key present in either dict. A key present in only one of
-        them keeps the fallback for the other level rather than becoming
-        ungated, so that a partial override cannot silently disable a check.
+        One entry per key present in either dict.
+
+    Notes
+    -----
+    A key present in only one dict must resolve the other side the way the
+    task's original lookup did: ``arm:species`` then ``arm`` then the global
+    fallback. Going straight to the fallback silently rewrites a configured
+    verdict -- with ``warn={"b": 50, "b:Argon": 93}`` and ``fail={"b": 60}``,
+    the FAIL level for ``b:Argon`` is 60, not 20, because the arm entry stands
+    in for the species that has none.
     """
+
+    def resolve(source: Mapping[str, float], key: str, fallback: float | None) -> float | None:
+        if key in source:
+            return source[key]
+        arm = key.split(":", 1)[0]
+        return source.get(arm, fallback)
+
     return {
         key: Thresholds(
-            warn=warn.get(key, IQ_FLAG_RATE_FALLBACK.warn),
-            fail=fail.get(key, IQ_FLAG_RATE_FALLBACK.fail),
+            warn=resolve(warn, key, IQ_FLAG_RATE_FALLBACK.warn),
+            fail=resolve(fail, key, IQ_FLAG_RATE_FALLBACK.fail),
         )
         for key in sorted(set(warn) | set(fail))
     }

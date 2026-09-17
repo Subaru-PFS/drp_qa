@@ -225,8 +225,11 @@ def deriveThresholds(
             visitRange=visitRange,
             derivedOn=derivedOn,
             numSamples=int(good.size),
-            warnPercentile=warnPercentile,
-            failPercentile=failPercentile,
+            # The reflected quantiles, not the requested ones: for a metric that
+            # fails low these are p5/p1, and recording p95/p99 would make the
+            # provenance R2 requires describe a derivation that never happened.
+            warnPercentile=warnQ,
+            failPercentile=failQ,
             physicalLimit=physicalLimit,
         ),
     )

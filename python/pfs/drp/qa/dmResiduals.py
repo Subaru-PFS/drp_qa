@@ -569,7 +569,11 @@ def get_fit_stats(
     dof = xDof + yDof
 
     def getSoften(resid, err, dof, soften=0):
-        if len(resid) == 0:
+        # dof <= 0 divides by zero and yields NaN, which bisect cannot start
+        # from. It happens when the parameter count eats the whole sample --
+        # a fiber left with one surviving line, say. The same guard exists in
+        # drp_stella's calculateSoftening, for the same reason.
+        if len(resid) == 0 or dof <= 0:
             return 0
         with np.errstate(invalid="ignore"):
             return (getChi2(resid, err, soften) / dof) - 1
@@ -577,19 +581,33 @@ def get_fit_stats(
     f_x = partial(getSoften, arc_data.xResid, arc_data.xErr, xDof)
     f_y = partial(getSoften, lines.yResid, lines.yErr, yDof)
 
-    if f_x(0) < 0:
-        xSoftFit = 0.0
-    elif f_x(maxSoften) > 0:
-        xSoftFit = np.nan
-    else:
-        xSoftFit = bisect(f_x, 0, maxSoften)
+    def solveSoften(f):
+        """Solve for the softening that brings chi2/dof to 1, or give up cleanly.
 
-    if f_y(0) < 0:
-        ySoftFit = 0.0
-    elif f_y(maxSoften) > 0:
-        ySoftFit = np.nan
-    else:
-        ySoftFit = bisect(f_y, 0, maxSoften)
+        Parameters
+        ----------
+        f : `callable`
+            Softening residual function; ``f(s) == 0`` at the solution.
+
+        Returns
+        -------
+        `float`
+            The softening, 0.0 when none is needed, or NaN when the fit cannot
+            be softened within ``maxSoften`` or the endpoints are not finite.
+            Returning NaN beats raising: one unsolvable detector must not take
+            down the quantum.
+        """
+        low, high = f(0), f(maxSoften)
+        if not np.isfinite(low) or not np.isfinite(high):
+            return np.nan
+        if low < 0:
+            return 0.0
+        if high > 0:
+            return np.nan
+        return bisect(f, 0, maxSoften)
+
+    xSoftFit = solveSoften(f_x)
+    ySoftFit = solveSoften(f_y)
 
     xFibers = len(traces.fiberId.unique())
     yFibers = len(lines.fiberId.unique())

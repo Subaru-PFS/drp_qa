@@ -328,7 +328,7 @@ def _parseEntry(item: Any, defaultExpect: str | None, where: str) -> GoldenVisit
     if not isinstance(item, dict):
         raise ValueError(f"{where}: expected a mapping, got {type(item).__name__}")
 
-    placeholder = bool(item.get("placeholder", False))
+    placeholder = _asBool(item.get("placeholder", False), "placeholder", where)
     visits = _parseVisits(item, where, placeholder)
 
     expect = item.get("expect", defaultExpect)
@@ -352,7 +352,7 @@ def _parseEntry(item: Any, defaultExpect: str | None, where: str) -> GoldenVisit
         metric=_optionalStr(item.get("metric")),
         reason=_optionalStr(item.get("reason")),
         note=_optionalStr(item.get("note")),
-        unconfirmed=bool(item.get("unconfirmed", False)),
+        unconfirmed=_asBool(item.get("unconfirmed", False), "unconfirmed", where),
         placeholder=placeholder,
     )
 
@@ -401,6 +401,38 @@ def _parseVisits(item: dict, where: str, placeholder: bool) -> tuple[int, ...]:
         return tuple(range(first, last + 1))
 
     return (_asInt(visit, "visit", where),)
+
+
+def _asBool(value: Any, name: str, where: str) -> bool:
+    """Coerce a YAML scalar to `bool`, or raise.
+
+    Truthiness is not good enough here. ``placeholder: "false"`` is a string,
+    and a plain `bool` call would read it as True and silently drop the entry --
+    exactly the kind of quiet loss the strict parsing elsewhere in this module
+    exists to prevent.
+
+    Parameters
+    ----------
+    value : `Any`
+        The raw value.
+    name : `str`
+        Field name, used in error messages.
+    where : `str`
+        Human-readable location, used in error messages.
+
+    Returns
+    -------
+    `bool`
+        The value.
+
+    Raises
+    ------
+    ValueError
+        If the value is not a YAML boolean.
+    """
+    if not isinstance(value, bool):
+        raise ValueError(f"{where}: '{name}' must be true or false, got {value!r}")
+    return value
 
 
 def _asInt(value: Any, name: str, where: str) -> int:

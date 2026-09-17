@@ -232,13 +232,26 @@ class TestImageQualityDefinitions:
         registry = buildImageQualityRegistry(iqConfig)
         assert registry.gate("medFwhm", 4.0).status == "PASS"
 
-    def testPartialOverrideDoesNotDisableTheOtherLevel(self, iqConfig):
-        """A key in only one dict keeps the fallback for the other level."""
-        iqConfig.flagRateWarnThreshold = {"z": 30.0}
+    def testPartialOverrideResolvesTheMissingSideThroughTheArm(self, iqConfig):
+        """A species with no FAIL entry takes its arm's, not the global fallback.
+
+        Going straight to the fallback would rewrite a configured verdict: with
+        b:Argon warning at 93 and only the arm's FAIL of 60 configured, a 70 %
+        flag rate is a FAIL at 60 and would wrongly have been one at 20 too --
+        but a 25 % rate must stay PASS, which the fallback would have failed.
+        """
+        iqConfig.flagRateWarnThreshold = {"b": 50.0, "b:Argon": 93.0}
+        iqConfig.flagRateFailThreshold = {"b": 60.0}
+        registry = buildImageQualityRegistry(iqConfig)
+        result = registry.gate("pctFlagged", 25.0, keys=("b:Argon", "b"))
+        assert result.status == "PASS", "the global 20 % fallback must not apply here"
+        assert registry.gate("pctFlagged", 70.0, keys=("b:Argon", "b")).threshold == 60.0
+
+    def testGlobalFallbackStillAppliesWhenTheArmHasNoEntryEither(self, iqConfig):
+        iqConfig.flagRateWarnThreshold = {"z:Neon": 30.0}
         iqConfig.flagRateFailThreshold = {}
         registry = buildImageQualityRegistry(iqConfig)
-        assert registry.gate("pctFlagged", 25.0, keys=("z",)).status == "FAIL"
-        assert registry.gate("pctFlagged", 22.0, keys=("z",)).threshold == IQ_FLAG_RATE_FALLBACK.fail
+        assert registry.gate("pctFlagged", 25.0, keys=("z:Neon",)).threshold == IQ_FLAG_RATE_FALLBACK.fail
 
     def testUngatedMetricsAreRegisteredButSilent(self, iqConfig):
         registry = buildImageQualityRegistry(iqConfig)
