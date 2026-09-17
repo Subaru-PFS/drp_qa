@@ -1,9 +1,11 @@
-description: DetectorMap QA pipeline
+description: DetectorMap and Image Quality QA pipeline
 tasks:
   dmResiduals:
     class: pfs.drp.qa.dmResiduals.DetectorMapResidualsTask
   dmCombinedResiduals:
     class: pfs.drp.qa.dmCombinedResiduals.DetectorMapCombinedResidualsTask
+  dmDriftMonitor:
+    class: pfs.drp.qa.dmDriftMonitorTask.DmDriftMonitorTask
   extractionQa:
     class: pfs.drp.qa.extractionQa.ExtractionQaTask
   extractionQaCombined:
