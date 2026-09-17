@@ -8,8 +8,15 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ## [Unreleased]
 
+### Removed
+
+- **`tests/SConscript`** — the last SCons file in the repository. It imported
+  `lsst.sconsUtils` and did nothing; `pytest` never used it.
+
 ### Added
 
+- **`tests/test_fitStats.py`** — pins the field order of `FitStat`, which `FitStats.from_dataframe`
+  unpacks positionally and which is therefore part of the stored `dmQaResidualStats` schema.
 - **Metric registry** (`pfs.drp.qa.metrics.registry`) — `MetricDef` declares a metric's units, the
   external reference it is measured against (R1), its direction, its thresholds and their provenance
   (R2); `MetricRegistry.gate` is the one gating path for every metric, replacing the per-metric
@@ -20,6 +27,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
+- **`tests/test_dmResiduals.py` tests something.** It was a single `pass` body; it now exercises
+  `get_fit_stats` over synthetic frames, injecting spatial and wavelength shifts of known size and
+  asserting the statistics recover them. It guards itself with `pytest.importorskip` at module level
+  rather than relying on `conftest.py`'s ignore list, which is now empty.
 - **Plotting moved to `pfs.drp.qa.plotting`.** `palettes`, `dmResiduals`, `dmCombined` and `iqQa`.
   Every function takes DataFrames and returns a `matplotlib.figure.Figure`, and none imports the
   Butler or a task class — `tests/test_plotting.py` checks that statically and smoke-tests each

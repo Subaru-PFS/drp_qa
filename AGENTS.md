@@ -72,8 +72,8 @@ the pipeline/config glue to run them.
 - `bin.src/` — command-line scripts, run directly as `python bin.src/<name>.py`.
   There is no SCons `shebang()` step and no generated `bin/` directory.
 - `ups/` — EUPS configuration (`drp_qa.table`, dependencies and `PATH`/`PYTHONPATH`)
-- `tests/` — pytest-based tests (may rely on the LSST/PFS stack). `tests/SConscript` is
-  the one surviving SCons file; it is vestigial and not exercised by `pytest`.
+- `tests/` — pytest-based tests. Most run without the LSST/PFS stack; the ones that need
+  it guard themselves with `pytest.importorskip` (see below).
 - `pyproject.toml` — build config (setuptools) and **all** tool configs (Ruff, pytest).
   Keep it that way: don't add standalone per-tool config files.
 - `README.md` — project overview and usage notes
@@ -100,9 +100,9 @@ setup -r .
 so both must be available.
 
 EUPS is still used for dependency resolution via `ups/drp_qa.table`, but **there is no
-SCons build** — `SConstruct` and `bin.src/SConscript` were removed. `setup -r .` only
-prepends `PATH` and `PYTHONPATH`; nothing is compiled or generated. (`tests/SConscript`
-still exists but is vestigial.)
+SCons build** — `SConstruct`, `bin.src/SConscript` and `tests/SConscript` were all
+removed. `setup -r .` only prepends `PATH` and `PYTHONPATH`; nothing is compiled or
+generated.
 
 ### Install
 
@@ -155,15 +155,32 @@ fix findings in the code you touch rather than widening the ignore list in
 
 **The package is not installed in CI.** `pip install -e .` would pull `pfs-utils` (and
 transitively `pfs-datamodel`, `pfs-instdata`) from GitHub, making every run depend on
-three other repositories. Only the stack-free suite runs, and it imports nothing beyond
-the standard library.
+three other repositories. CI installs only ordinary PyPI wheels (`pytest`, `numpy`,
+`pandas`, `matplotlib`, `seaborn`, `pyyaml`) and `tests/conftest.py` puts `python/` on
+`sys.path`, so the stack-free suite imports `pfs.drp.qa.*` straight from the checkout.
 
 **Tests that need the stack** cannot be collected without it — a module-level
 `import lsst.utils.tests` fails during collection and aborts the whole run, so an in-test
-`try/except ImportError` never gets the chance to skip. `tests/conftest.py` lists those
-modules in `_STACK_MODULES` and ignores them when the stack is absent. Add new ones there,
-or better, keep the logic under test in pure functions that take arrays and DataFrames so
-no stack is needed at all.
+`try/except ImportError` never gets the chance to skip. Guard such a module at module
+level instead:
+
+```python
+dmResiduals = pytest.importorskip("pfs.drp.qa.dmResiduals", reason="requires the LSST/PFS stack")
+```
+
+`tests/conftest.py` also keeps a `_STACK_MODULES` list that drops modules from collection
+when their module-scope imports cannot be satisfied. It is empty today and is the escape
+hatch for a module that genuinely cannot use `importorskip` — one subclassing
+`lsst.utils.tests.TestCase`, say. Prefer `importorskip`, which keeps the guard next to the
+import it guards.
+
+**Better than either:** keep the logic under test in pure functions that take arrays and
+DataFrames, so no stack is needed at all. That is what `pfs.drp.qa.metrics` and
+`pfs.drp.qa.plotting` exist for.
+
+**No `pass` test bodies.** A test that asserts nothing reports green and hides the defect
+it was named after. A metric test should inject a defect of known size and assert the
+metric recovers it.
 
 ### Running pipelines
 

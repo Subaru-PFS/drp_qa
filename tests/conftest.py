@@ -27,9 +27,13 @@ import sys
 from pathlib import Path
 
 # Test modules that import the LSST/PFS stack at module scope.
-_STACK_MODULES = [
-    "test_dmResiduals.py",
-]
+#
+# Empty today: every stack-dependent module fetches the stack with
+# ``pytest.importorskip`` at module level instead, which skips cleanly on its
+# own. Prefer that in new tests -- it keeps the guard next to the import it
+# guards. This list stays as the escape hatch for a module that genuinely cannot
+# use importorskip, e.g. one that subclasses ``lsst.utils.tests.TestCase``.
+_STACK_MODULES: list[str] = []
 
 _HERE = Path(__file__).parent
 
