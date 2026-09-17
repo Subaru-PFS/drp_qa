@@ -92,6 +92,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   the tasks are run one at a time with `#label`. `imageQualityQa` now declares it as a prerequisite
   with an explicit `minimum=0`, which keeps it optional — prerequisites otherwise default to
   `minimum=1` and are resolved at graph-build time, where no runtime `try/except` can help.
+- **`plot_residual` no longer trips a pandas `FutureWarning`.** Its per-fiber aggregation applied
+  over the grouping columns; it now selects the two columns the aggregation reads, which is
+  behaviour-identical (verified) and works on every pandas version, unlike `include_groups=`.
 - **Partial flag-rate overrides no longer change verdicts.** A species key present in only one of
   `flagRateWarnThreshold` / `flagRateFailThreshold` now resolves the missing side through its arm
   entry before the global fallback, as the task's original lookup did. Previously

@@ -296,8 +296,13 @@ def plot_residual(
 
     # Upper row
     # Fiber residual
+    # Select the two columns the lambda reads before applying. pandas is
+    # deprecating apply() over the grouping columns, and since neither fiberId,
+    # status nor isOutlier is used here, narrowing first is behaviour-identical
+    # and silences the FutureWarning without needing `include_groups=`, which
+    # only exists from pandas 2.2.
     fiber_avg = (
-        plotData.groupby(["fiberId", "status", "isOutlier"])
+        plotData.groupby(["fiberId", "status", "isOutlier"])[[column, f"{column[0]}Err"]]
         .apply(
             lambda rows: (
                 len(rows),
