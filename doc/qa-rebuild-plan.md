@@ -20,7 +20,7 @@ what its limits are.
 
 | Phases | Ticket | Delivers |
 |---|---|---|
-| 0, 1 | **`PIPE2D-1391-01`** (this ticket) | unblock the broken import; golden visit set, threshold procedure, metric registry, long-format schema, storage contract, plotting library, test harness |
+| 0, 1 | **`PIPE2D-1391-01`** (this ticket) | golden visit set, threshold procedure, metric registry, long-format schema, storage contract, plotting library, test harness |
 | 2 | later ticket | detector-map drift monitoring |
 | 3 | later ticket | image-quality extensions |
 | 4 | later ticket | visit-level rollup and alerting |
@@ -33,9 +33,10 @@ particular, resist adding a new metric "while we are in here" — a metric added
 golden set exists cannot be validated, which is the failure mode Phase 1 is built to
 prevent.
 
-The one exception worth making: [Phase 0](#phase-0--unblock-and-verify) step 1 fixes an
-import that currently prevents `dmResiduals` from loading at all. If it is convenient to
-land that as its own commit or its own ticket ahead of the rest, do so.
+**Depends on `PIPE2D-1392`** ("Add CI testing for `drp_qa`"), which is assumed merged
+first. It carries the `dmResiduals` import fix described in
+[Phase 0](#phase-0--unblock-and-verify) step 1, without which the task cannot import and
+no CI run over the pipeline is meaningful.
 
 ---
 
@@ -198,11 +199,16 @@ while leaving orphaned plotting code behind produces a module whose functions ra
 
 Small, independently mergeable. Do this before any feature work.
 
-1. **Fix the broken import.** Change `dmResiduals.py` to
-   `from pfs.drp.stella.fitDetectorMap import getDescriptionCounts`. Verify the symbol
-   exists in the `drp_stella` you are set up against:
+1. **Fix the broken import** — **delivered by `PIPE2D-1392`, assumed already merged.**
+   `dmResiduals.py` imported `getDescriptionCounts` from
+   `pfs.drp.stella.fitDistortedDetectorMap`, a module that no longer exists in
+   `drp_stella`; it is now `pfs.drp.stella.fitDetectorMap`. The stale import raised at
+   module import time, so `DetectorMapResidualsTask` could not be constructed at all.
+   It landed on the CI ticket so that CI has a pipeline that imports. Confirm it is
+   present before starting, and if it is not, stop and rebase onto it:
    ```bash
-   grep -n "def getDescriptionCounts" ../drp_stella/python/pfs/drp/stella/fitDetectorMap.py
+   grep -n "from pfs.drp.stella.fitDetectorMap import getDescriptionCounts" \
+     python/pfs/drp/qa/dmResiduals.py
    ```
 2. **Confirm the pipeline builds a QuantumGraph** against a real repo:
    ```bash
@@ -657,7 +663,7 @@ an amp-localised degradation is invisible in a detector-wide median.
 This ticket is done when all of the following hold. Note that none of these require a new
 metric to exist:
 
-- [ ] `dmResiduals` imports; `pipetask build -p pipelines/drpQA.yaml` succeeds.
+- [ ] `PIPE2D-1392` is merged; `dmResiduals` imports and `pipetask build -p pipelines/drpQA.yaml` succeeds.
 - [ ] `tests/data/goldenVisits.yaml` exists, with at least one `known_good` entry and the
       SM1 focus range as a `known_bad` entry.
 - [ ] `bin.src/calibrateQaThresholds.py` runs over a collection and prints suggested
