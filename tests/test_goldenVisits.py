@@ -52,6 +52,26 @@ class TestCheckedInSet:
         assert entry.metric, "a known_bad entry must name the metric that identifies the fault"
         assert entry.reason
 
+    def testKnownGoodIsPopulated(self):
+        """The Run25 stable set; thresholds cannot be derived without it."""
+        golden = loadGoldenVisits()
+        assert golden.knownGood, "no usable known_good entries"
+        assert golden.goodVisits[0] == 133025
+        assert golden.goodVisits[-1] == 133055
+
+    def testKnownGoodEntriesAreScopedToTheArmsThatWereRead(self):
+        """Run25 block A read b/r/n and block B read b/m; neither covers the other."""
+        golden = loadGoldenVisits()
+        assert golden.expectationFor(133037, arm="b", spectrograph=1) == "PASS"
+        assert golden.expectationFor(133037, arm="m", spectrograph=1) is None, "m was not read in block A"
+        assert golden.expectationFor(133042, arm="m", spectrograph=1) == "PASS"
+        assert golden.expectationFor(133042, arm="n", spectrograph=1) is None, "n was not read in block B"
+
+    def testEveryKnownGoodEntryNamesItsSequence(self):
+        """The flag-rate threshold key is derived from seqType; it cannot be blank."""
+        for entry in loadGoldenVisits().knownGood:
+            assert entry.seqType, f"{entry.visits[0]} does not name its W_SEQNAM"
+
     def testPlaceholdersExcludedByDefault(self):
         """An unfilled entry must never silently validate a threshold."""
         assert not any(entry.placeholder for entry in loadGoldenVisits())

@@ -42,27 +42,71 @@
 version: 1
 
 known_good:
-  # TODO(PIPE2D-1391): replace with a real visit from the archive. Wanted: a
-  # nominal-focus HgCd arc taken shortly after a calibration, where HgCd gives
-  # dense, well-measured b-arm coverage (see AGENTS.md, arc lamp physics).
-  - placeholder: true
-    visit: null
-    arms: [b, r, n, m]
+  # Run25, 2025-11-10/11. A stable calibration sequence at fixed pointing
+  # (alt 90, az 90, insrot 0), taken as two blocks with different camera sets.
+  # Supplied as the reference stable set; every threshold is derived from it.
+  #
+  # Block A -- b, r and n arms, spectrographs 1-4.
+  - visitRange: [133025, 133027]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    note: "Run25 stable set, block A. 10 s exposures."
+  - visitRange: [133028, 133030]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    note: "Run25 stable set, block A. 45 s exposures."
+  - visitRange: [133031, 133033]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    note: "Run25 stable set, block A. 5 s exposures."
+  - visitRange: [133034, 133036]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    note: "Run25 stable set, block A. 70 s exposures."
+  - visitRange: [133037, 133039]
+    arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: HgCd"
-    expect: PASS
-    note: "Nominal focus, taken shortly after a calibration."
-
-  # TODO(PIPE2D-1391): replace with a real quartz/trace visit. Needed because
-  # the trace path through imageQualityQa (traceOnly) is gated by the same
-  # thresholds but exercises different code.
-  - placeholder: true
-    visit: null
-    arms: [b, r, n, m]
+    note: >-
+      Run25 stable set, block A. 45 s exposures. The only HgCd in the set, and
+      so the only dense, well-measured b-arm coverage: b-arm flag rates here are
+      genuine rather than lamp physics.
+  - visitRange: [133040, 133041]
+    arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
-    seqType: "Quartz"
-    expect: PASS
-    note: "Nominal trace/flat exposure; exercises the fiber-profile path."
+    seqType: "Trace"
+    note: "Run25 stable set, block A. 20 s scienceTrace; exercises the fiber-profile path."
+
+  # Block B -- b and m arms, spectrographs 1-4. No HgCd was taken in this block.
+  - visitRange: [133042, 133044]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    note: "Run25 stable set, block B. 10 s exposures."
+  - visitRange: [133045, 133047]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    note: "Run25 stable set, block B. 45 s exposures."
+  - visitRange: [133048, 133050]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    note: "Run25 stable set, block B. 5 s exposures."
+  - visitRange: [133051, 133053]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    note: "Run25 stable set, block B. 45 s exposures."
+  - visitRange: [133054, 133055]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    note: "Run25 stable set, block B. 20 s scienceTrace."
 
 known_bad:
   # Documented genuine optics failure: SM1 showed FWHM 3.83-4.86 px across all

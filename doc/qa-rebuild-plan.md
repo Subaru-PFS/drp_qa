@@ -666,11 +666,10 @@ metric to exist:
 - [x] `PIPE2D-1392` is merged and `dmResiduals` imports.
       **`pipetask build -p pipelines/drpQA.yaml` has not been run** — no Butler or stack
       was available to the session that did this work. Run it before merging.
-- [~] `tests/data/goldenVisits.yaml` exists, with the SM1 focus range (140005–140138) as
-      its `known_bad` entry. **The `known_good` entries are still placeholders**, and the
-      loader excludes placeholders by default, so nothing can be validated against them
-      yet. Filling in real visit numbers is the one remaining input this ticket needs
-      from the archive, and everything below is blocked on it.
+- [x] `tests/data/goldenVisits.yaml` holds the Run25 stable calibration sequence
+      (133025–133055, 31 visits over 11 entries) as `known_good`, and the SM1 focus range
+      (140005–140138) as `known_bad`. Two `known_bad` placeholders remain — the stale-calib
+      and saturated-frame reference cases for Phases 2 and 3.
 - [x] `bin.src/calibrateQaThresholds.py` runs the procedure and prints suggested
       thresholds with their provenance sentence. Exercised end to end against a CSV;
       **not yet run against a Butler collection.**
@@ -699,10 +698,17 @@ verdict, removal of the rendered plot datasets, and the dashboard.
 
 #### Remaining work on this ticket
 
-1. **Fill in the `known_good` entries** of `tests/data/goldenVisits.yaml` from the archive
-   and drop their `placeholder: true`. Wanted: a nominal-focus HgCd arc and a quartz
-   trace. Two of the three `known_bad` entries (stale calib, saturated frame) are also
-   still placeholders; they are the reference cases for Phases 2 and 3 and can wait.
+1. **Fill in the remaining `known_bad` entries** of `tests/data/goldenVisits.yaml` — the
+   stale-calib and saturated-frame reference cases for Phases 2 and 3. `known_good` is
+   done (Run25, 133025–133055).
+
+   One sizing gap to know about when deriving per-species thresholds: Run25 has
+   **12 b-arm detectors for HgCd** against 24 for each of Argon, Xenon, Neon and Krypton,
+   because HgCd was taken in block A only. That is below the 20-sample floor
+   `calibrateQaThresholds.py` enforces, and `b:HgCd` is the b-arm key that matters most —
+   it is the one lamp whose blue flag rates are genuine rather than lamp physics. Either
+   add a second HgCd block from another run, or accept a hand-set `b:HgCd` and say so in
+   its provenance. Per-*arm* thresholds are comfortable: b=124, n=68, r=68, m=56.
 2. **Run `pipetask build`** against a real repo to confirm the pipeline still builds with
    the new `iqQaSpeciesMetrics` output connection.
 3. **Re-derive the `imageQualityQa` thresholds** with `bin.src/calibrateQaThresholds.py`
