@@ -722,6 +722,13 @@ registry gives the same verdict for all 666 quanta. See
 `examples/verify_PIPE2D-1391-01.ipynb` section 3a; it reads only the measured values,
 which this branch does not touch, so it needs no pipeline run.
 
+Note what that collection cannot do. `qaActor/reductions` is reduced incrementally, each
+visit by whatever code was deployed at the time, so its stored `qaStatus` is a mixture of
+versions and cannot serve as a baseline for what `main` produces today. Comparing against
+it (notebook section 3b) establishes nothing either way. A baseline has to be a fresh
+reduction of chosen visits on `main`, compared against the same visits on the branch —
+notebook section 3c.
+
 #### Remaining work on this ticket
 
 1. **Fill in the remaining `known_bad` entries** of `tests/data/goldenVisits.yaml` — the
