@@ -8,63 +8,24 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ## [Unreleased]
 
-### Removed
-
-- **`tests/SConscript`** — the last SCons file in the repository. It imported
-  `lsst.sconsUtils` and did nothing; `pytest` never used it.
-
 ### Added
 
-- **`tests/test_fitStats.py`** — pins the field order of `FitStat`, which `FitStats.from_dataframe`
+- **Golden visit set** (`tests/data/goldenVisits.yaml`) plus a stack-free loader,
+  `pfs.drp.qa.metrics.goldenVisits`. Placeholder entries are excluded by default, so an unfilled
+  entry cannot validate a threshold. The SM1 focus range (140005-140138) is the anchor `known_bad`.
+- **`pfs.drp.qa.metrics.thresholds`** — the threshold derivation procedure as pure functions: WARN at
+  p95 and FAIL at p99 of the known-good distribution, or a physical limit, plus the provenance
+  sentence for the config field's `doc`.
+- **`bin.src/calibrateQaThresholds.py`** — runs that procedure over a Butler collection or a CSV and
+  prints suggested config values. Exits non-zero on too few samples, or when the known-bad data does
+  not cross the suggested FAIL.
+- **Metric registry** (`pfs.drp.qa.metrics.registry`) — one `MetricDef` per metric carrying its
+  units, external reference, direction, thresholds and their provenance; `MetricRegistry.gate` is the
+  single gating path. An unmeasured or ungated metric yields no verdict rather than a PASS.
+- **`iqQaSpeciesMetrics`** — new `imageQualityQa` output: per-species fit statistics in long format.
+- **`tests/test_fitStats.py`** — pins `FitStat`'s field order, which `FitStats.from_dataframe`
   unpacks positionally and which is therefore part of the stored `dmQaResidualStats` schema.
-- **Metric registry** (`pfs.drp.qa.metrics.registry`) — `MetricDef` declares a metric's units, the
-  external reference it is measured against (R1), its direction, its thresholds and their provenance
-  (R2); `MetricRegistry.gate` is the one gating path for every metric, replacing the per-metric
-  if/elif ladders. A value that was not measured, or a metric with no thresholds, yields no verdict
-  rather than a PASS.
-- **`iqQaSpeciesMetrics`** — new `imageQualityQa` output holding per-species fit statistics in long
-  format, one row per `(visit, arm, spectrograph, description, metric)`.
-
-### Changed
-
-- **`tests/test_dmResiduals.py` tests something.** It was a single `pass` body; it now exercises
-  `get_fit_stats` over synthetic frames, injecting spatial and wavelength shifts of known size and
-  asserting the statistics recover them. It guards itself with `pytest.importorskip` at module level
-  rather than relying on `conftest.py`'s ignore list, which is now empty.
-- **Plotting moved to `pfs.drp.qa.plotting`.** `palettes`, `dmResiduals`, `dmCombined` and `iqQa`.
-  Every function takes DataFrames and returns a `matplotlib.figure.Figure`, and none imports the
-  Butler or a task class — `tests/test_plotting.py` checks that statically and smoke-tests each
-  function against a synthetic frame. `pfs.drp.qa.utils.plotting` and `pfs.drp.qa.iqQaPlots` remain
-  as re-export shims, so existing imports keep working.
-- **`plot_detectormap_residuals` accepts a `DetectorGeometry`** as well as a `DetectorMap`; the
-  detector map is reduced to one via `DetectorGeometry.coerce`, so callers are unaffected.
-- **`make_report` is now a thin wrapper** over `pfs.drp.qa.plotting.dmCombined.reportFigures`, which
-  yields the report pages; only the binding to `MultipagePdfFigure` stays with the task.
-- **`FitStat`/`FitStats` moved to `pfs.drp.qa.metrics.fitStats`**, re-exported from
-  `pfs.drp.qa.dmResiduals`.
-- **`imageQualityQa` gates through the metric registry.** Thresholds still come from the config, so
-  command-line overrides work as before, and the verdict boundaries and reason strings are unchanged.
-- **Per-species metrics are long-format.** The ragged `fitSpeciesXRms_<species>` /
-  `fitSpeciesYRms_<species>` columns are gone from `iqQaMetrics`; the same values are now rows in the
-  new `iqQaSpeciesMetrics` dataset. Concatenating across quanta that saw different species no longer
-  produces a NaN-padded frame, and `groupby("description")` no longer needs the species known in
-  advance.
-
-- **Golden visit set** (`tests/data/goldenVisits.yaml`) — a fixed list of visits with known verdicts,
-  against which every threshold and every new metric is validated. Loaded with
-  `pfs.drp.qa.metrics.goldenVisits.loadGoldenVisits`, which is stack-free and Butler-free. Entries
-  marked `placeholder: true` are excluded by default so an unfilled entry cannot silently validate a
-  threshold. The documented SM1 focus range (visits 140005-140138) is the anchor `known_bad` entry.
-- **`pfs.drp.qa.metrics.thresholds`** — the threshold derivation procedure as pure functions
-  (`deriveThresholds`, `verifyKnownBad`, `formatProvenance`, `roundToReadable`): WARN at p95 and
-  FAIL at p99 of the known-good distribution, or a physical limit where one exists, with the
-  provenance sentence required for the config field's `doc` string.
-- **`bin.src/calibrateQaThresholds.py`** — CLI that runs the procedure over a Butler collection (or
-  an exported CSV) and prints suggested config values. Exits non-zero when a suggestion rests on
-  fewer than 20 samples or when the known-bad data does not cross the suggested FAIL.
-- **AGENTS.md: "Golden Visit Set and Threshold Derivation"** — documents the procedure that every
-  threshold must follow.
-
+- **AGENTS.md: "Golden Visit Set and Threshold Derivation"**.
 - **GitHub Actions CI** — `.github/workflows/tests.yml` runs the stack-free test suite on Python 3.12 and
   3.13; `.github/workflows/lint.yml` runs `ruff check .` and `ruff format --check .` over the whole tree.
   Both are blocking.
@@ -73,25 +34,35 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `E501` is ignored because `ruff format` already enforces `line-length` for code and what remains are
   long regexes and report strings the formatter will not split; `RUF001`–`RUF003` are ignored because
   Greek letters and typographic dashes are intentional in a scientific package.
-- **`tests/conftest.py`** — skips test modules that import the LSST/PFS stack at module scope when the
-  stack is unavailable, so the stack-free suite can be collected and run in CI. Add new stack-dependent
-  modules to `_STACK_MODULES`.
-- Added a new `imageQualityQa` workflow that writes `iqQaData`/`iqQaMetrics` with per-quantum status and supports
-  post-hoc time-series plotting via `iqQaPlots` and `bin.src/plotIqQaTimeSeries.py`.
-- Added stack-free log QA/report tools (`bin.src/fitDetectorMapLogQa.py`, `bin.src/imageQualityLogQa.py`) and associated
-  tests/documentation for the image-quality pipeline.
+- **`tests/conftest.py`** — puts `python/` on `sys.path` so the suite imports `pfs.drp.qa.*` from the
+  checkout, and drops test modules whose module-scope stack imports cannot be satisfied. New
+  stack-dependent modules should use `pytest.importorskip` instead.
+- **`imageQualityQa` workflow** writing `iqQaData`/`iqQaMetrics` with per-quantum status, with
+  post-hoc time-series plotting via `bin.src/plotIqQaTimeSeries.py`.
+- **Stack-free log QA/report tools** (`bin.src/fitDetectorMapLogQa.py`, `bin.src/imageQualityLogQa.py`)
+  and associated tests and documentation.
 - **`AGENTS.md`** — single source of instructions for AI coding assistants, with
   `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md` as symlinks to it.
 
-### Fixed
-
-- **`dmResiduals` import** — `getDescriptionCounts` is now imported from
-  `pfs.drp.stella.fitDetectorMap`. The former `pfs.drp.stella.fitDistortedDetectorMap` module no longer
-  exists in `drp_stella`, so `DetectorMapResidualsTask` failed to import and the `dmResiduals` pipeline
-  task could not run.
-
 ### Changed
 
+- **Plotting moved to `pfs.drp.qa.plotting`** (`palettes`, `dmResiduals`, `dmCombined`, `iqQa`).
+  DataFrames in, `Figure` out; no Butler and no task class, checked statically by
+  `tests/test_plotting.py`. `pfs.drp.qa.utils.plotting` and `pfs.drp.qa.iqQaPlots` remain as shims.
+- **`plot_detectormap_residuals` takes a `DetectorGeometry`**; a `DetectorMap` is still accepted and
+  reduced to one, so callers are unaffected.
+- **`make_report` is a thin wrapper** over `plotting.dmCombined.reportFigures`; only the binding to
+  `MultipagePdfFigure` stays with the task.
+- **`FitStat`/`FitStats` moved to `pfs.drp.qa.metrics.fitStats`**, re-exported from `dmResiduals`.
+- **`imageQualityQa` gates through the registry.** Thresholds still come from the config, so
+  overrides work as before; verdict boundaries and reason strings are unchanged.
+- **Per-species metrics are long-format.** The ragged `fitSpeciesXRms_<species>` columns are gone
+  from `iqQaMetrics`; the values are rows in `iqQaSpeciesMetrics`, so quanta with different species
+  mixes concatenate without NaN padding.
+- **`tests/test_dmResiduals.py` tests something.** Was a `pass` body; now exercises `get_fit_stats`
+  against injected defects of known size, guarded by `pytest.importorskip`.
+- **CI installs the PyPI wheels the stack-free suite needs** (numpy, pandas, matplotlib, seaborn,
+  pyyaml). None pulls in the stack or another PFS repository.
 - **Build and packaging** — `pyproject.toml` is now the single source of build, lint, and test configuration. Ruff
   replaces Black, isort, and Flake8; `uv.lock` pins the development environment. EUPS `setup -r .` still works via
   `ups/drp_qa.table`, but there is no longer a build step.
@@ -100,12 +71,19 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   → PEP 604 unions and `typing.Iterable` → `collections.abc.Iterable`. No behaviour changes. LSST camelCase naming is
   preserved; the corresponding pep8-naming rules are in the ignore list.
 
+### Fixed
+
+- **`dmResiduals` import** — `getDescriptionCounts` is now imported from
+  `pfs.drp.stella.fitDetectorMap`. The former `pfs.drp.stella.fitDistortedDetectorMap` module no longer
+  exists in `drp_stella`, so `DetectorMapResidualsTask` failed to import and the `dmResiduals` pipeline
+  task could not run.
+
 ### Removed
 
+- **`tests/SConscript`** — the last SCons file; it imported `lsst.sconsUtils` and did nothing.
 - **Log-artifact tests** — the `TestRealLogs` class in `tests/test_fitDetectorMapLogQa.py` depended on
   `run28-dm-02.log` / `run28-dm-03.log`, which are not in the repository, so all eight tests always
   skipped and provided no coverage.
-
 - **SCons build** — `SConstruct`, `bin.src/SConscript`, and `ups/drp_qa.cfg`. The `bin/`
   directory is no longer generated; scripts are run as `python bin.src/<name>.py`.
 - **`setup.cfg`** and **`mypy.ini`** — superseded by `pyproject.toml`. No static type checker is configured for this
