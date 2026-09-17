@@ -30,6 +30,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   units, external reference, direction, thresholds and their provenance; `MetricRegistry.gate` is the
   single gating path. An unmeasured or ungated metric yields no verdict rather than a PASS.
 - **`iqQaSpeciesMetrics`** — new `imageQualityQa` output: per-species fit statistics in long format.
+- **`examples/verify_PIPE2D-1391-01.ipynb`** — read-only verification notebook for this branch. Opens
+  the Butler with `writeable=False` and runs no pipeline; the verdict-parity check puts the stored
+  `iqQaMetrics` numbers through both the old gating ladder and the new registry and compares.
 - **`tests/test_fitStats.py`** — pins `FitStat`'s field order, which `FitStats.from_dataframe`
   unpacks positionally and which is therefore part of the stored `dmQaResidualStats` schema.
 - **AGENTS.md: "Golden Visit Set and Threshold Derivation"**.
