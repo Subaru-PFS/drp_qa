@@ -127,6 +127,34 @@ class TestRun30KnownBad:
         assert all(entry.expect == "WARN" for entry in flexure)
 
 
+class TestUnconfirmedVerdicts:
+    """Suspected faults, recorded so somebody checks them."""
+
+    def testUnconfirmedEntriesAreLoaded(self):
+        """They are real visits; hiding them defeats the point of recording them."""
+        golden = loadGoldenVisits()
+        suspect = {entry.visits[0] for entry in golden.knownBad if entry.unconfirmed}
+        assert suspect == {149883, 150661}
+
+    def testConfirmedBadExcludesThem(self):
+        """A guess must not decide whether a threshold separates the bad data."""
+        golden = loadGoldenVisits()
+        assert len(golden.confirmedBad) == len(golden.knownBad) - 2
+        assert all(not entry.unconfirmed for entry in golden.confirmedBad)
+
+    def testTheyStillCarryAVerdictAndAReason(self):
+        """Unconfirmed means "not established", not "unspecified"."""
+        for entry in loadGoldenVisits().knownBad:
+            if entry.unconfirmed:
+                assert entry.expect == "FAIL"
+                assert entry.reason
+
+    def testConfirmedEntriesDefaultToConfirmed(self, writeYaml):
+        path = writeYaml("version: 1\nknown_bad:\n  - {visit: 1, expect: FAIL}\n")
+        (entry,) = loadGoldenVisits(path).knownBad
+        assert not entry.unconfirmed
+
+
 class TestEntryMatching:
     def testMatchesRespectsSelectors(self):
         entry = GoldenVisit(visits=(100, 101), expect="FAIL", arms=("b",), spectrographs=(1,))

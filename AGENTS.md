@@ -440,6 +440,13 @@ Two properties to keep in mind:
 - **Placeholders are excluded by default.** Entries marked `placeholder: true` have no
   real visit number yet; the loader drops them unless `includePlaceholders=True` is
   passed, so an unfilled entry can never silently validate a threshold.
+- **A suspected verdict is not a verdict.** `unconfirmed: true` marks a real visit that
+  was flagged at the telescope but whose metrics nobody has checked. It is loaded and
+  reported like any other entry — `calibrateQaThresholds.py` prints where its values land
+  relative to the suggested FAIL — but `GoldenVisitSet.confirmedBad` leaves it out, so it
+  never decides a pass/fail. A guess that fails the build is worse than no entry. Once the
+  numbers have been compared, drop the flag and name the metric, or move the visit to
+  `known_good` if it turns out fine.
 
 **Every threshold and every new metric is validated against this set.** A metric that
 flags a `known_good` visit, or passes a `known_bad` one, does not merge.

@@ -109,6 +109,7 @@ def selectVisits(
     golden: GoldenVisitSet,
     which: str,
     metric: str | None = None,
+    confirmedOnly: bool = True,
 ) -> pd.DataFrame:
     """Select the rows of ``metrics`` covered by one half of the golden set.
 
@@ -126,6 +127,9 @@ def selectVisits(
         this metric or name none at all. A known_bad entry that names
         ``medFwhm`` asserts nothing about ``pctFlagged``, and holding it against
         every metric turns one real fault into a wall of spurious failures.
+    confirmedOnly : `bool`, optional
+        For ``known_bad``, drop entries marked ``unconfirmed``. Their verdict is
+        a suspicion nobody has checked yet, so it must not decide a pass/fail.
 
     Returns
     -------
@@ -133,7 +137,10 @@ def selectVisits(
         The matching rows. Empty when the collection holds none of the golden
         visits.
     """
-    entries = golden.knownGood if which == "good" else golden.knownBad
+    if which == "good":
+        entries = golden.knownGood
+    else:
+        entries = golden.confirmedBad if confirmedOnly else golden.knownBad
     if metric is not None:
         entries = tuple(entry for entry in entries if entry.metric in (None, metric))
     if "visit" not in metrics.columns:
@@ -250,6 +257,16 @@ def main() -> int:
     print(f"known_bad  rows: {len(bad)} over visits {describeVisits(bad)}")
     if bad.empty:
         print("WARNING: no known_bad rows found; step 4 of the procedure cannot be checked.")
+
+    # Suspected faults nobody has checked yet. Shown, never gated on -- the
+    # point of recording them is that somebody compares their numbers.
+    unconfirmed = selectVisits(metrics, golden, "bad", confirmedOnly=False)
+    unconfirmed = unconfirmed.drop(index=bad.index, errors="ignore")
+    if not unconfirmed.empty:
+        print(
+            f"unconfirmed rows: {len(unconfirmed)} over visits {describeVisits(unconfirmed)} "
+            "(reported below, not gated on)"
+        )
     print()
 
     groupBy = [column for column in (args.groupBy or []) if column in good.columns]
@@ -301,6 +318,16 @@ def main() -> int:
                 else:
                     print(f"    {message}")
                     ok = ok and crossed
+
+            # Suspected faults: show where they land relative to the suggestion
+            # so somebody can settle them, but never let them decide the exit
+            # code. That is the difference between a record and a verdict.
+            suspect = _matchGroup(unconfirmed, groupBy, key)
+            if not suspect.empty and metric in suspect.columns:
+                values = suspect[metric].abs() if metric == "medDxCenter" else suspect[metric]
+                for visit, value in zip(suspect["visit"], values, strict=False):
+                    verdict = "over" if value >= suggestion.fail else "under"
+                    print(f"    unconfirmed: visit {visit} {metric}={value:.4g} ({verdict} FAIL)")
             print()
 
     if not ok:

@@ -43,6 +43,12 @@
 #   note:     str, free-form context.
 #
 # Bookkeeping:
+#   unconfirmed: true   marks a verdict that is suspected but not established --
+#                       a real visit, flagged at the telescope, whose metrics
+#                       nobody has checked. It is loaded and reported like any
+#                       other entry, but it is excluded from the check that a
+#                       threshold separates the known-bad data, because a guess
+#                       that fails the build is worse than no entry at all.
 #   placeholder: true   marks an entry that has not yet been filled in with a
 #                       real visit number. Placeholders are excluded by the
 #                       loader unless ``includePlaceholders=True`` is passed, so
@@ -254,15 +260,32 @@ known_bad:
     expect: FAIL
     metric: pctFlagged
     reason: "Mirror cover and top screen both closed; flagged at the telescope as to be ignored."
+  # Suspected faults, recorded so that somebody looks at them. Both were
+  # flagged at the telescope with a note nobody has yet tied to a number, so
+  # the verdict below is a suspicion, not a finding: `unconfirmed: true` keeps
+  # them out of the check that a threshold must separate the known-bad data.
+  # Once their metrics have been compared against the Run25 set, drop the flag
+  # and name the metric -- or move them to known_good if they turn out fine.
   - visit: 150661
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
     expect: FAIL
+    unconfirmed: true
     reason: >-
-      Mirror cover open but the screen in the wrong position. The metric that
-      should catch it is not yet attributed -- deliberately left unnamed rather
-      than guessed at.
+      Tagged "Mirror cover open, but screen is wrong position". Probably a
+      failure; neither the verdict nor the metric that should catch it has been
+      established.
+  - visit: 149883
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    expect: FAIL
+    unconfirmed: true
+    reason: >-
+      Tagged "Home" at the telescope, a note whose meaning is not settled. Other
+      visits carry the same tag. Recorded so its metrics can be compared against
+      the Run25 set; probably a failure, but unestablished.
 
   # Partial slit illumination: only one fiber group was lit, so most fibers
   # have no usable measurement. The defect is the count, not the shape.

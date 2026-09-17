@@ -17,7 +17,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   Placeholder entries are excluded by default, so an unfilled entry cannot validate a threshold.
   Every entry carries a verdict: visits with none — a per-run calibration block, a drift series, the
   inputs to a run-to-run comparison — are selected by querying the Butler when the job runs, not
-  transcribed here.
+  transcribed here. An entry marked `unconfirmed: true` carries a suspected verdict that nobody has
+  checked: it is loaded and reported, but excluded from the check that a threshold separates the
+  known-bad data, so a guess cannot fail a build.
 - **`pfs.drp.qa.metrics.thresholds`** — the threshold derivation procedure as pure functions: WARN at
   p95 and FAIL at p99 of the known-good distribution, or a physical limit, plus the provenance
   sentence for the config field's `doc`.

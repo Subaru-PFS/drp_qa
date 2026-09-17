@@ -61,8 +61,16 @@ class GoldenVisit:
         Why this verdict is expected.
     note : `str` or `None`
         Free-form context.
+    unconfirmed : `bool`
+        True when the verdict is suspected but not yet established -- a real
+        visit, flagged at the telescope, whose metrics nobody has looked at.
+        Such an entry is loaded and reported like any other, but consumers must
+        not let it decide a pass/fail: a guess that fails the build is worse
+        than no entry. `pfs.drp.qa.metrics.goldenVisits` keeps the distinction;
+        ``bin.src/calibrateQaThresholds.py`` acts on it.
     placeholder : `bool`
-        True when the entry is a template awaiting a real visit number.
+        True when the entry is a template awaiting a real visit number. Unlike
+        ``unconfirmed``, it has no visit number at all yet.
     """
 
     visits: tuple[int, ...]
@@ -73,6 +81,7 @@ class GoldenVisit:
     metric: str | None = None
     reason: str | None = None
     note: str | None = None
+    unconfirmed: bool = False
     placeholder: bool = False
 
     def matches(
@@ -140,6 +149,16 @@ class GoldenVisitSet:
     def visits(self) -> tuple[int, ...]:
         """Every visit number mentioned by the set, sorted and deduplicated."""
         return tuple(sorted({visit for entry in self for visit in entry.visits}))
+
+    @property
+    def confirmedBad(self) -> tuple[GoldenVisit, ...]:
+        """The ``known_bad`` entries whose verdict has actually been established.
+
+        These are the ones a threshold must separate. An ``unconfirmed`` entry
+        is a suspicion recorded so that somebody looks at it, not a fact to
+        hold a build against.
+        """
+        return tuple(entry for entry in self.knownBad if not entry.unconfirmed)
 
     @property
     def goodVisits(self) -> tuple[int, ...]:
@@ -333,6 +352,7 @@ def _parseEntry(item: Any, defaultExpect: str | None, where: str) -> GoldenVisit
         metric=_optionalStr(item.get("metric")),
         reason=_optionalStr(item.get("reason")),
         note=_optionalStr(item.get("note")),
+        unconfirmed=bool(item.get("unconfirmed", False)),
         placeholder=placeholder,
     )
 
