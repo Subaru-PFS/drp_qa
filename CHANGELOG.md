@@ -33,6 +33,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **`examples/verify_PIPE2D-1391-01.ipynb`** — read-only verification notebook for this branch. Opens
   the Butler with `writeable=False` and runs no pipeline; the verdict-parity check puts the stored
   `iqQaMetrics` numbers through both the old gating ladder and the new registry and compares.
+- **`tests/test_connections.py`** — stack-free consistency checks over the connections declared by
+  the tasks in `drpQA.yaml`, read from source with `ast`. Catches the prerequisite/input mismatch
+  above, which previously needed a Butler and the full stack to surface.
 - **`tests/test_fitStats.py`** — pins `FitStat`'s field order, which `FitStats.from_dataframe`
   unpacks positionally and which is therefore part of the stored `dmQaResidualStats` schema.
 - **AGENTS.md: "Golden Visit Set and Threshold Derivation"**.
@@ -83,6 +86,12 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Fixed
 
+- **The pipeline builds.** `pfsConfig` was a `PrerequisiteInput` to `extractionQa` and
+  `extractionQaCombined` but a plain `Input` to `imageQualityQa`, so resolving all five tasks into
+  one graph failed with `ConnectionTypeConsistencyError`. Pre-existing on `main`, and invisible while
+  the tasks are run one at a time with `#label`. `imageQualityQa` now declares it as a prerequisite
+  with an explicit `minimum=0`, which keeps it optional — prerequisites otherwise default to
+  `minimum=1` and are resolved at graph-build time, where no runtime `try/except` can help.
 - **Partial flag-rate overrides no longer change verdicts.** A species key present in only one of
   `flagRateWarnThreshold` / `flagRateFailThreshold` now resolves the missing side through its arm
   entry before the global fallback, as the task's original lookup did. Previously

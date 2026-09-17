@@ -138,13 +138,26 @@ class ImageQualityQaConnections(
         minimum=0,
     )
 
-    pfsConfig = InputConnection(
+    pfsConfig = PrerequisiteConnection(
         name="pfsConfig",
         doc=(
             "Fiber configuration for this visit.  When provided alongside"
             " ``calexp``, only fibers with ``targetType=FLUXSTD`` and"
             " ``fiberStatus=GOOD`` are used for calexp-based FWHM measurement,"
             " avoiding contamination from dark sky fibers."
+            "\n\n"
+            "Declared as a prerequisite, not a plain input, because"
+            " ``extractionQa`` and ``extractionQaCombined`` declare it that way"
+            " and a dataset type must be a prerequisite to every task or to"
+            " none.  Mixing the two makes the whole pipeline fail to resolve"
+            " with ``ConnectionTypeConsistencyError`` -- which is invisible"
+            " while the tasks are run one at a time with ``#label``."
+            "\n\n"
+            "``minimum=0`` is explicit and load-bearing.  Prerequisites default"
+            " to ``minimum=1`` and are resolved when the QuantumGraph is built,"
+            " so without it this task would produce no quantum at all against a"
+            " collection lacking a ``pfsConfig``, and no runtime ``try/except``"
+            " could rescue a quantum that was never created."
         ),
         storageClass="PfsConfig",
         dimensions=("instrument", "visit"),

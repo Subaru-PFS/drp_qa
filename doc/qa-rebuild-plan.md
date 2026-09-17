@@ -467,6 +467,12 @@ not in the per-quantum task. Per-quantum, emit only the inputs: `medLineFlux` an
 
 ### 3.3 Connection hygiene
 
+**Partly delivered by `PIPE2D-1391-01`**, because the pipeline did not build without it:
+`pfsConfig` was a `PrerequisiteInput` to the two extraction tasks and a plain `Input` to
+`imageQualityQa`, and a dataset type must be a prerequisite to every task in a graph or to
+none. It is now a prerequisite with an explicit `minimum=0` everywhere, and
+`tests/test_connections.py` checks this without needing a Butler.
+
 `pfsConfig` should remain optional. If it is declared as a `PrerequisiteInput`, note that
 prerequisites default to `minimum=1` and are resolved at QuantumGraph build time — set
 `minimum=0` explicitly, or the task cannot run against collections that lack a
