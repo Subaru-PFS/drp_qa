@@ -149,7 +149,7 @@ class DetectorMapResidualsTask(PipelineTask):
         reduceExposure_config: Config = None,
         **kwargs,
     ) -> Struct:
-        """Cleans and masks the data. Adds fiberInfo if requested.
+        """Clean and mask the data. Adds fiberInfo if requested.
 
         The arcline data includes basic statistics, such as the median and sigma of the residuals.
 
@@ -470,7 +470,7 @@ def scrub_data(
     onlyReservedAndUsed: bool = True,
     log: Logger | None = None,
 ) -> pd.DataFrame:
-    """Gets a copy of the arcline data, with some columns added.
+    """Get a copy of the arcline data, with some columns added.
 
     Parameters
     ----------
@@ -1071,11 +1071,9 @@ def plot_residual(
         vertical=True,
         rasterized=True,
     )
-    try:
+    # Skip missing wavelength legend.
+    with contextlib.suppress(AttributeError):
         ax3.get_legend().set_visible(False)
-    except AttributeError:
-        # Skip missing wavelength legend.
-        pass
 
     drawRefLines(ax3, goodRange, sigmaRange, isVertical=True)
 

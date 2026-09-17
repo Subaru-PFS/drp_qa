@@ -1,4 +1,4 @@
-from typing import Iterable
+from collections.abc import Iterable
 
 import numpy as np
 from lsst.pex.config import Field, ListField
@@ -13,20 +13,28 @@ from lsst.pipe.base import (
 )
 from lsst.pipe.base.connectionTypes import (
     Input as InputConnection,
+)
+from lsst.pipe.base.connectionTypes import (
     Output as OutputConnection,
+)
+from lsst.pipe.base.connectionTypes import (
     PrerequisiteInput as PrerequisiteConnection,
 )
 from matplotlib import pyplot as plt
-from pfs.datamodel import PfsConfig
 
+from pfs.datamodel import PfsConfig
 from pfs.drp.qa.storageClasses import MultipagePdfFigure, QaDict
 
 
 class ExtractionQaCombinedConnections(
     PipelineTaskConnections,
-    dimensions=("instrument", "visit", "arm",),
+    dimensions=(
+        "instrument",
+        "visit",
+        "arm",
+    ),
 ):
-    """Connections for ExtractionQaCombinedTask"""
+    """Connections for ExtractionQaCombinedTask."""
 
     pfsConfig = PrerequisiteConnection(
         name="pfsConfig",
@@ -50,7 +58,7 @@ class ExtractionQaCombinedConnections(
 
 
 class ExtractionQaCombinedConfig(PipelineTaskConfig, pipelineConnections=ExtractionQaCombinedConnections):
-    """Configuration for ExtractionQaCombinedTask"""
+    """Configuration for ExtractionQaCombinedTask."""
 
     plotMinChiMed = Field(dtype=float, default=-1.5, doc="Minimum median Chi to plot")
     plotMaxChiMed = Field(dtype=float, default=+1.5, doc="Maximum median Chi to plot")
@@ -60,14 +68,15 @@ class ExtractionQaCombinedConfig(PipelineTaskConfig, pipelineConnections=Extract
     plotMaxChiAtPeak = Field(dtype=float, default=+1.5, doc="Maximum Chi at peak to plot")
     plotMinResFrac = Field(dtype=float, default=-5.0, doc="Minimum residual fraction")
     plotMaxResFrac = Field(dtype=float, default=5.0, doc="Maximum residual fraction")
-    targetType = ListField(dtype=str, default=["^ENGINEERING"],
-                           doc="Target type for which to calculate statistics")
+    targetType = ListField(
+        dtype=str, default=["^ENGINEERING"], doc="Target type for which to calculate statistics"
+    )
     figureDpi = Field(dtype=int, default=72, doc="Resolution of plot for residual")
     footnoteSize = Field(dtype=int, default=9, doc="Fontsize of the footnote")
 
 
 class ExtractionQaCombinedTask(PipelineTask):
-    """Task for QA of extraction"""
+    """Task for QA of extraction."""
 
     ConfigClass = ExtractionQaCombinedConfig
     _DefaultName = "extractionQaCombined"
@@ -78,7 +87,6 @@ class ExtractionQaCombinedTask(PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ):
-
         inputs = butlerQC.get(inputRefs)
 
         # Perform the actual processing.
@@ -101,13 +109,13 @@ class ExtractionQaCombinedTask(PipelineTask):
         extQaImage_pickle : Iterable[QaDict]
             An iterable of DataFrames containing extraction QA residual statistics.
             These are combined into a single DataFrame for processing.
+
         Returns
         -------
         extQaStatsCombined : `MultipagePdfFigure`
             Summary plots.
             Results of the residual analysis of extraction are plotted.
         """
-
         qaStatsCombined = QaDict(
             {
                 "dataId": [],
@@ -127,7 +135,7 @@ class ExtractionQaCombinedTask(PipelineTask):
         for stats in extQaImage_pickle:
             dataId = stats["dataId"]
             self.log.info(
-                "Extraction QA combined plots on (visit=%(visit)d arm=%(arm)s) RUN=%(run)s" % dataId
+                "Extraction QA combined plots on (visit={visit} arm={arm}) RUN={run}".format(**dataId)
             )
             for k, v in stats.items():
                 if k == "dataId":
@@ -181,7 +189,7 @@ class ExtractionQaCombinedTask(PipelineTask):
 
         # chiMed
 
-        fig, ax = plt.subplots(1, 2, figsize=(15, 5), gridspec_kw=dict(width_ratios=[2, 1.5]))
+        fig, ax = plt.subplots(1, 2, figsize=(15, 5), gridspec_kw={"width_ratios": [2, 1.5]})
         fig.suptitle(f"visit={visit}, arm={arm}, spectrograph=1,2,3,4", y=1.1)
         sc = None
         # chiMed vs. fiberId (left panel)
@@ -199,7 +207,8 @@ class ExtractionQaCombinedTask(PipelineTask):
             chiMed_all[mask_inside],
             s=5,
             c=pfsArmAve_all[mask_inside],
-            vmin=vmin, vmax=vmax,
+            vmin=vmin,
+            vmax=vmax,
             rasterized=True,
         )
         if np.any(mask_over):
@@ -209,10 +218,11 @@ class ExtractionQaCombinedTask(PipelineTask):
                 marker="^",
                 s=50,
                 c=pfsArmAve_all[mask_over],
-                vmin=vmin, vmax=vmax,
+                vmin=vmin,
+                vmax=vmax,
                 edgecolors="k",
                 rasterized=True,
-                clip_on=False
+                clip_on=False,
             )
         if np.any(mask_under):
             ax[0].scatter(
@@ -221,10 +231,11 @@ class ExtractionQaCombinedTask(PipelineTask):
                 marker="v",
                 s=50,
                 c=pfsArmAve_all[mask_under],
-                vmin=vmin, vmax=vmax,
+                vmin=vmin,
+                vmax=vmax,
                 edgecolors="k",
                 rasterized=True,
-                clip_on=False
+                clip_on=False,
             )
         if sc is not None:
             fig.colorbar(sc, ax=ax[0], location="right", fraction=0.04, alpha=1.0, label="pfsArmAve")
@@ -244,7 +255,8 @@ class ExtractionQaCombinedTask(PipelineTask):
             c=chiMed_all,
             alpha=0.7,
             rasterized=True,
-            vmin=ymin, vmax=ymax,
+            vmin=ymin,
+            vmax=ymax,
         )
         ax[1].set_xlabel("X(PFI) [mm]")
         ax[1].set_ylabel("Y(PFI) [mm]")
@@ -265,7 +277,7 @@ class ExtractionQaCombinedTask(PipelineTask):
 
         # chiStd
 
-        fig, ax = plt.subplots(1, 2, figsize=(15, 5), gridspec_kw=dict(width_ratios=[2, 1.5]))
+        fig, ax = plt.subplots(1, 2, figsize=(15, 5), gridspec_kw={"width_ratios": [2, 1.5]})
         fig.suptitle(f"visit={visit}, arm={arm}, spectrograph=1,2,3,4", y=1.1)
 
         # chiStd vs. fiberId (left panel)
@@ -283,8 +295,9 @@ class ExtractionQaCombinedTask(PipelineTask):
             chiStd_all[mask_inside],
             s=5,
             c=pfsArmAve_all[mask_inside],
-            vmin=vmin, vmax=vmax,
-            rasterized=True
+            vmin=vmin,
+            vmax=vmax,
+            rasterized=True,
         )
         if np.any(mask_over):
             ax[0].scatter(
@@ -293,10 +306,11 @@ class ExtractionQaCombinedTask(PipelineTask):
                 marker="^",
                 s=50,
                 c=pfsArmAve_all[mask_over],
-                vmin=vmin, vmax=vmax,
+                vmin=vmin,
+                vmax=vmax,
                 edgecolors="k",
                 rasterized=True,
-                clip_on=False
+                clip_on=False,
             )
         if np.any(mask_under):
             ax[0].scatter(
@@ -305,10 +319,11 @@ class ExtractionQaCombinedTask(PipelineTask):
                 marker="v",
                 s=50,
                 c=pfsArmAve_all[mask_under],
-                vmin=vmin, vmax=vmax,
+                vmin=vmin,
+                vmax=vmax,
                 edgecolors="k",
                 rasterized=True,
-                clip_on=False
+                clip_on=False,
             )
         if sc is not None:
             fig.colorbar(sc, ax=ax[0], location="right", fraction=0.04, alpha=1.0, label="pfsArmAve")
@@ -328,7 +343,8 @@ class ExtractionQaCombinedTask(PipelineTask):
             c=chiStd_all,
             alpha=0.7,
             rasterized=True,
-            vmin=ymin, vmax=ymax,
+            vmin=ymin,
+            vmax=ymax,
         )
         ax[1].set_xlabel("X(PFI) [mm]")
         ax[1].set_ylabel("Y(PFI) [mm]")
@@ -349,7 +365,7 @@ class ExtractionQaCombinedTask(PipelineTask):
 
         # chiAtPeak
 
-        fig, ax = plt.subplots(1, 2, figsize=(15, 5), gridspec_kw=dict(width_ratios=[2, 1.5]))
+        fig, ax = plt.subplots(1, 2, figsize=(15, 5), gridspec_kw={"width_ratios": [2, 1.5]})
         fig.suptitle(f"visit={visit}, arm={arm}, spectrograph=1,2,3,4", y=1.1)
 
         # chiAtPeak vs. fiberId (left panel)
@@ -367,7 +383,8 @@ class ExtractionQaCombinedTask(PipelineTask):
             chiAtPeak_all[mask_inside],
             s=5,
             c=pfsArmAve_all[mask_inside],
-            vmin=vmin, vmax=vmax,
+            vmin=vmin,
+            vmax=vmax,
             rasterized=True,
         )
         if np.any(mask_over):
@@ -377,10 +394,11 @@ class ExtractionQaCombinedTask(PipelineTask):
                 marker="^",
                 s=50,
                 c=pfsArmAve_all[mask_over],
-                vmin=vmin, vmax=vmax,
+                vmin=vmin,
+                vmax=vmax,
                 edgecolors="k",
                 rasterized=True,
-                clip_on=False
+                clip_on=False,
             )
         if np.any(mask_under):
             ax[0].scatter(
@@ -389,10 +407,11 @@ class ExtractionQaCombinedTask(PipelineTask):
                 marker="v",
                 s=50,
                 c=pfsArmAve_all[mask_under],
-                vmin=vmin, vmax=vmax,
+                vmin=vmin,
+                vmax=vmax,
                 edgecolors="k",
                 rasterized=True,
-                clip_on=False
+                clip_on=False,
             )
         if sc is not None:
             fig.colorbar(sc, ax=ax[0], location="right", fraction=0.04, alpha=1.0, label="pfsArmAve")
@@ -412,7 +431,8 @@ class ExtractionQaCombinedTask(PipelineTask):
             c=chiAtPeak_all,
             alpha=0.7,
             rasterized=True,
-            vmin=ymin, vmax=ymax,
+            vmin=ymin,
+            vmax=ymax,
         )
         ax[1].set_xlabel("X(PFI) [mm]")
         ax[1].set_ylabel("Y(PFI) [mm]")
@@ -433,7 +453,7 @@ class ExtractionQaCombinedTask(PipelineTask):
 
         # resFrac
 
-        fig, ax = plt.subplots(1, 2, figsize=(15, 5), gridspec_kw=dict(width_ratios=[2, 1.5]))
+        fig, ax = plt.subplots(1, 2, figsize=(15, 5), gridspec_kw={"width_ratios": [2, 1.5]})
         fig.suptitle(f"visit={visit}, arm={arm}, spectrograph=1,2,3,4", y=1.1)
 
         # resFrac vs. fiberId (left panel)
@@ -451,7 +471,8 @@ class ExtractionQaCombinedTask(PipelineTask):
             resFrac_all[mask_inside],
             s=5,
             c=pfsArmAve_all[mask_inside],
-            vmin=vmin, vmax=vmax,
+            vmin=vmin,
+            vmax=vmax,
             rasterized=True,
         )
         if np.any(mask_over):
@@ -461,10 +482,11 @@ class ExtractionQaCombinedTask(PipelineTask):
                 marker="^",
                 s=50,
                 c=pfsArmAve_all[mask_over],
-                vmin=vmin, vmax=vmax,
+                vmin=vmin,
+                vmax=vmax,
                 edgecolors="k",
                 rasterized=True,
-                clip_on=False
+                clip_on=False,
             )
         if np.any(mask_under):
             ax[0].scatter(
@@ -473,10 +495,11 @@ class ExtractionQaCombinedTask(PipelineTask):
                 marker="v",
                 s=50,
                 c=pfsArmAve_all[mask_under],
-                vmin=vmin, vmax=vmax,
+                vmin=vmin,
+                vmax=vmax,
                 edgecolors="k",
                 rasterized=True,
-                clip_on=False
+                clip_on=False,
             )
         if sc is not None:
             fig.colorbar(sc, ax=ax[0], location="right", fraction=0.04, alpha=1.0, label="pfsArmAve")
@@ -496,16 +519,15 @@ class ExtractionQaCombinedTask(PipelineTask):
             c=resFrac_all,
             alpha=0.7,
             rasterized=True,
-            vmin=ymin, vmax=ymax,
+            vmin=ymin,
+            vmax=ymax,
         )
         ax[1].set_xlabel("X(PFI) [mm]")
         ax[1].set_ylabel("Y(PFI) [mm]")
         if sc is not None:
             fig.colorbar(sc, ax=ax[1], location="right", fraction=0.04, alpha=1.0, label="resFrac")
 
-        caption_text = (
-            "Note: resFrac is the median, per fiber, of sum(residuals) / sum(original values) "
-        )
+        caption_text = "Note: resFrac is the median, per fiber, of sum(residuals) / sum(original values) "
         fig.text(0.02, 0.02, caption_text, ha="left", fontsize=self.config.footnoteSize)
 
         plt.subplots_adjust(wspace=0.3, bottom=0.15)

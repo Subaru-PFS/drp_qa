@@ -143,25 +143,19 @@ the PR.
 
 Two GitHub Actions workflows run on every pull request:
 
-| Workflow | Job | Blocking | What it does |
-|---|---|---|---|
-| `.github/workflows/tests.yml` | `stack-free` | yes | `pytest -v` on Python 3.12 and 3.13 |
-| `.github/workflows/lint.yml` | `ruff` | yes, changed lines only | Ruff over lines the change touched |
+| Workflow | Blocking | What it does |
+|---|---|---|
+| `.github/workflows/tests.yml` | yes | `pytest -v` on Python 3.12 and 3.13 |
+| `.github/workflows/lint.yml` | yes | `ruff check .` and `ruff format --check .` over the whole tree |
 
-Two constraints shape this, and both are worth understanding before editing the
-workflows:
+**The repository is Ruff-clean and both checks gate the whole tree.** Keep it that way:
+fix findings in the code you touch rather than widening the ignore list in
+`pyproject.toml`.
 
-- **The package is not installed in CI.** `pip install -e .` would pull `pfs-utils`
-  (and transitively `pfs-datamodel`, `pfs-instdata`) from GitHub, making every run depend
-  on three other repositories. `uv sync --frozen` is also unavailable: `uv.lock` is stale
-  with respect to `pyproject.toml` and `uv lock --check` fails. Only the stack-free suite
-  runs, and it imports nothing beyond the standard library.
-- **Linting is scoped to changed lines**, via `.github/scripts/ruff_changed_lines.py`.
-  The repository is not Ruff-clean, so gating on whole files would fail pull requests over
-  pre-existing findings the author did not introduce. New code is held to the full rule
-  set; old code is left for deliberate cleanup. `ruff format --check` is reported but not
-  enforced, because eight files are not format-clean and fixing them inside a feature PR
-  is exactly the bulk reformat this file warns against.
+**The package is not installed in CI.** `pip install -e .` would pull `pfs-utils` (and
+transitively `pfs-datamodel`, `pfs-instdata`) from GitHub, making every run depend on
+three other repositories. Only the stack-free suite runs, and it imports nothing beyond
+the standard library.
 
 **Tests that need the stack** cannot be collected without it — a module-level
 `import lsst.utils.tests` fails during collection and aborts the whole run, so an in-test
@@ -197,12 +191,16 @@ Ruff is the only style tool; there is no separate type checker.
   `N815`, `N816` and `N999` are in the ignore list. **Do not "fix" camelCase names to
   satisfy pep8-naming** — re-enabling those rules flags ~730 intentional LSST-style
   names.
-- **Excludes**: none configured; Ruff respects `.gitignore`, which already covers `bin/`
-  and `tests/.tests/`.
+- **Excludes**: `examples/` — out-of-order imports (`E402`), unused imports and
+  cross-cell names (`F401`/`F821`) are inherent to notebooks, not defects. Ruff also
+  respects `.gitignore`, which covers `bin/` and `tests/.tests/`.
+- **Also ignored**: `E501` (`ruff format` already enforces `line-length` for code; what
+  E501 still catches is long regexes and report strings the formatter will not split),
+  and `RUF001`–`RUF003` (Greek letters and typographic dashes are intentional here).
 
-The codebase is not currently Ruff-clean (~242 findings as of the last sweep, mostly
-`E501`, `D4xx`, `UP`, and `F401`). Lint your own changes; don't bulk-reformat unrelated
-files in a feature PR.
+The codebase **is** Ruff-clean: `ruff check .` and `ruff format --check .` both pass, and
+CI gates on them. Fix findings in the code you touch rather than adding to the ignore
+list.
 
 ---
 

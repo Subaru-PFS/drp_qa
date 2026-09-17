@@ -29,8 +29,9 @@ class OverlapRegionLinesTask(Task):
     def run(
         self, detectorMap: Iterable[DetectorMap], arcLines: Iterable[ArcLineSet], pfsArm: Iterable[PfsArm]
     ) -> Struct:
-        """QA of adjustDetectorMap by plotting the wavelength difference of sky lines detected in multiple
-        arms.
+        """QA adjustDetectorMap by plotting sky-line wavelength differences.
+
+        Plots the wavelength difference of sky lines detected in multiple arms.
 
         Parameters
         ----------

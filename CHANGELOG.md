@@ -11,9 +11,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 ### Added
 
 - **GitHub Actions CI** — `.github/workflows/tests.yml` runs the stack-free test suite on Python 3.12 and
-  3.13; `.github/workflows/lint.yml` runs Ruff. Linting is blocking but scoped to the lines a change
-  touches, via `.github/scripts/ruff_changed_lines.py`, so pre-existing findings in a touched file do not
-  fail unrelated pull requests. Formatting is reported but not yet enforced.
+  3.13; `.github/workflows/lint.yml` runs `ruff check .` and `ruff format --check .` over the whole tree.
+  Both are blocking.
+- **Repository is now Ruff-clean** — `ruff check .` and `ruff format --check .` both pass, and CI gates
+  on them. `examples/` is excluded (out-of-order imports and cross-cell names are inherent to notebooks);
+  `E501` is ignored because `ruff format` already enforces `line-length` for code and what remains are
+  long regexes and report strings the formatter will not split; `RUF001`–`RUF003` are ignored because
+  Greek letters and typographic dashes are intentional in a scientific package.
 - **`tests/conftest.py`** — skips test modules that import the LSST/PFS stack at module scope when the
   stack is unavailable, so the stack-free suite can be collected and run in CI. Add new stack-dependent
   modules to `_STACK_MODULES`.
@@ -42,6 +46,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   preserved; the corresponding pep8-naming rules are in the ignore list.
 
 ### Removed
+
+- **Log-artifact tests** — the `TestRealLogs` class in `tests/test_fitDetectorMapLogQa.py` depended on
+  `run28-dm-02.log` / `run28-dm-03.log`, which are not in the repository, so all eight tests always
+  skipped and provided no coverage.
 
 - **SCons build** — `SConstruct`, `bin.src/SConscript`, and `ups/drp_qa.cfg`. The `bin/`
   directory is no longer generated; scripts are run as `python bin.src/<name>.py`.

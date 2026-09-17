@@ -11,8 +11,7 @@ __all__ = [
 
 
 class MultipagePdfFigure(StorageClass):
-    """Duck type for `matplotlib.figure.Figure`,
-    to be passed to ``butler.put()``.
+    """Duck type for `matplotlib.figure.Figure`, to be passed to ``butler.put()``.
 
     This is a wrapper of `matplotlib.backends.backend_pdf.PdfPages`.
     The behavior of ``MultipagePdfFigure.savefig()`` conforms to that of

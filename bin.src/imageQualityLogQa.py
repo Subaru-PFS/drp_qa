@@ -8,14 +8,14 @@ Matplotlib and numpy are optional and only needed when generating plots using th
 from __future__ import annotations
 
 import argparse
+import contextlib
 import math
 import os
 import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
-
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -35,9 +35,9 @@ class VisitQA:
     visit: int
     arm: str
     spectrograph: int
-    dither: Optional[int] = None
-    pfs_design_id: Optional[int] = None
-    collection: Optional[str] = None
+    dither: int | None = None
+    pfs_design_id: int | None = None
+    collection: str | None = None
 
     # ISR stats
     isr_bad_pixels: int = 0
@@ -182,8 +182,7 @@ class VisitQA:
             "fit_trace_x_rms": clean_val(self.fit_trace_x_rms),
             "fit_trace_y_rms": clean_val(self.fit_trace_y_rms),
             "fit_species_stats": {
-                k: [clean_val(v[0]), clean_val(v[1])]
-                for k, v in self.fit_species_stats.items()
+                k: [clean_val(v[0]), clean_val(v[1])] for k, v in self.fit_species_stats.items()
             },
             "fit_total_lines": self.fit_total_lines,
             "fit_active_fibers": self.fit_active_fibers,
@@ -314,10 +313,7 @@ class VisitQA:
     @classmethod
     def from_metrics(cls, metrics: dict[str, Any] | Any) -> VisitQA:
         """Create a VisitQA instance from a Butler iqQaMetrics row/dictionary."""
-        if hasattr(metrics, "to_dict"):
-            data = metrics.to_dict()
-        else:
-            data = dict(metrics)
+        data = metrics.to_dict() if hasattr(metrics, "to_dict") else dict(metrics)
 
         def restore_float(v):
             if v is None:
@@ -421,25 +417,13 @@ class VisitQA:
                     fiber_ids = json.loads(cleaned_ids)
 
                     cleaned_x = clean_numpy_str(fiber_x_rms)
-                    fiber_x_rms = (
-                        json.loads(cleaned_x)
-                        if isinstance(cleaned_x, str)
-                        else cleaned_x
-                    )
+                    fiber_x_rms = json.loads(cleaned_x) if isinstance(cleaned_x, str) else cleaned_x
 
                     cleaned_y = clean_numpy_str(fiber_y_rms)
-                    fiber_y_rms = (
-                        json.loads(cleaned_y)
-                        if isinstance(cleaned_y, str)
-                        else cleaned_y
-                    )
+                    fiber_y_rms = json.loads(cleaned_y) if isinstance(cleaned_y, str) else cleaned_y
 
                     cleaned_n = clean_numpy_str(fiber_n_lines)
-                    fiber_n_lines = (
-                        json.loads(cleaned_n)
-                        if isinstance(cleaned_n, str)
-                        else cleaned_n
-                    )
+                    fiber_n_lines = json.loads(cleaned_n) if isinstance(cleaned_n, str) else cleaned_n
                 except Exception:
                     pass
             for i, fid in enumerate(fiber_ids):
@@ -453,16 +437,8 @@ class VisitQA:
                     if fiber_y_rms is not None and i < len(fiber_y_rms)
                     else float("nan")
                 )
-                n_lines = (
-                    fiber_n_lines[i]
-                    if fiber_n_lines is not None and i < len(fiber_n_lines)
-                    else 0
-                )
-                vqa.fibers.append(
-                    FiberStats(
-                        fiber_id=int(fid), x_rms=x_rms, y_rms=y_rms, n_lines=n_lines
-                    )
-                )
+                n_lines = fiber_n_lines[i] if fiber_n_lines is not None and i < len(fiber_n_lines) else 0
+                vqa.fibers.append(FiberStats(fiber_id=int(fid), x_rms=x_rms, y_rms=y_rms, n_lines=n_lines))
 
         return vqa
 
@@ -515,11 +491,10 @@ def log_records_to_string(records: Any) -> str:
 def parse_log_text_lines(lines: list[str], vqa: VisitQA):
     """Parse log text lines and populate a VisitQA object."""
     re_bad_pixels = re.compile(r"Set (\d+) BAD pixels to")
-    re_cr = re.compile(
-        r"(?:Found|Identified) (\d+) cosmic rays (?:\(|covering )(\d+) pixels"
-    )
+    re_cr = re.compile(r"(?:Found|Identified) (\d+) cosmic rays (?:\(|covering )(\d+) pixels")
     re_centroids = re.compile(
-        r"Measured (\d+) line centroids:\s*(\d+) good \((\d+)%\),\s*(\d+) low-S/N < [\d\.]+ \((\d+)%\),\s*(\d+) centroid-fail \((\d+)%\)"
+        r"Measured (\d+) line centroids:\s*(\d+) good \((\d+)%\),\s*(\d+) low-S/N < [\d\.]+ \((\d+)%\),\s*(\d+) "
+        r"centroid-fail \((\d+)%\)"
     )
     # Newer drp_stella prefixes its fit summary messages with the detector they
     # belong to ("Final result: arm=b spectrograph=1 chi2=...").  Keep the
@@ -531,22 +506,16 @@ def parse_log_text_lines(lines: list[str], vqa: VisitQA):
         + r"chi2=(\S+) dof=(\d+) xRMS=(\S+) yRMS=(\S+) xSoften=(\S+) ySoften=(\S+) from (\d+) lines"
     )
     re_fiber = re.compile(
-        r"Stats for fiberId=(\d+): "
-        + arm_spec
-        + r"chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+).*from (\d+) lines"
+        r"Stats for fiberId=(\d+): " + arm_spec + r"chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+).*from (\d+) lines"
     )
-    re_task_time = re.compile(
-        r"Execution of task '(\w+)' on quantum .* took ([\d\.]+) seconds"
-    )
+    re_task_time = re.compile(r"Execution of task '(\w+)' on quantum .* took ([\d\.]+) seconds")
     re_qa = re.compile(
         r"IQ QA (PASS|WARN|FAIL)\s+(\d+)\s+([a-z0-9]+)\s+(.+?)\s+medFWHM=([\d\.]+)px\s+dxCenter=([+-]?[\d\.]+px|NaN)\s+pctFlagged=([\d\.]+%|NaN)\s*(?:\[(.*?)\])?"
     )
     re_quantum = re.compile(
         r"dataId=\{instrument:\s*'PFS',\s*arm:\s*'(\w+)',\s*spectrograph:\s*(\d+),\s*visit:\s*(\d+),\s*dither:\s*(-?\d+)"
     )
-    re_species_stats = re.compile(
-        r"Stats for (\w+): " + arm_spec + r"chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+)"
-    )
+    re_species_stats = re.compile(r"Stats for (\w+): " + arm_spec + r"chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+)")
     re_fit_lines = re.compile(r"Final fit:.*from (\d+)/(\d+) lines")
     re_reserved_fit = re.compile(
         r"Fit quality from reserved lines:\s*chi2=(\S+)\s+xRMS=(\S+)\s+yRMS=(\S+)(?:\s+\([^\)]+\))?\s+xSoften=(\S+)\s+ySoften=(\S+)\s+from\s+(\d+)\s+lines"
@@ -619,10 +588,8 @@ def parse_log_text_lines(lines: list[str], vqa: VisitQA):
 
         m = re_active_fibers.search(line)
         if m:
-            try:
+            with contextlib.suppress(ValueError):
                 vqa.fit_active_fibers = int(m.group(1))
-            except ValueError:
-                pass
             continue
 
         m = re_fiber.search(line)
@@ -634,11 +601,7 @@ def parse_log_text_lines(lines: list[str], vqa: VisitQA):
                 n_lines = int(m.group(4))
                 # Avoid duplicates
                 if not any(f.fiber_id == fid for f in vqa.fibers):
-                    vqa.fibers.append(
-                        FiberStats(
-                            fiber_id=fid, x_rms=x_rms, y_rms=y_rms, n_lines=n_lines
-                        )
-                    )
+                    vqa.fibers.append(FiberStats(fiber_id=fid, x_rms=x_rms, y_rms=y_rms, n_lines=n_lines))
             except ValueError:
                 pass
             continue
@@ -701,9 +664,7 @@ def parse_log_text_lines(lines: list[str], vqa: VisitQA):
             continue
 
 
-def parse_logs(
-    log_paths: list[Path], collection: Optional[str] = None
-) -> list[VisitQA]:
+def parse_logs(log_paths: list[Path], collection: str | None = None) -> list[VisitQA]:
     """Parse log files on disk and return list of VisitQA structures."""
     visits: dict[tuple[int, str, int], VisitQA] = {}
     current_key = None
@@ -717,7 +678,7 @@ def parse_logs(
             print(f"Warning: File not found: {path}", file=sys.stderr)
             continue
 
-        with open(path, "r") as f:
+        with open(path) as f:
             for line in f:
                 # 1. Look for Quantum setup/identities
                 m = re_quantum.search(line)
@@ -751,7 +712,7 @@ def parse_butler_logs(
     logs: dict[str, Any],
     visit: int,
     spectrograph: int,
-    collection: Optional[str] = None,
+    collection: str | None = None,
 ) -> list[VisitQA]:
     """Parse log records retrieved from Butler."""
     visits: dict[tuple[int, str, int], VisitQA] = {}
@@ -761,7 +722,7 @@ def parse_butler_logs(
 
         # Determine if this is per-detector or per-visit log
         if "/" in key:
-            task, suffix = key.split("/", 1)
+            _task, suffix = key.split("/", 1)
         else:
             suffix = str(spectrograph)
 
@@ -776,9 +737,7 @@ def parse_butler_logs(
         if arm:
             vkey = (visit, arm, spec)
             if vkey not in visits:
-                visits[vkey] = VisitQA(
-                    visit=visit, arm=arm, spectrograph=spec, collection=collection
-                )
+                visits[vkey] = VisitQA(visit=visit, arm=arm, spectrograph=spec, collection=collection)
             vqa = visits[vkey]
             parse_log_text_lines(log_text.splitlines(), vqa)
         else:
@@ -786,9 +745,8 @@ def parse_butler_logs(
             temp_vqa = VisitQA(visit=visit, arm="temp", spectrograph=spec)
             parse_log_text_lines(log_text.splitlines(), temp_vqa)
             for vqa in visits.values():
-                if vqa.visit == visit and vqa.spectrograph == spec:
-                    if temp_vqa.merge_arms_time_s > 0.0:
-                        vqa.merge_arms_time_s = temp_vqa.merge_arms_time_s
+                if vqa.visit == visit and vqa.spectrograph == spec and temp_vqa.merge_arms_time_s > 0.0:
+                    vqa.merge_arms_time_s = temp_vqa.merge_arms_time_s
 
     return list(visits.values())
 
@@ -807,15 +765,13 @@ def _connect_butler(repo: str, collection: str):
             "Error: lsst.daf.butler is not installed/loaded in this environment.",
             file=sys.stderr,
         )
-        print(
-            "To query Butler, source the LSST stack environment first.", file=sys.stderr
-        )
+        print("To query Butler, source the LSST stack environment first.", file=sys.stderr)
         sys.exit(1)
 
     return dafButler.Butler(repo, collections=[collection])
 
 
-def _metrics_row_to_dict(metrics: Any) -> Optional[dict[str, Any]]:
+def _metrics_row_to_dict(metrics: Any) -> dict[str, Any] | None:
     """Reduce an ``iqQaMetrics`` dataset to a single row dictionary."""
     if hasattr(metrics, "columns"):  # pandas DataFrame: one row per quantum
         if len(metrics) == 0:
@@ -858,7 +814,7 @@ def get_visit_metrics(
 
     vqa_list: list[VisitQA] = []
     for arm in arms:
-        dataId = dict(instrument="PFS", visit=visit, arm=arm, spectrograph=spectrograph)
+        dataId = {"instrument": "PFS", "visit": visit, "arm": arm, "spectrograph": spectrograph}
         try:
             metrics = butler.get("iqQaMetrics", dataId=dataId)
         except LookupError:
@@ -881,9 +837,7 @@ def get_visit_metrics(
     return vqa_list
 
 
-def get_visit_logs(
-    repo: str, collection: str, visit: int, spectrograph: int, arms: tuple[str, ...]
-):
+def get_visit_logs(repo: str, collection: str, visit: int, spectrograph: int, arms: tuple[str, ...]):
     """Gather all science pipeline logs for a single processed visit from Butler.
 
     Parameters
@@ -923,9 +877,7 @@ def get_visit_logs(
 
     for task in per_detector_tasks:
         for arm in arms:
-            dataId = dict(
-                instrument="PFS", visit=visit, arm=arm, spectrograph=spectrograph
-            )
+            dataId = {"instrument": "PFS", "visit": visit, "arm": arm, "spectrograph": spectrograph}
             try:
                 records = butler.get(f"{task}_log", dataId=dataId)
                 logs[f"{task}/{arm}{spectrograph}"] = records
@@ -933,7 +885,7 @@ def get_visit_logs(
                 pass
 
     for task in per_visit_tasks:
-        dataId = dict(instrument="PFS", visit=visit, spectrograph=spectrograph)
+        dataId = {"instrument": "PFS", "visit": visit, "spectrograph": spectrograph}
         try:
             records = butler.get(f"{task}_log", dataId=dataId)
             logs[f"{task}/{spectrograph}"] = records
@@ -948,7 +900,7 @@ def get_visit_logs(
 # ---------------------------------------------------------------------------
 
 
-def generate_plots(vqa: VisitQA, output_dir: Path, collection: Optional[str] = None):
+def generate_plots(vqa: VisitQA, output_dir: Path, collection: str | None = None):
     """Generate combined diagnostic dashboard with scorecard banner on top."""
     vqa.sanitize()
     try:
@@ -1003,7 +955,6 @@ def generate_plots(vqa: VisitQA, output_dir: Path, collection: Optional[str] = N
     c_good = "#10b981"
     c_low_sn = "#3b82f6"
     c_fail = "#ef4444"
-    c_warning = "#f59e0b"
 
     # Layout: 1 large figure with a scorecard header on top, and 2x2 grid below
     fig = plt.figure(figsize=(16, 14.5), facecolor="#f8fafc")
@@ -1031,9 +982,7 @@ def generate_plots(vqa: VisitQA, output_dir: Path, collection: Optional[str] = N
         c_good_lbl
         if vqa.qa_status == "PASS"
         else (
-            c_warning_lbl
-            if vqa.qa_status == "WARN"
-            else c_fail_lbl if vqa.qa_status == "FAIL" else "#64748b"
+            c_warning_lbl if vqa.qa_status == "WARN" else c_fail_lbl if vqa.qa_status == "FAIL" else "#64748b"
         )
     )
 
@@ -1082,18 +1031,10 @@ def generate_plots(vqa: VisitQA, output_dir: Path, collection: Optional[str] = N
             "b:Argon": 97.0,
         }
         arm = vqa.arm
-        species = (
-            vqa.qa_target.split(":", 1)[-1].strip()
-            if ":" in vqa.qa_target
-            else vqa.qa_target
-        )
+        species = vqa.qa_target.split(":", 1)[-1].strip() if ":" in vqa.qa_target else vqa.qa_target
         compoundKey = f"{arm}:{species}" if species else ""
-        flag_warn = flagRateWarnThreshold.get(
-            compoundKey, flagRateWarnThreshold.get(arm, 15.0)
-        )
-        flag_fail = flagRateFailThreshold.get(
-            compoundKey, flagRateFailThreshold.get(arm, 20.0)
-        )
+        flag_warn = flagRateWarnThreshold.get(compoundKey, flagRateWarnThreshold.get(arm, 15.0))
+        flag_fail = flagRateFailThreshold.get(compoundKey, flagRateFailThreshold.get(arm, 20.0))
         if vqa.qa_flagged < flag_warn:
             flagged_color = c_good_lbl
         elif vqa.qa_flagged < flag_fail:
@@ -1130,10 +1071,7 @@ def generate_plots(vqa: VisitQA, output_dir: Path, collection: Optional[str] = N
     # Format cosmic rays metric
     total_crs = sum(x[0] for x in vqa.cosmic_rays) if vqa.cosmic_rays else 0
     total_pixels = sum(x[1] for x in vqa.cosmic_rays) if vqa.cosmic_rays else 0
-    if total_pixels >= 10000:
-        pix_str = f"{total_pixels/1000:.0f}k"
-    else:
-        pix_str = f"{total_pixels}"
+    pix_str = f"{total_pixels / 1000:.0f}k" if total_pixels >= 10000 else f"{total_pixels}"
     cr_lbl = f"{total_crs:,} ({pix_str} px)" if total_crs > 0 else "N/A"
     cr_status_lbl = "nominal" if total_crs > 0 else "skipped"
     cr_color = "#475569" if total_crs > 0 else "#64748b"
@@ -1206,11 +1144,7 @@ def generate_plots(vqa: VisitQA, output_dir: Path, collection: Optional[str] = N
             soften_color,
         ),
         (
-            (
-                "Center shift (dx/RMS)"
-                if not math.isnan(vqa.qa_dx_rms)
-                else "Center shift (dx)"
-            ),
+            ("Center shift (dx/RMS)" if not math.isnan(vqa.qa_dx_rms) else "Center shift (dx)"),
             (
                 f"{vqa.qa_dx:+.3f}/{vqa.qa_dx_rms:.3f} px"
                 if not math.isnan(vqa.qa_dx_rms)
@@ -1238,7 +1172,7 @@ def generate_plots(vqa: VisitQA, output_dir: Path, collection: Optional[str] = N
     ]
 
     x_positions = [0.03, 0.19, 0.35, 0.51, 0.67, 0.83]
-    for (name, val, status, color), x_pos in zip(metrics, x_positions):
+    for (name, val, status, color), x_pos in zip(metrics, x_positions, strict=False):
         ax_card.text(x_pos, 0.52, name, color="#475569", fontsize=11, fontweight="bold")
         ax_card.text(x_pos, 0.26, val, color=color, fontsize=18, fontweight="bold")
         ax_card.text(
@@ -1287,16 +1221,16 @@ def generate_plots(vqa: VisitQA, output_dir: Path, collection: Optional[str] = N
             f"Fail ({vqa.centroids_fail_pct}% / Other)",
         ]
         colors = [c_good, c_low_sn, c_fail]
-        wedges, texts, autotexts = ax1.pie(
+        _wedges, texts, autotexts = ax1.pie(
             sizes,
             labels=labels,
             autopct="%1.1f%%",
             startangle=140,
             colors=colors,
-            textprops=dict(color="#0f172a"),
+            textprops={"color": "#0f172a"},
             explode=(0.1, 0, 0) if sizes[0] > 0 else (0, 0, 0),
             pctdistance=0.75,
-            wedgeprops=dict(width=0.4, edgecolor="w"),
+            wedgeprops={"width": 0.4, "edgecolor": "w"},
         )
         plt.setp(autotexts, size=10, weight="bold")
         plt.setp(texts, size=11, weight="bold")
@@ -1350,12 +1284,13 @@ def generate_plots(vqa: VisitQA, output_dir: Path, collection: Optional[str] = N
         ax2.set_xlabel("Fiber ID", fontsize=11, fontweight="semibold")
         ax2.legend(frameon=True, facecolor="#ffffff", edgecolor="#e2e8f0")
     else:
-        ax2.text(
-            0.5, 0.5, "No Fiber Statistics Found", ha="center", va="center", fontsize=14
-        )
+        ax2.text(0.5, 0.5, "No Fiber Statistics Found", ha="center", va="center", fontsize=14)
     if vqa.fit_active_fibers > 0:
         ax2.set_title(
-            f"Detector Map Fitting Residuals by Fiber\n(Showing {len(vqa.fibers)} of {vqa.fit_active_fibers} active fibers)",
+            (
+                f"Detector Map Fitting Residuals by Fiber\n(Showing {len(vqa.fibers)} of {vqa.fit_active_fibers} "
+                f"active fibers)"
+            ),
             fontsize=14,
             fontweight="bold",
             pad=15,
@@ -1445,18 +1380,12 @@ def generate_plots(vqa: VisitQA, output_dir: Path, collection: Optional[str] = N
     if len(categories) == 1 and not math.isnan(vqa.fit_species_x_rms):
         categories.append(f"{vqa.fit_species_name} Lines")
         x_rms_vals.append(vqa.fit_species_x_rms)
-        y_rms_vals.append(
-            vqa.fit_species_y_rms if not math.isnan(vqa.fit_species_y_rms) else 0.0
-        )
+        y_rms_vals.append(vqa.fit_species_y_rms if not math.isnan(vqa.fit_species_y_rms) else 0.0)
 
     # Add Traces
     categories.append("Traces")
-    x_rms_vals.append(
-        vqa.fit_trace_x_rms if not math.isnan(vqa.fit_trace_x_rms) else 0.0
-    )
-    y_rms_vals.append(
-        vqa.fit_trace_y_rms if not math.isnan(vqa.fit_trace_y_rms) else 0.0
-    )
+    x_rms_vals.append(vqa.fit_trace_x_rms if not math.isnan(vqa.fit_trace_x_rms) else 0.0)
+    y_rms_vals.append(vqa.fit_trace_y_rms if not math.isnan(vqa.fit_trace_y_rms) else 0.0)
 
     has_data = any(val > 0.0 for val in x_rms_vals + y_rms_vals)
 
@@ -1505,9 +1434,7 @@ def generate_plots(vqa: VisitQA, output_dir: Path, collection: Optional[str] = N
     )
 
     plt.tight_layout(rect=[0.02, 0.02, 0.98, 0.96])
-    dashboard_path = (
-        output_dir / f"qa_dashboard_{vqa.visit}_{vqa.arm}{vqa.spectrograph}.png"
-    )
+    dashboard_path = output_dir / f"qa_dashboard_{vqa.visit}_{vqa.arm}{vqa.spectrograph}.png"
     plt.savefig(dashboard_path, dpi=150, facecolor="#f8fafc")
     plt.close()
 
@@ -1517,16 +1444,12 @@ def generate_plots(vqa: VisitQA, output_dir: Path, collection: Optional[str] = N
 def generate_markdown_report(
     vqa: VisitQA,
     output_path: Path,
-    plot_dir: Optional[Path] = None,
-    collection: Optional[str] = None,
+    plot_dir: Path | None = None,
+    collection: str | None = None,
 ):
     """Generate a detailed markdown QA diagnostic report based on VisitQA metrics."""
     vqa.sanitize()
-    target = (
-        vqa.qa_target
-        if vqa.qa_target
-        else (vqa.collection if vqa.collection else "Unknown Target")
-    )
+    target = vqa.qa_target if vqa.qa_target else (vqa.collection if vqa.collection else "Unknown Target")
 
     # 1. Optical Focus
     if math.isnan(vqa.qa_fwhm):
@@ -1534,10 +1457,14 @@ def generate_markdown_report(
         fwhm_desc = "No FWHM measurements available."
     elif vqa.qa_fwhm < 3.2:
         fwhm_status = "**Nominal**"
-        fwhm_desc = "The FWHM is sharp and well-focused, indicating excellent spectrograph alignment and focusing."
+        fwhm_desc = (
+            "The FWHM is sharp and well-focused, indicating excellent spectrograph alignment and focusing."
+        )
     elif vqa.qa_fwhm < 3.5:
         fwhm_status = "**Marginal/Degraded**"
-        fwhm_desc = "The focus is slightly degraded, showing minor defocusing or mirror temperature deviations."
+        fwhm_desc = (
+            "The focus is slightly degraded, showing minor defocusing or mirror temperature deviations."
+        )
     else:
         fwhm_status = "**FAILED/Defocused**"
         fwhm_desc = "The focus is significantly degraded. Optical alignment or mirror focus mechanism needs investigation."
@@ -1551,10 +1478,15 @@ def generate_markdown_report(
         dx_desc = "The physical spatial shift (flexure) along the dispersion direction is extremely small."
     elif abs(vqa.qa_dx) < 0.5:
         dx_status = "**Marginal/Moderate**"
-        dx_desc = f"Moderate physical drift (flexure) detected. The pipeline successfully adjusted for this offset, but the instrument has shifted slightly."
+        dx_desc = (
+            "Moderate physical drift (flexure) detected. The pipeline successfully adjusted for this offset, "
+            "but the instrument has shifted slightly."
+        )
     else:
         dx_status = "**FAILED/Severe Drift**"
-        dx_desc = f"Severe physical alignment shift detected. Search boxes for line centroiding may be misaligned."
+        dx_desc = (
+            "Severe physical alignment shift detected. Search boxes for line centroiding may be misaligned."
+        )
 
     # 3. Centroids
     is_science = (
@@ -1593,7 +1525,10 @@ def generate_markdown_report(
     if math.isnan(vqa.fit_x_rms) and math.isnan(vqa.fit_y_rms):
         fit_desc = "No detector map fitting residuals available."
     else:
-        fit_desc = f"Global residuals ($x\\text{{RMS}} = {vqa.fit_x_rms:.4f}\\text{{ px}}$ and $y\\text{{RMS}} = {vqa.fit_y_rms:.4f}\\text{{ px}}$) are "
+        fit_desc = (
+            f"Global residuals ($x\\text{{RMS}} = {vqa.fit_x_rms:.4f}\\text{{ px}}$ and $y\\text{{RMS}} = {vqa.fit_y_rms:.4f}\\text{{ px}}$) "
+            f"are "
+        )
         if (vqa.fit_x_rms < 0.15 or math.isnan(vqa.fit_x_rms)) and (
             vqa.fit_y_rms < 0.15 or math.isnan(vqa.fit_y_rms)
         ):
@@ -1602,19 +1537,36 @@ def generate_markdown_report(
             fit_desc += "**high**, indicating fitting instabilities, poor line constraints, or large optical distortions."
 
     if not math.isnan(vqa.fit_x_soften):
-        fit_desc += f" Systematic error floors (softening) are $x\\text{{Soften}} = {vqa.fit_x_soften:.4f}\\text{{ px}}$ and $y\\text{{Soften}} = {vqa.fit_y_soften:.4f}\\text{{ px}}$."
+        fit_desc += (
+            f" Systematic error floors (softening) are $x\\text{{Soften}} = {vqa.fit_x_soften:.4f}\\text{{ px}}$ "
+            f"and $y\\text{{Soften}} = {vqa.fit_y_soften:.4f}\\text{{ px}}$."
+        )
         if vqa.fit_x_soften < 0.05:
-            fit_desc += " The low $x$-softening confirms that the distortion model matches the physical traces without needing a large systematic error floor."
+            fit_desc += (
+                " The low $x$-softening confirms that the distortion model matches the physical traces without "
+                "needing a large systematic error floor."
+            )
         else:
-            fit_desc += " The elevated systematic error floor shows the fitter had to down-weight measurement errors to cope with unmodeled distortion or centroid scatter."
+            fit_desc += (
+                " The elevated systematic error floor shows the fitter had to down-weight measurement errors "
+                "to cope with unmodeled distortion or centroid scatter."
+            )
 
     # 4.5 Fibers
     if vqa.fit_active_fibers > 0:
-        fibers_used_str = f"**{vqa.fit_active_fibers}** active fibers contributed lines to the fit (sample residuals for {len(vqa.fibers)} fibers are plotted below)."
+        fibers_used_str = (
+            f"**{vqa.fit_active_fibers}** active fibers contributed lines to the fit (sample residuals for {len(vqa.fibers)} "
+            f"fibers are plotted below)."
+        )
     elif len(vqa.fibers) < 5:
-        fibers_used_str = f"**{len(vqa.fibers)}** active fibers contributed lines to the fit (all are plotted below)."
+        fibers_used_str = (
+            f"**{len(vqa.fibers)}** active fibers contributed lines to the fit (all are plotted below)."
+        )
     else:
-        fibers_used_str = f"At least **{len(vqa.fibers)}** active fibers have residual statistics logged (sample residuals plotted below)."
+        fibers_used_str = (
+            f"At least **{len(vqa.fibers)}** active fibers have residual statistics logged (sample residuals "
+            f"plotted below)."
+        )
 
     # 4.6 Line Flagging Rate (pctFlagged)
     if math.isnan(vqa.qa_flagged):
@@ -1642,7 +1594,8 @@ def generate_markdown_report(
         )
     elif vqa.fit_n_lines == 0:
         fit_warnings.append(
-            "* ❌ **No constraints:** Zero lines were used in the detector map fit! The fit is completely unconstrained."
+            "* ❌ **No constraints:** Zero lines were used in the detector map fit! The fit is completely "
+            "unconstrained."
         )
 
     if vqa.fit_active_fibers > 0 and vqa.fit_active_fibers < 10:
@@ -1652,14 +1605,16 @@ def generate_markdown_report(
         )
     elif len(vqa.fibers) > 0 and len(vqa.fibers) < 5 and vqa.fit_active_fibers == 0:
         fit_warnings.append(
-            f"* ⚠️ **Sparse fiber coverage:** Only **{len(vqa.fibers)}** fibers had valid lines. The fit constraints are extremely sparse."
+            f"* ⚠️ **Sparse fiber coverage:** Only **{len(vqa.fibers)}** fibers had valid lines. The fit "
+            f"constraints are extremely sparse."
         )
 
     if (not math.isnan(vqa.fit_x_rms) and math.isnan(vqa.fit_y_rms)) or (
         math.isnan(vqa.fit_x_rms) and not math.isnan(vqa.fit_y_rms)
     ):
         fit_warnings.append(
-            "* ❌ **Degenerate fit:** One of the fitting RMS residuals (spatial or wavelength) is `NaN`, indicating a degenerate fit."
+            "* ❌ **Degenerate fit:** One of the fitting RMS residuals (spatial or wavelength) is `NaN`, indicating "
+            "a degenerate fit."
         )
 
     fit_warnings_str = "\n".join(fit_warnings) if fit_warnings else ""
@@ -1668,7 +1623,10 @@ def generate_markdown_report(
     total_crs = sum(cr[0] for cr in vqa.cosmic_rays) if vqa.cosmic_rays else 0
     total_pixels = sum(cr[1] for cr in vqa.cosmic_rays) if vqa.cosmic_rays else 0
     if total_crs > 0:
-        cr_desc = f"Found {total_crs:,} cosmic rays affecting {total_pixels:,} pixels. This is within normal background limits for this exposure."
+        cr_desc = (
+            f"Found {total_crs:,} cosmic rays affecting {total_pixels:,} pixels. This is within normal background "
+            f"limits for this exposure."
+        )
     else:
         cr_desc = "Cosmic ray task was skipped or no cosmic rays were reported."
 
@@ -1680,36 +1638,30 @@ def generate_markdown_report(
         )
     if not math.isnan(vqa.qa_dx) and abs(vqa.qa_dx) >= 0.2:
         recs.append(
-            "* **Verify slit offsets configuration:** If flexure/alignment shift continues to grow, ensure `doSlitOffsets` is enabled in `fitDetectorMap` config to shift the template before centroiding."
+            "* **Verify slit offsets configuration:** If flexure/alignment shift continues to grow, ensure "
+            "`doSlitOffsets` is enabled in `fitDetectorMap` config to shift the template before centroiding."
         )
     if not math.isnan(vqa.qa_fwhm) and vqa.qa_fwhm >= 3.2:
         recs.append(
-            "* **Inspect spectrograph focus/alignment:** Defocusing is present. Check mirror focusing mechanics and spectrograph temperature logs."
+            "* **Inspect spectrograph focus/alignment:** Defocusing is present. Check mirror focusing mechanics "
+            "and spectrograph temperature logs."
         )
-    if (
-        not is_science
-        and vqa.centroids_good_pct < 10
-        and not math.isnan(vqa.qa_dx)
-        and abs(vqa.qa_dx) >= 0.5
-    ):
+    if not is_science and vqa.centroids_good_pct < 10 and not math.isnan(vqa.qa_dx) and abs(vqa.qa_dx) >= 0.5:
         recs.append(
-            "* **Check base calibration map:** The template detector map is significantly shifted relative to physical traces. Verify that a stale calibration file is not being used."
+            "* **Check base calibration map:** The template detector map is significantly shifted relative "
+            "to physical traces. Verify that a stale calibration file is not being used."
         )
 
     # Diagnosis Summary
     if vqa.qa_status == "PASS":
-        diagnosis_summary = (
-            "**Yes.** This run represents an excellent, high-quality exposure."
-        )
+        diagnosis_summary = "**Yes.** This run represents an excellent, high-quality exposure."
     else:
         reasons = []
         if not math.isnan(vqa.qa_fwhm) and vqa.qa_fwhm >= 3.2:
             reasons.append("optical defocusing (elevated FWHM)")
         if not math.isnan(vqa.qa_dx) and abs(vqa.qa_dx) >= 0.2:
             reasons.append("physical flexure/spatial shift (dxCenter)")
-        if not math.isnan(vqa.qa_flagged) and vqa.qa_flagged >= (
-            40.0 if vqa.arm == "b" else 15.0
-        ):
+        if not math.isnan(vqa.qa_flagged) and vqa.qa_flagged >= (40.0 if vqa.arm == "b" else 15.0):
             reasons.append("high flagged line rate (pctFlagged)")
         if vqa.fit_n_lines > 0 and vqa.fit_n_lines < 20:
             reasons.append("critically low number of fit lines")
@@ -1720,22 +1672,14 @@ def generate_markdown_report(
         ):
             reasons.append("degenerate fit (NaN residuals)")
 
-        reasons_str = (
-            ", ".join(reasons) if reasons else "unspecified calibration/image issues"
-        )
-        diagnosis_summary = (
-            f"**No.** This run flagged a warning or failure due to: **{reasons_str}**."
-        )
+        reasons_str = ", ".join(reasons) if reasons else "unspecified calibration/image issues"
+        diagnosis_summary = f"**No.** This run flagged a warning or failure due to: **{reasons_str}**."
 
     # Status Emoji
     status_emoji = (
         "✅ PASS"
         if vqa.qa_status == "PASS"
-        else (
-            "⚠️ WARN"
-            if vqa.qa_status == "WARN"
-            else "❌ FAIL" if vqa.qa_status == "FAIL" else "❓ UNKNOWN"
-        )
+        else ("⚠️ WARN" if vqa.qa_status == "WARN" else "❌ FAIL" if vqa.qa_status == "FAIL" else "❓ UNKNOWN")
     )
 
     # Plot path
@@ -1810,7 +1754,7 @@ Here is the step-by-step diagnostic breakdown:
 ## ⏱️ Execution Durations
 * **ISR (Instrument Signature Removal):** {vqa.isr_time_s:.2f} s
 * **Cosmic Ray Detection:** {vqa.cosmic_ray_time_s:.2f} s
-* **reduceExposure (Total Task):** {vqa.reduce_exposure_time_s:.2f} s ({(vqa.reduce_exposure_time_s/60.0):.2f} minutes)
+* **reduceExposure (Total Task):** {vqa.reduce_exposure_time_s:.2f} s ({(vqa.reduce_exposure_time_s / 60.0):.2f} minutes)
 * **imageQualityQa:** {vqa.iq_qa_time_s:.2f} s
 {"* **mergeArms:** " + f"{vqa.merge_arms_time_s:.2f} s" if vqa.merge_arms_time_s > 0.0 else ""}
 
@@ -1837,11 +1781,7 @@ def print_text_report(vqa: VisitQA):
     status_emoji = (
         "✅"
         if vqa.qa_status == "PASS"
-        else (
-            "⚠️"
-            if vqa.qa_status == "WARN"
-            else "❌" if vqa.qa_status == "FAIL" else "❓"
-        )
+        else ("⚠️" if vqa.qa_status == "WARN" else "❌" if vqa.qa_status == "FAIL" else "❓")
     )
     print(
         f" {status_emoji}  PFS DRP QA REPORT: Visit {vqa.visit} | "
@@ -1860,9 +1800,7 @@ def print_text_report(vqa: VisitQA):
         dx_comment = (
             "  (Nominal)"
             if abs(vqa.qa_dx) < 0.15
-            else (
-                "  (Severe physical drift!)" if abs(vqa.qa_dx) > 0.5 else "  (Marginal)"
-            )
+            else ("  (Severe physical drift!)" if abs(vqa.qa_dx) > 0.5 else "  (Marginal)")
         )
     dx_str = f"{vqa.qa_dx:+.3f} px" if not math.isnan(vqa.qa_dx) else "N/A"
     if not math.isnan(vqa.qa_dx_rms):
@@ -1875,9 +1813,7 @@ def print_text_report(vqa: VisitQA):
     print("  Line Centroiding Performance:")
     print(f"    - Total Centroids:  {vqa.centroids_total:,}")
     print(f"    - Good Centroids:   {vqa.centroids_good:,} ({vqa.centroids_good_pct}%)")
-    print(
-        f"    - Low S/N (<5.0):   {vqa.centroids_low_sn:,} ({vqa.centroids_low_sn_pct}%)"
-    )
+    print(f"    - Low S/N (<5.0):   {vqa.centroids_low_sn:,} ({vqa.centroids_low_sn_pct}%)")
     print(f"    - Failed Centroids: {vqa.centroids_fail:,} ({vqa.centroids_fail_pct}%)")
     print("-" * 80)
     print("  Detector Map Fit Residuals:")
@@ -1894,15 +1830,11 @@ def print_text_report(vqa: VisitQA):
         print("        FiberId   |   xRMS (pixels)   |   yRMS (pixels)   |   nLines")
         print("        " + "-" * 56)
         for f in vqa.fibers:
-            print(
-                f"        {f.fiber_id:<9} |   {f.x_rms:<15.4f} |   {f.y_rms:<15.4f} |   {f.n_lines}"
-            )
+            print(f"        {f.fiber_id:<9} |   {f.x_rms:<15.4f} |   {f.y_rms:<15.4f} |   {f.n_lines}")
 
     print("-" * 80)
     print("  Execution Durations & Resources:")
-    print(
-        f"    - ISR:              {vqa.isr_time_s:.2f} s  (Bad Pixels: {vqa.isr_bad_pixels})"
-    )
+    print(f"    - ISR:              {vqa.isr_time_s:.2f} s  (Bad Pixels: {vqa.isr_bad_pixels})")
     if vqa.cosmic_ray_time_s > 0.0 or vqa.cosmic_rays:
         total_crs = sum(x[0] for x in vqa.cosmic_rays)
         total_pixels = sum(x[1] for x in vqa.cosmic_rays)
@@ -1925,7 +1857,10 @@ def print_text_report(vqa: VisitQA):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Parse reduceExposure & imageQualityQa logs (from files or Butler), assess QA health, and generate plots."
+        description=(
+            "Parse reduceExposure & imageQualityQa logs (from files or Butler), assess QA health, and generate "
+            "plots."
+        )
     )
     parser.add_argument(
         "log_files",
@@ -2004,7 +1939,7 @@ def main():
     if args.json_in:
         print(f"Loading VisitQA from JSON file: {args.json_in}")
         try:
-            with open(args.json_in, "r") as f:
+            with open(args.json_in) as f:
                 vqa_list = [VisitQA.from_json(f.read())]
         except Exception as e:
             print(f"Error loading JSON file: {e}", file=sys.stderr)
@@ -2053,9 +1988,7 @@ def main():
                 )
                 sys.exit(1)
 
-            vqa_list = parse_butler_logs(
-                logs, args.visit, args.spectrograph, collection=args.collection
-            )
+            vqa_list = parse_butler_logs(logs, args.visit, args.spectrograph, collection=args.collection)
     else:
         if not args.log_files:
             parser.error("Must specify log_files, --json-in, or --butler-repo.")
@@ -2078,9 +2011,7 @@ def main():
             if len(vqa_list) > 1:
                 stem = out_path.stem
                 ext = out_path.suffix
-                out_path = out_path.with_name(
-                    f"{stem}_{vqa.visit}_{vqa.arm}{vqa.spectrograph}{ext}"
-                )
+                out_path = out_path.with_name(f"{stem}_{vqa.visit}_{vqa.arm}{vqa.spectrograph}{ext}")
 
             print(f"Writing VisitQA JSON to: {out_path}")
             try:
@@ -2095,12 +2026,8 @@ def main():
             if len(vqa_list) > 1:
                 stem = report_path.stem
                 ext = report_path.suffix
-                report_path = report_path.with_name(
-                    f"{stem}_{vqa.visit}_{vqa.arm}{vqa.spectrograph}{ext}"
-                )
-            generate_markdown_report(
-                vqa, report_path, plot_dir=args.plot_dir, collection=args.collection
-            )
+                report_path = report_path.with_name(f"{stem}_{vqa.visit}_{vqa.arm}{vqa.spectrograph}{ext}")
+            generate_markdown_report(vqa, report_path, plot_dir=args.plot_dir, collection=args.collection)
 
         if args.plot_dir:
             generate_plots(vqa, args.plot_dir, collection=args.collection)

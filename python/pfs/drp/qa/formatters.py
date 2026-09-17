@@ -4,8 +4,9 @@ __all__ = ["PdfMatplotlibFormatter"]
 
 
 class PdfMatplotlibFormatter(MatplotlibFormatter):
-    """Variant of `MatplotlibFormatter` (used by Butler) that saves figures
-    in PDF format instead of PNG format.
+    """Save figures in PDF format instead of PNG.
+
+    A variant of `MatplotlibFormatter`, which Butler uses by default.
     """
 
     default_extension = ".pdf"
