@@ -663,25 +663,55 @@ an amp-localised degradation is invisible in a detector-wide median.
 This ticket is done when all of the following hold. Note that none of these require a new
 metric to exist:
 
-- [ ] `PIPE2D-1392` is merged; `dmResiduals` imports and `pipetask build -p pipelines/drpQA.yaml` succeeds.
-- [ ] `tests/data/goldenVisits.yaml` exists, with at least one `known_good` entry and the
-      SM1 focus range as a `known_bad` entry.
-- [ ] `bin.src/calibrateQaThresholds.py` runs over a collection and prints suggested
-      thresholds from the golden set.
-- [ ] The metric registry exists and the existing `imageQualityQa` thresholds have been
-      migrated onto it, with their provenance recorded.
-- [ ] Per-species output is long-format; concatenating across quanta yields a stable
-      schema with no NaN padding.
+- [x] `PIPE2D-1392` is merged and `dmResiduals` imports.
+      **`pipetask build -p pipelines/drpQA.yaml` has not been run** — no Butler or stack
+      was available to the session that did this work. Run it before merging.
+- [~] `tests/data/goldenVisits.yaml` exists, with the SM1 focus range (140005–140138) as
+      its `known_bad` entry. **The `known_good` entries are still placeholders**, and the
+      loader excludes placeholders by default, so nothing can be validated against them
+      yet. Filling in real visit numbers is the one remaining input this ticket needs
+      from the archive, and everything below is blocked on it.
+- [x] `bin.src/calibrateQaThresholds.py` runs the procedure and prints suggested
+      thresholds with their provenance sentence. Exercised end to end against a CSV;
+      **not yet run against a Butler collection.**
+- [x] The metric registry exists (`pfs.drp.qa.metrics.registry`) and the `imageQualityQa`
+      thresholds are gated through it, with provenance recorded. The provenance says what
+      is true: the numbers are the hand-tuned defaults, not golden-set derived.
+- [x] Per-species output is long-format, in the new `iqQaSpeciesMetrics` dataset;
+      `tests/test_longFormat.py` asserts that concatenating quanta with different species
+      mixes yields a stable schema with no NaN padding.
 - [ ] Tier 2 volume per visit and the per-quantum plotting cost are both measured and
-      recorded in this document.
-- [ ] `pfs.drp.qa.plotting` exists, imports no Butler and no task class, and each function
-      has a smoke test returning a `Figure` from a synthetic frame.
-- [ ] The stack-free tests run green in CI without the LSST stack.
-- [ ] `tests/test_dmResiduals.py` either tests something or is deleted. No `pass` bodies.
-- [ ] Files touched are Ruff-clean.
+      recorded in this document. **Not done — both need a real visit through the
+      pipeline.** See the note below.
+- [x] `pfs.drp.qa.plotting` exists and imports no Butler and no task class —
+      `tests/test_plotting.py` checks that statically over the whole subpackage, and
+      smoke-tests each function against a synthetic frame.
+- [x] The stack-free tests run green without the LSST stack (133 passed locally). CI now
+      installs the PyPI wheels they need; **confirm the first CI run.**
+- [x] `tests/test_dmResiduals.py` tests something: `get_fit_stats` against injected
+      defects of known size. No `pass` bodies remain. It skips without the stack and has
+      been checked against a stub, **not against the real stack.**
+- [x] Files touched are Ruff-clean; `ruff check .` and `ruff format --check .` pass over
+      the whole tree.
 
 Explicitly **not** in this ticket: any new QA metric, any change to an existing QA
 verdict, removal of the rendered plot datasets, and the dashboard.
+
+#### Remaining work on this ticket
+
+1. **Fill in the `known_good` entries** of `tests/data/goldenVisits.yaml` from the archive
+   and drop their `placeholder: true`. Wanted: a nominal-focus HgCd arc and a quartz
+   trace. Two of the three `known_bad` entries (stale calib, saturated frame) are also
+   still placeholders; they are the reference cases for Phases 2 and 3 and can wait.
+2. **Run `pipetask build`** against a real repo to confirm the pipeline still builds with
+   the new `iqQaSpeciesMetrics` output connection.
+3. **Re-derive the `imageQualityQa` thresholds** with `bin.src/calibrateQaThresholds.py`
+   once (1) is done, and replace the inherited provenance strings in
+   `pfs.drp.qa.metrics.definitions`. This is the point of Phases 0 and 1; until it
+   happens the thresholds are still the hand-tuned ones.
+4. **Measure and record Tier 2 volume and plotting cost** (section 1.4): time one
+   `dmResiduals` quantum with and without `generatePlot`, record the artifact size, and
+   estimate the compressed-Parquet size of `dmQaResidualData` for one visit.
 
 ### Full rebuild — Phases 2 to 6
 
