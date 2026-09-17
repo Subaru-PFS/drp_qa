@@ -12,7 +12,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 - **Golden visit set** (`tests/data/goldenVisits.yaml`) plus a stack-free loader,
   `pfs.drp.qa.metrics.goldenVisits`. `known_good` is the Run25 stable calibration sequence
-  (133025-133055, 31 visits); the SM1 focus range (140005-140138) is the anchor `known_bad`.
+  (two blocks on 2025-11-10 and one on 2025-12-01) plus two clear twilight-sky sets;
+  `known_bad` is the SM1 focus range (140005-140138) and a cloudy twilight set.
   Placeholder entries are excluded by default, so an unfilled entry cannot validate a threshold.
 - **`pfs.drp.qa.metrics.thresholds`** — the threshold derivation procedure as pure functions: WARN at
   p95 and FAIL at p99 of the known-good distribution, or a physical limit, plus the provenance

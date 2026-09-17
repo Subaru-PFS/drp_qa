@@ -13,6 +13,7 @@ from pfs.drp.qa.metrics.goldenVisits import (
     defaultGoldenVisitsPath,
     loadGoldenVisits,
 )
+from pfs.drp.qa.metrics.thresholds import MIN_SAMPLES
 
 
 @pytest.fixture
@@ -57,7 +58,7 @@ class TestCheckedInSet:
         golden = loadGoldenVisits()
         assert golden.knownGood, "no usable known_good entries"
         assert golden.goodVisits[0] == 133025
-        assert golden.goodVisits[-1] == 133055
+        assert golden.goodVisits[-1] == 135850
 
     def testKnownGoodEntriesAreScopedToTheArmsThatWereRead(self):
         """Run25 block A read b/r/n and block B read b/m; neither covers the other."""
@@ -66,6 +67,21 @@ class TestCheckedInSet:
         assert golden.expectationFor(133037, arm="m", spectrograph=1) is None, "m was not read in block A"
         assert golden.expectationFor(133042, arm="m", spectrograph=1) == "PASS"
         assert golden.expectationFor(133042, arm="n", spectrograph=1) is None, "n was not read in block B"
+
+    def testHgCdClearsTheThresholdSampleFloor(self):
+        """b:HgCd needs both HgCd blocks to reach the 20-sample floor."""
+        detectors = sum(
+            len(entry.visits) * len(entry.spectrographs)
+            for entry in loadGoldenVisits().knownGood
+            if entry.seqType == "Arc: HgCd" and "b" in entry.arms
+        )
+        assert detectors >= MIN_SAMPLES, f"only {detectors} b-arm HgCd detectors"
+
+    def testCloudyTwilightIsKnownBadButTheClearOnesAreNot(self):
+        """Same seqType, opposite verdicts; matching is by visit, not sequence name."""
+        golden = loadGoldenVisits()
+        assert golden.expectationFor(134334, arm="b", spectrograph=1) == "FAIL"
+        assert golden.expectationFor(134880, arm="b", spectrograph=1) == "PASS"
 
     def testEveryKnownGoodEntryNamesItsSequence(self):
         """The flag-rate threshold key is derived from seqType; it cannot be blank."""

@@ -108,7 +108,96 @@ known_good:
     seqType: "Trace"
     note: "Run25 stable set, block B. 20 s scienceTrace."
 
+  # Block C -- 2025-12-01, the Nov-10 sequence repeated at azimuth 168 rather
+  # than 90, same altitude and insrot, three weeks later. Assumed stable on the
+  # same basis as blocks A and B, pending measurement. Its value is twofold: it
+  # takes b:HgCd to 24 detectors, over the 20-sample floor, and it is a genuine
+  # second epoch under a different gravity vector -- the external reference the
+  # Phase 2 drift metrics compare against (R1).
+  - visitRange: [135828, 135829]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    note: "Run25 block C, az 168. 20 s scienceTrace."
+  - visitRange: [135830, 135831]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    note: "Run25 block C, az 168. 10 s exposures."
+  - visitRange: [135832, 135833]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    note: "Run25 block C, az 168. 45 s exposures."
+  - visitRange: [135834, 135835]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    note: "Run25 block C, az 168. 5 s exposures."
+  - visitRange: [135836, 135837]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    note: "Run25 block C, az 168. 70 s exposures."
+  - visitRange: [135838, 135840]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: HgCd"
+    note: "Run25 block C, az 168. 45 s exposures. The second HgCd block; see above."
+  - visitRange: [135841, 135842]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    note: "Run25 block C, az 168, m arm. 10 s exposures."
+  - visitRange: [135843, 135844]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    note: "Run25 block C, az 168, m arm. 45 s exposures."
+  - visitRange: [135845, 135846]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    note: "Run25 block C, az 168, m arm. 5 s exposures."
+  - visitRange: [135847, 135848]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    note: "Run25 block C, az 168, m arm. 45 s exposures."
+  - visitRange: [135849, 135850]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    note: "Run25 block C, az 168, m arm. 20 s scienceTrace."
+
+  # Twilight sky, 2025-11-25. These are sky frames rather than true science
+  # targets. Their intended use is the O2 and OH sky-line check -- an
+  # independent test of the wavelength solution on data where no arc lines are
+  # available (plan section 6.6). Recorded as known_good on that basis; whether
+  # they should also be held to the FWHM and flag-rate gates is unconfirmed.
+  - visitRange: [134880, 134883]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Twilight sky"
+    note: "Run25 twilight sky, 180 s. Reference case for the O2/OH sky-line check."
+  - visitRange: [134884, 134886]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Twilight sky"
+    note: "Run25 twilight sky, 180 s. Reference case for the O2/OH sky-line check."
+
 known_bad:
+  # Run25 twilight sky taken through cloud. Unlike the SM1 entry above this is
+  # an observing condition rather than an instrument fault, but the degraded
+  # image quality is what QA should catch.
+  - visitRange: [134334, 134337]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Twilight sky"
+    expect: FAIL
+    metric: medFwhm
+    reason: "Cloudy; 180 s twilight sky taken through cloud."
+
   # Documented genuine optics failure: SM1 showed FWHM 3.83-4.86 px across all
   # lamp types over this visit range, independent of species, which rules out
   # the lamp-physics explanation that covers high b-arm flag rates elsewhere.
