@@ -32,6 +32,9 @@ from lsst.pipe.base.connectionTypes import (
 )
 
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
+from pfs.drp.qa.metrics.definitions import buildImageQualityRegistry
+from pfs.drp.qa.metrics.longFormat import longRecords, toLongFrame
+from pfs.drp.qa.metrics.registry import worstStatus
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
 from pfs.drp.stella.utils.stability import addTraceLambdaToArclines
@@ -79,6 +82,21 @@ class ImageQualityQaConnections(
             " ``medDxCenter``, ``dxCenterRms``, ``pctFlagged``,"
             " ``pctLowSN``, ``pctMeasFail``,"
             " ``nLines``, ``traceOnly``, ``qaStatus``."
+        ),
+        storageClass="DataFrame",
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
+    )
+
+    iqQaSpeciesMetrics = OutputConnection(
+        name="iqQaSpeciesMetrics",
+        doc=(
+            "Per-species QA metrics in long format, one row per"
+            " ``(visit, arm, spectrograph, description, metric)``."
+            " Columns: ``visit``, ``arm``, ``spectrograph``, ``description``,"
+            " ``metric``, ``value``, ``status``.  The species names are the"
+            " ``description`` values from the line lists (``HgI``, ``ArI``, ...)."
+            " Long format keeps the schema stable across quanta that saw"
+            " different species, so the frames concatenate without NaN padding."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -359,6 +377,7 @@ class ImageQualityQaTask(PipelineTask):
         else:
             butlerQC.put(outputs.iqQaData, outputRefs.iqQaData)
             butlerQC.put(outputs.iqQaMetrics, outputRefs.iqQaMetrics)
+            butlerQC.put(outputs.iqQaSpeciesMetrics, outputRefs.iqQaSpeciesMetrics)
 
     def run(
         self,
@@ -430,6 +449,11 @@ class ImageQualityQaTask(PipelineTask):
             ``dxCenterRms``, ``pctFlagged``, ``nLines``, ``traceOnly``,
             ``obsType``, ``seqName``, ``qaStatus``, ``visit``, ``arm``,
             ``spectrograph``.
+        iqQaSpeciesMetrics : `pandas.DataFrame`
+            Per-species fit statistics in long format, one row per
+            ``(description, metric)``, with columns ``visit``, ``arm``,
+            ``spectrograph``, ``description``, ``metric``, ``value``,
+            ``status``.  Empty when no ``reduceExposure_log`` was available.
         """
         self.log.info("Computing image quality metrics for %s", dataId)
 
@@ -804,57 +828,30 @@ class ImageQualityQaTask(PipelineTask):
 
         title = "{visit} {arm}{spectrograph}".format(**dataId)
 
-        # Determine per-quantum pass/warn/fail status from absolute thresholds.
-        # Trace-only visits use the same flag-rate check; FWHM check is skipped
-        # when medFwhm is NaN (no valid lines).
-        reasons = []
-        fwhm_status = "PASS"
-        if not trace_only and not np.isnan(med_fwhm):
-            if med_fwhm >= self.config.fwhmFailThreshold:
-                fwhm_status = "FAIL"
-                reasons.append(
-                    f"medFWHM={med_fwhm:.2f}px >= fail threshold {self.config.fwhmFailThreshold}px"
-                )
-            elif med_fwhm >= self.config.fwhmWarnThreshold:
-                fwhm_status = "WARN"
-                reasons.append(
-                    f"medFWHM={med_fwhm:.2f}px >= warn threshold {self.config.fwhmWarnThreshold}px"
-                )
+        # Determine per-quantum pass/warn/fail status. Measurement is above;
+        # judgement is here, and it is the one shared gating path over the
+        # metric registry rather than a per-metric if/elif ladder (rule R3).
+        # The thresholds themselves still come from the config, so command-line
+        # overrides continue to take effect.
+        registry = buildImageQualityRegistry(self.config)
 
-        flag_status = "PASS"
-        if np.isfinite(pct_flagged):
-            arm = dataId.get("arm", "")
-            species = seq_nam.split(":", 1)[-1].strip() if ":" in seq_nam else ""
-            compoundKey = f"{arm}:{species}" if species else ""
-            warn_thresh = self.config.flagRateWarnThreshold.get(
-                compoundKey, self.config.flagRateWarnThreshold.get(arm, 15.0)
-            )
-            fail_thresh = self.config.flagRateFailThreshold.get(
-                compoundKey, self.config.flagRateFailThreshold.get(arm, 20.0)
-            )
-            if pct_flagged >= fail_thresh:
-                flag_status = "FAIL"
-                reasons.append(f"pctFlagged={pct_flagged:.1f}% >= fail threshold {fail_thresh}%")
-            elif pct_flagged >= warn_thresh:
-                flag_status = "WARN"
-                reasons.append(f"pctFlagged={pct_flagged:.1f}% >= warn threshold {warn_thresh}%")
+        # Flag-rate thresholds are looked up ``arm:species`` then ``arm``: several
+        # lamp species have almost no usable b-arm lines, so a blended threshold
+        # tracks the species mix rather than the instrument (R7).
+        arm = dataId.get("arm", "")
+        species = seq_nam.split(":", 1)[-1].strip() if ":" in seq_nam else ""
+        flagRateKeys = (f"{arm}:{species}" if species else "", arm)
 
-        dx_status = "PASS"
-        if np.isfinite(medDxCenter):
-            absDx = abs(medDxCenter)
-            if absDx >= self.config.dxCenterFailThreshold:
-                dx_status = "FAIL"
-                reasons.append(
-                    f"|dxCenter|={absDx:.3f}px >= fail threshold {self.config.dxCenterFailThreshold}px"
-                )
-            elif absDx >= self.config.dxCenterWarnThreshold:
-                dx_status = "WARN"
-                reasons.append(
-                    f"|dxCenter|={absDx:.3f}px >= warn threshold {self.config.dxCenterWarnThreshold}px"
-                )
-
-        _level = {"PASS": 0, "WARN": 1, "FAIL": 2}
-        qa_status = max((fwhm_status, flag_status, dx_status), key=lambda s: _level[s])
+        # A trace-only visit has no arc-line FWHM to judge, and a NaN metric was
+        # never measured. Both yield ``None``, which is skipped rather than
+        # counted as a PASS.
+        gateResults = [
+            None if trace_only else registry.gate("medFwhm", med_fwhm),
+            registry.gate("pctFlagged", pct_flagged, keys=flagRateKeys),
+            registry.gate("medDxCenter", medDxCenter),
+        ]
+        qa_status = worstStatus(gateResults)
+        reasons = [result.reason for result in gateResults if result is not None and result.reason]
 
         reason_str = "; ".join(reasons) if reasons else "all metrics nominal"
         dxStr = f"{medDxCenter:+.3f}px" if np.isfinite(medDxCenter) else "NaN"
@@ -918,17 +915,28 @@ class ImageQualityQaTask(PipelineTask):
         for bitName, pct in flagBreakdown.items():
             metricsDict[f"pct{bitName}"] = [pct]
 
-        # Add species stats columns dynamically
-        for sp, (x_rms, y_rms) in logMetrics["speciesStats"].items():
-            metricsDict[f"fitSpeciesXRms_{sp}"] = [x_rms]
-            metricsDict[f"fitSpeciesYRms_{sp}"] = [y_rms]
+        # Per-species fit statistics go out in long format rather than as
+        # ``fitSpeciesXRms_<species>`` columns. The wide form made the column
+        # set vary per quantum, so concatenating across quanta produced a ragged
+        # NaN-padded frame and every downstream groupby had to know the species
+        # in advance. See pfs.drp.qa.metrics.longFormat.
+        speciesMetrics = toLongFrame(
+            longRecords(
+                dataId,
+                {
+                    speciesName: {"fitSpeciesXRms": xRms, "fitSpeciesYRms": yRms}
+                    for speciesName, (xRms, yRms) in logMetrics["speciesStats"].items()
+                },
+                registry=registry,
+            )
+        )
 
         metrics = pd.DataFrame(metricsDict)
         for key in ("visit", "arm", "spectrograph"):
             if key in dataId:
                 metrics[key] = dataId[key]
 
-        return Struct(iqQaData=data, iqQaMetrics=metrics)
+        return Struct(iqQaData=data, iqQaMetrics=metrics, iqQaSpeciesMetrics=speciesMetrics)
 
     @staticmethod
     def _logToString(logData: Any) -> str:

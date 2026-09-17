@@ -10,6 +10,24 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Metric registry** (`pfs.drp.qa.metrics.registry`) — `MetricDef` declares a metric's units, the
+  external reference it is measured against (R1), its direction, its thresholds and their provenance
+  (R2); `MetricRegistry.gate` is the one gating path for every metric, replacing the per-metric
+  if/elif ladders. A value that was not measured, or a metric with no thresholds, yields no verdict
+  rather than a PASS.
+- **`iqQaSpeciesMetrics`** — new `imageQualityQa` output holding per-species fit statistics in long
+  format, one row per `(visit, arm, spectrograph, description, metric)`.
+
+### Changed
+
+- **`imageQualityQa` gates through the metric registry.** Thresholds still come from the config, so
+  command-line overrides work as before, and the verdict boundaries and reason strings are unchanged.
+- **Per-species metrics are long-format.** The ragged `fitSpeciesXRms_<species>` /
+  `fitSpeciesYRms_<species>` columns are gone from `iqQaMetrics`; the same values are now rows in the
+  new `iqQaSpeciesMetrics` dataset. Concatenating across quanta that saw different species no longer
+  produces a NaN-padded frame, and `groupby("description")` no longer needs the species known in
+  advance.
+
 - **Golden visit set** (`tests/data/goldenVisits.yaml`) — a fixed list of visits with known verdicts,
   against which every threshold and every new metric is validated. Loaded with
   `pfs.drp.qa.metrics.goldenVisits.loadGoldenVisits`, which is stack-free and Butler-free. Entries

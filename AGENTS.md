@@ -291,6 +291,32 @@ Use `.pyi` files for C++ extensions in `drp_stella` to provide type hints.
 `runQuantum` wraps `self.run()` in a `try/except ValueError` — errors are logged but do
 not crash the pipeline. Only write outputs when `run()` succeeds.
 
+### Metrics and gating: the registry
+
+Tasks emit numbers; a separate layer turns numbers into `PASS`/`WARN`/`FAIL`. That layer
+is `pfs.drp.qa.metrics.registry`, and it is stack-free and Butler-free so it can be
+unit-tested in CI.
+
+A metric declares itself once as a `MetricDef`: its `units`, the external `reference` it
+is measured against (R1), `higherIsWorse`, its `thresholds` (with optional per-key
+`overrides` for `arm` / `arm:species`), and the `provenance` of those thresholds (R2).
+Gating is then `MetricRegistry.gate`, the same code for every metric, and the reason
+string is generated rather than written per metric.
+
+Two conventions that matter:
+
+- **The thresholds live in the task's config, not in the registry module.** A task builds
+  its registry from the config in force — see
+  `pfs.drp.qa.metrics.definitions.buildImageQualityRegistry` — so `-c` overrides still
+  take effect. The registry module holds the metadata; the config holds the numbers.
+- **`gate` returns `None`, not `PASS`, when there is no verdict to give** — a NaN value,
+  or a metric with no thresholds. `worstStatus` skips those. An unmeasured or ungated
+  metric must never turn a bad quantum green. A task that wants to report "we could not
+  measure at all" does so itself, when *every* gate returned `None`.
+
+Do not add a per-metric if/elif ladder to a task. If gating needs something the registry
+cannot express, extend `MetricDef`.
+
 ### Plot outputs
 
 - Single-figure tasks: return a `matplotlib.figure.Figure` in the `Struct`; Butler stores
@@ -526,8 +552,16 @@ Additional columns are added dynamically: a per-status-bit flag breakdown
 (`pctNotVisible`, `pctBlend`, `pctSuspect`, `pctRejected`, `pctBroad`, plus `pctLowSN` /
 `pctMeasFail` on the arc-line path), and — when the optional `isr_log`, `cosmicray_log`,
 and `reduceExposure_log` connections are present — ISR, cosmic-ray, and `fitDetectorMap`
-statistics (`fitChi2`, `fitXRms`, `fitYRms`, `fitReserved*`, `fitSpecies*Rms_<species>`,
-per-fiber arrays).
+statistics (`fitChi2`, `fitXRms`, `fitYRms`, `fitReserved*`, per-fiber arrays).
+
+**Per-species values are not columns here.** They go to the separate
+`iqQaSpeciesMetrics` dataset in long format — one row per
+`(visit, arm, spectrograph, description, metric)`, with columns `value` and `status`.
+The old `fitSpeciesXRms_<species>` / `fitSpeciesYRms_<species>` columns made the column
+set vary per quantum, so concatenating across quanta gave a ragged NaN-padded frame and
+every `groupby` had to know the species in advance. Build the rows with
+`pfs.drp.qa.metrics.longFormat.longRecords` / `toLongFrame`; `widen()` gives a wide view
+when an operator wants one.
 
 ### DM residual metrics
 
@@ -642,7 +676,7 @@ drpQA.yaml#imageQualityQa            dims: (instrument, visit, arm, spectrograph
              fiberProfiles, detectorMap_calib (calibrations),
              calexp, pfsConfig (optional),
              isr_log, cosmicray_log, reduceExposure_log (optional)
-    → writes: iqQaData, iqQaMetrics
+    → writes: iqQaData, iqQaMetrics, iqQaSpeciesMetrics
 
 drpQA.yaml#dmResiduals               dims: (instrument, visit, arm, spectrograph)
     ← reads: raw.visitInfo, detectorMap, lines, reduceExposure_config

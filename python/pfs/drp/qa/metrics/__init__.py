@@ -7,11 +7,29 @@ the Butler, so that it can be unit-tested in CI. Butler access belongs in
 See ``doc/qa-rebuild-plan.md``, Phase 1.
 """
 
+from pfs.drp.qa.metrics.definitions import (
+    buildImageQualityRegistry,
+    imageQualityMetricDefs,
+)
 from pfs.drp.qa.metrics.goldenVisits import (
     GoldenVisit,
     GoldenVisitSet,
     defaultGoldenVisitsPath,
     loadGoldenVisits,
+)
+from pfs.drp.qa.metrics.longFormat import (
+    LONG_COLUMNS,
+    longRecords,
+    toLongFrame,
+    widen,
+)
+from pfs.drp.qa.metrics.registry import (
+    STATUS_ORDER,
+    GateResult,
+    MetricDef,
+    MetricRegistry,
+    Thresholds,
+    worstStatus,
 )
 from pfs.drp.qa.metrics.thresholds import (
     ThresholdSuggestion,
@@ -20,11 +38,23 @@ from pfs.drp.qa.metrics.thresholds import (
 )
 
 __all__ = [
+    "LONG_COLUMNS",
+    "STATUS_ORDER",
+    "GateResult",
     "GoldenVisit",
     "GoldenVisitSet",
+    "MetricDef",
+    "MetricRegistry",
     "ThresholdSuggestion",
+    "Thresholds",
+    "buildImageQualityRegistry",
     "defaultGoldenVisitsPath",
     "deriveThresholds",
+    "imageQualityMetricDefs",
     "loadGoldenVisits",
+    "longRecords",
     "roundToReadable",
+    "toLongFrame",
+    "widen",
+    "worstStatus",
 ]
