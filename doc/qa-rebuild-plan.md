@@ -675,9 +675,12 @@ an amp-localised degradation is invisible in a detector-wide median.
 This ticket is done when all of the following hold. Note that none of these require a new
 metric to exist:
 
-- [x] `PIPE2D-1392` is merged and `dmResiduals` imports.
-      **`pipetask build -b <repo> -p pipelines/drpQA.yaml` has not been run** — no Butler
-      or stack was available to the session that did this work. Run it before merging.
+- [x] `PIPE2D-1392` is merged, `dmResiduals` imports, and
+      `pipetask build -b <repo> -p pipelines/drpQA.yaml --show pipeline-graph` resolves all
+      five tasks against a real repository. This needed a fix: `pfsConfig` was a
+      prerequisite to the extraction tasks and a plain input to `imageQualityQa`, so the
+      full pipeline had never built. Running the tasks one at a time with `#label` hides
+      it, which is why it survived this long.
 - [x] `tests/data/goldenVisits.yaml` holds the Run25 stable calibration sequence (three
       blocks, 2025-11-10 and 2025-12-01) and two clear twilight-sky sets as `known_good`;
       the SM1 focus range (140005–140138) and a cloudy twilight set as `known_bad`. Two
@@ -724,8 +727,9 @@ verdict, removal of the rendered plot datasets, and the dashboard.
    Neon and Krypton 40). `b:HgCd` reaches 24 only because the 2025-12-01 block repeated
    it; it is the tightest key and the one that matters most, being the one lamp whose
    blue flag rates are genuine rather than lamp physics.
-2. **Run `pipetask build`** against a real repo to confirm the pipeline still builds with
-   the new `iqQaSpeciesMetrics` output connection.
+2. ~~**Run `pipetask build`** against a real repo.~~ Done: the graph resolves and
+   `iqQaSpeciesMetrics` appears on `imageQualityQa` with dimensions
+   `{arm, spectrograph, visit}` and storage class `DataFrame`.
 3. **Re-derive the `imageQualityQa` thresholds** with `bin.src/calibrateQaThresholds.py`
    once (1) is done, and replace the inherited provenance strings in
    `pfs.drp.qa.metrics.definitions`. This is the point of Phases 0 and 1; until it
@@ -738,7 +742,8 @@ verdict, removal of the rendered plot datasets, and the dashboard.
 
 The rebuild as a whole is done when all of the following hold:
 
-- [ ] `pipetask build -b <repo> -p pipelines/drpQA.yaml` succeeds; every task imports.
+- [x] `pipetask build -b <repo> -p pipelines/drpQA.yaml` succeeds; every task imports.
+      Verified on the Run30 stack (2026-02-10) during `PIPE2D-1391-01`.
 - [ ] Every `known_good` visit in the golden set reports `PASS` on every metric.
 - [ ] Every `known_bad` visit reports the expected `WARN`/`FAIL`, **for the expected
       reason** — the failing metric's name identifies the actual fault.
