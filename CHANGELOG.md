@@ -115,6 +115,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Fixed
 
+- **`fluxCalQa` imports again.** It read `FilterCurve` / `TransmissionCurve` from
+  `pfs.drp.stella.fitReference`, which `drp_stella` deleted in April 2025 (`178a1899`); they live in
+  `fitFluxReference` now. Same class of breakage as the `getDescriptionCounts` import fixed by
+  PIPE2D-1392, and invisible until someone set up a current `drp_stella`, since `fluxCalQa` is not
+  in `drpQA.yaml`.
 - **The pipeline builds.** `pfsConfig` was a `PrerequisiteInput` to `extractionQa` and
   `extractionQaCombined` but a plain `Input` to `imageQualityQa`, so resolving all five tasks into
   one graph failed with `ConnectionTypeConsistencyError`. Pre-existing on `main`, and invisible while

@@ -26,7 +26,7 @@ from matplotlib.lines import Line2D
 from pfs.datamodel import PfsConfig, PfsSingle, TargetType
 from pfs.drp.qa.plotting.palettes import div_palette, spectrograph_plot_markers
 from pfs.drp.stella.datamodel import PfsCalibratedSpectra
-from pfs.drp.stella.fitReference import FilterCurve, TransmissionCurve
+from pfs.drp.stella.fitFluxReference import FilterCurve, TransmissionCurve
 from pfs.drp.stella.utils.math import robustRms
 
 
