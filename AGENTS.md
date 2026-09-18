@@ -156,7 +156,7 @@ fix findings in the code you touch rather than widening the ignore list in
 **The package is not installed in CI.** `pip install -e .` would pull `pfs-utils` (and
 transitively `pfs-datamodel`, `pfs-instdata`) from GitHub, making every run depend on
 three other repositories. CI installs only ordinary PyPI wheels (`pytest`, `numpy`,
-`pandas`, `matplotlib`, `seaborn`, `pyyaml`) and `tests/conftest.py` puts `python/` on
+`pandas`, `scipy`, `matplotlib`, `seaborn`, `pyyaml`) and `tests/conftest.py` puts `python/` on
 `sys.path`, so the stack-free suite imports `pfs.drp.qa.*` straight from the checkout.
 
 **Tests that need the stack** cannot be collected without it — a module-level
