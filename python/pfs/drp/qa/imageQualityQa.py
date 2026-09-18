@@ -539,11 +539,12 @@ class ImageQualityQaTask(PipelineTask):
                     dense_data = True
                 else:
                     self.log.warning(
-                        "Regular arc calexp fallback too sparse for %s"
-                        " (%d good, %.1f%% flagged); keeping %d arc-line measurements.",
+                        "Regular arc calexp fallback unusable for %s: %d of %d cross-dispersion"
+                        " samples measured cleanly (%.3f%% usable); keeping %d arc-line measurements.",
                         dataId,
                         n_good_calexp,
-                        100.0 * (1.0 - calexp_good_frac),
+                        len(calexp_data),
+                        100.0 * calexp_good_frac,
                         n_good_arc,
                     )
             else:
@@ -593,12 +594,17 @@ class ImageQualityQaTask(PipelineTask):
                     dense_data = True
                     force_sparse = False
                 else:
+                    # Report the denominator. "%d good, %.1f%% flagged" read as a
+                    # contradiction: the count is absolute, the percentage is over
+                    # ~50k cross-dispersion samples, and %.1f rounds 99.98 to 100.0
+                    # -- so 10 surviving samples printed as "100% flagged".
                     self.log.warning(
-                        "Quartz calexp too sparse for %s (%d good, %.1f%% flagged);"
-                        " trying the fiber profile calibration.",
+                        "Quartz calexp unusable for %s: %d of %d cross-dispersion samples"
+                        " measured cleanly (%.3f%% usable); trying the fiber profile calibration.",
                         dataId,
                         n_good_calexp,
-                        100.0 * (1.0 - calexp_good_frac),
+                        len(calexp_data),
+                        100.0 * calexp_good_frac,
                     )
 
             # The fiber profile widths are the secondary fallback, and the test

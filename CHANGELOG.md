@@ -64,6 +64,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   claimed the detector was fine on the strength of having measured nothing, and let a golden-set
   `known_good` entry be satisfied vacuously. `UNKNOWN` sits outside `STATUS_ORDER`: it is not a
   severity, it means unassessed. **This changes stored `qaStatus` values.**
+- **The calexp-sparsity log messages report their denominator.** `"10 good, 100.0% flagged"` read as
+  a contradiction: the count is absolute, the percentage is over ~50 000 cross-dispersion samples, and
+  `%.1f` rounded 99.98 to 100.0. They now read `"10 of 50000 cross-dispersion samples measured cleanly
+  (0.020% usable)"`. "Flagged" was also wrong — the complement of good includes a NaN FWHM, not just a
+  set flag. Log text only; no behaviour change.
 - **The fiber-profile fallback is reachable again for trace/quartz visits.** It hung off "no calexp"
   rather than "the calexp measurement failed", so a present-but-unusable calexp left the visit sparse
   with a good `fiberProfiles` unused. Observed on Run25 visit 133040, arm b, spectrograph 4 (10 good
