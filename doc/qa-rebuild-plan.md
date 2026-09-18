@@ -807,27 +807,57 @@ it (notebook section 3b) establishes nothing either way. A baseline has to be a 
 reduction of chosen visits on `main`, compared against the same visits on the branch —
 notebook section 3c.
 
-#### Remaining work on this ticket
+#### Remaining work on this ticket — handoff, 2026-09-18
 
-1. **Fill in the remaining `known_bad` entries** of `tests/data/goldenVisits.yaml` — the
-   stale-calib and saturated-frame reference cases for Phases 2 and 3. `known_good` is
-   done (Run25, 133025–133055).
+**Where it stands.** PR #76 is open; its body is current. Verdict parity against `main` is
+measured (666/666 quanta). The pipeline graph resolves. Three trace-path verdict changes are
+in and enumerated in the PR. `pfs.drp.qa.crossDispersion.measureRow` — the replacement
+width estimator — is written, tested (26 tests) and **validated on real quartz**, but
+**not yet wired into `imageQualityQa`**.
 
-   Sample sizes now clear the 20-detector floor `calibrateQaThresholds.py` enforces, per
-   arm (b=244, n=148, r=148, m=96) and per b-arm species (HgCd 24, each of Argon, Xenon,
-   Neon and Krypton 40). `b:HgCd` reaches 24 only because the 2025-12-01 block repeated
-   it; it is the tightest key and the one that matters most, being the one lamp whose
-   blue flag rates are genuine rather than lamp physics.
-2. ~~**Run `pipetask build`** against a real repo.~~ Done: the graph resolves and
-   `iqQaSpeciesMetrics` appears on `imageQualityQa` with dimensions
-   `{arm, spectrograph, visit}` and storage class `DataFrame`.
-3. **Re-derive the `imageQualityQa` thresholds** with `bin.src/calibrateQaThresholds.py`
-   once (1) is done, and replace the inherited provenance strings in
-   `pfs.drp.qa.metrics.definitions`. This is the point of Phases 0 and 1; until it
-   happens the thresholds are still the hand-tuned ones.
-4. **Measure and record Tier 2 volume and plotting cost** (section 1.4): time one
-   `dmResiduals` quantum with and without `generatePlot`, record the artifact size, and
-   estimate the compressed-Parquet size of `dmQaResidualData` for one visit.
+**Real-data validation of the new estimator** (Run25 visit 133040):
+
+| | b2 | r2 |
+|---|---|---|
+| Old `_buildImageWidthData` usable | 0.157 % | 0.004 % |
+| New `measureRow` usable | 92.0 % | 95.7 % |
+| New FWHM | 3.12 px | 3.17 px |
+| Calib (`fiberProfiles`) FWHM | 3.11 px | 2.88 px |
+| Runtime per quantum | 35 s | 35 s |
+
+b2 agrees with the calib to 0.5 %. **r2 reads 10 % wider than the calib, unexplained**: r2's
+inter-trace level is 4.5x b2's (median pixel 2028 vs 453), so it could be a real exposure
+difference, second-moment inflation of the calib width, or bias in `measureRow` from the
+higher level. Investigate before trusting r-arm trace FWHM.
+
+**Next, in order:**
+
+1. **Wire `measureRow` into `imageQualityQa._buildImageWidthData`.** Measure on *all*
+   detectorMap fibers per row (neighbours matter), then select requested fibers. Gate trace
+   FWHM on the `"trace:<arm>"` key chosen by `obs_type == "trace"`, not by the `traceOnly`
+   column. Where FWHM still comes only from `fiberProfiles`, leave it **ungated** so the
+   quantum reports `UNKNOWN` — that value is a calibration constant, identical every visit.
+2. **Explain the r2 10 % discrepancy** (above).
+3. **Re-reduce the golden visits including block C (135828-135850) and the twilight
+   visits**, then derive thresholds with `--filter "traceOnly == False"` for arcs.
+   Block B Argon (133042-133044) has no `fitDetectorMap` outputs in `PFS/defaults` —
+   upstream gap.
+4. **Decide the degenerate-threshold rule.** p95/p99 collapse on tight distributions
+   (filtered arcs: 0.03 px WARN band vs 0.077 px scatter). Candidates: FAIL at
+   median + k * robustRms, or p99.9.
+5. **Hold `medDxCenter`** thresholds until a known-bad case (e.g. the 150779/150782
+   flexure pair) verifies step 4. Derived r/n/m values are ~0.02 px vs shipped 1.0/2.0.
+6. **Measure Tier 2 volume and per-quantum plotting cost** — still open.
+
+**Filed elsewhere, drafts not in the repo:** a `drp_stella` ticket (`buildFiberProfiles.py:296`
+takes `sqrt` of a sigma since `5b882ab3`, 2024-03-21 — one-line fix; plus the second-moment
+width's background sensitivity), and a `drp_qa` ticket for the calexp estimator failure,
+which this work now resolves.
+
+**Why the calexp path failed:** `profileHalfWidth=7` against a measured fiber pitch of
+6.17 px on every arm — the old estimator's background pixels sat on the neighbouring fibers.
+Every Run25 quartz quantum (104) fell back to `fiberProfiles`, so every trace `medFwhm` in
+existing collections is a calibration constant, not a measurement.
 
 ### Full rebuild — Phases 2 to 6
 
