@@ -115,6 +115,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Fixed
 
+- **`calibrateQaThresholds.py` and the verification notebook no longer double-count.** Their Butler
+  queries lacked `findFirst=True`, so a chained collection returned every run's copy of a dataset: a
+  detector reduced twice was counted twice, inflating `n` and repeating values, which is exactly what
+  pushes p95 and p99 together. Found as 7 surplus b-arm datasets (360 found against 353 produced).
 - **`fluxCalQa` imports again.** It read `FilterCurve` / `TransmissionCurve` from
   `pfs.drp.stella.fitReference`, which `drp_stella` deleted in April 2025 (`178a1899`); they live in
   `fitFluxReference` now. Same class of breakage as the `getDescriptionCounts` import fixed by

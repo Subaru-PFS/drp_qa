@@ -89,7 +89,18 @@ def loadMetrics(args: argparse.Namespace) -> pd.DataFrame:
         raise SystemExit(1) from None
 
     butler = Butler(args.butler, collections=[args.collection])
-    refs = set(butler.registry.queryDatasets(args.dataset_type, where=args.where))
+    # findFirst: one dataset per data ID, taken from the first run in the chain
+    # that has it. Without it a chained collection returns every run's copy, so
+    # a detector reduced twice is counted twice -- inflating n and repeating
+    # values, which is precisely what drives p95 and p99 together.
+    refs = set(
+        butler.registry.queryDatasets(
+            args.dataset_type,
+            collections=[args.collection],
+            where=args.where,
+            findFirst=True,
+        )
+    )
     if not refs:
         # An empty result is reported as an error, not as "no data": a bad
         # collection name and an empty collection are different problems.
