@@ -183,6 +183,47 @@ confirmed stored and the plotting function has been extracted.** Deleting the re
 while leaving orphaned plotting code behind produces a module whose functions raise
 `NameError` on import of their dependencies — an easy and unhelpful mistake.
 
+### Found during `PIPE2D-1391-01` verification
+
+Two defects in the trace/quartz measurement path, both pre-existing and both out of scope
+for that ticket because fixing either changes QA verdicts. Observed on Run25 visit 133040
+(quartz), arm b, spectrograph 4.
+
+**1. The fiber-profile fallback is unreachable when a calexp exists but fails.**
+`imageQualityQa.run` structures the trace/quartz path as:
+
+```python
+if calexp is not None:
+    ...
+    else:                      # calexp present, measurement too sparse
+        log.warning("Quartz calexp too sparse ...; FWHM will be sparse.")
+elif fiberProfiles is not None:
+    ...                        # only reached when there is NO calexp
+```
+
+So the documented secondary fallback is only tried when `calexp` is absent, never when it
+is present and the measurement fails. On 133040/b4 the calexp path returned 10 good
+samples at 100 % flagged, and the task reported a sparse FWHM without consulting
+`fiberProfiles` — which would very likely have produced a usable trace width.
+
+**2. A quantum that measures nothing reports `PASS`.**
+When `medFwhm`, `pctFlagged` and `medDxCenter` are all NaN, every gate correctly returns
+"not judged", and `worstStatus` then falls through to its `PASS` default. The verdict says
+the detector is fine; what happened is that nothing was measured. This is the case
+[2.3](#23-status-and-recommended-action) reserves `UNKNOWN` for: *`UNKNOWN` must mean we
+could not measure, never we measured but could not combine.*
+
+It also blunts the golden set: a `known_good` entry is satisfied by a vacuous PASS, so the
+check passes without establishing anything. `examples/verify_PIPE2D-1391-01.ipynb`
+section 6 now reports these separately for that reason.
+
+**Reprocessing.** Fix 1 produces measurements that do not currently exist, so collections
+reduced before it must be re-run to benefit. Fix 2 is pure gating over values already
+stored in `iqQaMetrics`, so in principle it needs no pixel reprocessing — but nothing
+today re-gates a stored collection, which is the gap [1.4](#14-data-product-tiers-and-the-storage-contract)
+and R3 anticipate. Either add that re-gate step or re-run; for a handful of visits,
+re-running is cheaper than writing the tool.
+
 ### Known defects on `main`
 
 - `dmResiduals.py` imports `getDescriptionCounts` from
