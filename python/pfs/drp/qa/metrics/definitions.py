@@ -16,6 +16,7 @@ from pfs.drp.qa.metrics.registry import MetricDef, MetricRegistry, Thresholds
 
 __all__ = [
     "IQ_FLAG_RATE_FALLBACK",
+    "IQ_TRACE_FWHM_FALLBACK",
     "buildImageQualityRegistry",
     "imageQualityMetricDefs",
 ]
@@ -42,6 +43,13 @@ _INHERITED_FLAG_RATE = (
 #: Flag-rate thresholds for an arm with no entry in either config dict. Matches
 #: the fallback the task applied before the registry existed.
 IQ_FLAG_RATE_FALLBACK = Thresholds(warn=15.0, fail=20.0)
+
+#: Trace/quartz FWHM thresholds for an arm with no entry in either config dict.
+#: These are the arc-line values, which is the wrong quantity -- a fiber-profile
+#: width is not an arc-line second moment. They are a placeholder until the
+#: per-arm values are derived from the golden set's quartz visits, and the
+#: per-arm ``doc`` strings say so.
+IQ_TRACE_FWHM_FALLBACK = Thresholds(warn=3.2, fail=3.5)
 
 
 def imageQualityMetricDefs() -> tuple[MetricDef, ...]:
@@ -167,13 +175,12 @@ def buildImageQualityRegistry(config: Any) -> MetricRegistry:
                 warn=_attr(config, "fwhmWarnThreshold"),
                 fail=_attr(config, "fwhmFailThreshold"),
                 # Trace/quartz quanta measure a fiber-profile width, not an
-                # arc-line second moment, so they gate on their own key.
-                overrides={
-                    "trace": Thresholds(
-                        warn=_attr(config, "traceFwhmWarnThreshold"),
-                        fail=_attr(config, "traceFwhmFailThreshold"),
-                    )
-                },
+                # arc-line second moment, so they gate on their own keys:
+                # ``trace:<arm>`` first, then a bare ``trace`` fallback.
+                overrides=_traceOverrides(
+                    _attr(config, "traceFwhmWarnThreshold") or {},
+                    _attr(config, "traceFwhmFailThreshold") or {},
+                ),
             ),
             byName["pctFlagged"].withThresholds(
                 warn=IQ_FLAG_RATE_FALLBACK.warn,
@@ -192,6 +199,34 @@ def buildImageQualityRegistry(config: Any) -> MetricRegistry:
             byName["fitSpeciesYRms"],
         ]
     )
+
+
+def _traceOverrides(warn: Mapping[str, float], fail: Mapping[str, float]) -> dict[str, Thresholds]:
+    """Build the trace/quartz FWHM override keys from the per-arm config dicts.
+
+    Parameters
+    ----------
+    warn : `Mapping` [`str`, `float`]
+        WARN thresholds keyed by arm.
+    fail : `Mapping` [`str`, `float`]
+        FAIL thresholds keyed by arm.
+
+    Returns
+    -------
+    `dict` [`str`, `Thresholds`]
+        A ``trace:<arm>`` entry per configured arm, plus a bare ``trace`` entry
+        carrying `IQ_TRACE_FWHM_FALLBACK` for an arm with neither. The bare key
+        is what a trace quantum on an unconfigured arm lands on, so it must
+        exist or the metric would fall through to the arc-line thresholds
+        silently -- the very conflation the separate keys exist to prevent.
+    """
+    overrides = {"trace": IQ_TRACE_FWHM_FALLBACK}
+    for arm in sorted(set(warn) | set(fail)):
+        overrides[f"trace:{arm}"] = Thresholds(
+            warn=warn.get(arm, IQ_TRACE_FWHM_FALLBACK.warn),
+            fail=fail.get(arm, IQ_TRACE_FWHM_FALLBACK.fail),
+        )
+    return overrides
 
 
 def _pairOverrides(warn: Mapping[str, float], fail: Mapping[str, float]) -> dict[str, Thresholds]:

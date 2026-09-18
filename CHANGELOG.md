@@ -60,12 +60,15 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
-- **Trace/quartz FWHM is gated.** It was skipped entirely when `traceOnly=True`, so the
-  fiber-profile path had no metric that could fail. It now gates against new
-  `traceFwhmWarnThreshold` / `traceFwhmFailThreshold` fields, through the registry's `"trace"`
-  override key — a fiber-profile width is not an arc-line second moment, so it does not silently
-  borrow the arc thresholds. Those defaults **are** the arc values for now, and their `doc` strings
-  say so: re-derive them from the Run25 quartz visits, which is what they are in the golden set for.
+- **Trace/quartz FWHM is gated, per arm.** It was skipped entirely when `traceOnly=True`, so the
+  fiber-profile path had no metric that could fail. It now gates through the registry keys
+  `trace:<arm>` then `trace`, fed by `traceFwhmWarnThreshold` / `traceFwhmFailThreshold`, which are
+  `DictField`s keyed by arm. A fiber-profile width is not an arc-line second moment, so an
+  unconfigured arm lands on a trace-specific fallback rather than falling through to the arc
+  thresholds. Every value is currently the arc default and none is derived; the `doc` strings say
+  so. b, r and n have enough Run25 quartz to derive from (56/40/32 detectors); **m is hand-set and
+  stays that way** — its only quartz is the two short block B and C sequences, 16 detectors, below
+  the 20 floor.
 - **`pctFlagged` is suppressed on the fiber-profile path.** `_buildProfileData` sets `flag` to
   all-False unconditionally, so the metric was 0.0 by construction rather than by measurement — a
   statistic that cannot cross its own threshold (R1). It is now NaN there, as on the FLUXSTD path,

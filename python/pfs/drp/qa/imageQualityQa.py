@@ -293,29 +293,40 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " Set to a large value (e.g. 999) to disable."
         ),
     )
-    traceFwhmWarnThreshold = Field(
-        dtype=float,
-        default=3.2,
+    traceFwhmWarnThreshold = DictField(
+        keytype=str,
+        itemtype=float,
+        default={"b": 3.2, "r": 3.2, "n": 3.2, "m": 3.2},
         doc=(
-            "Median FWHM (pixels) above which a trace/quartz quantum measured from"
-            " fiber profile widths is set to WARN.  Separate from"
-            " ``fwhmWarnThreshold`` because a fiber-profile width is not the same"
-            " quantity as an arc-line second moment."
+            "Median FWHM (pixels), keyed by arm, above which a trace/quartz"
+            " quantum measured from fiber profile widths is set to WARN."
+            " Separate from ``fwhmWarnThreshold`` because a fiber-profile width"
+            " is not the same quantity as an arc-line second moment.  An arm"
+            " with no entry falls back to the arc-line thresholds."
             "\n\n"
-            "PROVENANCE: inherited from the arc-line thresholds as a starting"
-            " point; NOT yet derived from the golden visit set.  Re-derive from the"
-            " Run25 quartz visits with bin.src/calibrateQaThresholds.py, which is"
-            " what they are in the golden set for."
+            "PROVENANCE: every value here is currently the arc-line default and"
+            " NONE has been derived from the golden visit set.  For b, r and n"
+            " the Run25 trace visits do supply enough detectors to derive one"
+            " (56, 40 and 32 respectively, against a 20 floor) -- run"
+            " bin.src/calibrateQaThresholds.py over them and replace these."
+            "\n\n"
+            "The m arm is different and will stay hand-set for longer: Run25"
+            " holds only 4 m-arm trace visits (16 detectors, below the floor),"
+            " because the only m-arm quartz frames are the two short block B and"
+            " block C sequences.  Deriving it needs more m-arm quartz -- either"
+            " from another run, or accepting a cross-run derivation against a"
+            " different detectorMap_calib epoch."
         ),
     )
-    traceFwhmFailThreshold = Field(
-        dtype=float,
-        default=3.5,
+    traceFwhmFailThreshold = DictField(
+        keytype=str,
+        itemtype=float,
+        default={"b": 3.5, "r": 3.5, "n": 3.5, "m": 3.5},
         doc=(
-            "Median FWHM (pixels) above which a trace/quartz quantum measured from"
-            " fiber profile widths is set to FAIL.  See"
-            " ``traceFwhmWarnThreshold`` for provenance: these are the arc-line"
-            " values, not yet re-derived for trace widths."
+            "Median FWHM (pixels), keyed by arm, above which a trace/quartz"
+            " quantum measured from fiber profile widths is set to FAIL.  See"
+            " ``traceFwhmWarnThreshold`` for the provenance of every value and"
+            " for why the m arm cannot yet be derived."
         ),
     )
     flagRateWarnThreshold = DictField(
@@ -913,8 +924,9 @@ class ImageQualityQaTask(PipelineTask):
         # Trace FWHM is gated against its own thresholds. A fiber-profile width is
         # not the same quantity as an arc-line second moment, so it gets its own
         # key rather than borrowing the arc thresholds silently.
+        traceKeys = (f"trace:{arm}", "trace") if trace_only else ()
         gateResults = [
-            registry.gate("medFwhm", med_fwhm, keys=("trace",) if trace_only else ()),
+            registry.gate("medFwhm", med_fwhm, keys=traceKeys),
             registry.gate("pctFlagged", pct_flagged, keys=flagRateKeys),
             registry.gate("medDxCenter", medDxCenter),
         ]
