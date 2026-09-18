@@ -88,6 +88,22 @@ class TestCheckedInSet:
         for entry in loadGoldenVisits(includePlaceholders=True):
             assert entry.expect in ("PASS", "WARN", "FAIL")
 
+    def testTraceVisitsClearTheThresholdSampleFloor(self):
+        """The trace FWHM gate needs thresholds derived from quartz, not arcs.
+
+        b, r and n clear the floor; m does not, because the only m-arm traces are
+        the two short block B and block C sequences.
+        """
+        golden = loadGoldenVisits()
+        perArm = {}
+        for entry in golden.knownGood:
+            if entry.seqType != "Trace":
+                continue
+            for arm in entry.arms:
+                perArm[arm] = perArm.get(arm, 0) + len(entry.visits) * len(entry.spectrographs)
+        for arm in ("b", "r", "n"):
+            assert perArm.get(arm, 0) >= MIN_SAMPLES, f"{arm}: only {perArm.get(arm, 0)} trace detectors"
+
     def testEveryKnownGoodEntryNamesItsSequence(self):
         """The flag-rate threshold key is derived from seqType; it cannot be blank."""
         for entry in loadGoldenVisits().knownGood:

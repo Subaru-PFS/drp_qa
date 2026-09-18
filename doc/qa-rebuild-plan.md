@@ -245,6 +245,12 @@ The trace thresholds currently hold the arc-line values and say so in their `doc
 **re-deriving them from the Run25 quartz visits is outstanding**, and is exactly what those
 visits are in the golden set for.
 
+The Run25 uniformity set makes that derivation possible. Trace detectors per arm are now
+b=56, r=40, n=32 — all clear of the 20-sample floor — and m=16, which is not, because the
+only m-arm traces are the two short block B and block C sequences. So `b`, `r` and `n` can
+be derived now; `m` needs either more m-arm quartz or a hand-set value with its provenance
+stated.
+
 ### Known defects on `main`
 
 - `dmResiduals.py` imports `getDescriptionCounts` from

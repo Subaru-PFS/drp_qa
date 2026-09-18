@@ -12,7 +12,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 - **Golden visit set** (`tests/data/goldenVisits.yaml`) plus a stack-free loader,
   `pfs.drp.qa.metrics.goldenVisits`. `known_good` is the Run25 stable calibration sequence
-  (two blocks on 2025-11-10 and one on 2025-12-01) plus two clear twilight-sky sets;
+  (two blocks on 2025-11-10, one on 2025-12-01, and the uniformity set) plus three clear
+  twilight-sky sets;
   `known_bad` is the SM1 focus range (140005-140138) and a cloudy twilight set.
   Placeholder entries are excluded by default, so an unfilled entry cannot validate a threshold.
   Every entry carries a verdict: visits with none — a per-run calibration block, a drift series, the

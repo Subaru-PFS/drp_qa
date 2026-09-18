@@ -203,6 +203,35 @@ known_good:
     seqType: "Twilight sky"
     note: "Run25 twilight sky, 180 s. Reference case for the O2/OH sky-line check."
 
+  # Run25 "Uniformity" set. The trace visits here are what make a trace-FWHM
+  # threshold derivable: the fiber-profile path is gated on medFwhm, and a
+  # threshold for it has to come from quartz frames, not from the arc ones.
+  - visitRange: [133532, 133533]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    note: "Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace."
+  - visitRange: [133536, 133537]
+    arms: [b, r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    note: "Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace; n arm not read."
+  - visitRange: [134338, 134339]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    note: "Run25 uniformity set, 2025-11-21, az 290. 20 s scienceTrace."
+
+  # Twilight sky at insrot 90 rather than 0 -- the only entry at a different
+  # rotator angle, which is why it is worth having.
+  - visitRange: [135275, 135279]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Twilight sky"
+    note: >-
+      Run25 uniformity set, 2025-11-28, az 290, insrot 90. 180 s. Reference case
+      for the O2/OH sky-line check, as for the other twilight entries.
+
 known_bad:
   # Run25 twilight sky taken through cloud. Unlike the SM1 entry above this is
   # an observing condition rather than an instrument fault, but the degraded
