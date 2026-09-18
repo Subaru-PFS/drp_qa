@@ -458,6 +458,23 @@ do not go here. Select those by querying the Butler on sequence type, lamp and d
 the job runs: that stays correct for the next run without anyone editing the file, whereas
 a transcribed list is stale the moment observing continues.
 
+### What the shipped thresholds actually rest on
+
+Nothing written down. The `medFwhm` (3.2/3.5), `medDxCenter` (1.0/2.0) and `pctFlagged`
+values arrived with `imageQualityQa` itself in commit `8a69c05` (2026-08-11), and no
+derivation was recorded — not in the commit message, which explains the threshold
+*structure* at length but not the numbers; not in the field docs beyond "Tuned for
+arm-b"; not in `README.md` or this file, which restate them without justifying them.
+
+The per-species *shape* of the flag-rate thresholds is well justified: Ar, Xe and Kr have
+almost no usable blue lines, so a single b-arm threshold cannot work. The specific
+percentages are not.
+
+So treat all of them as R2 violations inherited rather than introduced, and re-derive
+them. The registry's provenance strings say `ORIGIN UNRECORDED` rather than inventing a
+plausible history — a guess dressed as a fact is worse than an admitted gap, because only
+one of them prompts anyone to fix it.
+
 ### Threshold derivation procedure
 
 Follow this for every threshold:
