@@ -575,6 +575,7 @@ class ImageQualityQaTask(PipelineTask):
             # does not apply to a quartz frame, so the visit stays sparse
             # unless one of the two measurement paths succeeds.
             force_sparse = True
+            calexp_failed = False
             if calexp is not None:
                 self.log.info(
                     "Regular trace/quartz %s: measuring FWHM from calexp.",
@@ -598,6 +599,7 @@ class ImageQualityQaTask(PipelineTask):
                     # contradiction: the count is absolute, the percentage is over
                     # ~50k cross-dispersion samples, and %.1f rounds 99.98 to 100.0
                     # -- so 10 surviving samples printed as "100% flagged".
+                    calexp_failed = True
                     self.log.warning(
                         "Quartz calexp unusable for %s: %d of %d cross-dispersion samples"
                         " measured cleanly (%.3f%% usable); trying the fiber profile calibration.",
@@ -614,7 +616,12 @@ class ImageQualityQaTask(PipelineTask):
             # present but measures badly left the visit sparse with a perfectly
             # good fiberProfiles sitting unused.
             if not dense_data and fiberProfiles is not None:
-                self.log.info(
+                # Log the resolution at the level of the problem it resolves. When
+                # the calexp measurement failed, the line above was a WARNING, and
+                # an INFO follow-up means an operator filtering at WARNING sees the
+                # failure but never learns it was recovered from.
+                report = self.log.warning if calexp_failed else self.log.info
+                report(
                     "Regular trace/quartz %s: falling back to fiber profile calibration widths.",
                     dataId,
                 )
