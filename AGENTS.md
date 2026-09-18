@@ -507,7 +507,10 @@ to be had. A known_bad entry that names `medFwhm` is only checked against `medFw
 it asserts nothing about the other metrics.
 
 Group with `--group-by arm` (and `--group-by description` once metrics are long-format)
-wherever the physics differs per group. Blue-arm flag rates are the standing example: a
+wherever the physics differs per group. **Filter before grouping** when a group mixes
+populations: `--group-by arm` alone puts arcs and quartz together, and quartz FWHM from the
+fiber-profile fallback is read from a *calibration*, so it is the same value every visit and
+lands in the tail. `--filter "traceOnly == False"` keeps the arc threshold an arc threshold. Blue-arm flag rates are the standing example: a
 single blended threshold is dominated by the species mix, not by the instrument.
 
 The pure functions behind the CLI live in `pfs.drp.qa.metrics.thresholds`

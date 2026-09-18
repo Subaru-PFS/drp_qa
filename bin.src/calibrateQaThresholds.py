@@ -243,6 +243,15 @@ def main() -> int:
     parser.add_argument("--csv", help="Read metrics from a CSV instead of the Butler.")
     parser.add_argument("-w", "--where", default="", help="Butler query expression to narrow the query.")
     parser.add_argument(
+        "--filter",
+        default=None,
+        help=(
+            "pandas query applied to the metrics before anything else, e.g. "
+            '"traceOnly == False" to derive arc thresholds without the quartz rows. '
+            "Unlike --where it can use any column, not just dimensions."
+        ),
+    )
+    parser.add_argument(
         "--golden",
         default=None,
         help=f"Golden visit set YAML (default: {defaultGoldenVisitsPath()}).",
@@ -278,6 +287,21 @@ def main() -> int:
         return 1
 
     metrics = loadMetrics(args)
+    if args.filter:
+        # Applied before the golden-set split so good and bad rows are filtered
+        # alike. Without it, --group-by arm mixes arcs and quartz, and the quartz
+        # rows -- read from a calibration, so identical visit to visit -- land in
+        # the arc tail and become the arc threshold.
+        before = len(metrics)
+        try:
+            metrics = metrics.query(args.filter)
+        except Exception as exc:
+            print(f"--filter {args.filter!r} is not a valid query: {exc}", file=sys.stderr)
+            return 1
+        print(f"--filter {args.filter!r}: kept {len(metrics)} of {before} rows", file=sys.stderr)
+        if metrics.empty:
+            print("The filter removed every row.", file=sys.stderr)
+            return 1
     good = selectVisits(metrics, golden, "good")
     bad = selectVisits(metrics, golden, "bad")
 

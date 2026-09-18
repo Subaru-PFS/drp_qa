@@ -24,6 +24,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **`pfs.drp.qa.metrics.thresholds`** — the threshold derivation procedure as pure functions: WARN at
   p95 and FAIL at p99 of the known-good distribution, or a physical limit, plus the provenance
   sentence for the config field's `doc`.
+- **`calibrateQaThresholds.py --filter`** — a pandas query applied to the metrics before
+  derivation, e.g. `--filter "traceOnly == False"`. Without it, `--group-by arm` mixes arcs and
+  quartz, and the quartz rows — read from a calibration, so identical visit to visit — land in the
+  arc tail and become the arc threshold. Unlike `--where` it can use any column.
 - **`bin.src/calibrateQaThresholds.py`** — runs that procedure over a Butler collection or a CSV and
   prints suggested config values. Exits non-zero on too few samples, or when the known-bad data does
   not cross the suggested FAIL.
