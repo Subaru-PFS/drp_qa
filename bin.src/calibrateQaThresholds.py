@@ -247,7 +247,7 @@ def main() -> int:
         default=None,
         help=(
             "pandas query applied to the metrics before anything else, e.g. "
-            '"traceOnly == False" to derive arc thresholds without the quartz rows. '
+            "\"obsType == 'arc'\" to derive arc thresholds without the quartz rows. "
             "Unlike --where it can use any column, not just dimensions."
         ),
     )

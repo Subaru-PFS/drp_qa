@@ -25,9 +25,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   p95 and FAIL at p99 of the known-good distribution, or a physical limit, plus the provenance
   sentence for the config field's `doc`.
 - **`calibrateQaThresholds.py --filter`** — a pandas query applied to the metrics before
-  derivation, e.g. `--filter "traceOnly == False"`. Without it, `--group-by arm` mixes arcs and
-  quartz, and the quartz rows — read from a calibration, so identical visit to visit — land in the
-  arc tail and become the arc threshold. Unlike `--where` it can use any column.
+  derivation, e.g. `--filter "obsType == 'arc'"`. Without it, `--group-by arm` mixes arcs and
+  quartz, and a quartz trace width is not an arc-line second moment. Filter on `obsType`, not
+  `traceOnly`: a quartz quantum measured from its calexp has `traceOnly = False`. Unlike `--where`
+  it can use any column.
 - **`bin.src/calibrateQaThresholds.py`** — runs that procedure over a Butler collection or a CSV and
   prints suggested config values. Exits non-zero on too few samples, or when the known-bad data does
   not cross the suggested FAIL.
@@ -64,6 +65,23 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
+- **`imageQualityQa` measures calexp trace widths with a new estimator**,
+  `pfs.drp.qa.crossDispersion.measureImageWidths`: each trace is fitted jointly with its neighbours
+  instead of from a fixed 15 px strip. At the measured 6.17 px fiber pitch the old strip's
+  "background" pixels sat on the neighbouring fibers, so on Run25 quartz 0.004-0.23 % of samples
+  were usable and every quartz quantum fell back to `fiberProfiles`. On real quartz (133040) the new
+  one finds 92 % (b2) and 96 % (r2) usable, and b2 agrees with its calib to 0.5 %. **Expect quartz
+  `medFwhm` to change** in new collections: it is now measured, not a calibration constant. r2 reads
+  about 10 % wider than its calib, unexplained so far. `fluxErr` is now the fit's standard error
+  rather than a constant 1, and `dxCenter` uses the fitted centroid. About 35 s per quantum.
+- **Trace FWHM gating keys off `obsType == "trace"`**, not `traceOnly`, and **FWHM read from
+  `fiberProfiles` is no longer gated**. That value is a calibration constant, identical every visit,
+  so it cannot distinguish a good exposure from a bad one; such a quantum now reports `UNKNOWN`
+  (reason: "FWHM read from the fiberProfiles calibration, not measured; not gated") unless another
+  metric judges it.
+- **`imageQualityQa:profileHalfWidth` is deprecated and ignored** — the new estimator uses no aperture.
+- **`imageQualityQa:minPeakSN`** now thresholds the fitted flux over its standard error, not the
+  peak over an edge-pixel scatter.
 - **Trace/quartz FWHM is gated, per arm.** It was skipped entirely when `traceOnly=True`, so the
   fiber-profile path had no metric that could fail. It now gates through the registry keys
   `trace:<arm>` then `trace`, fed by `traceFwhmWarnThreshold` / `traceFwhmFailThreshold`, which are

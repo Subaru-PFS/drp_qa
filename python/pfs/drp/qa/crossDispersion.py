@@ -64,14 +64,23 @@ fiber's fit depends on its *physical* neighbours. Callers select the fibers they
 want afterwards. Measured PFS pitch is 6.17 px on every arm (Run25), against the
 7 px half-width of the estimator this replaces.
 
-Pure numpy: no Butler, no stack, unit-tested in ``tests/test_crossDispersion.py``.
+`measureImageWidths` applies `measureRow` to the sampled rows of a whole
+detector and returns the per-sample table ``imageQualityQa`` writes to
+``iqQaData``. It takes the detector-map predictions as arrays, so the task does
+the stack calls and everything after them is testable here.
+
+No Butler, no stack -- numpy, scipy and pandas -- unit-tested in
+``tests/test_crossDispersion.py``, including on real quartz rows.
 """
 
+from collections.abc import Collection
+
 import numpy as np
+import pandas as pd
 from numpy.typing import ArrayLike
 from scipy.special import erf
 
-__all__ = ["FWHM_FACTOR", "measureRow"]
+__all__ = ["FWHM_FACTOR", "IMAGE_WIDTH_COLUMNS", "measureImageWidths", "measureRow"]
 
 #: Gaussian sigma to FWHM.
 FWHM_FACTOR = 2.0 * np.sqrt(2.0 * np.log(2.0))
@@ -365,3 +374,100 @@ def measureRow(
         out[key][order] = np.where(good, value, np.nan)
     out["flag"][order] = ~good
     return out
+
+
+#: Columns of the table `measureImageWidths` returns, in order.
+IMAGE_WIDTH_COLUMNS = (
+    "fiberId", "x", "y", "lam", "fwhm", "theta", "flux", "fluxErr",
+    "flag", "traceOnly", "peakRatio", "dxCenter", "snr",
+)  # fmt: skip
+
+
+def measureImageWidths(
+    image: ArrayLike,
+    variance: ArrayLike,
+    bad: ArrayLike,
+    rows: ArrayLike,
+    fiberIds: ArrayLike,
+    xCenters: ArrayLike,
+    wavelengths: ArrayLike,
+    calibXCenters: ArrayLike | None = None,
+    *,
+    select: Collection[int] | None = None,
+    minPeakSN: float = 5.0,
+) -> pd.DataFrame:
+    """Measure trace widths on sampled rows of a detector image.
+
+    Every fiber in ``fiberIds`` is fitted on every row, because a fiber's fit
+    depends on its physical neighbours; ``select`` restricts only which fibers
+    are *reported*.
+
+    Parameters
+    ----------
+    image, variance : array-like, shape (nRows, nCols)
+        Image and variance planes of the sampled rows.
+    bad : array-like of `bool`, shape (nRows, nCols)
+        True for pixels to ignore (masked BAD, SAT, CR, NO_DATA).
+    rows : array-like, shape (nRows,)
+        Detector row (y) of each sampled row.
+    fiberIds : array-like of `int`, shape (nFibers,)
+        Every fiber the detector map knows on this detector.
+    xCenters, wavelengths : array-like, shape (nRows, nFibers)
+        Detector-map x-center and wavelength of each fiber on each row.
+    calibXCenters : array-like, shape (nRows, nFibers), optional
+        x-center predicted by the static calibration detector map. When given,
+        ``dxCenter`` is that prediction minus the measured centroid.
+    select : collection of `int`, optional
+        Fiber IDs to report. `None` reports every fiber.
+    minPeakSN : `float`, optional
+        Passed to `measureRow`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        One row per reported (fiber, row) sample with a finite x-center and
+        wavelength, with columns `IMAGE_WIDTH_COLUMNS`. ``x`` is the
+        detector-map prediction, not the fitted centroid. ``fluxErr`` and
+        ``snr`` come from the fit's covariance. ``traceOnly`` is `False`:
+        these are measurements of the exposure, not widths read back from a
+        calibration.
+    """
+    image = np.asarray(image, dtype=np.float64)
+    variance = np.asarray(variance, dtype=np.float64)
+    bad = np.asarray(bad, dtype=bool)
+    rows = np.asarray(rows, dtype=np.float64)
+    fiberIds = np.asarray(fiberIds, dtype=np.int32)
+    xCenters = np.asarray(xCenters, dtype=np.float64)
+    wavelengths = np.asarray(wavelengths, dtype=np.float64)
+    calib = None if calibXCenters is None else np.asarray(calibXCenters, dtype=np.float64)
+
+    report = np.ones(len(fiberIds), dtype=bool) if select is None else np.isin(fiberIds, list(select))
+
+    frames = []
+    for ii, y in enumerate(rows):
+        result = measureRow(image[ii], bad[ii], variance[ii], xCenters[ii], minPeakSN=minPeakSN)
+        keep = report & np.isfinite(xCenters[ii]) & np.isfinite(wavelengths[ii])
+        n = int(keep.sum())
+        dxCenter = calib[ii][keep] - result["centroid"][keep] if calib is not None else np.full(n, np.nan)
+        frames.append(
+            pd.DataFrame(
+                {
+                    "fiberId": fiberIds[keep],
+                    "x": xCenters[ii][keep],
+                    "y": np.full(n, y),
+                    "lam": wavelengths[ii][keep],
+                    "fwhm": result["fwhm"][keep],
+                    "theta": np.zeros(n),
+                    "flux": result["flux"][keep],
+                    "fluxErr": result["fluxErr"][keep],
+                    "flag": result["flag"][keep],
+                    "traceOnly": np.zeros(n, dtype=bool),
+                    "peakRatio": result["peakRatio"][keep],
+                    "dxCenter": dxCenter,
+                    "snr": result["snr"][keep],
+                }
+            )
+        )
+    if not frames:
+        return pd.DataFrame(columns=list(IMAGE_WIDTH_COLUMNS))
+    return pd.concat(frames, ignore_index=True)

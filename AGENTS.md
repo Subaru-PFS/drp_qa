@@ -508,9 +508,10 @@ it asserts nothing about the other metrics.
 
 Group with `--group-by arm` (and `--group-by description` once metrics are long-format)
 wherever the physics differs per group. **Filter before grouping** when a group mixes
-populations: `--group-by arm` alone puts arcs and quartz together, and quartz FWHM from the
-fiber-profile fallback is read from a *calibration*, so it is the same value every visit and
-lands in the tail. `--filter "traceOnly == False"` keeps the arc threshold an arc threshold. Blue-arm flag rates are the standing example: a
+populations: `--group-by arm` alone puts arcs and quartz together, and a quartz trace width is
+not an arc-line second moment. `--filter "obsType == 'arc'"` keeps the arc threshold an arc
+threshold. Do not filter on `traceOnly`: it only marks FWHM read from `fiberProfiles`, and a
+quartz quantum measured from its calexp has `traceOnly == False`. Blue-arm flag rates are the standing example: a
 single blended threshold is dominated by the species mix, not by the instrument.
 
 The pure functions behind the CLI live in `pfs.drp.qa.metrics.thresholds`
@@ -592,10 +593,10 @@ fallback is preferred in that case.
 | Config field | Purpose |
 |---|---|
 | `minGoodLines` (default 10) | Min good arc-line measurements to trust the arc path |
-| `minPeakSN` (default 5.0) | Min peak S/N for calexp profile samples |
+| `minPeakSN` (default 5.0) | Min significance (fitted trace flux over its error) for calexp width samples |
 | `maxCalexpFlagRate` (default 0.5) | Max fraction of bad calexp samples before rejecting calexp path |
 | `minFluxstdGoodFrac` (default 0.10) | Min fraction of good FLUXSTD samples for stellar calexp path |
-| `profileHalfWidth` (default 7) | Half-width (px) of the cross-dispersion aperture for calexp measurements |
+| `profileHalfWidth` | Deprecated and ignored; the calexp estimator (`pfs.drp.qa.crossDispersion`) fits each trace with its neighbours and needs no aperture |
 | `profileYStride` (default 50) | Row sampling interval (px) for calexp profile measurements |
 | `fwhmWarnThreshold` / `fwhmFailThreshold` (3.2/3.5 px) | FWHM pass/warn/fail thresholds |
 | `dxCenterWarnThreshold` / `dxCenterFailThreshold` (1.0/2.0 px) | `\|medDxCenter\|` flexure thresholds |
@@ -629,7 +630,9 @@ dict as a Python literal:
   `detectorMap_calib`, a flexure diagnostic
 - `pctFlagged`: percentage of arc lines flagged by `fitDetectorMap`
 - `nLines`: number of measurements used
-- `traceOnly`: True when falling back to fiber-profile widths
+- `traceOnly`: True when FWHM was read from `fiberProfiles`. That value is a calibration
+  constant, so `medFwhm` is then **not gated** and the quantum reports `UNKNOWN` unless another
+  metric judges it. Trace FWHM gating keys off `obsType == "trace"`, not this column.
 - `obsType` / `seqName`: visit classification and raw `W_SEQNAM`
 - `qaStatus`: `"PASS"`, `"WARN"`, or `"FAIL"` — the worst of the FWHM, flag-rate, and
   `|medDxCenter|` checks

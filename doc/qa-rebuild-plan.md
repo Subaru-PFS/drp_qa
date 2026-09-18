@@ -809,11 +809,12 @@ notebook section 3c.
 
 #### Remaining work on this ticket — handoff, 2026-09-18
 
-**Where it stands.** PR #76 is open; its body is current. Verdict parity against `main` is
-measured (666/666 quanta). The pipeline graph resolves. Three trace-path verdict changes are
-in and enumerated in the PR. `pfs.drp.qa.crossDispersion.measureRow` — the replacement
-width estimator — is written, tested (26 tests) and **validated on real quartz**, but
-**not yet wired into `imageQualityQa`**.
+**Where it stands.** PR #76 is open. Verdict parity against `main` is measured (666/666
+quanta). The pipeline graph resolves. Three trace-path verdict changes are in and enumerated
+in the PR. `pfs.drp.qa.crossDispersion.measureRow` — the replacement width estimator — is
+written, tested and **validated on real quartz**, and is now **wired into `imageQualityQa`**
+through the stack-free `measureImageWidths` (step 1 below), but that wiring has **not yet run
+under `pipetask`** — it was written without the stack.
 
 **Real-data validation of the new estimator** (Run25 visit 133040):
 
@@ -832,14 +833,22 @@ higher level. Investigate before trusting r-arm trace FWHM.
 
 **Next, in order:**
 
-1. **Wire `measureRow` into `imageQualityQa._buildImageWidthData`.** Measure on *all*
-   detectorMap fibers per row (neighbours matter), then select requested fibers. Gate trace
-   FWHM on the `"trace:<arm>"` key chosen by `obs_type == "trace"`, not by the `traceOnly`
-   column. Where FWHM still comes only from `fiberProfiles`, leave it **ungated** so the
-   quantum reports `UNKNOWN` — that value is a calibration constant, identical every visit.
+1. ~~**Wire `measureRow` into `imageQualityQa._buildImageWidthData`.**~~ Done, 2026-09-18:
+   `_buildImageWidthData` now gathers detectorMap predictions and calls
+   `crossDispersion.measureImageWidths`, which fits every fiber and reports only the selected
+   ones. Trace FWHM gates on `trace:<arm>` chosen by `obs_type == "trace"`; FWHM from
+   `fiberProfiles` is ungated (`UNKNOWN`). `profileHalfWidth` is deprecated. Tested on the real
+   quartz exports in CI. **Still to do: run it under `pipetask`** on 133040 b2/r2 into
+   `u/$USER/tickets/PIPE2D-1391-01/branch` and confirm `medFwhm` ≈ 3.12 / 3.17 px, ~35 s per
+   quantum, and `qaStatus` from the `trace:<arm>` gate.
+
+   **Consequence for step 3:** a quartz quantum measured from its calexp has
+   `traceOnly == False`, so `--filter "traceOnly == False"` no longer excludes quartz. Use
+   `--filter "obsType == 'arc'"` (works on old and new collections alike).
 2. **Explain the r2 10 % discrepancy** (above).
 3. **Re-reduce the golden visits including block C (135828-135850) and the twilight
-   visits**, then derive thresholds with `--filter "traceOnly == False"` for arcs.
+   visits**, then derive thresholds with `--filter "obsType == 'arc'"` for arcs, and
+   `--filter "obsType == 'trace'"` for the `trace:<arm>` keys.
    Block B Argon (133042-133044) has no `fitDetectorMap` outputs in `PFS/defaults` —
    upstream gap.
 4. **Decide the degenerate-threshold rule.** p95/p99 collapse on tight distributions

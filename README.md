@@ -162,7 +162,8 @@ is applied to the cross-dispersion intensity profile measured at regular row int
   `pctLowSN` is usually lamp physics, `pctMeasFail` usually is not.
 - **`nLines`** — Number of measurements used (arc lines, calexp samples, or profile swaths).
 - **`traceOnly`** — `True` when FWHM comes from fiber profile calibration widths rather than live measurements; these
-  values reflect the calibration epoch, not the current visit.
+  values reflect the calibration epoch, not the current visit, so `medFwhm` is not gated for them. A quartz visit
+  measured from its calexp has `traceOnly = False`; select quartz with `obsType == "trace"`.
 - **`obsType`** / **`seqName`** — Visit classification (`arc`, `trace`, `science`, `allsky`,
   `unknown`) and the raw `W_SEQNAM` string (e.g. `"Arc: HgCd"`) it was derived from.
 - **`qaStatus`** — `PASS`, `WARN`, or `FAIL`; the worst of the `medFwhm`, `pctFlagged`, and
@@ -201,12 +202,12 @@ counts and for the `minSignalToNoisePerSpecies` option in `drp_stella` that addr
 ###### Measurement
 
 - `imageQualityQa:minGoodLines`: Minimum good arc-line measurements to trust the arc path. Default `10`.
-- `imageQualityQa:minPeakSN`: Minimum peak S/N for calexp profile samples. Default `5.0`.
+- `imageQualityQa:minPeakSN`: Minimum significance (fitted trace flux over its error) for calexp width samples. Default `5.0`.
 - `imageQualityQa:maxCalexpFlagRate`: Max fraction of bad calexp samples before rejecting the calexp path. Default
   `0.5`.
 - `imageQualityQa:minFluxstdGoodFrac`: Min fraction of good FLUXSTD samples for the stellar calexp path. Default `0.10`.
-- `imageQualityQa:profileHalfWidth`: Half-width (pixels) of the cross-dispersion aperture for calexp measurements.
-  Default `7`.
+- `imageQualityQa:profileHalfWidth`: Deprecated and ignored. The calexp estimator fits each trace jointly with its
+  neighbours and uses no fixed aperture.
 - `imageQualityQa:profileYStride`: Row sampling interval (pixels) for calexp profile measurements. Default `50`.
 
 ###### Pass/Fail Thresholds
