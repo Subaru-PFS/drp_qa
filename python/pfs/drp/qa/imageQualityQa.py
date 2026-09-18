@@ -34,7 +34,7 @@ from lsst.pipe.base.connectionTypes import (
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
 from pfs.drp.qa.metrics.definitions import buildImageQualityRegistry
 from pfs.drp.qa.metrics.longFormat import longRecords, toLongFrame
-from pfs.drp.qa.metrics.registry import worstStatus
+from pfs.drp.qa.metrics.registry import UNKNOWN, worstStatus
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
 from pfs.drp.stella.utils.stability import addTraceLambdaToArclines
@@ -81,7 +81,8 @@ class ImageQualityQaConnections(
             " Columns: ``visit``, ``arm``, ``spectrograph``, ``medFwhm``,"
             " ``medDxCenter``, ``dxCenterRms``, ``pctFlagged``,"
             " ``pctLowSN``, ``pctMeasFail``,"
-            " ``nLines``, ``traceOnly``, ``qaStatus``."
+            " ``nLines``, ``traceOnly``, ``qaStatus`` (PASS/WARN/FAIL, or"
+            " UNKNOWN when no metric could be measured)."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -593,22 +594,31 @@ class ImageQualityQaTask(PipelineTask):
                     force_sparse = False
                 else:
                     self.log.warning(
-                        "Quartz calexp too sparse for %s (%d good, %.1f%% flagged); FWHM will be sparse.",
+                        "Quartz calexp too sparse for %s (%d good, %.1f%% flagged);"
+                        " trying the fiber profile calibration.",
                         dataId,
                         n_good_calexp,
                         100.0 * (1.0 - calexp_good_frac),
                     )
-            elif fiberProfiles is not None:
+
+            # The fiber profile widths are the secondary fallback, and the test
+            # is whether the calexp path produced a usable result -- not whether
+            # a calexp existed. Hanging this off ``calexp is None`` made the
+            # fallback unreachable exactly when it was needed: a calexp that is
+            # present but measures badly left the visit sparse with a perfectly
+            # good fiberProfiles sitting unused.
+            if not dense_data and fiberProfiles is not None:
                 self.log.info(
-                    "Regular trace/quartz %s: no calexp; falling back to fiber profile calibration widths.",
+                    "Regular trace/quartz %s: falling back to fiber profile calibration widths.",
                     dataId,
                 )
                 data = self._buildProfileData(fiberProfiles, detectorMap)
                 dense_data = True
                 force_sparse = False
-            else:
+            elif not dense_data:
                 self.log.warning(
-                    "Regular trace/quartz %s: no calexp and no fiberProfiles; FWHM will be sparse.",
+                    "Regular trace/quartz %s: neither a usable calexp measurement nor"
+                    " fiberProfiles; FWHM will be sparse.",
                     dataId,
                 )
 
@@ -863,10 +873,19 @@ class ImageQualityQaTask(PipelineTask):
             registry.gate("pctFlagged", pct_flagged, keys=flagRateKeys),
             registry.gate("medDxCenter", medDxCenter),
         ]
-        qa_status = worstStatus(gateResults)
+        # UNKNOWN, not PASS, when every gate declined to judge. A quantum where
+        # nothing could be measured is unassessed, and reporting PASS would say
+        # the detector is fine on the strength of having looked at nothing --
+        # which also lets a golden-set known_good entry be satisfied vacuously.
+        qa_status = worstStatus(gateResults, default=UNKNOWN)
         reasons = [result.reason for result in gateResults if result is not None and result.reason]
 
-        reason_str = "; ".join(reasons) if reasons else "all metrics nominal"
+        if reasons:
+            reason_str = "; ".join(reasons)
+        elif qa_status == UNKNOWN:
+            reason_str = "no metric could be measured"
+        else:
+            reason_str = "all metrics nominal"
         dxStr = f"{medDxCenter:+.3f}px" if np.isfinite(medDxCenter) else "NaN"
         self.log.info(
             "IQ QA %-4s  %s  %-22s  medFWHM=%.2fpx  dxCenter=%s  pctFlagged=%s  [%s]",

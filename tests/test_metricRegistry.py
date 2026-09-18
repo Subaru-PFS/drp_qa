@@ -16,6 +16,7 @@ from pfs.drp.qa.metrics.definitions import (
 )
 from pfs.drp.qa.metrics.registry import (
     STATUS_ORDER,
+    UNKNOWN,
     MetricDef,
     MetricRegistry,
     Thresholds,
@@ -199,6 +200,20 @@ class TestWorstStatus:
 
     def testStatusOrderIsBestToWorst(self):
         assert STATUS_ORDER == ("PASS", "WARN", "FAIL")
+
+    def testUnknownIsOutsideTheOrdering(self):
+        """It is not a severity; a detector that could not be measured is unassessed."""
+        assert UNKNOWN not in STATUS_ORDER
+
+    def testDefaultIsReturnedWhenNothingWasJudged(self):
+        """The case that makes a vacuous PASS impossible."""
+        assert worstStatus([None, None], default=UNKNOWN) == UNKNOWN
+        assert worstStatus([], default=UNKNOWN) == UNKNOWN
+
+    def testOneRealVerdictBeatsTheDefault(self, fwhm):
+        """A single measurable metric still decides; UNKNOWN means none of them were."""
+        assert worstStatus([None, fwhm.gate(2.0), None], default=UNKNOWN) == "PASS"
+        assert worstStatus([None, fwhm.gate(3.6)], default=UNKNOWN) == "FAIL"
 
 
 class TestImageQualityDefinitions:

@@ -59,6 +59,15 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
+- **A quantum that measures nothing now reports `UNKNOWN`, not `PASS`.** When every gate
+  declines to judge, `imageQualityQa` passes `default=UNKNOWN` to `worstStatus`. Reporting PASS
+  claimed the detector was fine on the strength of having measured nothing, and let a golden-set
+  `known_good` entry be satisfied vacuously. `UNKNOWN` sits outside `STATUS_ORDER`: it is not a
+  severity, it means unassessed. **This changes stored `qaStatus` values.**
+- **The fiber-profile fallback is reachable again for trace/quartz visits.** It hung off "no calexp"
+  rather than "the calexp measurement failed", so a present-but-unusable calexp left the visit sparse
+  with a good `fiberProfiles` unused. Observed on Run25 visit 133040, arm b, spectrograph 4 (10 good
+  samples, 100 % flagged). **This changes `medFwhm` from NaN to a real value on affected quanta.**
 - **Plotting moved to `pfs.drp.qa.plotting`** (`palettes`, `dmResiduals`, `dmCombined`, `iqQa`).
   DataFrames in, `Figure` out; no Butler and no task class, checked statically by
   `tests/test_plotting.py`. `pfs.drp.qa.utils.plotting` and `pfs.drp.qa.iqQaPlots` remain as shims.

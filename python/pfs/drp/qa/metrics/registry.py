@@ -30,6 +30,7 @@ from dataclasses import dataclass, field, replace
 
 __all__ = [
     "STATUS_ORDER",
+    "UNKNOWN",
     "GateResult",
     "MetricDef",
     "MetricRegistry",
@@ -39,12 +40,21 @@ __all__ = [
 
 #: Gate verdicts, from best to worst.
 #:
-#: ``UNKNOWN`` is deliberately absent. "We could not measure" is a statement
-#: about a whole quantum, not about one value, and only the task knows whether
-#: *every* measurement was missing or just one. `MetricRegistry.gate` therefore
-#: returns ``None`` for a value it cannot judge, and the task decides what a
-#: quantum of nothing but ``None`` means (see plan section 2.3).
+#: ``UNKNOWN`` is deliberately absent from the *ordering*. "We could not
+#: measure" is a statement about a whole quantum, not about one value, and only
+#: the task knows whether *every* measurement was missing or just one.
+#: `MetricRegistry.gate` therefore returns ``None`` for a value it cannot judge,
+#: and the task decides what a quantum of nothing but ``None`` means -- normally
+#: by passing ``default=UNKNOWN`` to `worstStatus`.
 STATUS_ORDER = ("PASS", "WARN", "FAIL")
+
+#: The verdict for a quantum where nothing could be measured.
+#:
+#: It sits outside `STATUS_ORDER` because it is not a severity: a detector that
+#: could not be measured is not "worse than PASS but better than WARN", it is
+#: unassessed. Reporting PASS instead would say the detector is fine on the
+#: strength of having looked at nothing (plan section 2.3).
+UNKNOWN = "UNKNOWN"
 
 
 @dataclass(frozen=True)
@@ -413,7 +423,12 @@ def worstStatus(statuses: Iterable[str | GateResult | None], default: str = "PAS
         Status strings, `GateResult` objects, or ``None`` for metrics that were
         not judged. ``None`` entries are skipped.
     default : `str`, optional
-        Result when nothing was judged. Default is ``"PASS"``.
+        Result when nothing was judged -- every entry was ``None``. Defaults to
+        ``"PASS"`` for callers that want the old behaviour, but a task whose
+        metrics were all unmeasurable should pass `UNKNOWN`: PASS would claim
+        the detector is fine on the strength of having measured nothing. The
+        default is returned as given and is not required to be in
+        `STATUS_ORDER`.
 
     Returns
     -------

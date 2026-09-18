@@ -183,11 +183,13 @@ confirmed stored and the plotting function has been extracted.** Deleting the re
 while leaving orphaned plotting code behind produces a module whose functions raise
 `NameError` on import of their dependencies — an easy and unhelpful mistake.
 
-### Found during `PIPE2D-1391-01` verification
+### Found during `PIPE2D-1391-01` verification — and fixed there
 
-Two defects in the trace/quartz measurement path, both pre-existing and both out of scope
-for that ticket because fixing either changes QA verdicts. Observed on Run25 visit 133040
-(quartz), arm b, spectrograph 4.
+Two defects in the trace/quartz measurement path, both pre-existing, observed on Run25
+visit 133040 (quartz), arm b, spectrograph 4. They were initially held back because
+fixing either changes QA verdicts; the maintainer chose to take them in the same ticket
+rather than carry a known-wrong verdict through a merge. **Both are now fixed, and the
+ticket therefore does change verdicts** — see the acceptance criteria.
 
 **1. The fiber-profile fallback is unreachable when a calexp exists but fails.**
 `imageQualityQa.run` structures the trace/quartz path as:
@@ -223,6 +225,12 @@ stored in `iqQaMetrics`, so in principle it needs no pixel reprocessing — but 
 today re-gates a stored collection, which is the gap [1.4](#14-data-product-tiers-and-the-storage-contract)
 and R3 anticipate. Either add that re-gate step or re-run; for a handful of visits,
 re-running is cheaper than writing the tool.
+
+**What changed.** `imageQualityQa` now tries the fiber profile widths whenever the calexp
+path fails to produce a usable result, rather than only when no calexp exists; and a
+quantum whose gates all decline to judge reports `UNKNOWN` rather than `PASS`
+(`worstStatus(..., default=UNKNOWN)`). `UNKNOWN` sits outside `STATUS_ORDER` because it is
+not a severity: an unmeasured detector is unassessed, not mildly bad.
 
 ### Known defects on `main`
 
@@ -740,6 +748,9 @@ metric to exist:
 - [x] Per-species output is long-format, in the new `iqQaSpeciesMetrics` dataset;
       `tests/test_longFormat.py` asserts that concatenating quanta with different species
       mixes yields a stable schema with no NaN padding.
+- [x] Verdict changes are intentional and enumerated: `UNKNOWN` for an unmeasurable
+      quantum, and a real FWHM where the fiber-profile fallback now runs. Notebook
+      section 3a distinguishes these from unintended ones.
 - [ ] Tier 2 volume per visit and the per-quantum plotting cost are both measured and
       recorded in this document. **Not done — both need a real visit through the
       pipeline.** See the note below.
@@ -754,8 +765,15 @@ metric to exist:
 - [x] Files touched are Ruff-clean; `ruff check .` and `ruff format --check .` pass over
       the whole tree.
 
-Explicitly **not** in this ticket: any new QA metric, any change to an existing QA
-verdict, removal of the rendered plot datasets, and the dashboard.
+Explicitly **not** in this ticket: any new QA metric, removal of the rendered plot
+datasets, and the dashboard.
+
+**Scope change.** This ticket was specified to change no QA verdict, and it now does, by
+the maintainer's decision: the two trace-path defects above are fixed here rather than
+deferred. A quantum with no measurable metric reports `UNKNOWN` instead of `PASS`, and a
+quartz visit whose calexp measurement fails now falls back to the fiber profile widths
+and so reports a real FWHM where it previously reported none. Everything else is verdict-
+identical, and notebook section 3a separates these two intended changes from any other.
 
 **Verdict parity is measured, not asserted.** Putting the metric values stored in
 `qaActor/reductions` through both the gating ladder as it stood on `main` and the new
