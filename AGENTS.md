@@ -496,7 +496,14 @@ python bin.src/calibrateQaThresholds.py -b /path/to/butler -c u/you/qa/run12 \
 
 It exits non-zero when a suggestion rests on too few samples (< 20) or when the
 known-bad data does not cross the suggested `FAIL` — either way, do not commit the
-numbers. A known_bad entry that names `medFwhm` is only checked against `medFwhm`;
+numbers *as though they were derived*.
+
+It still prints them, which is deliberate: an underpowered number is worth having as long
+as nobody mistakes it for a measurement. Its provenance sentence carries a `NOT RELIABLE`
+clause naming the sample count and the floor, so the caveat travels with the value into
+the config field rather than living only in the terminal output you saw once. The `m`-arm
+trace threshold is the standing example — 16 detectors, and no more m-arm quartz in Run25
+to be had. A known_bad entry that names `medFwhm` is only checked against `medFwhm`;
 it asserts nothing about the other metrics.
 
 Group with `--group-by arm` (and `--group-by description` once metrics are long-format)

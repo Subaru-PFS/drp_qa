@@ -92,6 +92,20 @@ class TestDeriveThresholds:
         assert "140200-140260" in result.provenance
         assert "2026-09-17" in result.provenance
 
+    def testUnreliableProvenanceSaysSo(self):
+        """A 16-detector derivation must not read like a 400-detector one."""
+        result = deriveThresholds([3.0, 3.1, 3.2], metric="medFwhm", visitRange="133054-135850")
+        assert not result.reliable
+        assert "NOT RELIABLE" in result.provenance
+        assert "below the 20-sample floor" in result.provenance
+        # The numbers are still there: the point is to report them, flagged.
+        assert result.warn > 0 and result.fail > 0
+
+    def testReliableProvenanceCarriesNoWarning(self):
+        result = deriveThresholds(np.linspace(2.5, 3.5, 100), metric="medFwhm")
+        assert result.reliable
+        assert "NOT RELIABLE" not in result.provenance
+
     def testEmptyInputRaises(self):
         with pytest.raises(ValueError, match="No finite values"):
             deriveThresholds([np.nan, np.nan], metric="test")

@@ -128,6 +128,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `flagRateWarnThreshold` / `flagRateFailThreshold` now resolves the missing side through its arm
   entry before the global fallback, as the task's original lookup did. Previously
   `warn={"b": 50, "b:Argon": 93}` with `fail={"b": 60}` gave `b:Argon` a FAIL of 20 rather than 60.
+- **An unreliable derivation says so in its provenance.** A threshold from 16 detectors and one
+  from 400 used to produce identical-looking provenance sentences, so an underpowered value pasted
+  into a config read as derived. The sentence now carries an explicit `NOT RELIABLE` clause naming
+  the sample count and the floor. The number is still reported — the point is to have it *and* know
+  what it rests on.
 - **Threshold provenance records the quantiles actually used.** For a metric with
   `higherIsWorse=False` the thresholds come from p5/p1; the provenance said p95/p99.
 - **`calibrateQaThresholds.py` no longer reports success without producing a threshold.** A metric

@@ -231,6 +231,7 @@ def deriveThresholds(
             warnPercentile=warnQ,
             failPercentile=failQ,
             physicalLimit=physicalLimit,
+            reliable=good.size >= MIN_SAMPLES,
         ),
     )
 
@@ -242,6 +243,7 @@ def formatProvenance(
     warnPercentile: float,
     failPercentile: float,
     physicalLimit: float | None = None,
+    reliable: bool = True,
 ) -> str:
     """Build the provenance sentence for a config field's ``doc`` string.
 
@@ -263,12 +265,19 @@ def formatProvenance(
         Percentile used for FAIL.
     physicalLimit : `float`, optional
         The physical limit used for FAIL, if any.
+    reliable : `bool`, optional
+        False when the sample was too small to stand behind. The sentence then
+        carries that warning, which is the whole point: a threshold derived from
+        16 detectors and one derived from 400 must not read identically once
+        they are sitting in a config file. Someone reading the field a year from
+        now sees only this string.
 
     Returns
     -------
     `str`
         A single sentence, e.g. ``"Derived 2026-09-17 from golden visits
-        140200-140260 (n=384): WARN at p95, FAIL at p99."``
+        140200-140260 (n=384): WARN at p95, FAIL at p99."`` -- with an explicit
+        NOT RELIABLE clause appended when ``reliable`` is False.
     """
     derivedOn = derivedOn or date.today()
     source = f"golden visits {visitRange}" if visitRange else "the golden visit set"
@@ -277,10 +286,17 @@ def formatProvenance(
         if physicalLimit is not None
         else f"FAIL at p{failPercentile:g}"
     )
-    return (
+    sentence = (
         f"Derived {derivedOn.isoformat()} from {source} (n={numSamples}): "
         f"WARN at p{warnPercentile:g}, {failClause}."
     )
+    if not reliable:
+        sentence += (
+            f" NOT RELIABLE: n={numSamples} is below the {MIN_SAMPLES}-sample floor, so this"
+            " is indicative only and must not be treated as derived. Replace it once more"
+            " data exists; until then it is a considered guess, not a measurement."
+        )
+    return sentence
 
 
 def verifyKnownBad(
