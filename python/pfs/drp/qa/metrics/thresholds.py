@@ -70,6 +70,13 @@ class ThresholdSuggestion:
     reliable : `bool`
         False when fewer than `MIN_SAMPLES` finite values were available. A
         threshold from a handful of detectors is a guess with a decimal point.
+    degenerate : `bool`
+        True when WARN and FAIL round to the same value. The pair is then
+        unusable: `MetricDef.gate` tests FAIL first, so an equal WARN can never
+        fire and the metric silently loses its warning level. It happens when
+        the known-good distribution is tight enough that p95 and p99 fall inside
+        one rounding step -- more digits would not fix it, only disguise a band
+        narrower than the scatter.
     provenance : `str`
         Human-readable record of where the numbers came from, to be pasted into
         the config field's ``doc`` string (rule R2).
@@ -86,10 +93,13 @@ class ThresholdSuggestion:
     higherIsWorse: bool
     reliable: bool
     provenance: str
+    degenerate: bool = False
 
     def __str__(self) -> str:
         """Return a one-line summary suitable for CLI output."""
         flag = "" if self.reliable else "  [UNRELIABLE: too few samples]"
+        if self.degenerate:
+            flag += "  [DEGENERATE: WARN == FAIL, so WARN can never fire]"
         return (
             f"{self.metric:<24s} warn={self.warn:<10.4g} fail={self.fail:<10.4g} "
             f"(raw {self.warnRaw:.4g}/{self.failRaw:.4g}, "
@@ -206,6 +216,7 @@ def deriveThresholds(
     warn = roundToReadable(warnRaw, significant)
     fail = roundToReadable(failRaw, significant)
 
+    degenerate = warn == fail
     median = float(np.median(good))
     q25, q75 = (float(x) for x in np.percentile(good, [25.0, 75.0]))
     robustRms = 0.741 * (q75 - q25)
@@ -221,6 +232,7 @@ def deriveThresholds(
         numSamples=int(good.size),
         higherIsWorse=higherIsWorse,
         reliable=good.size >= MIN_SAMPLES,
+        degenerate=degenerate,
         provenance=formatProvenance(
             visitRange=visitRange,
             derivedOn=derivedOn,
@@ -232,6 +244,7 @@ def deriveThresholds(
             failPercentile=failQ,
             physicalLimit=physicalLimit,
             reliable=good.size >= MIN_SAMPLES,
+            degenerate=degenerate,
         ),
     )
 
@@ -244,6 +257,7 @@ def formatProvenance(
     failPercentile: float,
     physicalLimit: float | None = None,
     reliable: bool = True,
+    degenerate: bool = False,
 ) -> str:
     """Build the provenance sentence for a config field's ``doc`` string.
 
@@ -265,6 +279,9 @@ def formatProvenance(
         Percentile used for FAIL.
     physicalLimit : `float`, optional
         The physical limit used for FAIL, if any.
+    degenerate : `bool`, optional
+        True when WARN and FAIL rounded to the same value, which silently costs
+        the metric its warning level.
     reliable : `bool`, optional
         False when the sample was too small to stand behind. The sentence then
         carries that warning, which is the whole point: a threshold derived from
@@ -290,6 +307,12 @@ def formatProvenance(
         f"Derived {derivedOn.isoformat()} from {source} (n={numSamples}): "
         f"WARN at p{warnPercentile:g}, {failClause}."
     )
+    if degenerate:
+        sentence += (
+            " DEGENERATE: WARN and FAIL round to the same value, so WARN can never fire --"
+            " the gate tests FAIL first. Widen the pair by hand, or set FAIL from a physical"
+            " limit, rather than carrying a metric with no warning level."
+        )
     if not reliable:
         sentence += (
             f" NOT RELIABLE: n={numSamples} is below the {MIN_SAMPLES}-sample floor, so this"

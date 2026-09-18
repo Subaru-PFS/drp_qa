@@ -106,6 +106,26 @@ class TestDeriveThresholds:
         assert result.reliable
         assert "NOT RELIABLE" not in result.provenance
 
+    def testDegeneratePairIsFlagged(self):
+        """WARN == FAIL costs the metric its warning level, silently.
+
+        `MetricDef.gate` tests FAIL first, so an equal WARN can never fire. A
+        tight distribution puts p95 and p99 inside one rounding step; more
+        digits would only disguise a band narrower than the scatter.
+        """
+        tight = np.full(40, 3.2) + np.linspace(-0.001, 0.001, 40)
+        result = deriveThresholds(tight, metric="medFwhm")
+        assert result.warn == result.fail
+        assert result.degenerate
+        assert "DEGENERATE" in str(result)
+        assert "WARN can never fire" in result.provenance
+
+    def testAHealthySpreadIsNotDegenerate(self):
+        result = deriveThresholds(np.linspace(2.0, 4.0, 200), metric="medFwhm")
+        assert result.warn != result.fail
+        assert not result.degenerate
+        assert "DEGENERATE" not in result.provenance
+
     def testEmptyInputRaises(self):
         with pytest.raises(ValueError, match="No finite values"):
             deriveThresholds([np.nan, np.nan], metric="test")

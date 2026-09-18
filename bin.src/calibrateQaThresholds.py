@@ -337,7 +337,10 @@ def main() -> int:
 
             print(suggestion)
             print(f"    doc: {suggestion.provenance}")
-            if not suggestion.reliable:
+            if not suggestion.reliable or suggestion.degenerate:
+                # Degenerate is as disqualifying as underpowered: a pair whose
+                # WARN can never fire is not a threshold, it is one threshold
+                # wearing two names.
                 ok = False
 
             badSubset = _matchGroup(badForMetric, groupBy, key)

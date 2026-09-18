@@ -128,6 +128,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `flagRateWarnThreshold` / `flagRateFailThreshold` now resolves the missing side through its arm
   entry before the global fallback, as the task's original lookup did. Previously
   `warn={"b": 50, "b:Argon": 93}` with `fail={"b": 60}` gave `b:Argon` a FAIL of 20 rather than 60.
+- **A degenerate WARN/FAIL pair is detected.** When a tight distribution puts p95 and p99 inside one
+  rounding step the two collapse to the same number, and since the gate tests FAIL first the metric
+  silently loses its warning level. `deriveThresholds` now flags it, the provenance says so, and
+  `calibrateQaThresholds.py` exits non-zero. More significant digits would only disguise a WARN band
+  narrower than the distribution's own scatter.
 - **An unreliable derivation says so in its provenance.** A threshold from 16 detectors and one
   from 400 used to produce identical-looking provenance sentences, so an underpowered value pasted
   into a config read as derived. The sentence now carries an explicit `NOT RELIABLE` clause naming
