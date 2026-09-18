@@ -849,10 +849,11 @@ higher level. Investigate before trusting r-arm trace FWHM.
    flexure pair) verifies step 4. Derived r/n/m values are ~0.02 px vs shipped 1.0/2.0.
 6. **Measure Tier 2 volume and per-quantum plotting cost** — still open.
 
-**Filed elsewhere, drafts not in the repo:** a `drp_stella` ticket (`buildFiberProfiles.py:296`
+**Ticket drafts are in `doc/tickets/`:** a `drp_stella` ticket (`buildFiberProfiles.py:296`
 takes `sqrt` of a sigma since `5b882ab3`, 2024-03-21 — one-line fix; plus the second-moment
 width's background sensitivity), and a `drp_qa` ticket for the calexp estimator failure,
-which this work now resolves.
+which this work now resolves. The real quartz exports used to validate it are in
+`tests/data/` — see `tests/data/README.md`.
 
 **Why the calexp path failed:** `profileHalfWidth=7` against a measured fiber pitch of
 6.17 px on every arm — the old estimator's background pixels sat on the neighbouring fibers.
