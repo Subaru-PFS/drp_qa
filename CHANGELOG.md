@@ -79,6 +79,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   so it cannot distinguish a good exposure from a bad one; such a quantum now reports `UNKNOWN`
   (reason: "FWHM read from the fiberProfiles calibration, not measured; not gated") unless another
   metric judges it.
+- **`imageQualityQa` no longer reads `lines` on a trace/quartz visit.** The connection is now
+  `deferLoad=True`. On quartz, `fitDetectorMap` writes a trace position per fiber per row — 2.4 M
+  rows, 201 MB for 133040 b2 — and reading it took about 170 s of a 240 s quantum, for rows the
+  trace path never uses.
 - **`imageQualityQa:profileHalfWidth` is deprecated and ignored** — the new estimator uses no aperture.
 - **`imageQualityQa:minPeakSN`** now thresholds the fitted flux over its standard error, not the
   peak over an edge-pixel scatter.

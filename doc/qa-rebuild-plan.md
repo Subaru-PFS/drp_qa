@@ -813,8 +813,7 @@ notebook section 3c.
 quanta). The pipeline graph resolves. Three trace-path verdict changes are in and enumerated
 in the PR. `pfs.drp.qa.crossDispersion.measureRow` — the replacement width estimator — is
 written, tested and **validated on real quartz**, and is now **wired into `imageQualityQa`**
-through the stack-free `measureImageWidths` (step 1 below), but that wiring has **not yet run
-under `pipetask`** — it was written without the stack.
+through the stack-free `measureImageWidths` and verified under `pipetask` (step 1 below).
 
 **Real-data validation of the new estimator** (Run25 visit 133040):
 
@@ -838,9 +837,13 @@ higher level. Investigate before trusting r-arm trace FWHM.
    `crossDispersion.measureImageWidths`, which fits every fiber and reports only the selected
    ones. Trace FWHM gates on `trace:<arm>` chosen by `obs_type == "trace"`; FWHM from
    `fiberProfiles` is ungated (`UNKNOWN`). `profileHalfWidth` is deprecated. Tested on the real
-   quartz exports in CI. **Still to do: run it under `pipetask`** on 133040 b2/r2 into
-   `u/$USER/tickets/PIPE2D-1391-01/branch` and confirm `medFwhm` ≈ 3.12 / 3.17 px, ~35 s per
-   quantum, and `qaStatus` from the `trace:<arm>` gate.
+   quartz exports in CI. **Run under `pipetask` 2026-09-18** on 133040 b2/r2: `medFwhm`
+   3.122 / 3.170 px, 92.0 / 95.7 % usable, `PASS` via `trace:<arm>`, `traceOnly=False`,
+   `|medDxCenter|` < 0.005 px — matching the offline check exactly. Each quantum took ~240 s,
+   of which ~170 s was reading `lines`: on quartz it holds a trace position per fiber per row
+   (2.4 M rows, 201 MB). `arcLines` is now `deferLoad=True` and not read on trace visits;
+   **re-time one quantum** to confirm, expecting ~70 s (the width fit, with two quanta running
+   concurrently).
 
    **Consequence for step 3:** a quartz quantum measured from its calexp has
    `traceOnly == False`, so `--filter "traceOnly == False"` no longer excludes quartz. Use

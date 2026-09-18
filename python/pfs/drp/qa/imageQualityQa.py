@@ -53,9 +53,15 @@ class ImageQualityQaConnections(
 
     arcLines = InputConnection(
         name="lines",
-        doc="Emission line measurements",
+        doc=(
+            "Emission line measurements.  Loaded only when the visit is not a"
+            " trace/quartz: on a quartz visit ``fitDetectorMap`` stores a trace"
+            " position per fiber per row (2.4 M rows, 201 MB for 133040 b2),"
+            " which took ~170 s to read and is never used on that path."
+        ),
         storageClass="ArcLineSet",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
+        deferLoad=True,
     )
 
     detectorMap = InputConnection(
@@ -428,6 +434,14 @@ class ImageQualityQaTask(PipelineTask):
         dataId = dict(**inputRefs.arcLines.dataId.mapping)
         inputs = butlerQC.get(inputRefs)
         inputs["dataId"] = dataId
+        # ``arcLines`` is deferred: a quartz visit's ``lines`` holds millions of
+        # trace-position rows that the trace path never reads, so skip the load.
+        obs_type, _, _ = self._classifyVisit(inputs.get("calexp"), inputs.get("pfsConfig"))
+        if obs_type == "trace":
+            self.log.info("Trace/quartz %s: not loading arcLines; the trace path does not use them.", dataId)
+            inputs["arcLines"] = None
+        else:
+            inputs["arcLines"] = inputs["arcLines"].get()
         try:
             # Perform the actual processing.
             outputs = self.run(**inputs)
@@ -443,7 +457,7 @@ class ImageQualityQaTask(PipelineTask):
 
     def run(
         self,
-        arcLines: ArcLineSet,
+        arcLines: ArcLineSet | None,
         detectorMap: DetectorMap,
         fiberProfiles: FiberProfileSet | None,
         detectorMapCalib: DetectorMap | None,
@@ -482,8 +496,9 @@ class ImageQualityQaTask(PipelineTask):
 
         Parameters
         ----------
-        arcLines : `ArcLineSet`
-            Arc line measurements.
+        arcLines : `ArcLineSet` or `None`
+            Arc line measurements.  `None` on a trace/quartz visit, where
+            `runQuantum` does not load them; treated as zero arc lines.
         detectorMap : `DetectorMap`
             Adjusted detector mapping from fiberId,wavelength to x,y.
         fiberProfiles : `FiberProfileSet` or `None`
@@ -527,14 +542,22 @@ class ImageQualityQaTask(PipelineTask):
             "Visit classification: obs_type=%r is_iis=%s seq_nam=%r for %s", obs_type, is_iis, seq_nam, dataId
         )
 
-        als = addTraceLambdaToArclines(arcLines, detectorMap)
-        data = computeImageQuality(als)
+        if arcLines is not None:
+            als = addTraceLambdaToArclines(arcLines, detectorMap)
+            data = computeImageQuality(als)
+        else:
+            # Not loaded (trace/quartz visit, see runQuantum): an empty arc-line
+            # table, so the paths below see zero good arc lines.
+            data = pd.DataFrame(
+                {column: pd.Series(dtype=float) for column in ("fiberId", "x", "y", "lam", "fwhm", "theta")}
+            )
+            data["flag"] = pd.Series(dtype=bool)
         data["peakRatio"] = np.nan
 
         # Flexure diagnostic: offset from static calibration detectorMap.
         # Positive dxCenter means the calibration prediction is to the right
         # of the actual measured fiber position.
-        if detectorMapCalib is not None and "x" in data.columns:
+        if detectorMapCalib is not None and "x" in data.columns and len(data) > 0:
             calibX = detectorMapCalib.getXCenter(
                 np.asarray(data["fiberId"], dtype=np.int32),
                 np.asarray(data["y"], dtype=np.float64),
