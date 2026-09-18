@@ -96,7 +96,7 @@ known_good:
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
-    note: "Run25 stable set, block A. 20 s scienceTrace; exercises the fiber-profile path."
+    note: "Run25 stable set, block A. 20 s scienceTrace; exercises the calexp trace-width path (b2 3.12 px, r2 3.17 px)."
 
   # Block B -- b and m arms, spectrographs 1-4. No HgCd was taken in this block.
   - visitRange: [133042, 133044]

@@ -842,8 +842,7 @@ higher level. Investigate before trusting r-arm trace FWHM.
    `|medDxCenter|` < 0.005 px — matching the offline check exactly. Each quantum took ~240 s,
    of which ~170 s was reading `lines`: on quartz it holds a trace position per fiber per row
    (2.4 M rows, 201 MB). `arcLines` is now `deferLoad=True` and not read on trace visits;
-   **re-time one quantum** to confirm, expecting ~70 s (the width fit, with two quanta running
-   concurrently).
+   re-timed at 87 s for the two quanta, same results. **Done.**
 
    **Consequence for step 3:** a quartz quantum measured from its calexp has
    `traceOnly == False`, so `--filter "traceOnly == False"` no longer excludes quartz. Use
