@@ -21,23 +21,30 @@ __all__ = [
     "imageQualityMetricDefs",
 ]
 
-#: Provenance of the thresholds inherited from before the golden visit set
-#: existed. Recording this honestly is the point: these numbers were tuned by
-#: hand against engineering-run data and arc lamp physics, not derived from a
-#: known-good visit range, and they are the first thing to re-derive with
-#: ``bin.src/calibrateQaThresholds.py`` once the golden set has real visits in
-#: it. See doc/qa-rebuild-plan.md section 1.2.
+#: Provenance of the thresholds that predate the golden visit set.
+#:
+#: Say only what is known. These values arrived with the task itself, in commit
+#: 8a69c05 (2026-08-11), and **no derivation was recorded anywhere** -- not in
+#: the commit message, which explains the threshold structure at length but not
+#: the numbers, not in the field docs beyond "Tuned for arm-b", and not in
+#: README.md or AGENTS.md, which restate them without justification. Calling
+#: them "hand-tuned against engineering-run data" would be a plausible guess
+#: dressed as a fact. They are thresholds of unrecorded origin, and R2 applies
+#: to them exactly as it does to a new one.
 _INHERITED = (
-    "Inherited from the hand-tuned imageQualityQa defaults (PFS engineering runs, "
-    "pre-2026-09); not yet derived from the golden visit set."
+    "ORIGIN UNRECORDED. Present since the task was added (8a69c05, 2026-08-11) with no "
+    "derivation recorded in the commit, the field docs, or the project documentation. "
+    "Not derived from the golden visit set. Re-derive with "
+    "bin.src/calibrateQaThresholds.py; see doc/qa-rebuild-plan.md section 1.2."
 )
 
 _INHERITED_FLAG_RATE = (
-    "Inherited from the hand-tuned imageQualityQa defaults (PFS engineering runs, "
-    "pre-2026-09). The permissive blue-arm values are lamp physics, not optics: Ar, Xe "
-    "and Kr have very few or very faint lines in the blue, so the global S/N cut flags "
-    "almost all of them. See AGENTS.md, arc lamp physics. Not yet derived from the "
-    "golden visit set."
+    "ORIGIN UNRECORDED for the numeric values, as for the FWHM thresholds (8a69c05, "
+    "2026-08-11). What IS documented is the shape rather than the magnitudes: the "
+    "permissive blue-arm values exist because Ar, Xe and Kr have very few or very faint "
+    "lines in the blue, so the global S/N cut flags almost all of them -- lamp physics, "
+    "not optics. See AGENTS.md, arc lamp physics. The per-species split is therefore "
+    "justified; the specific percentages are not. Not derived from the golden visit set."
 )
 
 #: Flag-rate thresholds for an arm with no entry in either config dict. Matches
@@ -45,10 +52,14 @@ _INHERITED_FLAG_RATE = (
 IQ_FLAG_RATE_FALLBACK = Thresholds(warn=15.0, fail=20.0)
 
 #: Trace/quartz FWHM thresholds for an arm with no entry in either config dict.
-#: These are the arc-line values, which is the wrong quantity -- a fiber-profile
-#: width is not an arc-line second moment. They are a placeholder until the
-#: per-arm values are derived from the golden set's quartz visits, and the
-#: per-arm ``doc`` strings say so.
+#:
+#: These are the arc-line numbers, applied to a quantity they were never meant
+#: for -- a fiber-profile width is not an arc-line second moment -- and those
+#: numbers are themselves of unrecorded origin (see ``_INHERITED``). So this is
+#: not "the arc threshold, pending a better one": it is an unjustified value
+#: borrowed for an unrelated measurement. It exists so that the trace path has
+#: *something* that can fail, which is strictly better than the previous state
+#: of having no gate at all, and it should be replaced at the first opportunity.
 IQ_TRACE_FWHM_FALLBACK = Thresholds(warn=3.2, fail=3.5)
 
 

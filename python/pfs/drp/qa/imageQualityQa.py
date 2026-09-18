@@ -289,7 +289,8 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
         default=3.5,
         doc=(
             "Median FWHM (pixels) above which the per-quantum status is set to"
-            " FAIL.  Tuned for arm-b (400–650 nm); adjust for other arms."
+            " FAIL.  Nominally tuned for arm-b (400–650 nm), but no derivation"
+            " was ever recorded; see the metric registry's provenance string."
             " Set to a large value (e.g. 999) to disable."
         ),
     )
@@ -304,11 +305,15 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " is not the same quantity as an arc-line second moment.  An arm"
             " with no entry falls back to the arc-line thresholds."
             "\n\n"
-            "PROVENANCE: every value here is currently the arc-line default and"
-            " NONE has been derived from the golden visit set.  For b, r and n"
-            " the Run25 trace visits do supply enough detectors to derive one"
-            " (56, 40 and 32 respectively, against a 20 floor) -- run"
-            " bin.src/calibrateQaThresholds.py over them and replace these."
+            "PROVENANCE: every value here is the arc-line number, and the"
+            " arc-line numbers are themselves of unrecorded origin -- present"
+            " since the task was added (8a69c05, 2026-08-11) with no derivation"
+            " written down anywhere.  So these are not merely underived for the"
+            " trace path; they are unjustified values borrowed for a quantity"
+            " they were never meant for.  For b, r and n the Run25 trace visits"
+            " supply enough detectors to derive a real one (56, 40 and 32"
+            " against a 20 floor) -- run bin.src/calibrateQaThresholds.py over"
+            " them and replace these."
             "\n\n"
             "The m arm is different and will stay hand-set for longer: Run25"
             " holds only 4 m-arm trace visits (16 detectors, below the floor),"
@@ -325,8 +330,9 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
         doc=(
             "Median FWHM (pixels), keyed by arm, above which a trace/quartz"
             " quantum measured from fiber profile widths is set to FAIL.  See"
-            " ``traceFwhmWarnThreshold`` for the provenance of every value and"
-            " for why the m arm cannot yet be derived."
+            " ``traceFwhmWarnThreshold`` for the provenance of every value --"
+            " which is that none was recorded -- and for why the m arm cannot"
+            " yet be derived."
         ),
     )
     flagRateWarnThreshold = DictField(
