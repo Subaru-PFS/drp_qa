@@ -59,6 +59,17 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
+- **Trace/quartz FWHM is gated.** It was skipped entirely when `traceOnly=True`, so the
+  fiber-profile path had no metric that could fail. It now gates against new
+  `traceFwhmWarnThreshold` / `traceFwhmFailThreshold` fields, through the registry's `"trace"`
+  override key — a fiber-profile width is not an arc-line second moment, so it does not silently
+  borrow the arc thresholds. Those defaults **are** the arc values for now, and their `doc` strings
+  say so: re-derive them from the Run25 quartz visits, which is what they are in the golden set for.
+- **`pctFlagged` is suppressed on the fiber-profile path.** `_buildProfileData` sets `flag` to
+  all-False unconditionally, so the metric was 0.0 by construction rather than by measurement — a
+  statistic that cannot cross its own threshold (R1). It is now NaN there, as on the FLUXSTD path,
+  which already did this for the same reason. Combined with the two changes above, a trace quantum
+  now passes on a real measurement or reports `UNKNOWN`.
 - **A quantum that measures nothing now reports `UNKNOWN`, not `PASS`.** When every gate
   declines to judge, `imageQualityQa` passes `default=UNKNOWN` to `worstStatus`. Reporting PASS
   claimed the detector was fine on the strength of having measured nothing, and let a golden-set

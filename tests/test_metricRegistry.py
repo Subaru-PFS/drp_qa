@@ -44,6 +44,8 @@ def iqConfig():
     return SimpleNamespace(
         fwhmWarnThreshold=3.2,
         fwhmFailThreshold=3.5,
+        traceFwhmWarnThreshold=3.2,
+        traceFwhmFailThreshold=3.5,
         dxCenterWarnThreshold=1.0,
         dxCenterFailThreshold=2.0,
         flagRateWarnThreshold={
@@ -267,6 +269,27 @@ class TestImageQualityDefinitions:
         iqConfig.flagRateFailThreshold = {}
         registry = buildImageQualityRegistry(iqConfig)
         assert registry.gate("pctFlagged", 25.0, keys=("z:Neon",)).threshold == IQ_FLAG_RATE_FALLBACK.fail
+
+    def testTraceFwhmGatesOnItsOwnThresholds(self, iqConfig):
+        """A fiber-profile width is not an arc-line second moment.
+
+        It borrows the arc values today, but through its own key, so re-deriving
+        them from the golden set's quartz visits is a config change rather than a
+        code change.
+        """
+        iqConfig.traceFwhmWarnThreshold = 4.0
+        iqConfig.traceFwhmFailThreshold = 4.5
+        registry = buildImageQualityRegistry(iqConfig)
+        # 4.2 px fails the arc thresholds but only warns against the trace ones.
+        assert registry.gate("medFwhm", 4.2).status == "FAIL"
+        assert registry.gate("medFwhm", 4.2, keys=("trace",)).status == "WARN"
+        assert registry.gate("medFwhm", 3.3, keys=("trace",)).status == "PASS"
+
+    def testTraceFwhmIsActuallyGated(self, iqConfig):
+        """It used to be skipped entirely, which left the trace path ungateable."""
+        registry = buildImageQualityRegistry(iqConfig)
+        assert registry.gate("medFwhm", 9.0, keys=("trace",)) is not None
+        assert registry.gate("medFwhm", 9.0, keys=("trace",)).status == "FAIL"
 
     def testUngatedMetricsAreRegisteredButSilent(self, iqConfig):
         registry = buildImageQualityRegistry(iqConfig)

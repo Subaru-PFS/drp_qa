@@ -166,6 +166,14 @@ def buildImageQualityRegistry(config: Any) -> MetricRegistry:
             byName["medFwhm"].withThresholds(
                 warn=_attr(config, "fwhmWarnThreshold"),
                 fail=_attr(config, "fwhmFailThreshold"),
+                # Trace/quartz quanta measure a fiber-profile width, not an
+                # arc-line second moment, so they gate on their own key.
+                overrides={
+                    "trace": Thresholds(
+                        warn=_attr(config, "traceFwhmWarnThreshold"),
+                        fail=_attr(config, "traceFwhmFailThreshold"),
+                    )
+                },
             ),
             byName["pctFlagged"].withThresholds(
                 warn=IQ_FLAG_RATE_FALLBACK.warn,

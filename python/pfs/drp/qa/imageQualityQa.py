@@ -293,6 +293,31 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " Set to a large value (e.g. 999) to disable."
         ),
     )
+    traceFwhmWarnThreshold = Field(
+        dtype=float,
+        default=3.2,
+        doc=(
+            "Median FWHM (pixels) above which a trace/quartz quantum measured from"
+            " fiber profile widths is set to WARN.  Separate from"
+            " ``fwhmWarnThreshold`` because a fiber-profile width is not the same"
+            " quantity as an arc-line second moment."
+            "\n\n"
+            "PROVENANCE: inherited from the arc-line thresholds as a starting"
+            " point; NOT yet derived from the golden visit set.  Re-derive from the"
+            " Run25 quartz visits with bin.src/calibrateQaThresholds.py, which is"
+            " what they are in the golden set for."
+        ),
+    )
+    traceFwhmFailThreshold = Field(
+        dtype=float,
+        default=3.5,
+        doc=(
+            "Median FWHM (pixels) above which a trace/quartz quantum measured from"
+            " fiber profile widths is set to FAIL.  See"
+            " ``traceFwhmWarnThreshold`` for provenance: these are the arc-line"
+            " values, not yet re-derived for trace widths."
+        ),
+    )
     flagRateWarnThreshold = DictField(
         keytype=str,
         itemtype=float,
@@ -503,6 +528,7 @@ class ImageQualityQaTask(PipelineTask):
 
         dense_data = False
         using_fluxstd_filter = False
+        using_profile_widths = False
         # force_sparse bypasses the n_good_arc check for visit types where we
         # know the arc catalog will not match (IIS arcs/traces).
         force_sparse = False
@@ -626,6 +652,7 @@ class ImageQualityQaTask(PipelineTask):
                     dataId,
                 )
                 data = self._buildProfileData(fiberProfiles, detectorMap)
+                using_profile_widths = True
                 dense_data = True
                 force_sparse = False
             elif not dense_data:
@@ -779,6 +806,7 @@ class ImageQualityQaTask(PipelineTask):
                         self.config.minGoodLines,
                     )
                     data = self._buildProfileData(fiberProfiles, detectorMap)
+                    using_profile_widths = True
                     dense_data = True
                 else:
                     self.log.warning(
@@ -850,7 +878,11 @@ class ImageQualityQaTask(PipelineTask):
         # flag rate reflects exposure depth rather than optical quality.  FWHM
         # is still reported when the good-fraction threshold is met.
         sparse_fallback = force_sparse or ((n_good_arc < self.config.minGoodLines) and not dense_data)
-        if sparse_fallback or using_fluxstd_filter:
+        # _buildProfileData sets `flag` to all-False unconditionally, so pctFlagged
+        # on the fiber-profile path is 0.0 by construction rather than by
+        # measurement -- a statistic that cannot cross its own threshold (R1).
+        # Suppress it, as the FLUXSTD path already does for the same reason.
+        if sparse_fallback or using_fluxstd_filter or using_profile_widths:
             pct_flagged = np.nan
             flagBreakdown = {}
         else:
@@ -878,11 +910,11 @@ class ImageQualityQaTask(PipelineTask):
         species = seq_nam.split(":", 1)[-1].strip() if ":" in seq_nam else ""
         flagRateKeys = (f"{arm}:{species}" if species else "", arm)
 
-        # A trace-only visit has no arc-line FWHM to judge, and a NaN metric was
-        # never measured. Both yield ``None``, which is skipped rather than
-        # counted as a PASS.
+        # Trace FWHM is gated against its own thresholds. A fiber-profile width is
+        # not the same quantity as an arc-line second moment, so it gets its own
+        # key rather than borrowing the arc thresholds silently.
         gateResults = [
-            None if trace_only else registry.gate("medFwhm", med_fwhm),
+            registry.gate("medFwhm", med_fwhm, keys=("trace",) if trace_only else ()),
             registry.gate("pctFlagged", pct_flagged, keys=flagRateKeys),
             registry.gate("medDxCenter", medDxCenter),
         ]

@@ -232,6 +232,19 @@ quantum whose gates all decline to judge reports `UNKNOWN` rather than `PASS`
 (`worstStatus(..., default=UNKNOWN)`). `UNKNOWN` sits outside `STATUS_ORDER` because it is
 not a severity: an unmeasured detector is unassessed, not mildly bad.
 
+**A third defect, found by following the first two through.** Verifying the fallback on
+133040/b2 produced `medFwhm=3.03`, `medDxCenter=NaN`, `pctFlagged=0.0`, `qaStatus=PASS` —
+and that PASS was still hollow. Trace FWHM was not gated at all when `traceOnly=True`, and
+`_buildProfileData` sets `flag` to all-False unconditionally, so `pctFlagged` was 0.0 by
+construction. The fiber-profile path therefore had **no metric capable of failing**: a
+textbook R1 violation, a statistic compared against a threshold it cannot cross.
+
+Both are fixed. Trace FWHM gates through a `"trace"` override key with its own config
+fields, and `pctFlagged` is suppressed on that path as it already was on the FLUXSTD path.
+The trace thresholds currently hold the arc-line values and say so in their `doc` strings;
+**re-deriving them from the Run25 quartz visits is outstanding**, and is exactly what those
+visits are in the golden set for.
+
 ### Known defects on `main`
 
 - `dmResiduals.py` imports `getDescriptionCounts` from
