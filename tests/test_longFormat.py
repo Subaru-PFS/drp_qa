@@ -108,6 +108,20 @@ class TestToLongFrame:
         assert frame["value"].dtype == "float64"
         assert frame["visit"].dtype == "Int64"
 
+    def testNoStringColumnIsAllNull(self, dataId):
+        """The Butler's parquet writer raises on a non-empty, all-null string column.
+
+        Every ``fitSpecies*`` metric is ungated, so without this every quantum
+        with per-species statistics failed to write ``iqQaSpeciesMetrics``
+        (seen on 150367 r1: ``max() iterable argument is empty``).
+        """
+        frame = toLongFrame(
+            longRecords(dataId, {"HgI": {"fitSpeciesXRms": 0.02}, "ArI": {"fitSpeciesYRms": 0.03}})
+        )
+        for column in ("arm", "description", "metric", "status"):
+            assert frame[column].notna().all(), column
+        assert (frame["status"] == "").all(), "an ungated metric still has no verdict"
+
     def testEmptyFrameKeepsTheSchema(self):
         frame = toLongFrame([])
         assert tuple(frame.columns) == LONG_COLUMNS

@@ -132,9 +132,19 @@ def toLongFrame(records: Sequence[Mapping[str, object]]) -> pd.DataFrame:
         An empty input yields an empty frame with the same columns and dtypes,
         so that ``pd.concat`` over a mix of empty and non-empty quanta neither
         widens the schema nor changes a column's type.
+
+        A missing string -- above all a ``status`` of `None`, "no verdict" -- is
+        stored as the empty string, never as null. The Butler's parquet writer
+        sizes each string column from its longest non-null value and raises
+        on a non-empty column with none, which is every quantum whose species
+        metrics are all ungated. ``""`` still carries no verdict: it is not in
+        `~pfs.drp.qa.metrics.registry.STATUS_ORDER`.
     """
-    frame = pd.DataFrame(list(records), columns=list(LONG_COLUMNS))
-    return frame.astype(_DTYPES)
+    frame = pd.DataFrame(list(records), columns=list(LONG_COLUMNS)).astype(_DTYPES)
+    for column, dtype in _DTYPES.items():
+        if dtype == "string":
+            frame[column] = frame[column].fillna("")
+    return frame
 
 
 def widen(frame: pd.DataFrame) -> pd.DataFrame:

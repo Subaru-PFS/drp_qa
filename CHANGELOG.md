@@ -141,6 +141,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Fixed
 
+- **`iqQaSpeciesMetrics` failed to write whenever it had rows.** The `fitSpecies*` metrics are
+  ungated, so `status` was null on every row, and the Butler's parquet writer raises on a non-empty
+  string column with no non-null value (`max() iterable argument is empty`). A missing string is now
+  stored as `""`, which is still no verdict.
 - **`calibrateQaThresholds.py` and the verification notebook no longer double-count.** Their Butler
   queries lacked `findFirst=True`, so a chained collection returned every run's copy of a dataset: a
   detector reduced twice was counted twice, inflating `n` and repeating values, which is exactly what
