@@ -24,8 +24,10 @@ keywords = ["astronomy", "spectrograph", "subaru", "pfs", "autoguider"]
 dependencies = [
     "numpy >= 2.0",
     "pandas",
+    "scipy",
     "matplotlib",
     "seaborn",
+    "pyyaml",
     "pfs-utils @ git+https://github.com/Subaru-PFS/pfs_utils.git",
 ]
 

@@ -1,8 +1,8 @@
 """Image quality QA pipeline task.
 
 Produces per-detector FWHM and image-shape QA plots from arc-line
-second-moment measurements, fiber profile calibrations, or direct
-cross-dispersion moment measurements from post-ISR pixel data.
+second-moment measurements, direct cross-dispersion fits to post-ISR pixel
+data (`pfs.drp.qa.crossDispersion`), or fiber profile calibrations.
 """
 
 import re
@@ -32,6 +32,10 @@ from lsst.pipe.base.connectionTypes import (
 )
 
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
+from pfs.drp.qa.crossDispersion import measureImageWidths
+from pfs.drp.qa.metrics.definitions import buildImageQualityRegistry
+from pfs.drp.qa.metrics.longFormat import longRecords, toLongFrame
+from pfs.drp.qa.metrics.registry import UNKNOWN, worstStatus
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
 from pfs.drp.stella.utils.stability import addTraceLambdaToArclines
@@ -49,9 +53,15 @@ class ImageQualityQaConnections(
 
     arcLines = InputConnection(
         name="lines",
-        doc="Emission line measurements",
+        doc=(
+            "Emission line measurements.  Loaded only when the visit is not a"
+            " trace/quartz: on a quartz visit ``fitDetectorMap`` stores a trace"
+            " position per fiber per row (2.4 M rows, 201 MB for 133040 b2),"
+            " which took ~170 s to read and is never used on that path."
+        ),
         storageClass="ArcLineSet",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
+        deferLoad=True,
     )
 
     detectorMap = InputConnection(
@@ -78,7 +88,23 @@ class ImageQualityQaConnections(
             " Columns: ``visit``, ``arm``, ``spectrograph``, ``medFwhm``,"
             " ``medDxCenter``, ``dxCenterRms``, ``pctFlagged``,"
             " ``pctLowSN``, ``pctMeasFail``,"
-            " ``nLines``, ``traceOnly``, ``qaStatus``."
+            " ``nLines``, ``traceOnly``, ``qaStatus`` (PASS/WARN/FAIL, or"
+            " UNKNOWN when no metric could be measured)."
+        ),
+        storageClass="DataFrame",
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
+    )
+
+    iqQaSpeciesMetrics = OutputConnection(
+        name="iqQaSpeciesMetrics",
+        doc=(
+            "Per-species QA metrics in long format, one row per"
+            " ``(visit, arm, spectrograph, description, metric)``."
+            " Columns: ``visit``, ``arm``, ``spectrograph``, ``description``,"
+            " ``metric``, ``value``, ``status``.  The species names are the"
+            " ``description`` values from the line lists (``HgI``, ``ArI``, ...)."
+            " Long format keeps the schema stable across quanta that saw"
+            " different species, so the frames concatenate without NaN padding."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -111,22 +137,35 @@ class ImageQualityQaConnections(
         name="calexp",
         doc=(
             "Calibrated exposure output by ReduceExposureTask.  When present for"
-            " non-arc visits, fiber profile widths are measured directly from"
-            " pixel data via cross-dispersion 2nd moments rather than read from"
-            " the calibration."
+            " non-arc visits, fiber trace widths are measured directly from"
+            " pixel data by a joint cross-dispersion fit of each trace and its"
+            " neighbours, rather than read from the calibration."
         ),
         storageClass="Exposure",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
         minimum=0,
     )
 
-    pfsConfig = InputConnection(
+    pfsConfig = PrerequisiteConnection(
         name="pfsConfig",
         doc=(
             "Fiber configuration for this visit.  When provided alongside"
             " ``calexp``, only fibers with ``targetType=FLUXSTD`` and"
             " ``fiberStatus=GOOD`` are used for calexp-based FWHM measurement,"
             " avoiding contamination from dark sky fibers."
+            "\n\n"
+            "Declared as a prerequisite, not a plain input, because"
+            " ``extractionQa`` and ``extractionQaCombined`` declare it that way"
+            " and a dataset type must be a prerequisite to every task or to"
+            " none.  Mixing the two makes the whole pipeline fail to resolve"
+            " with ``ConnectionTypeConsistencyError`` -- which is invisible"
+            " while the tasks are run one at a time with ``#label``."
+            "\n\n"
+            "``minimum=0`` is explicit and load-bearing.  Prerequisites default"
+            " to ``minimum=1`` and are resolved when the QuantumGraph is built,"
+            " so without it this task would produce no quantum at all against a"
+            " collection lacking a ``pfsConfig``, and no runtime ``try/except``"
+            " could rescue a quantum that was never created."
         ),
         storageClass="PfsConfig",
         dimensions=("instrument", "visit"),
@@ -165,9 +204,14 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
         dtype=int,
         default=7,
         doc=(
-            "Half-width in pixels of the cross-dispersion aperture used when"
-            " measuring fiber profile widths directly from the calexp image."
+            "Ignored.  Was the half-width of the fixed cross-dispersion aperture"
+            " of the old calexp width estimator.  At the measured PFS fiber"
+            " pitch of 6.17 px that aperture's background pixels sat on the"
+            " neighbouring fibers, so every Run25 quartz quantum fell back to"
+            " fiberProfiles.  The replacement fits each trace jointly with its"
+            " neighbours and needs no aperture."
         ),
+        deprecated="Unused since the calexp width estimator was replaced; will be removed in a later release.",
     )
     profileYStride = Field(
         dtype=int,
@@ -195,14 +239,12 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
         dtype=float,
         default=5.0,
         doc=(
-            "Minimum peak signal-to-noise ratio required to accept a fiber"
-            " profile sample in the calexp-based width measurement."
-            " Noise is estimated from the 4 background edge pixels of the"
-            " cross-dispersion strip.  Samples below this threshold — e.g."
-            " scattered light in an IIS frame, or rows where a fiber is not"
-            " illuminated — are flagged and excluded from the FWHM median."
-            " Without this check pure-noise strips pass the total>0 gate"
-            " roughly 50 % of the time and corrupt the FWHM distribution."
+            "Minimum significance (fitted trace flux over its standard error,"
+            " from the fit covariance and the calexp variance plane) required"
+            " to accept a calexp width sample.  Samples below it -- scattered"
+            " light in an IIS frame, rows where a fiber is not illuminated --"
+            " are flagged and excluded from the FWHM median.  A pure-noise row"
+            " is accepted 0 % of the time at the default."
         ),
     )
     maxCalexpFlagRate = Field(
@@ -257,8 +299,52 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
         default=3.5,
         doc=(
             "Median FWHM (pixels) above which the per-quantum status is set to"
-            " FAIL.  Tuned for arm-b (400–650 nm); adjust for other arms."
+            " FAIL.  Nominally tuned for arm-b (400–650 nm), but no derivation"
+            " was ever recorded; see the metric registry's provenance string."
             " Set to a large value (e.g. 999) to disable."
+        ),
+    )
+    traceFwhmWarnThreshold = DictField(
+        keytype=str,
+        itemtype=float,
+        default={"b": 3.2, "r": 3.2, "n": 3.2, "m": 3.2},
+        doc=(
+            "Median FWHM (pixels), keyed by arm, above which a trace/quartz"
+            " quantum measured from its calexp is set to WARN.  Separate from"
+            " ``fwhmWarnThreshold`` because a quartz trace width is not the"
+            " same quantity as an arc-line second moment.  An arm with no"
+            " entry falls back to a bare ``trace`` default (3.2/3.5).  A FWHM"
+            " read from ``fiberProfiles`` instead is never gated: it is a"
+            " calibration constant, not a measurement of the exposure."
+            "\n\n"
+            "PROVENANCE: every value here is the arc-line number, and the"
+            " arc-line numbers are themselves of unrecorded origin -- present"
+            " since the task was added (8a69c05, 2026-08-11) with no derivation"
+            " written down anywhere.  So these are not merely underived for the"
+            " trace path; they are unjustified values borrowed for a quantity"
+            " they were never meant for.  For b, r and n the Run25 trace visits"
+            " supply enough detectors to derive a real one (56, 40 and 32"
+            " against a 20 floor) -- run bin.src/calibrateQaThresholds.py over"
+            " them and replace these."
+            "\n\n"
+            "The m arm is different and will stay hand-set for longer: Run25"
+            " holds only 4 m-arm trace visits (16 detectors, below the floor),"
+            " because the only m-arm quartz frames are the two short block B and"
+            " block C sequences.  Deriving it needs more m-arm quartz -- either"
+            " from another run, or accepting a cross-run derivation against a"
+            " different detectorMap_calib epoch."
+        ),
+    )
+    traceFwhmFailThreshold = DictField(
+        keytype=str,
+        itemtype=float,
+        default={"b": 3.5, "r": 3.5, "n": 3.5, "m": 3.5},
+        doc=(
+            "Median FWHM (pixels), keyed by arm, above which a trace/quartz"
+            " quantum measured from its calexp is set to FAIL.  See"
+            " ``traceFwhmWarnThreshold`` for the provenance of every value --"
+            " which is that none was recorded -- and for why the m arm cannot"
+            " yet be derived."
         ),
     )
     flagRateWarnThreshold = DictField(
@@ -348,6 +434,14 @@ class ImageQualityQaTask(PipelineTask):
         dataId = dict(**inputRefs.arcLines.dataId.mapping)
         inputs = butlerQC.get(inputRefs)
         inputs["dataId"] = dataId
+        # ``arcLines`` is deferred: a quartz visit's ``lines`` holds millions of
+        # trace-position rows that the trace path never reads, so skip the load.
+        obs_type, _, _ = self._classifyVisit(inputs.get("calexp"), inputs.get("pfsConfig"))
+        if obs_type == "trace":
+            self.log.info("Trace/quartz %s: not loading arcLines; the trace path does not use them.", dataId)
+            inputs["arcLines"] = None
+        else:
+            inputs["arcLines"] = inputs["arcLines"].get()
         try:
             # Perform the actual processing.
             outputs = self.run(**inputs)
@@ -359,10 +453,11 @@ class ImageQualityQaTask(PipelineTask):
         else:
             butlerQC.put(outputs.iqQaData, outputRefs.iqQaData)
             butlerQC.put(outputs.iqQaMetrics, outputRefs.iqQaMetrics)
+            butlerQC.put(outputs.iqQaSpeciesMetrics, outputRefs.iqQaSpeciesMetrics)
 
     def run(
         self,
-        arcLines: ArcLineSet,
+        arcLines: ArcLineSet | None,
         detectorMap: DetectorMap,
         fiberProfiles: FiberProfileSet | None,
         detectorMapCalib: DetectorMap | None,
@@ -386,7 +481,7 @@ class ImageQualityQaTask(PipelineTask):
           catalog does not match the 16 IIS positions; FWHM is reported as
           sparse (no value, no pass/fail).
         * **Regular trace/quartz** (``scienceTrace``, all fibers): calexp
-          cross-dispersion moments are the primary path; fiber profile
+          cross-dispersion trace fits are the primary path; fiber profile
           calibration is the secondary fallback.
         * **IIS trace/quartz** (``scienceTrace``, engineering fibers): too few
           fibers for a reliable measurement; reported as sparse.
@@ -401,8 +496,9 @@ class ImageQualityQaTask(PipelineTask):
 
         Parameters
         ----------
-        arcLines : `ArcLineSet`
-            Arc line measurements.
+        arcLines : `ArcLineSet` or `None`
+            Arc line measurements.  `None` on a trace/quartz visit, where
+            `runQuantum` does not load them; treated as zero arc lines.
         detectorMap : `DetectorMap`
             Adjusted detector mapping from fiberId,wavelength to x,y.
         fiberProfiles : `FiberProfileSet` or `None`
@@ -430,6 +526,11 @@ class ImageQualityQaTask(PipelineTask):
             ``dxCenterRms``, ``pctFlagged``, ``nLines``, ``traceOnly``,
             ``obsType``, ``seqName``, ``qaStatus``, ``visit``, ``arm``,
             ``spectrograph``.
+        iqQaSpeciesMetrics : `pandas.DataFrame`
+            Per-species fit statistics in long format, one row per
+            ``(description, metric)``, with columns ``visit``, ``arm``,
+            ``spectrograph``, ``description``, ``metric``, ``value``,
+            ``status``.  Empty when no ``reduceExposure_log`` was available.
         """
         self.log.info("Computing image quality metrics for %s", dataId)
 
@@ -441,14 +542,22 @@ class ImageQualityQaTask(PipelineTask):
             "Visit classification: obs_type=%r is_iis=%s seq_nam=%r for %s", obs_type, is_iis, seq_nam, dataId
         )
 
-        als = addTraceLambdaToArclines(arcLines, detectorMap)
-        data = computeImageQuality(als)
+        if arcLines is not None:
+            als = addTraceLambdaToArclines(arcLines, detectorMap)
+            data = computeImageQuality(als)
+        else:
+            # Not loaded (trace/quartz visit, see runQuantum): an empty arc-line
+            # table, so the paths below see zero good arc lines.
+            data = pd.DataFrame(
+                {column: pd.Series(dtype=float) for column in ("fiberId", "x", "y", "lam", "fwhm", "theta")}
+            )
+            data["flag"] = pd.Series(dtype=bool)
         data["peakRatio"] = np.nan
 
         # Flexure diagnostic: offset from static calibration detectorMap.
         # Positive dxCenter means the calibration prediction is to the right
         # of the actual measured fiber position.
-        if detectorMapCalib is not None and "x" in data.columns:
+        if detectorMapCalib is not None and "x" in data.columns and len(data) > 0:
             calibX = detectorMapCalib.getXCenter(
                 np.asarray(data["fiberId"], dtype=np.int32),
                 np.asarray(data["y"], dtype=np.float64),
@@ -465,6 +574,7 @@ class ImageQualityQaTask(PipelineTask):
 
         dense_data = False
         using_fluxstd_filter = False
+        using_profile_widths = False
         # force_sparse bypasses the n_good_arc check for visit types where we
         # know the arc catalog will not match (IIS arcs/traces).
         force_sparse = False
@@ -501,11 +611,12 @@ class ImageQualityQaTask(PipelineTask):
                     dense_data = True
                 else:
                     self.log.warning(
-                        "Regular arc calexp fallback too sparse for %s"
-                        " (%d good, %.1f%% flagged); keeping %d arc-line measurements.",
+                        "Regular arc calexp fallback unusable for %s: %d of %d cross-dispersion"
+                        " samples measured cleanly (%.3f%% usable); keeping %d arc-line measurements.",
                         dataId,
                         n_good_calexp,
-                        100.0 * (1.0 - calexp_good_frac),
+                        len(calexp_data),
+                        100.0 * calexp_good_frac,
                         n_good_arc,
                     )
             else:
@@ -531,11 +642,12 @@ class ImageQualityQaTask(PipelineTask):
 
         elif obs_type == "trace" and not is_iis:
             # Regular quartz/trace (all fibers, quartz lamp): no arc lines to
-            # fit, so use calexp cross-dispersion moments as the primary path.
+            # fit, so use calexp cross-dispersion trace fits as the primary path.
             # Any arc-line rows still held in ``data`` describe a catalog that
             # does not apply to a quartz frame, so the visit stays sparse
             # unless one of the two measurement paths succeeds.
             force_sparse = True
+            calexp_failed = False
             if calexp is not None:
                 self.log.info(
                     "Regular trace/quartz %s: measuring FWHM from calexp.",
@@ -555,23 +667,44 @@ class ImageQualityQaTask(PipelineTask):
                     dense_data = True
                     force_sparse = False
                 else:
+                    # Report the denominator. "%d good, %.1f%% flagged" read as a
+                    # contradiction: the count is absolute, the percentage is over
+                    # ~50k cross-dispersion samples, and %.1f rounds 99.98 to 100.0
+                    # -- so 10 surviving samples printed as "100% flagged".
+                    calexp_failed = True
                     self.log.warning(
-                        "Quartz calexp too sparse for %s (%d good, %.1f%% flagged); FWHM will be sparse.",
+                        "Quartz calexp unusable for %s: %d of %d cross-dispersion samples"
+                        " measured cleanly (%.3f%% usable); trying the fiber profile calibration.",
                         dataId,
                         n_good_calexp,
-                        100.0 * (1.0 - calexp_good_frac),
+                        len(calexp_data),
+                        100.0 * calexp_good_frac,
                     )
-            elif fiberProfiles is not None:
-                self.log.info(
-                    "Regular trace/quartz %s: no calexp; falling back to fiber profile calibration widths.",
+
+            # The fiber profile widths are the secondary fallback, and the test
+            # is whether the calexp path produced a usable result -- not whether
+            # a calexp existed. Hanging this off ``calexp is None`` made the
+            # fallback unreachable exactly when it was needed: a calexp that is
+            # present but measures badly left the visit sparse with a perfectly
+            # good fiberProfiles sitting unused.
+            if not dense_data and fiberProfiles is not None:
+                # Log the resolution at the level of the problem it resolves. When
+                # the calexp measurement failed, the line above was a WARNING, and
+                # an INFO follow-up means an operator filtering at WARNING sees the
+                # failure but never learns it was recovered from.
+                report = self.log.warning if calexp_failed else self.log.info
+                report(
+                    "Regular trace/quartz %s: falling back to fiber profile calibration widths.",
                     dataId,
                 )
                 data = self._buildProfileData(fiberProfiles, detectorMap)
+                using_profile_widths = True
                 dense_data = True
                 force_sparse = False
-            else:
+            elif not dense_data:
                 self.log.warning(
-                    "Regular trace/quartz %s: no calexp and no fiberProfiles; FWHM will be sparse.",
+                    "Regular trace/quartz %s: neither a usable calexp measurement nor"
+                    " fiberProfiles; FWHM will be sparse.",
                     dataId,
                 )
 
@@ -719,6 +852,7 @@ class ImageQualityQaTask(PipelineTask):
                         self.config.minGoodLines,
                     )
                     data = self._buildProfileData(fiberProfiles, detectorMap)
+                    using_profile_widths = True
                     dense_data = True
                 else:
                     self.log.warning(
@@ -790,7 +924,11 @@ class ImageQualityQaTask(PipelineTask):
         # flag rate reflects exposure depth rather than optical quality.  FWHM
         # is still reported when the good-fraction threshold is met.
         sparse_fallback = force_sparse or ((n_good_arc < self.config.minGoodLines) and not dense_data)
-        if sparse_fallback or using_fluxstd_filter:
+        # _buildProfileData sets `flag` to all-False unconditionally, so pctFlagged
+        # on the fiber-profile path is 0.0 by construction rather than by
+        # measurement -- a statistic that cannot cross its own threshold (R1).
+        # Suppress it, as the FLUXSTD path already does for the same reason.
+        if sparse_fallback or using_fluxstd_filter or using_profile_widths:
             pct_flagged = np.nan
             flagBreakdown = {}
         else:
@@ -804,59 +942,50 @@ class ImageQualityQaTask(PipelineTask):
 
         title = "{visit} {arm}{spectrograph}".format(**dataId)
 
-        # Determine per-quantum pass/warn/fail status from absolute thresholds.
-        # Trace-only visits use the same flag-rate check; FWHM check is skipped
-        # when medFwhm is NaN (no valid lines).
-        reasons = []
-        fwhm_status = "PASS"
-        if not trace_only and not np.isnan(med_fwhm):
-            if med_fwhm >= self.config.fwhmFailThreshold:
-                fwhm_status = "FAIL"
-                reasons.append(
-                    f"medFWHM={med_fwhm:.2f}px >= fail threshold {self.config.fwhmFailThreshold}px"
-                )
-            elif med_fwhm >= self.config.fwhmWarnThreshold:
-                fwhm_status = "WARN"
-                reasons.append(
-                    f"medFWHM={med_fwhm:.2f}px >= warn threshold {self.config.fwhmWarnThreshold}px"
-                )
+        # Determine per-quantum pass/warn/fail status. Measurement is above;
+        # judgement is here, and it is the one shared gating path over the
+        # metric registry rather than a per-metric if/elif ladder (rule R3).
+        # The thresholds themselves still come from the config, so command-line
+        # overrides continue to take effect.
+        registry = buildImageQualityRegistry(self.config)
 
-        flag_status = "PASS"
-        if np.isfinite(pct_flagged):
-            arm = dataId.get("arm", "")
-            species = seq_nam.split(":", 1)[-1].strip() if ":" in seq_nam else ""
-            compoundKey = f"{arm}:{species}" if species else ""
-            warn_thresh = self.config.flagRateWarnThreshold.get(
-                compoundKey, self.config.flagRateWarnThreshold.get(arm, 15.0)
-            )
-            fail_thresh = self.config.flagRateFailThreshold.get(
-                compoundKey, self.config.flagRateFailThreshold.get(arm, 20.0)
-            )
-            if pct_flagged >= fail_thresh:
-                flag_status = "FAIL"
-                reasons.append(f"pctFlagged={pct_flagged:.1f}% >= fail threshold {fail_thresh}%")
-            elif pct_flagged >= warn_thresh:
-                flag_status = "WARN"
-                reasons.append(f"pctFlagged={pct_flagged:.1f}% >= warn threshold {warn_thresh}%")
+        # Flag-rate thresholds are looked up ``arm:species`` then ``arm``: several
+        # lamp species have almost no usable b-arm lines, so a blended threshold
+        # tracks the species mix rather than the instrument (R7).
+        arm = dataId.get("arm", "")
+        species = seq_nam.split(":", 1)[-1].strip() if ":" in seq_nam else ""
+        flagRateKeys = (f"{arm}:{species}" if species else "", arm)
 
-        dx_status = "PASS"
-        if np.isfinite(medDxCenter):
-            absDx = abs(medDxCenter)
-            if absDx >= self.config.dxCenterFailThreshold:
-                dx_status = "FAIL"
-                reasons.append(
-                    f"|dxCenter|={absDx:.3f}px >= fail threshold {self.config.dxCenterFailThreshold}px"
-                )
-            elif absDx >= self.config.dxCenterWarnThreshold:
-                dx_status = "WARN"
-                reasons.append(
-                    f"|dxCenter|={absDx:.3f}px >= warn threshold {self.config.dxCenterWarnThreshold}px"
-                )
+        # Trace FWHM is gated against its own thresholds: a quartz trace width is
+        # not the same quantity as an arc-line second moment. The key follows the
+        # visit type, not the ``traceOnly`` column -- a quartz frame measured
+        # from its calexp has ``traceOnly == False`` and is still a trace.
+        #
+        # A FWHM read from ``fiberProfiles`` is not gated at all. It is a
+        # calibration constant, identical every visit that uses the calib, so
+        # it cannot tell a defocused exposure from a good one; gating it would
+        # report a verdict on nothing. The value is still written.
+        traceKeys = (f"trace:{arm}", "trace") if obs_type == "trace" else ()
+        gateResults = [
+            None if using_profile_widths else registry.gate("medFwhm", med_fwhm, keys=traceKeys),
+            registry.gate("pctFlagged", pct_flagged, keys=flagRateKeys),
+            registry.gate("medDxCenter", medDxCenter),
+        ]
+        # UNKNOWN, not PASS, when every gate declined to judge. A quantum where
+        # nothing could be measured is unassessed, and reporting PASS would say
+        # the detector is fine on the strength of having looked at nothing --
+        # which also lets a golden-set known_good entry be satisfied vacuously.
+        qa_status = worstStatus(gateResults, default=UNKNOWN)
+        reasons = [result.reason for result in gateResults if result is not None and result.reason]
 
-        _level = {"PASS": 0, "WARN": 1, "FAIL": 2}
-        qa_status = max((fwhm_status, flag_status, dx_status), key=lambda s: _level[s])
-
-        reason_str = "; ".join(reasons) if reasons else "all metrics nominal"
+        if reasons:
+            reason_str = "; ".join(reasons)
+        elif qa_status == UNKNOWN and using_profile_widths:
+            reason_str = "FWHM read from the fiberProfiles calibration, not measured; not gated"
+        elif qa_status == UNKNOWN:
+            reason_str = "no metric could be measured"
+        else:
+            reason_str = "all metrics nominal"
         dxStr = f"{medDxCenter:+.3f}px" if np.isfinite(medDxCenter) else "NaN"
         self.log.info(
             "IQ QA %-4s  %s  %-22s  medFWHM=%.2fpx  dxCenter=%s  pctFlagged=%s  [%s]",
@@ -918,17 +1047,28 @@ class ImageQualityQaTask(PipelineTask):
         for bitName, pct in flagBreakdown.items():
             metricsDict[f"pct{bitName}"] = [pct]
 
-        # Add species stats columns dynamically
-        for sp, (x_rms, y_rms) in logMetrics["speciesStats"].items():
-            metricsDict[f"fitSpeciesXRms_{sp}"] = [x_rms]
-            metricsDict[f"fitSpeciesYRms_{sp}"] = [y_rms]
+        # Per-species fit statistics go out in long format rather than as
+        # ``fitSpeciesXRms_<species>`` columns. The wide form made the column
+        # set vary per quantum, so concatenating across quanta produced a ragged
+        # NaN-padded frame and every downstream groupby had to know the species
+        # in advance. See pfs.drp.qa.metrics.longFormat.
+        speciesMetrics = toLongFrame(
+            longRecords(
+                dataId,
+                {
+                    speciesName: {"fitSpeciesXRms": xRms, "fitSpeciesYRms": yRms}
+                    for speciesName, (xRms, yRms) in logMetrics["speciesStats"].items()
+                },
+                registry=registry,
+            )
+        )
 
         metrics = pd.DataFrame(metricsDict)
         for key in ("visit", "arm", "spectrograph"):
             if key in dataId:
                 metrics[key] = dataId[key]
 
-        return Struct(iqQaData=data, iqQaMetrics=metrics)
+        return Struct(iqQaData=data, iqQaMetrics=metrics, iqQaSpeciesMetrics=speciesMetrics)
 
     @staticmethod
     def _logToString(logData: Any) -> str:
@@ -1262,15 +1402,17 @@ class ImageQualityQaTask(PipelineTask):
         detectorMapCalib: DetectorMap | None = None,
         fiberIds: set | None = None,
     ) -> pd.DataFrame:
-        """Measure fiber profile FWHM directly from post-ISR image pixel data.
+        """Measure fiber trace FWHM directly from post-ISR image pixel data.
 
-        Samples the cross-dispersion intensity profile at regular row
-        intervals, computes the background-subtracted 2nd moment (converting
-        to a Gaussian-equivalent FWHM), and records the peak-to-total flux
-        ratio as a secondary focus indicator.
+        Every ``profileYStride`` rows, fits every detectorMap fiber in the row
+        with `pfs.drp.qa.crossDispersion.measureRow`: a joint fit of each trace
+        and its neighbours, since PFS traces sit ~6.2 px apart and a fixed
+        aperture's "background" lands on the next fiber. This does the stack
+        calls; the measurement itself is the stack-free
+        `~pfs.drp.qa.crossDispersion.measureImageWidths`.
 
-        Unlike ``_buildProfileData``, this method reflects the actual optical
-        state of the exposure rather than a (possibly stale) calibration.
+        Unlike ``_buildProfileData``, this reflects the actual optical state of
+        the exposure rather than a (possibly stale) calibration.
 
         Parameters
         ----------
@@ -1283,142 +1425,44 @@ class ImageQualityQaTask(PipelineTask):
             offset ``dxCenter`` (calibration prediction minus measured
             center) is recorded for each sample as a flexure diagnostic.
         fiberIds : `set` or `None`, optional
-            If provided, only fibers whose IDs are in this set are sampled.
-            Use this to restrict measurement to known bright fibers (e.g.
-            FLUXSTD fibers from ``pfsConfig``) and avoid dilution from dark
-            sky fibers.  When ``None``, all fibers in the detectorMap are
-            sampled.
+            If provided, only these fibers are *reported* -- e.g. FLUXSTD
+            fibers from ``pfsConfig``, to avoid dilution from dark sky fibers.
+            Every fiber is still fitted, because a fiber's fit depends on its
+            physical neighbours.
 
         Returns
         -------
         `pandas.DataFrame`
-            Columns: ``fiberId``, ``x``, ``y``, ``lam``, ``fwhm``, ``theta``,
-            ``flux``, ``fluxErr``, ``flag``, ``traceOnly``, ``peakRatio``,
-            ``dxCenter``.  ``traceOnly`` is `False`: these are live
-            measurements of the exposure, not calibration trace widths.
+            Columns `pfs.drp.qa.crossDispersion.IMAGE_WIDTH_COLUMNS`.
+            ``traceOnly`` is `False`: these are live measurements of the
+            exposure, not calibration trace widths.
         """
-        image = calexp.image.array.astype(np.float64)
-        mask_arr = calexp.mask.array
-        nRows, nCols = image.shape
-
-        halfWidth = self.config.profileHalfWidth
-        yStride = self.config.profileYStride
+        nRows = calexp.image.array.shape[0]
+        rows = np.arange(self.config.profileYStride // 2, nRows, self.config.profileYStride)
         badBits = calexp.mask.getPlaneBitMask(["BAD", "SAT", "CR", "NO_DATA"])
 
-        all_det_fiberIds = np.asarray(detectorMap.fiberId, dtype=np.int32)
-        if fiberIds is not None:
-            mask = np.isin(all_det_fiberIds, list(fiberIds))
-            det_fiberIds = all_det_fiberIds[mask]
-        else:
-            det_fiberIds = all_det_fiberIds
-        y_samples = np.arange(yStride // 2, nRows, yStride, dtype=np.float64)
+        allFiberIds = np.asarray(detectorMap.fiberId, dtype=np.int32)
+        xCenters = np.empty((len(rows), len(allFiberIds)))
+        wavelengths = np.empty_like(xCenters)
+        calibXCenters = np.empty_like(xCenters) if detectorMapCalib is not None else None
+        for ii, row in enumerate(rows):
+            yArr = np.full(len(allFiberIds), row, dtype=np.float64)
+            xCenters[ii] = detectorMap.getXCenter(allFiberIds, yArr)
+            wavelengths[ii] = detectorMap.findWavelength(allFiberIds, yArr)
+            if calibXCenters is not None:
+                calibXCenters[ii] = detectorMapCalib.getXCenter(allFiberIds, yArr)
 
-        all_fiberIds: list = []
-        all_y: list = []
-        all_x: list = []
-        all_lam: list = []
-        all_fwhm: list = []
-        all_flux: list = []
-        all_flag: list = []
-        all_peakRatio: list = []
-        all_dxCenter: list = []
-
-        for y_val in y_samples:
-            y_int = round(y_val)
-            if y_int < 0 or y_int >= nRows:
-                continue
-
-            y_arr = np.full(len(det_fiberIds), y_val, dtype=np.float64)
-            x_centers = detectorMap.getXCenter(det_fiberIds, y_arr)
-            lams = detectorMap.findWavelength(det_fiberIds, y_arr)
-            calibXCenters = (
-                detectorMapCalib.getXCenter(det_fiberIds, y_arr) if detectorMapCalib is not None else None
-            )
-            row_image = image[y_int, :]
-            row_mask = mask_arr[y_int, :]
-
-            for ii, (fiberId, x_cen, lam) in enumerate(zip(det_fiberIds, x_centers, lams, strict=False)):
-                if not (np.isfinite(x_cen) and np.isfinite(lam)):
-                    continue
-
-                x_lo = max(0, int(x_cen) - halfWidth)
-                x_hi = min(nCols, int(x_cen) + halfWidth + 1)
-                if x_hi - x_lo < 5:
-                    continue
-
-                strip = row_image[x_lo:x_hi]
-                is_bad = (row_mask[x_lo:x_hi] & badBits) != 0
-
-                fwhm_val = np.nan
-                flag_val = True
-                peak_ratio = np.nan
-                flux_val = np.nan
-                dx_center = np.nan
-
-                if is_bad.sum() <= halfWidth:
-                    # Background from outermost 2 pixels on each side.
-                    edge = np.concatenate([strip[:2], strip[-2:]])
-                    edge_bad = np.concatenate([is_bad[:2], is_bad[-2:]])
-                    good_edge = ~edge_bad
-                    bg = float(np.nanmean(np.where(good_edge, edge, np.nan)))
-                    if not np.isfinite(bg):
-                        bg = 0.0
-
-                    # Per-pixel noise from edge scatter; fall back to sqrt(|bg|)
-                    # when fewer than 2 good edge pixels are available.
-                    bg_rms = float(np.nanstd(np.where(good_edge, edge, np.nan)))
-                    if not np.isfinite(bg_rms) or bg_rms <= 0:
-                        bg_rms = max(1.0, np.sqrt(abs(bg)))
-
-                    strip_bg = np.where(is_bad, 0.0, strip - bg)
-                    peak_val = float(strip_bg.max())
-                    total = float(strip_bg.sum())
-
-                    # Require a minimum peak S/N before accepting this sample.
-                    # Without this gate, pure-noise strips (e.g. dark rows in
-                    # an IIS frame) pass the total>0 check ~50 % of the time
-                    # and contribute garbage FWHM values.
-                    if peak_val >= self.config.minPeakSN * bg_rms and total > 0:
-                        x_rel = np.arange(x_lo, x_hi, dtype=np.float64) - x_cen
-                        mu = float((x_rel * strip_bg).sum()) / total
-                        var = float(((x_rel - mu) ** 2 * strip_bg).sum()) / total
-                        if var > 0:
-                            fwhm_val = _FWHM_FACTOR * np.sqrt(var)
-                            peak_ratio = peak_val / total
-                            flag_val = False
-                            if calibXCenters is not None:
-                                dx_center = float(calibXCenters[ii]) - (x_cen + mu)
-                        flux_val = total
-
-                all_fiberIds.append(int(fiberId))
-                all_y.append(y_val)
-                all_x.append(float(x_cen))
-                all_lam.append(float(lam))
-                all_fwhm.append(fwhm_val)
-                all_flux.append(flux_val)
-                all_flag.append(flag_val)
-                all_peakRatio.append(peak_ratio)
-                all_dxCenter.append(dx_center)
-
-        n = len(all_fwhm)
-        return pd.DataFrame(
-            {
-                "fiberId": np.array(all_fiberIds, dtype=np.int32),
-                "y": np.array(all_y),
-                "x": np.array(all_x),
-                "lam": np.array(all_lam),
-                "fwhm": np.array(all_fwhm),
-                "theta": np.zeros(n),
-                "flux": np.array(all_flux),
-                "fluxErr": np.ones(n),
-                "flag": np.array(all_flag, dtype=bool),
-                # These are measurements of the exposure itself, not widths
-                # read back from a fiber profile calibration, so the FWHM
-                # thresholds apply to them.
-                "traceOnly": False,
-                "peakRatio": np.array(all_peakRatio),
-                "dxCenter": np.array(all_dxCenter),
-            }
+        return measureImageWidths(
+            calexp.image.array[rows],
+            calexp.variance.array[rows],
+            (calexp.mask.array[rows] & badBits) != 0,
+            rows,
+            allFiberIds,
+            xCenters,
+            wavelengths,
+            calibXCenters,
+            select=fiberIds,
+            minPeakSN=self.config.minPeakSN,
         )
 
     @staticmethod

@@ -14,12 +14,13 @@ Contents:
 3. [Architecture](#architecture)
 4. [Key Conventions](#key-conventions)
 5. [How to Work in This Repo](#how-to-work-in-this-repo)
-6. [Git Commit Convention](#git-commit-convention)
-7. [Domain Knowledge: `imageQualityQa`](#domain-knowledge-imagequalityqa)
-8. [Arc Lamp Physics and b-arm `pctFlagged` Failures](#arc-lamp-physics-and-b-arm-pctflagged-failures)
-9. [Butler / Pipeline Data Flow for DM & IQ QA](#butler--pipeline-data-flow-for-dm--iq-qa)
-10. [Common Failure Patterns](#common-failure-patterns)
-11. [Cross-repo Dependency Notes](#cross-repo-dependency-notes)
+6. [Golden Visit Set and Threshold Derivation](#golden-visit-set-and-threshold-derivation)
+7. [Git Commit Convention](#git-commit-convention)
+8. [Domain Knowledge: `imageQualityQa`](#domain-knowledge-imagequalityqa)
+9. [Arc Lamp Physics and b-arm `pctFlagged` Failures](#arc-lamp-physics-and-b-arm-pctflagged-failures)
+10. [Butler / Pipeline Data Flow for DM & IQ QA](#butler--pipeline-data-flow-for-dm--iq-qa)
+11. [Common Failure Patterns](#common-failure-patterns)
+12. [Cross-repo Dependency Notes](#cross-repo-dependency-notes)
 
 ---
 
@@ -36,7 +37,7 @@ the pipeline/config glue to run them.
   `dmResiduals`, `dmCombinedResiduals`, `extractionQa`, `extractionQaCombined`,
   `imageQualityQa`.
 - **Tasks in the pipeline (`python/pfs/drp/qa/`)**:
-  - `imageQualityQa.py` — image quality (FWHM, flag rates); plots in `iqQaPlots.py`
+  - `imageQualityQa.py` — image quality (FWHM, flag rates); plots in `plotting/iqQa.py`
   - `dmResiduals.py`, `dmCombinedResiduals.py` — detector map residuals (per-detector
     and cross-visit combined)
   - `extractionQa.py`, `extractionQaCombined.py` — fiber extraction quality
@@ -57,7 +58,7 @@ the pipeline/config glue to run them.
     exits non-zero on BAD. Keep it stack-free.
   - `imageQualityLogQa.py` — per-visit report from `reduceExposure`/`imageQualityQa`
     logs or a direct Butler query; dashboard plot, markdown report, JSON dump
-  - `plotIqQaTimeSeries.py` — cross-visit `iqQaMetrics` time series via `iqQaPlots.py`
+  - `plotIqQaTimeSeries.py` — cross-visit `iqQaMetrics` time series via `plotting/iqQa.py`
   - `fiberNormsQa.py` — entry point for `fiberNormsQa.main`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),
   which contains the core reduction logic and C++ primitives, and on `pfs_utils`. Both
@@ -71,8 +72,8 @@ the pipeline/config glue to run them.
 - `bin.src/` — command-line scripts, run directly as `python bin.src/<name>.py`.
   There is no SCons `shebang()` step and no generated `bin/` directory.
 - `ups/` — EUPS configuration (`drp_qa.table`, dependencies and `PATH`/`PYTHONPATH`)
-- `tests/` — pytest-based tests (may rely on the LSST/PFS stack). `tests/SConscript` is
-  the one surviving SCons file; it is vestigial and not exercised by `pytest`.
+- `tests/` — pytest-based tests. Most run without the LSST/PFS stack; the ones that need
+  it guard themselves with `pytest.importorskip` (see below).
 - `pyproject.toml` — build config (setuptools) and **all** tool configs (Ruff, pytest).
   Keep it that way: don't add standalone per-tool config files.
 - `README.md` — project overview and usage notes
@@ -99,9 +100,9 @@ setup -r .
 so both must be available.
 
 EUPS is still used for dependency resolution via `ups/drp_qa.table`, but **there is no
-SCons build** — `SConstruct` and `bin.src/SConscript` were removed. `setup -r .` only
-prepends `PATH` and `PYTHONPATH`; nothing is compiled or generated. (`tests/SConscript`
-still exists but is vestigial.)
+SCons build** — `SConstruct`, `bin.src/SConscript` and `tests/SConscript` were all
+removed. `setup -r .` only prepends `PATH` and `PYTHONPATH`; nothing is compiled or
+generated.
 
 ### Install
 
@@ -154,15 +155,32 @@ fix findings in the code you touch rather than widening the ignore list in
 
 **The package is not installed in CI.** `pip install -e .` would pull `pfs-utils` (and
 transitively `pfs-datamodel`, `pfs-instdata`) from GitHub, making every run depend on
-three other repositories. Only the stack-free suite runs, and it imports nothing beyond
-the standard library.
+three other repositories. CI installs only ordinary PyPI wheels (`pytest`, `numpy`,
+`pandas`, `scipy`, `matplotlib`, `seaborn`, `pyyaml`) and `tests/conftest.py` puts `python/` on
+`sys.path`, so the stack-free suite imports `pfs.drp.qa.*` straight from the checkout.
 
 **Tests that need the stack** cannot be collected without it — a module-level
 `import lsst.utils.tests` fails during collection and aborts the whole run, so an in-test
-`try/except ImportError` never gets the chance to skip. `tests/conftest.py` lists those
-modules in `_STACK_MODULES` and ignores them when the stack is absent. Add new ones there,
-or better, keep the logic under test in pure functions that take arrays and DataFrames so
-no stack is needed at all.
+`try/except ImportError` never gets the chance to skip. Guard such a module at module
+level instead:
+
+```python
+dmResiduals = pytest.importorskip("pfs.drp.qa.dmResiduals", reason="requires the LSST/PFS stack")
+```
+
+`tests/conftest.py` also keeps a `_STACK_MODULES` list that drops modules from collection
+when their module-scope imports cannot be satisfied. It is empty today and is the escape
+hatch for a module that genuinely cannot use `importorskip` — one subclassing
+`lsst.utils.tests.TestCase`, say. Prefer `importorskip`, which keeps the guard next to the
+import it guards.
+
+**Better than either:** keep the logic under test in pure functions that take arrays and
+DataFrames, so no stack is needed at all. That is what `pfs.drp.qa.metrics` and
+`pfs.drp.qa.plotting` exist for.
+
+**No `pass` test bodies.** A test that asserts nothing reports green and hides the defect
+it was named after. A metric test should inject a defect of known size and assert the
+metric recovers it.
 
 ### Running pipelines
 
@@ -290,13 +308,67 @@ Use `.pyi` files for C++ extensions in `drp_stella` to provide type hints.
 `runQuantum` wraps `self.run()` in a `try/except ValueError` — errors are logged but do
 not crash the pipeline. Only write outputs when `run()` succeeds.
 
+### Metrics and gating: the registry
+
+Tasks emit numbers; a separate layer turns numbers into `PASS`/`WARN`/`FAIL`. That layer
+is `pfs.drp.qa.metrics.registry`, and it is stack-free and Butler-free so it can be
+unit-tested in CI.
+
+A metric declares itself once as a `MetricDef`: its `units`, the external `reference` it
+is measured against (R1), `higherIsWorse`, its `thresholds` (with optional per-key
+`overrides` for `arm` / `arm:species`), and the `provenance` of those thresholds (R2).
+Gating is then `MetricRegistry.gate`, the same code for every metric, and the reason
+string is generated rather than written per metric.
+
+Two conventions that matter:
+
+- **The thresholds live in the task's config, not in the registry module.** A task builds
+  its registry from the config in force — see
+  `pfs.drp.qa.metrics.definitions.buildImageQualityRegistry` — so `-c` overrides still
+  take effect. The registry module holds the metadata; the config holds the numbers.
+- **`gate` returns `None`, not `PASS`, when there is no verdict to give** — a NaN value,
+  or a metric with no thresholds. `worstStatus` skips those. An unmeasured or ungated
+  metric must never turn a bad quantum green. A task that wants to report "we could not
+  measure at all" does so itself, when *every* gate returned `None`.
+
+Do not add a per-metric if/elif ladder to a task. If gating needs something the registry
+cannot express, extend `MetricDef`.
+
 ### Plot outputs
 
 - Single-figure tasks: return a `matplotlib.figure.Figure` in the `Struct`; Butler stores
   it via `storageClass="Plot"` using `PdfMatplotlibFormatter`.
 - Multi-page tasks: return a `MultipagePdfFigure`; call `.append(fig)` for each page.
 
-### Shared plotting utilities (`utils/plotting.py`)
+### Plotting lives in `pfs.drp.qa.plotting`
+
+Every plotting function takes DataFrames (and plain numbers) and returns a
+`matplotlib.figure.Figure`. **None of them may import the Butler or a task class** —
+`tests/test_plotting.py` checks this statically over the whole subpackage, so the rule
+cannot quietly rot. That constraint is what gives three consumers (dashboard, on-demand
+report, notebooks) one implementation, and what makes the plots testable at all.
+
+| Module | Contents |
+|---|---|
+| `plotting/palettes.py` | `div_palette`, `detector_palette`, `description_palette`, `spectrograph_plot_markers`, `scatterplot_with_outliers` |
+| `plotting/dmResiduals.py` | `DetectorGeometry`, `plot_detectormap_residuals`, `plot_residual` |
+| `plotting/dmCombined.py` | `plot_detector_summary`, `plot_detector_summary_per_desc`, `plot_visits`, `plot_title`, `reportFigures` |
+| `plotting/iqQa.py` | `plotIqTimeSeries` |
+
+Two consequences worth knowing:
+
+- **`plot_detectormap_residuals` takes a `DetectorGeometry`**, not a `DetectorMap`. A
+  `DetectorMap` is still accepted and reduced to one via `DetectorGeometry.coerce`, so
+  existing callers are unaffected — but passing the geometry is what lets the function be
+  called without the stack.
+- **Assembling figures into a Butler artifact is the task's job.** `reportFigures` yields
+  pages; `dmCombinedResiduals.make_report` binds them to `MultipagePdfFigure`. Do not push
+  a storage class back into the plotting package.
+
+`pfs.drp.qa.utils.plotting` and `pfs.drp.qa.iqQaPlots` remain as re-export shims for
+notebooks and external callers; prefer the new paths in new code.
+
+### Shared plotting utilities (`utils/plotting.py` — re-export shim)
 
 - `div_palette` — diverging colormap with over/under/bad colors for residual plots.
 - `detector_palette` — arm color mapping: `{"b": blue, "r": red, "n": goldenrod, "m": pink}`.
@@ -333,6 +405,118 @@ on Butler/LSST objects are documentation rather than something a tool will check
 8. Include concise docstrings describing purpose, inputs, outputs, and any assumptions —
    especially about LSST data structures.
 9. Prefer small, focused PRs with clear descriptions of the change and its QA impact.
+
+---
+
+## Golden Visit Set and Threshold Derivation
+
+**No threshold enters the codebase before it has been computed from a known-good visit
+range.** A number invented at the keyboard cannot be defended when it fires at 03:00, and
+a metric compared against a threshold derived from its own sample is pinned near a
+constant and measures nothing. See `doc/qa-rebuild-plan.md` sections 1.1 and 1.2.
+
+### The golden visit set
+
+`tests/data/goldenVisits.yaml` is a small, fixed list of visits with known verdicts:
+`known_good` entries must PASS every metric, `known_bad` entries must WARN or FAIL, and
+each `known_bad` entry names the `metric` whose value identifies the fault. The file's
+own header documents the entry schema.
+
+Load it with `pfs.drp.qa.metrics.goldenVisits.loadGoldenVisits`, which is stack-free and
+Butler-free:
+
+```python
+from pfs.drp.qa.metrics.goldenVisits import loadGoldenVisits
+
+golden = loadGoldenVisits()
+golden.expectationFor(140005, arm="b", spectrograph=1)   # -> "FAIL"
+golden.expectationFor(999999)                            # -> None, i.e. no expectation
+```
+
+Two properties to keep in mind:
+
+- **Absence is not a PASS.** `expectationFor` returns `None` for a visit the set does not
+  cover. Never treat that as an expectation.
+- **Placeholders are excluded by default.** Entries marked `placeholder: true` have no
+  real visit number yet; the loader drops them unless `includePlaceholders=True` is
+  passed, so an unfilled entry can never silently validate a threshold.
+- **A suspected verdict is not a verdict.** `unconfirmed: true` marks a real visit that
+  was flagged at the telescope but whose metrics nobody has checked. It is loaded and
+  reported like any other entry — `calibrateQaThresholds.py` prints where its values land
+  relative to the suggested FAIL — but `GoldenVisitSet.confirmedBad` leaves it out, so it
+  never decides a pass/fail. A guess that fails the build is worse than no entry. Once the
+  numbers have been compared, drop the flag and name the metric, or move the visit to
+  `known_good` if it turns out fine.
+
+**Every threshold and every new metric is validated against this set.** A metric that
+flags a `known_good` visit, or passes a `known_bad` one, does not merge.
+
+**Every entry carries a verdict, and only entries with verdicts belong.** A visit earns
+its place because a metric that gets it wrong must not merge. Visits with no verdict — a
+per-run calibration block, a nightly drift series, the inputs to a run-to-run comparison —
+do not go here. Select those by querying the Butler on sequence type, lamp and date when
+the job runs: that stays correct for the next run without anyone editing the file, whereas
+a transcribed list is stale the moment observing continues.
+
+### What the shipped thresholds actually rest on
+
+Nothing written down. The `medFwhm` (3.2/3.5), `medDxCenter` (1.0/2.0) and `pctFlagged`
+values arrived with `imageQualityQa` itself in commit `8a69c05` (2026-08-11), and no
+derivation was recorded — not in the commit message, which explains the threshold
+*structure* at length but not the numbers; not in the field docs beyond "Tuned for
+arm-b"; not in `README.md` or this file, which restate them without justifying them.
+
+The per-species *shape* of the flag-rate thresholds is well justified: Ar, Xe and Kr have
+almost no usable blue lines, so a single b-arm threshold cannot work. The specific
+percentages are not.
+
+So treat all of them as R2 violations inherited rather than introduced, and re-derive
+them. The registry's provenance strings say `ORIGIN UNRECORDED` rather than inventing a
+plausible history — a guess dressed as a fact is worse than an admitted gap, because only
+one of them prompts anyone to fix it.
+
+### Threshold derivation procedure
+
+Follow this for every threshold:
+
+1. Run the metric over the `known_good` visits with **no gating**.
+2. Take the distribution of the metric across all good detectors.
+3. `WARN` at the 95th percentile, `FAIL` at the 99th, rounded to a readable value — or,
+   where a physical limit exists (saturation, fiber pitch), use the physical limit.
+4. Verify the `known_bad` visits exceed `FAIL`.
+5. Record the visit range and the derivation date in the config field's `doc` string.
+
+`bin.src/calibrateQaThresholds.py` does steps 1-4 and prints the provenance sentence for
+step 5:
+
+```bash
+python bin.src/calibrateQaThresholds.py -b /path/to/butler -c u/you/qa/run12 \
+    --metric medFwhm --metric pctFlagged --group-by arm
+```
+
+It exits non-zero when a suggestion rests on too few samples (< 20) or when the
+known-bad data does not cross the suggested `FAIL` — either way, do not commit the
+numbers *as though they were derived*.
+
+It still prints them, which is deliberate: an underpowered number is worth having as long
+as nobody mistakes it for a measurement. Its provenance sentence carries a `NOT RELIABLE`
+clause naming the sample count and the floor, so the caveat travels with the value into
+the config field rather than living only in the terminal output you saw once. The `m`-arm
+trace threshold is the standing example — 16 detectors, and no more m-arm quartz in Run25
+to be had. A known_bad entry that names `medFwhm` is only checked against `medFwhm`;
+it asserts nothing about the other metrics.
+
+Group with `--group-by arm` (and `--group-by description` once metrics are long-format)
+wherever the physics differs per group. **Filter before grouping** when a group mixes
+populations: `--group-by arm` alone puts arcs and quartz together, and a quartz trace width is
+not an arc-line second moment. `--filter "obsType == 'arc'"` keeps the arc threshold an arc
+threshold. Do not filter on `traceOnly`: it only marks FWHM read from `fiberProfiles`, and a
+quartz quantum measured from its calexp has `traceOnly == False`. Blue-arm flag rates are the standing example: a
+single blended threshold is dominated by the species mix, not by the instrument.
+
+The pure functions behind the CLI live in `pfs.drp.qa.metrics.thresholds`
+(`deriveThresholds`, `verifyKnownBad`, `formatProvenance`, `roundToReadable`) and are
+unit-tested without the stack in `tests/test_thresholds.py`.
 
 ---
 
@@ -409,10 +593,10 @@ fallback is preferred in that case.
 | Config field | Purpose |
 |---|---|
 | `minGoodLines` (default 10) | Min good arc-line measurements to trust the arc path |
-| `minPeakSN` (default 5.0) | Min peak S/N for calexp profile samples |
+| `minPeakSN` (default 5.0) | Min significance (fitted trace flux over its error) for calexp width samples |
 | `maxCalexpFlagRate` (default 0.5) | Max fraction of bad calexp samples before rejecting calexp path |
 | `minFluxstdGoodFrac` (default 0.10) | Min fraction of good FLUXSTD samples for stellar calexp path |
-| `profileHalfWidth` (default 7) | Half-width (px) of the cross-dispersion aperture for calexp measurements |
+| `profileHalfWidth` | Deprecated and ignored; the calexp estimator (`pfs.drp.qa.crossDispersion`) fits each trace with its neighbours and needs no aperture |
 | `profileYStride` (default 50) | Row sampling interval (px) for calexp profile measurements |
 | `fwhmWarnThreshold` / `fwhmFailThreshold` (3.2/3.5 px) | FWHM pass/warn/fail thresholds |
 | `dxCenterWarnThreshold` / `dxCenterFailThreshold` (1.0/2.0 px) | `\|medDxCenter\|` flexure thresholds |
@@ -446,7 +630,9 @@ dict as a Python literal:
   `detectorMap_calib`, a flexure diagnostic
 - `pctFlagged`: percentage of arc lines flagged by `fitDetectorMap`
 - `nLines`: number of measurements used
-- `traceOnly`: True when falling back to fiber-profile widths
+- `traceOnly`: True when FWHM was read from `fiberProfiles`. That value is a calibration
+  constant, so `medFwhm` is then **not gated** and the quantum reports `UNKNOWN` unless another
+  metric judges it. Trace FWHM gating keys off `obsType == "trace"`, not this column.
 - `obsType` / `seqName`: visit classification and raw `W_SEQNAM`
 - `qaStatus`: `"PASS"`, `"WARN"`, or `"FAIL"` — the worst of the FWHM, flag-rate, and
   `|medDxCenter|` checks
@@ -455,8 +641,16 @@ Additional columns are added dynamically: a per-status-bit flag breakdown
 (`pctNotVisible`, `pctBlend`, `pctSuspect`, `pctRejected`, `pctBroad`, plus `pctLowSN` /
 `pctMeasFail` on the arc-line path), and — when the optional `isr_log`, `cosmicray_log`,
 and `reduceExposure_log` connections are present — ISR, cosmic-ray, and `fitDetectorMap`
-statistics (`fitChi2`, `fitXRms`, `fitYRms`, `fitReserved*`, `fitSpecies*Rms_<species>`,
-per-fiber arrays).
+statistics (`fitChi2`, `fitXRms`, `fitYRms`, `fitReserved*`, per-fiber arrays).
+
+**Per-species values are not columns here.** They go to the separate
+`iqQaSpeciesMetrics` dataset in long format — one row per
+`(visit, arm, spectrograph, description, metric)`, with columns `value` and `status`.
+The old `fitSpeciesXRms_<species>` / `fitSpeciesYRms_<species>` columns made the column
+set vary per quantum, so concatenating across quanta gave a ragged NaN-padded frame and
+every `groupby` had to know the species in advance. Build the rows with
+`pfs.drp.qa.metrics.longFormat.longRecords` / `toLongFrame`; `widen()` gives a wide view
+when an operator wants one.
 
 ### DM residual metrics
 
@@ -470,9 +664,11 @@ a robust variant (`robustRms`); `softenFit` is solved by bisection. Prefer these
 adding parallel unweighted metrics.
 
 `dmCombinedResiduals` aggregates across detectors into `dmQaDetectorStats` and renders a
-multi-page `dmQaCombinedResidualPlot` via `make_report`.
+multi-page `dmQaCombinedResidualPlot` via `make_report`, which is now a thin wrapper that
+binds the pages yielded by `pfs.drp.qa.plotting.dmCombined.reportFigures` to the Butler
+storage class.
 
-The task writes **data only**. Plotting lives in `iqQaPlots.py` and is driven after the
+The task writes **data only**. Plotting lives in `pfs.drp.qa.plotting` and is driven after the
 fact by `bin.src/plotIqQaTimeSeries.py`; there is no `iqQaPlot` dataset.
 
 ---
@@ -571,7 +767,7 @@ drpQA.yaml#imageQualityQa            dims: (instrument, visit, arm, spectrograph
              fiberProfiles, detectorMap_calib (calibrations),
              calexp, pfsConfig (optional),
              isr_log, cosmicray_log, reduceExposure_log (optional)
-    → writes: iqQaData, iqQaMetrics
+    → writes: iqQaData, iqQaMetrics, iqQaSpeciesMetrics
 
 drpQA.yaml#dmResiduals               dims: (instrument, visit, arm, spectrograph)
     ← reads: raw.visitInfo, detectorMap, lines, reduceExposure_config
@@ -587,7 +783,7 @@ drpQA.yaml#extractionQaCombined      ← extQaImage_pickle (multiple)
 
 bin.src/plotIqQaTimeSeries.py
     ← reads: iqQaMetrics (all quanta in a collection)
-    → writes: time-series PNG via pfs.drp.qa.iqQaPlots.plotIqTimeSeries
+    → writes: time-series PNG via pfs.drp.qa.plotting.plotIqTimeSeries
 ```
 
 `reduceExposure` is **not** required between `fitDetectorMap` and `imageQualityQa`. The

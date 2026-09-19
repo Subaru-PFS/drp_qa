@@ -10,6 +10,41 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Golden visit set** (`tests/data/goldenVisits.yaml`) plus a stack-free loader,
+  `pfs.drp.qa.metrics.goldenVisits`. `known_good` is the Run25 stable calibration sequence
+  (two blocks on 2025-11-10, one on 2025-12-01, and the uniformity set) plus three clear
+  twilight-sky sets;
+  `known_bad` is the SM1 focus range (140005-140138) and a cloudy twilight set.
+  Placeholder entries are excluded by default, so an unfilled entry cannot validate a threshold.
+  Every entry carries a verdict: visits with none — a per-run calibration block, a drift series, the
+  inputs to a run-to-run comparison — are selected by querying the Butler when the job runs, not
+  transcribed here. An entry marked `unconfirmed: true` carries a suspected verdict that nobody has
+  checked: it is loaded and reported, but excluded from the check that a threshold separates the
+  known-bad data, so a guess cannot fail a build.
+- **`pfs.drp.qa.metrics.thresholds`** — the threshold derivation procedure as pure functions: WARN at
+  p95 and FAIL at p99 of the known-good distribution, or a physical limit, plus the provenance
+  sentence for the config field's `doc`.
+- **`calibrateQaThresholds.py --filter`** — a pandas query applied to the metrics before
+  derivation, e.g. `--filter "obsType == 'arc'"`. Without it, `--group-by arm` mixes arcs and
+  quartz, and a quartz trace width is not an arc-line second moment. Filter on `obsType`, not
+  `traceOnly`: a quartz quantum measured from its calexp has `traceOnly = False`. Unlike `--where`
+  it can use any column.
+- **`bin.src/calibrateQaThresholds.py`** — runs that procedure over a Butler collection or a CSV and
+  prints suggested config values. Exits non-zero on too few samples, or when the known-bad data does
+  not cross the suggested FAIL.
+- **Metric registry** (`pfs.drp.qa.metrics.registry`) — one `MetricDef` per metric carrying its
+  units, external reference, direction, thresholds and their provenance; `MetricRegistry.gate` is the
+  single gating path. An unmeasured or ungated metric yields no verdict rather than a PASS.
+- **`iqQaSpeciesMetrics`** — new `imageQualityQa` output: per-species fit statistics in long format.
+- **`examples/verify_PIPE2D-1391-01.ipynb`** — read-only verification notebook for this branch. Opens
+  the Butler with `writeable=False` and runs no pipeline; the verdict-parity check puts the stored
+  `iqQaMetrics` numbers through both the old gating ladder and the new registry and compares.
+- **`tests/test_connections.py`** — stack-free consistency checks over the connections declared by
+  the tasks in `drpQA.yaml`, read from source with `ast`. Catches the prerequisite/input mismatch
+  above, which previously needed a Butler and the full stack to surface.
+- **`tests/test_fitStats.py`** — pins `FitStat`'s field order, which `FitStats.from_dataframe`
+  unpacks positionally and which is therefore part of the stored `dmQaResidualStats` schema.
+- **AGENTS.md: "Golden Visit Set and Threshold Derivation"**.
 - **GitHub Actions CI** — `.github/workflows/tests.yml` runs the stack-free test suite on Python 3.12 and
   3.13; `.github/workflows/lint.yml` runs `ruff check .` and `ruff format --check .` over the whole tree.
   Both are blocking.
@@ -18,25 +53,84 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `E501` is ignored because `ruff format` already enforces `line-length` for code and what remains are
   long regexes and report strings the formatter will not split; `RUF001`–`RUF003` are ignored because
   Greek letters and typographic dashes are intentional in a scientific package.
-- **`tests/conftest.py`** — skips test modules that import the LSST/PFS stack at module scope when the
-  stack is unavailable, so the stack-free suite can be collected and run in CI. Add new stack-dependent
-  modules to `_STACK_MODULES`.
-- Added a new `imageQualityQa` workflow that writes `iqQaData`/`iqQaMetrics` with per-quantum status and supports
-  post-hoc time-series plotting via `iqQaPlots` and `bin.src/plotIqQaTimeSeries.py`.
-- Added stack-free log QA/report tools (`bin.src/fitDetectorMapLogQa.py`, `bin.src/imageQualityLogQa.py`) and associated
-  tests/documentation for the image-quality pipeline.
+- **`tests/conftest.py`** — puts `python/` on `sys.path` so the suite imports `pfs.drp.qa.*` from the
+  checkout, and drops test modules whose module-scope stack imports cannot be satisfied. New
+  stack-dependent modules should use `pytest.importorskip` instead.
+- **`imageQualityQa` workflow** writing `iqQaData`/`iqQaMetrics` with per-quantum status, with
+  post-hoc time-series plotting via `bin.src/plotIqQaTimeSeries.py`.
+- **Stack-free log QA/report tools** (`bin.src/fitDetectorMapLogQa.py`, `bin.src/imageQualityLogQa.py`)
+  and associated tests and documentation.
 - **`AGENTS.md`** — single source of instructions for AI coding assistants, with
   `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md` as symlinks to it.
 
-### Fixed
-
-- **`dmResiduals` import** — `getDescriptionCounts` is now imported from
-  `pfs.drp.stella.fitDetectorMap`. The former `pfs.drp.stella.fitDistortedDetectorMap` module no longer
-  exists in `drp_stella`, so `DetectorMapResidualsTask` failed to import and the `dmResiduals` pipeline
-  task could not run.
-
 ### Changed
 
+- **`imageQualityQa` measures calexp trace widths with a new estimator**,
+  `pfs.drp.qa.crossDispersion.measureImageWidths`: each trace is fitted jointly with its neighbours
+  instead of from a fixed 15 px strip. At the measured 6.17 px fiber pitch the old strip's
+  "background" pixels sat on the neighbouring fibers, so on Run25 quartz 0.004-0.23 % of samples
+  were usable and every quartz quantum fell back to `fiberProfiles`. On real quartz (133040) the new
+  one finds 92 % (b2) and 96 % (r2) usable, and b2 agrees with its calib to 0.5 %. **Expect quartz
+  `medFwhm` to change** in new collections: it is now measured, not a calibration constant. r2 reads
+  about 10 % wider than its calib, unexplained so far. `fluxErr` is now the fit's standard error
+  rather than a constant 1, and `dxCenter` uses the fitted centroid. About 35 s per quantum.
+- **Trace FWHM gating keys off `obsType == "trace"`**, not `traceOnly`, and **FWHM read from
+  `fiberProfiles` is no longer gated**. That value is a calibration constant, identical every visit,
+  so it cannot distinguish a good exposure from a bad one; such a quantum now reports `UNKNOWN`
+  (reason: "FWHM read from the fiberProfiles calibration, not measured; not gated") unless another
+  metric judges it.
+- **`imageQualityQa` no longer reads `lines` on a trace/quartz visit.** The connection is now
+  `deferLoad=True`. On quartz, `fitDetectorMap` writes a trace position per fiber per row — 2.4 M
+  rows, 201 MB for 133040 b2 — and reading it took about 170 s of a 240 s quantum, for rows the
+  trace path never uses.
+- **`imageQualityQa:profileHalfWidth` is deprecated and ignored** — the new estimator uses no aperture.
+- **`imageQualityQa:minPeakSN`** now thresholds the fitted flux over its standard error, not the
+  peak over an edge-pixel scatter.
+- **Trace/quartz FWHM is gated, per arm.** It was skipped entirely when `traceOnly=True`, so the
+  fiber-profile path had no metric that could fail. It now gates through the registry keys
+  `trace:<arm>` then `trace`, fed by `traceFwhmWarnThreshold` / `traceFwhmFailThreshold`, which are
+  `DictField`s keyed by arm. A fiber-profile width is not an arc-line second moment, so an
+  unconfigured arm lands on a trace-specific fallback rather than falling through to the arc
+  thresholds. Every value is currently the arc default and none is derived; the `doc` strings say
+  so. b, r and n have enough Run25 quartz to derive from (56/40/32 detectors); **m is hand-set and
+  stays that way** — its only quartz is the two short block B and C sequences, 16 detectors, below
+  the 20 floor.
+- **`pctFlagged` is suppressed on the fiber-profile path.** `_buildProfileData` sets `flag` to
+  all-False unconditionally, so the metric was 0.0 by construction rather than by measurement — a
+  statistic that cannot cross its own threshold (R1). It is now NaN there, as on the FLUXSTD path,
+  which already did this for the same reason. Combined with the two changes above, a trace quantum
+  now passes on a real measurement or reports `UNKNOWN`.
+- **A quantum that measures nothing now reports `UNKNOWN`, not `PASS`.** When every gate
+  declines to judge, `imageQualityQa` passes `default=UNKNOWN` to `worstStatus`. Reporting PASS
+  claimed the detector was fine on the strength of having measured nothing, and let a golden-set
+  `known_good` entry be satisfied vacuously. `UNKNOWN` sits outside `STATUS_ORDER`: it is not a
+  severity, it means unassessed. **This changes stored `qaStatus` values.**
+- **The calexp-sparsity log messages report their denominator.** `"10 good, 100.0% flagged"` read as
+  a contradiction: the count is absolute, the percentage is over ~50 000 cross-dispersion samples, and
+  `%.1f` rounded 99.98 to 100.0. They now read `"10 of 50000 cross-dispersion samples measured cleanly
+  (0.020% usable)"`. "Flagged" was also wrong — the complement of good includes a NaN FWHM, not just a
+  set flag. Log text only; no behaviour change.
+- **The fiber-profile fallback is reachable again for trace/quartz visits.** It hung off "no calexp"
+  rather than "the calexp measurement failed", so a present-but-unusable calexp left the visit sparse
+  with a good `fiberProfiles` unused. Observed on Run25 visit 133040, arm b, spectrograph 4 (10 good
+  samples, 100 % flagged). **This changes `medFwhm` from NaN to a real value on affected quanta.**
+- **Plotting moved to `pfs.drp.qa.plotting`** (`palettes`, `dmResiduals`, `dmCombined`, `iqQa`).
+  DataFrames in, `Figure` out; no Butler and no task class, checked statically by
+  `tests/test_plotting.py`. `pfs.drp.qa.utils.plotting` and `pfs.drp.qa.iqQaPlots` remain as shims.
+- **`plot_detectormap_residuals` takes a `DetectorGeometry`**; a `DetectorMap` is still accepted and
+  reduced to one, so callers are unaffected.
+- **`make_report` is a thin wrapper** over `plotting.dmCombined.reportFigures`; only the binding to
+  `MultipagePdfFigure` stays with the task.
+- **`FitStat`/`FitStats` moved to `pfs.drp.qa.metrics.fitStats`**, re-exported from `dmResiduals`.
+- **`imageQualityQa` gates through the registry.** Thresholds still come from the config, so
+  overrides work as before; verdict boundaries and reason strings are unchanged.
+- **Per-species metrics are long-format.** The ragged `fitSpeciesXRms_<species>` columns are gone
+  from `iqQaMetrics`; the values are rows in `iqQaSpeciesMetrics`, so quanta with different species
+  mixes concatenate without NaN padding.
+- **`tests/test_dmResiduals.py` tests something.** Was a `pass` body; now exercises `get_fit_stats`
+  against injected defects of known size, guarded by `pytest.importorskip`.
+- **CI installs the PyPI wheels the stack-free suite needs** (numpy, pandas, matplotlib, seaborn,
+  pyyaml). None pulls in the stack or another PFS repository.
 - **Build and packaging** — `pyproject.toml` is now the single source of build, lint, and test configuration. Ruff
   replaces Black, isort, and Flake8; `uv.lock` pins the development environment. EUPS `setup -r .` still works via
   `ups/drp_qa.table`, but there is no longer a build step.
@@ -45,12 +139,69 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   → PEP 604 unions and `typing.Iterable` → `collections.abc.Iterable`. No behaviour changes. LSST camelCase naming is
   preserved; the corresponding pep8-naming rules are in the ignore list.
 
+### Fixed
+
+- **`iqQaSpeciesMetrics` failed to write whenever it had rows.** The `fitSpecies*` metrics are
+  ungated, so `status` was null on every row, and the Butler's parquet writer raises on a non-empty
+  string column with no non-null value (`max() iterable argument is empty`). A missing string is now
+  stored as `""`, which is still no verdict.
+- **`calibrateQaThresholds.py` and the verification notebook no longer double-count.** Their Butler
+  queries lacked `findFirst=True`, so a chained collection returned every run's copy of a dataset: a
+  detector reduced twice was counted twice, inflating `n` and repeating values, which is exactly what
+  pushes p95 and p99 together. Found as 7 surplus b-arm datasets (360 found against 353 produced).
+- **`fluxCalQa` imports again.** It read `FilterCurve` / `TransmissionCurve` from
+  `pfs.drp.stella.fitReference`, which `drp_stella` deleted in April 2025 (`178a1899`); they live in
+  `fitFluxReference` now. Same class of breakage as the `getDescriptionCounts` import fixed by
+  PIPE2D-1392, and invisible until someone set up a current `drp_stella`, since `fluxCalQa` is not
+  in `drpQA.yaml`.
+- **The pipeline builds.** `pfsConfig` was a `PrerequisiteInput` to `extractionQa` and
+  `extractionQaCombined` but a plain `Input` to `imageQualityQa`, so resolving all five tasks into
+  one graph failed with `ConnectionTypeConsistencyError`. Pre-existing on `main`, and invisible while
+  the tasks are run one at a time with `#label`. `imageQualityQa` now declares it as a prerequisite
+  with an explicit `minimum=0`, which keeps it optional — prerequisites otherwise default to
+  `minimum=1` and are resolved at graph-build time, where no runtime `try/except` can help.
+- **`plot_residual` no longer trips a pandas `FutureWarning`.** Its per-fiber aggregation applied
+  over the grouping columns; it now selects the two columns the aggregation reads, which is
+  behaviour-identical (verified) and works on every pandas version, unlike `include_groups=`.
+- **Partial flag-rate overrides no longer change verdicts.** A species key present in only one of
+  `flagRateWarnThreshold` / `flagRateFailThreshold` now resolves the missing side through its arm
+  entry before the global fallback, as the task's original lookup did. Previously
+  `warn={"b": 50, "b:Argon": 93}` with `fail={"b": 60}` gave `b:Argon` a FAIL of 20 rather than 60.
+- **A degenerate WARN/FAIL pair is detected.** When a tight distribution puts p95 and p99 inside one
+  rounding step the two collapse to the same number, and since the gate tests FAIL first the metric
+  silently loses its warning level. `deriveThresholds` now flags it, the provenance says so, and
+  `calibrateQaThresholds.py` exits non-zero. More significant digits would only disguise a WARN band
+  narrower than the distribution's own scatter.
+- **An unreliable derivation says so in its provenance.** A threshold from 16 detectors and one
+  from 400 used to produce identical-looking provenance sentences, so an underpowered value pasted
+  into a config read as derived. The sentence now carries an explicit `NOT RELIABLE` clause naming
+  the sample count and the floor. The number is still reported — the point is to have it *and* know
+  what it rests on.
+- **Threshold provenance records the quantiles actually used.** For a metric with
+  `higherIsWorse=False` the thresholds come from p5/p1; the provenance said p95/p99.
+- **`calibrateQaThresholds.py` no longer reports success without producing a threshold.** A metric
+  named on the command line but absent from the data is an error, long-format input is pivoted so
+  `iqQaSpeciesMetrics` can be calibrated against, a `verifyKnownBad` failure sets the exit status,
+  and metrics for which step 4 never ran are listed explicitly instead of passing silently.
+- **`imageQualityLogQa.py` reads per-species residuals again.** It reconstructed them from the
+  `fitSpeciesXRms_*` columns that moved to `iqQaSpeciesMetrics`, so Butler-sourced reports silently
+  omitted every species; it now merges that dataset, keeping the legacy path for older collections.
+- **`get_fit_stats` survives `dof <= 0`.** The softening solve divided by zero and handed
+  `scipy.optimize.bisect` a NaN endpoint, which raises. Matches the guard in `drp_stella`'s
+  `calculateSoftening`.
+- **The golden-visit loader rejects non-boolean `placeholder` / `unconfirmed`.** `placeholder:
+  "false"` is a string, and truthiness silently dropped the entry.
+- **`dmResiduals` import** — `getDescriptionCounts` is now imported from
+  `pfs.drp.stella.fitDetectorMap`. The former `pfs.drp.stella.fitDistortedDetectorMap` module no longer
+  exists in `drp_stella`, so `DetectorMapResidualsTask` failed to import and the `dmResiduals` pipeline
+  task could not run.
+
 ### Removed
 
+- **`tests/SConscript`** — the last SCons file; it imported `lsst.sconsUtils` and did nothing.
 - **Log-artifact tests** — the `TestRealLogs` class in `tests/test_fitDetectorMapLogQa.py` depended on
   `run28-dm-02.log` / `run28-dm-03.log`, which are not in the repository, so all eight tests always
   skipped and provided no coverage.
-
 - **SCons build** — `SConstruct`, `bin.src/SConscript`, and `ups/drp_qa.cfg`. The `bin/`
   directory is no longer generated; scripts are run as `python bin.src/<name>.py`.
 - **`setup.cfg`** and **`mypy.ini`** — superseded by `pyproject.toml`. No static type checker is configured for this

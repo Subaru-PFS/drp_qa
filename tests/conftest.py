@@ -23,14 +23,26 @@ that takes arrays or DataFrames so the test needs no stack at all — see
 
 import ast
 import importlib.util
+import sys
 from pathlib import Path
 
 # Test modules that import the LSST/PFS stack at module scope.
-_STACK_MODULES = [
-    "test_dmResiduals.py",
-]
+#
+# Empty today: every stack-dependent module fetches the stack with
+# ``pytest.importorskip`` at module level instead, which skips cleanly on its
+# own. Prefer that in new tests -- it keeps the guard next to the import it
+# guards. This list stays as the escape hatch for a module that genuinely cannot
+# use importorskip, e.g. one that subclasses ``lsst.utils.tests.TestCase``.
+_STACK_MODULES: list[str] = []
 
 _HERE = Path(__file__).parent
+
+# The package is deliberately not installed in CI (see .github/workflows/tests.yml),
+# and `setup -r .` only puts `python/` on PYTHONPATH for an EUPS shell. Put it on
+# sys.path here so the stack-free tests can import `pfs.drp.qa.*` either way.
+_SOURCE = _HERE.parent / "python"
+if str(_SOURCE) not in sys.path:
+    sys.path.insert(0, str(_SOURCE))
 
 
 def _moduleLevelImports(path: Path) -> set[str]:

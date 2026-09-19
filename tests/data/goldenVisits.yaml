@@ -1,0 +1,375 @@
+# Golden visit set for drp_qa
+# =============================================================================
+#
+# A small, fixed list of visits with *known* verdicts. Every threshold and every
+# new metric is validated against this set:
+#
+#   * a metric that flags a ``known_good`` visit does not merge;
+#   * a metric that passes a ``known_bad`` visit does not merge.
+#
+# See doc/qa-rebuild-plan.md section 1.1. Load it with
+# ``pfs.drp.qa.metrics.goldenVisits.loadGoldenVisits``, and derive thresholds
+# from it with ``bin.src/calibrateQaThresholds.py``.
+#
+# Entry schema
+# ------------
+# Exactly one of:
+#   visit:        int          a single visit
+#   visitRange:   [first, last]  an inclusive range of visits
+#
+# Optional selectors (omitted means "every value"):
+#   arms:           list of str, e.g. [b, r, n, m]
+#   spectrographs:  list of int, e.g. [1, 2, 3, 4]
+#   seqType:        str, the W_SEQNAM value, e.g. "Arc: HgCd"
+#
+# Sections:
+#   known_good:  expected to PASS every metric.
+#   known_bad:   expected to WARN or FAIL, for a stated reason.
+#
+# Every entry carries a verdict. That is the whole content of this file: a
+# visit earns a place here because a metric that gets it wrong must not merge.
+# Visits with no verdict do not belong -- a per-run calibration block, a nightly
+# drift series, the inputs to a run-to-run comparison. Those are selected by
+# querying the Butler on sequence type, lamp and date at the time the job runs,
+# which stays correct for the next run without anyone editing this file.
+#
+# Verdict:
+#   expect:   PASS | WARN | FAIL   (defaults to PASS in known_good, and is
+#                                   required in known_bad)
+#   metric:   str, optional. The metric whose name should identify the fault.
+#             The full-rebuild acceptance criterion is that a known_bad visit
+#             fails *for the expected reason*, not merely that it fails.
+#   reason:   str, why this verdict is expected.
+#   note:     str, free-form context.
+#
+# Bookkeeping:
+#   unconfirmed: true   marks a verdict that is suspected but not established --
+#                       a real visit, flagged at the telescope, whose metrics
+#                       nobody has checked. It is loaded and reported like any
+#                       other entry, but it is excluded from the check that a
+#                       threshold separates the known-bad data, because a guess
+#                       that fails the build is worse than no entry at all.
+#   placeholder: true   marks an entry that has not yet been filled in with a
+#                       real visit number. Placeholders are excluded by the
+#                       loader unless ``includePlaceholders=True`` is passed, so
+#                       that an unfilled entry can never silently validate a
+#                       threshold.
+# =============================================================================
+
+version: 1
+
+known_good:
+  # Run25, 2025-11-10/11. A stable calibration sequence at fixed pointing
+  # (alt 90, az 90, insrot 0), taken as two blocks with different camera sets.
+  # Supplied as the reference stable set; every threshold is derived from it.
+  #
+  # Block A -- b, r and n arms, spectrographs 1-4.
+  - visitRange: [133025, 133027]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    note: "Run25 stable set, block A. 10 s exposures."
+  - visitRange: [133028, 133030]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    note: "Run25 stable set, block A. 45 s exposures."
+  - visitRange: [133031, 133033]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    note: "Run25 stable set, block A. 5 s exposures."
+  - visitRange: [133034, 133036]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    note: "Run25 stable set, block A. 70 s exposures."
+  - visitRange: [133037, 133039]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: HgCd"
+    note: >-
+      Run25 stable set, block A. 45 s exposures. The only HgCd in the set, and
+      so the only dense, well-measured b-arm coverage: b-arm flag rates here are
+      genuine rather than lamp physics.
+  - visitRange: [133040, 133041]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    note: "Run25 stable set, block A. 20 s scienceTrace; exercises the calexp trace-width path (b2 3.12 px, r2 3.17 px)."
+
+  # Block B -- b and m arms, spectrographs 1-4. No HgCd was taken in this block.
+  - visitRange: [133042, 133044]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    note: "Run25 stable set, block B. 10 s exposures."
+  - visitRange: [133045, 133047]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    note: "Run25 stable set, block B. 45 s exposures."
+  - visitRange: [133048, 133050]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    note: "Run25 stable set, block B. 5 s exposures."
+  - visitRange: [133051, 133053]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    note: "Run25 stable set, block B. 45 s exposures."
+  - visitRange: [133054, 133055]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    note: "Run25 stable set, block B. 20 s scienceTrace."
+
+  # Block C -- 2025-12-01, the Nov-10 sequence repeated at azimuth 168 rather
+  # than 90, same altitude and insrot, three weeks later. Assumed stable on the
+  # same basis as blocks A and B, pending measurement. Its value is twofold: it
+  # takes b:HgCd to 24 detectors, over the 20-sample floor, and it is a genuine
+  # second epoch under a different gravity vector -- the external reference the
+  # Phase 2 drift metrics compare against (R1).
+  - visitRange: [135828, 135829]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    note: "Run25 block C, az 168. 20 s scienceTrace."
+  - visitRange: [135830, 135831]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    note: "Run25 block C, az 168. 10 s exposures."
+  - visitRange: [135832, 135833]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    note: "Run25 block C, az 168. 45 s exposures."
+  - visitRange: [135834, 135835]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    note: "Run25 block C, az 168. 5 s exposures."
+  - visitRange: [135836, 135837]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    note: "Run25 block C, az 168. 70 s exposures."
+  - visitRange: [135838, 135840]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: HgCd"
+    note: "Run25 block C, az 168. 45 s exposures. The second HgCd block; see above."
+  - visitRange: [135841, 135842]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    note: "Run25 block C, az 168, m arm. 10 s exposures."
+  - visitRange: [135843, 135844]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    note: "Run25 block C, az 168, m arm. 45 s exposures."
+  - visitRange: [135845, 135846]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    note: "Run25 block C, az 168, m arm. 5 s exposures."
+  - visitRange: [135847, 135848]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    note: "Run25 block C, az 168, m arm. 45 s exposures."
+  - visitRange: [135849, 135850]
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    note: "Run25 block C, az 168, m arm. 20 s scienceTrace."
+
+  # Twilight sky, 2025-11-25. These are sky frames rather than true science
+  # targets. Their intended use is the O2 and OH sky-line check -- an
+  # independent test of the wavelength solution on data where no arc lines are
+  # available (plan section 6.6). Recorded as known_good on that basis; whether
+  # they should also be held to the FWHM and flag-rate gates is unconfirmed.
+  - visitRange: [134880, 134883]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Twilight sky"
+    note: "Run25 twilight sky, 180 s. Reference case for the O2/OH sky-line check."
+  - visitRange: [134884, 134886]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Twilight sky"
+    note: "Run25 twilight sky, 180 s. Reference case for the O2/OH sky-line check."
+
+  # Run25 "Uniformity" set. The trace visits here are what make a trace-FWHM
+  # threshold derivable: the fiber-profile path is gated on medFwhm, and a
+  # threshold for it has to come from quartz frames, not from the arc ones.
+  - visitRange: [133532, 133533]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    note: "Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace."
+  - visitRange: [133536, 133537]
+    arms: [b, r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    note: "Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace; n arm not read."
+  - visitRange: [134338, 134339]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    note: "Run25 uniformity set, 2025-11-21, az 290. 20 s scienceTrace."
+
+  # Twilight sky at insrot 90 rather than 0 -- the only entry at a different
+  # rotator angle, which is why it is worth having.
+  - visitRange: [135275, 135279]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Twilight sky"
+    note: >-
+      Run25 uniformity set, 2025-11-28, az 290, insrot 90. 180 s. Reference case
+      for the O2/OH sky-line check, as for the other twilight entries.
+
+known_bad:
+  # Run25 twilight sky taken through cloud. Unlike the SM1 entry above this is
+  # an observing condition rather than an instrument fault, but the degraded
+  # image quality is what QA should catch.
+  - visitRange: [134334, 134337]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Twilight sky"
+    expect: FAIL
+    metric: medFwhm
+    reason: "Cloudy; 180 s twilight sky taken through cloud."
+
+  # Documented genuine optics failure: SM1 showed FWHM 3.83-4.86 px across all
+  # lamp types over this visit range, independent of species, which rules out
+  # the lamp-physics explanation that covers high b-arm flag rates elsewhere.
+  # See AGENTS.md, "SM1 exception".
+  - visitRange: [140005, 140138]
+    arms: [b, r, n, m]
+    spectrographs: [1]
+    expect: FAIL
+    metric: medFwhm
+    reason: "SM1 focus/mirror alignment; FWHM 3.83-4.86 px across all lamp types."
+
+  # TODO(PIPE2D-1391): find a visit reduced against an out-of-date
+  # detectorMap_calib. This is the reference case for the Phase 2 drift
+  # metrics: large drift against a stale calib must be attributed to the calib,
+  # not to the instrument.
+  - placeholder: true
+    visit: null
+    expect: WARN
+    metric: medDxCenter
+    reason: "Reduced against a stale detectorMap_calib; bulk spatial offset."
+
+  # TODO(PIPE2D-1391): find a saturated frame if one exists in the archive.
+  # This is the reference case for the Phase 3 real-saturation metric.
+  - placeholder: true
+    visit: null
+    expect: FAIL
+    metric: pctSaturatedPixels
+    reason: "Saturated exposure; peak pixels flagged SAT."
+
+  # ---- Run30 -------------------------------------------------------------
+  # Frames taken with the light path obstructed. These are mis-taken frames
+  # rather than instrument faults, but they must not pass: a QA gate that
+  # greenlights a frame shot through a closed cover is not a gate.
+  - visitRange: [150115, 150116]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    expect: FAIL
+    metric: pctFlagged
+    reason: "M1 cover closed."
+  - visitRange: [150641, 150642]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    expect: FAIL
+    metric: pctFlagged
+    reason: "Mirror cover and top screen both closed; flagged at the telescope as to be ignored."
+  # Suspected faults, recorded so that somebody looks at them. Both were
+  # flagged at the telescope with a note nobody has yet tied to a number, so
+  # the verdict below is a suspicion, not a finding: `unconfirmed: true` keeps
+  # them out of the check that a threshold must separate the known-bad data.
+  # Once their metrics have been compared against the Run25 set, drop the flag
+  # and name the metric -- or move them to known_good if they turn out fine.
+  - visit: 150661
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    expect: FAIL
+    unconfirmed: true
+    reason: >-
+      Tagged "Mirror cover open, but screen is wrong position". Probably a
+      failure; neither the verdict nor the metric that should catch it has been
+      established.
+  - visit: 149883
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    expect: FAIL
+    unconfirmed: true
+    reason: >-
+      Tagged "Home" at the telescope, a note whose meaning is not settled. Other
+      visits carry the same tag. Recorded so its metrics can be compared against
+      the Run25 set; probably a failure, but unestablished.
+
+  # Partial slit illumination: only one fiber group was lit, so most fibers
+  # have no usable measurement. The defect is the count, not the shape.
+  - visit: 149217
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Trace"
+    expect: WARN
+    metric: nLines
+    reason: "Only group 2 was illuminated."
+  - visit: 149398
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    expect: WARN
+    metric: nLines
+    reason: "Only group 3 was illuminated."
+  - visit: 149881
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    expect: WARN
+    metric: nLines
+    reason: "Only group 2 was illuminated."
+  - visit: 150367
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    expect: WARN
+    metric: nLines
+    reason: "Only group 4 was illuminated."
+  - visit: 150413
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    expect: WARN
+    metric: nLines
+    reason: "Only group 1 was illuminated."
+
+  # Off-zenith Helium DetectorMap tests bracketing a science exposure, at
+  # altitude 45-49 and insrot 5-9 rather than at the zenith the calibration
+  # was taken at. This is the flexure reference case: a real offset against
+  # detectorMap_calib, which is what the Phase 2 drift metrics must detect and
+  # attribute correctly. WARN rather than FAIL is provisional.
+  - visit: 150779
+    arms: [b, m, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "DetectorMap test pre-exposure (Helium)"
+    expect: WARN
+    metric: medDxCenter
+    reason: "Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib."
+  - visit: 150782
+    arms: [b, m, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "DetectorMap test post-exposure (Helium)"
+    expect: WARN
+    metric: medDxCenter
+    reason: "Alt 49, az 53, insrot 5; flexure against a zenith-derived detectorMap_calib."

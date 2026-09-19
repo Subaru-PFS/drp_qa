@@ -10,10 +10,12 @@ __pycache__
 .coverage
 bin
 
-# Ignore everything in examples except our example notebook.
+# Ignore everything in examples except the notebooks we ship. Note that a new
+# notebook must be named here or `git add -A` will silently skip it.
 examples/*
 !examples/QA Pipelines.ipynb
 !examples/check_fiberProfiles.ipynb
+!examples/verify_PIPE2D-1391-01.ipynb
 
 .sconf_temp
 tests/.tests

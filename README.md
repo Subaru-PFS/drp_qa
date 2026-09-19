@@ -100,7 +100,7 @@ Measures image quality (FWHM), spatial flexure, and arc-line flag rates on a per
 `W_SEQNAM`) and routes it to the appropriate measurement path. When `reduceExposure` logs are available it also folds
 ISR, cosmic-ray, and `fitDetectorMap` statistics into the metrics table.
 
-The task writes data only; plotting lives in `pfs.drp.qa.iqQaPlots` and is driven after the fact by
+The task writes data only; plotting lives in `pfs.drp.qa.plotting` and is driven after the fact by
 `bin.src/plotIqQaTimeSeries.py` (see
 [Command-line tools](#command-line-tools)).
 
@@ -162,7 +162,8 @@ is applied to the cross-dispersion intensity profile measured at regular row int
   `pctLowSN` is usually lamp physics, `pctMeasFail` usually is not.
 - **`nLines`** — Number of measurements used (arc lines, calexp samples, or profile swaths).
 - **`traceOnly`** — `True` when FWHM comes from fiber profile calibration widths rather than live measurements; these
-  values reflect the calibration epoch, not the current visit.
+  values reflect the calibration epoch, not the current visit, so `medFwhm` is not gated for them. A quartz visit
+  measured from its calexp has `traceOnly = False`; select quartz with `obsType == "trace"`.
 - **`obsType`** / **`seqName`** — Visit classification (`arc`, `trace`, `science`, `allsky`,
   `unknown`) and the raw `W_SEQNAM` string (e.g. `"Arc: HgCd"`) it was derived from.
 - **`qaStatus`** — `PASS`, `WARN`, or `FAIL`; the worst of the `medFwhm`, `pctFlagged`, and
@@ -201,12 +202,12 @@ counts and for the `minSignalToNoisePerSpecies` option in `drp_stella` that addr
 ###### Measurement
 
 - `imageQualityQa:minGoodLines`: Minimum good arc-line measurements to trust the arc path. Default `10`.
-- `imageQualityQa:minPeakSN`: Minimum peak S/N for calexp profile samples. Default `5.0`.
+- `imageQualityQa:minPeakSN`: Minimum significance (fitted trace flux over its error) for calexp width samples. Default `5.0`.
 - `imageQualityQa:maxCalexpFlagRate`: Max fraction of bad calexp samples before rejecting the calexp path. Default
   `0.5`.
 - `imageQualityQa:minFluxstdGoodFrac`: Min fraction of good FLUXSTD samples for the stellar calexp path. Default `0.10`.
-- `imageQualityQa:profileHalfWidth`: Half-width (pixels) of the cross-dispersion aperture for calexp measurements.
-  Default `7`.
+- `imageQualityQa:profileHalfWidth`: Deprecated and ignored. The calexp estimator fits each trace jointly with its
+  neighbours and uses no fixed aperture.
 - `imageQualityQa:profileYStride`: Row sampling interval (pixels) for calexp profile measurements. Default `50`.
 
 ###### Pass/Fail Thresholds
@@ -363,18 +364,6 @@ Scripts live in `bin.src/` and are run directly — there is no SCons step to co
 python bin.src/<script>.py --help
 ```
 
-### `fiberNormsQa.py`
-
-Thin entry point for `pfs.drp.qa.fiberNormsQa.main`, which plots fiber normalizations from a Butler collection.
-
-## Command-line tools
-
-Scripts live in `bin.src/` and are run directly — there is no SCons step to copy them into a `bin/` directory on `PATH`:
-
-```bash
-python bin.src/<script>.py --help
-```
-
 ### `fitDetectorMapLogQa.py`
 
 Parses `pipetask run` log files from the detectorMap pipeline and reports a per-quantum
@@ -424,7 +413,7 @@ reparsing.
 
 Reads `iqQaMetrics` datasets across a collection and produces the multi-panel time-series figure (FWHM, flexure, flag
 breakdown, pass/fail heatmap) implemented in
-`pfs.drp.qa.iqQaPlots.plotIqTimeSeries`. This is the plotting that used to live inside
+`pfs.drp.qa.plotting.plotIqTimeSeries`. This is the plotting that used to live inside
 `imageQualityQa` itself. Requires the LSST stack for the Butler query; `--csv` bypasses it.
 
 ```bash
@@ -436,6 +425,38 @@ python bin.src/plotIqQaTimeSeries.py --csv metrics.csv --arm b,r --obs-type arc
 
 Filters: `--arm`, `--spectrograph`, `--obs-type` (all comma-separated), plus `--where`
 for an arbitrary Butler query expression.
+
+### `calibrateQaThresholds.py`
+
+Derives QA thresholds from the golden visit set, so that no threshold enters the codebase
+without having been computed from a known-good visit range. Reads a metrics dataset from a
+Butler collection (or a CSV exported earlier) and prints suggested config values together
+with the provenance sentence to paste into the config field's `doc` string.
+
+```bash
+python bin.src/calibrateQaThresholds.py \
+    -b /path/to/butler -c u/user/run30 \
+    --metric medFwhm --metric pctFlagged --group-by arm
+
+python bin.src/calibrateQaThresholds.py --csv metrics.csv --metric medFwhm
+```
+
+WARN is the 95th percentile of the known-good distribution and FAIL the 99th, rounded to a
+readable value, or a physical limit where one exists. Group with `--group-by` wherever the
+physics differs per group — `arm` is the standing example, because a single blended
+blue-arm flag-rate threshold tracks the lamp species mix rather than the instrument.
+
+**It exits non-zero** when a suggestion rests on fewer than 20 samples, or when the
+known-bad visits do not cross the suggested FAIL. Either way the numbers are not ready to
+commit: a threshold the known-bad data never crosses is a number in a config file, not a
+gate. A `known_bad` entry that names a metric is only checked against that metric, and
+entries marked `unconfirmed` are reported but never gate.
+
+The set itself is `tests/data/goldenVisits.yaml` — visits with known verdicts, loaded by
+`pfs.drp.qa.metrics.goldenVisits.loadGoldenVisits`. Every entry carries a verdict; visits
+with none (a per-run calibration block, a drift series) are selected by querying the Butler
+when a job runs, not transcribed there. See the file's own header for the entry schema and
+`AGENTS.md` for the full derivation procedure.
 
 ### `fiberNormsQa.py`
 

@@ -31,8 +31,8 @@ from matplotlib.figure import Figure
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pandas import DataFrame
 
+from pfs.drp.qa.plotting.palettes import detector_palette, div_palette
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
-from pfs.drp.qa.utils.plotting import detector_palette, div_palette
 from pfs.drp.stella import PfsArm, PfsConfig
 from pfs.drp.stella.fitFocalPlane import FitBlockedOversampledSplineConfig, FitBlockedOversampledSplineTask
 from pfs.drp.stella.selectFibers import SelectFibersTask
