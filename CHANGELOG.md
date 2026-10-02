@@ -44,6 +44,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `target-version = "py312"`), including `typing.Union`/`Optional`
   → PEP 604 unions and `typing.Iterable` → `collections.abc.Iterable`. No behaviour changes. LSST camelCase naming is
   preserved; the corresponding pep8-naming rules are in the ignore list.
+- **`pfs` and `pfs.drp` are PEP 420 namespace packages** — the `pkgutil`-style `python/pfs/__init__.py` and
+  `python/pfs/drp/__init__.py` are removed (and no longer ship in the wheel), matching `drp_stella`, `pfs_utils` and
+  `datamodel`. Module names are unchanged (PIPE2D-1904).
 
 ### Removed
 
