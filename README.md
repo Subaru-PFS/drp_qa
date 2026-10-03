@@ -194,8 +194,10 @@ is applied to the cross-dispersion intensity profile measured at regular row int
 
 The per-lamp b-arm values are deliberately permissive: several arc species have very few or very faint lines between 400
 and 650 nm, so `fitDetectorMap`'s global S/N cut rejects almost all of them regardless of image quality. Treating that
-as a failure would flag every Ar and Xe arc. See the "Arc Lamp Physics" section of `AGENTS.md` for the underlying line
-counts and for the `minSignalToNoisePerSpecies` option in `drp_stella` that addresses the cause.
+as a failure would flag every Ar and Xe arc. See the "Arc Lamp Physics" section of
+[`docs/qa-domain-notes.md`](docs/qa-domain-notes.md) for the underlying line counts. That section also describes a
+per-species S/N option (`minSignalToNoisePerSpecies`) that would address the cause, but it is **proposed only** — it
+does not exist in `drp_stella`, so the permissive thresholds above are the current mitigation.
 
 ##### Options
 
