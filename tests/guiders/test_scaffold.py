@@ -14,7 +14,7 @@ from matplotlib.figure import Figure
 from pfs.drp.qa.utils.plotting import opaqueColorbar
 
 
-@pytest.mark.parametrize("name", ["coordinates", "queries", "analysis", "plotting"])
+@pytest.mark.parametrize("name", ["coordinates", "queries", "compat", "analysis", "plotting"])
 def testGuidersModulesImport(name):
     importlib.import_module(f"pfs.drp.qa.guiders.{name}")
 

@@ -8,4 +8,7 @@ The package has four layers:
 - `plotting`: figures.
 
 `analysis` and `plotting` take DataFrames, never a database connection.
+
+`compat` keeps the names of drp_stella's AG readers, as deprecated wrappers
+of `queries.readAgcData`, while notebooks move to it.
 """

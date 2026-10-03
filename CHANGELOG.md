@@ -40,6 +40,23 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   (`pfiToZenith`, `zenithToPfi`) from drp_stella's `ag_to_zenith_offset`, which take hardware
   coordinates rather than negated y. Constants are renamed with their units (`agcCameraCenters` is
   `AGC_CAMERA_CENTERS_MM`, ...) (PIPE2D-1896).
+- **`pfs.drp.qa.guiders.queries`** — the guider tools' opdb and butler readers. Each takes a
+  `pfs.utils.database.opdb.OpDB` and binds its parameters. `readAgcData` replaces drp_stella's four AG
+  readers: one query for all the visits, one row per matched spot (every match flag; `agc_match_flags`
+  says which are valid), positions in hardware coordinates, a fresh index, and the columns listed in
+  `AGC_DATA_COLUMNS`. INST-PA and, before 2025-03-21, `m2_off3` come from the raw headers through a Gen3
+  butler (`readInstPa`, `find_W_M2OFF3`). Also `readAGCStars`, `readPfsDesign`, `readSpSInfo` and
+  `readTelStatus`. Compared with drp_stella: `readAGCStars` has its missing comma, the schema's
+  `*_designed` column names, and a qualified `guide_star_ra`, and reads only the visit's own config;
+  nothing calls `pd.set_option`; an exposure without a tel_status row keeps its stars; `shutter_open`
+  doesn't depend on spectrograph camera 1; `readSpSInfo` keeps visits in no sequence; NULL
+  `agc_data` flags get RIGHT from the centroid, as ics_agActor reads them; and
+  `find_W_M2OFF3` names the right visit in its error
+  (PIPE2D-1897).
+- **`pfs.drp.qa.guiders.compat`** — drp_stella's `readAGCPositionsForVisitByAgcExposureId`,
+  `readAgcDataFromOpdb`, `readAGCStarsForVisitByPfsVisitId` and `readAGCStarsForVisitSetByPfsVisitId`,
+  as wrappers of `readAgcData` that keep their arguments and columns and raise a `DeprecationWarning`
+  (PIPE2D-1897).
 
 ### Fixed
 

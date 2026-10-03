@@ -4,13 +4,19 @@ These tests need numpy, pandas, matplotlib and pfs_utils but not the LSST
 stack. CI runs them in their own job (``guiders`` in
 ``.github/workflows/tests.yml``); the standard-library job ignores this
 directory.
+
+Test modules can't import each other (``--import-mode=importlib``), so the
+test doubles here (`FakeOpDB`, `StubButler`) are handed out by fixtures.
 """
+
+import re
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.guiders.coordinates import AGC_CAMERA_CENTERS_MM
+from pfs.drp.qa.guiders.coordinates import AGC_CAMERA_CENTERS_MM, OPDB_Y_COLUMNS
 from pfs.utils.datamodel.ag import SourceCatalogFlags
 
 GAIA_ISOLATED = SourceCatalogFlags.GAIA | SourceCatalogFlags.NON_BINARY
@@ -39,8 +45,9 @@ def makeAgcData(
     (branch ``tickets/guiders-cleanup-reference``). The random draws are made
     in the same order, so the same seed gives the same data. Unlike the
     original it doesn't add the derived ``rms``, ``FWHM`` and ``left``
-    columns when ``stars=True``; those come from the package once its readers
-    move.
+    columns when ``stars=True``: `pfs.drp.qa.guiders.queries.readAgcData`
+    doesn't return them. Its columns are all in
+    `pfs.drp.qa.guiders.queries.AGC_DATA_COLUMNS`.
 
     Parameters
     ----------
@@ -137,3 +144,167 @@ def makeAgcDataFixture(rng):
         return makeAgcData(rng, **kwargs)
 
     return make
+
+
+# The opdb tables behind each readAgcData query, as FakeOpDB looks them up.
+AGC_QUERIES = {
+    "agc_data": r"FROM agc_exposure\s+JOIN agc_data",
+    "agc_exposure": r"FROM agc_exposure\s+WHERE",
+    "agc_tel_status": r"FROM tel_status\s+WHERE.*caller = 'agcc'",
+}
+
+
+class FakeOpDB:
+    """Stand-in for `pfs.utils.database.opdb.OpDB`.
+
+    Answers each query from the first table whose pattern matches the SQL.
+    When the query binds ``visits``, only the table's rows with those
+    ``pfs_visit_id`` values are returned, in a random order (SQL guarantees
+    none without ORDER BY). Each call is recorded in ``calls``.
+
+    Parameters
+    ----------
+    tables : `dict` [`str`, `pandas.DataFrame` or callable]
+        Tables (or functions of the bound parameters returning one), by name.
+    patterns : `dict` [`str`, `str`]
+        A regular expression for each name, matched against the SQL.
+    """
+
+    def __init__(self, tables, patterns=AGC_QUERIES):
+        self.tables = dict(tables)
+        self.patterns = patterns
+        self.calls = []
+        self._rng = np.random.RandomState(0)
+
+    def query_dataframe(self, sql, /, *, params=None, conn=None):
+        self.calls.append(SimpleNamespace(sql=sql, params=params))
+        for name, pattern in self.patterns.items():
+            if re.search(pattern, sql, re.DOTALL):
+                table = self.tables[name]
+                if callable(table):
+                    return table(params)
+                if params and "visits" in params:
+                    table = table[table.pfs_visit_id.isin(params["visits"])]
+                    table = table.sample(frac=1, random_state=self._rng)
+                return table.reset_index(drop=True)
+
+        raise AssertionError(f"Unexpected query:\n{sql}")
+
+
+def makeOpdbTables(agcData: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    """Make the opdb's answers to readAgcData's queries for some AG data.
+
+    Parameters
+    ----------
+    agcData : `pandas.DataFrame`
+        Synthetic AG data from ``makeAgcData(stars=True)``, in hardware
+        coordinates.
+
+    Returns
+    -------
+    tables : `dict` [`str`, `pandas.DataFrame`]
+        For each of `AGC_QUERIES`, the rows the opdb would return: positions
+        in the opdb's frame, and ``m2_off3`` in tel_status, not agc_data.
+    """
+    agcData = agcData.sort_values(["agc_exposure_id", "guide_star_id"], ignore_index=True)
+    n = len(agcData)
+
+    rows = agcData.drop(columns="m2_off3")
+    for column in OPDB_Y_COLUMNS:
+        rows[column] = -rows[column]
+    rows["spot_id"] = rows.guide_star_id % 1000
+    rows["agc_exptime"] = 2.0
+    rows["adc_pa"] = 0.5
+    rows["image_moment_00_pix"] = 1e4
+    rows["centroid_x_pix"] = np.linspace(0, 1000, n)
+    rows["peak_pixel_x_pix"] = rows.centroid_x_pix.round().astype(int)
+    rows["peak_pixel_y_pix"] = rows.centroid_y_pix.round().astype(int)
+    rows["peak_intensity"] = 500.0
+    rows["background"] = 10.0
+    rows["guide_ra"] = 150.0
+    rows["guide_dec"] = 2.0
+    rows["guide_pa"] = -90.0
+    rows["guide_delta_ra"] = 0.1
+    rows["guide_delta_dec"] = -0.1
+    rows["guide_delta_scale"] = 0.0
+
+    exposures = agcData.groupby("agc_exposure_id", as_index=False).agg(
+        pfs_visit_id=("pfs_visit_id", "first"), m2_pos3=("m2_pos3", "first"), m2_off3=("m2_off3", "first")
+    )
+    telStatus = pd.DataFrame(
+        {
+            "pfs_visit_id": exposures.pfs_visit_id,
+            "status_sequence_id": 10 * exposures.agc_exposure_id,
+            "m2_off3": exposures.m2_off3,
+            "tel_ra": 150.0 + 1e-4 * exposures.agc_exposure_id,
+            "tel_dec": 2.0,
+        }
+    )
+
+    return {
+        "agc_data": rows,
+        "agc_exposure": exposures[["pfs_visit_id", "agc_exposure_id", "m2_pos3"]],
+        "agc_tel_status": telStatus,
+    }
+
+
+@pytest.fixture(name="makeOpdb")
+def makeOpdbFixture(makeAgcData):
+    """Return a function making a `FakeOpDB` with synthetic AG data.
+
+    It takes `makeAgcData`'s keyword arguments (``stars`` is always set) and
+    returns the `FakeOpDB` and the AG data it holds, in hardware
+    coordinates. The tables are in ``opdb.tables``, to edit.
+    """
+
+    def make(**kwargs) -> tuple[FakeOpDB, pd.DataFrame]:
+        agcData = makeAgcData(stars=True, **kwargs)
+        return FakeOpDB(makeOpdbTables(agcData)), agcData
+
+    return make
+
+
+@pytest.fixture(name="FakeOpDB")
+def fakeOpDBFixture():
+    """Return the `FakeOpDB` class."""
+    return FakeOpDB
+
+
+class StubButler:
+    """Stand-in for a Gen3 butler holding some raws.
+
+    Only the Gen3 calls the readers make are implemented, so a Gen2 call
+    (``butler.get("raw_md", ...)``) fails. Each raw's header has
+    ``INST-PA = 10 * visit``, plus 1 for the r arm, and
+    ``W_M2OFF3 = -visit / 1e6``.
+
+    Parameters
+    ----------
+    raws : `list` [`dict`]
+        Data IDs of the raws.
+    """
+
+    def __init__(self, raws):
+        self.raws = raws
+        self.registry = self
+
+    def queryDatasets(self, datasetType, **where):
+        assert datasetType == "raw"
+        return [
+            SimpleNamespace(dataId=dataId)
+            for dataId in self.raws
+            if all(dataId.get(key) == value for key, value in where.items())
+        ]
+
+    def get(self, datasetType, dataId):
+        assert datasetType == "raw.metadata"
+        return {
+            "INST-PA": 10.0 * dataId["visit"] + (dataId["arm"] == "r"),
+            "W_M2OFF3": -dataId["visit"] / 1e6,
+        }
+
+
+@pytest.fixture(name="StubButler")
+def stubButlerFixture():
+    """Return the `StubButler` class."""
+    return StubButler
