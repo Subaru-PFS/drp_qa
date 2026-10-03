@@ -47,6 +47,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **`pfs` and `pfs.drp` are PEP 420 namespace packages** — the `pkgutil`-style `python/pfs/__init__.py` and
   `python/pfs/drp/__init__.py` are removed (and no longer ship in the wheel), matching `drp_stella`, `pfs_utils` and
   `datamodel`. Module names are unchanged (PIPE2D-1904).
+- **`FluxCalQA` takes the databases** — `FluxCalQA(butler, opdb, qadb, ...)` now requires a
+  `pfs.utils.database` `OpDB` and `QaDB` and queries them with bound parameters, replacing its own
+  `psycopg2.connect` calls. Needs `pfs_utils` 7.4.18 or later. `main()` still reads the opdb on `pfsa-db`
+  (PIPE2D-1893).
 
 ### Removed
 
