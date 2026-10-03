@@ -6,10 +6,14 @@ stack. CI runs them in their own job (``guiders`` in
 directory.
 
 Test modules can't import each other (``--import-mode=importlib``), so the
-test doubles here (`FakeOpDB`, `StubButler`) are handed out by fixtures.
+test doubles here (`FakeOpDB`, `StubButler`) are handed out by fixtures, as is
+the real AG data in drp_pfs_data (`realAgcData`, `realAgcStars`).
 """
 
+import functools
+import os
 import re
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -308,3 +312,66 @@ class StubButler:
 def stubButlerFixture():
     """Return the `StubButler` class."""
     return StubButler
+
+
+# Real AG data, in drp_pfs_data's guiders/ (made by its makeGuiderFixtures.py).
+_LFS_POINTER = b"version https://git-lfs.github.com/spec/v1"
+
+
+def _realDataPath(filename: str) -> Path:
+    """Return the path of a file in drp_pfs_data's guiders/.
+
+    The test is skipped if ``DRP_PFS_DATA_DIR`` isn't set, or if the file is
+    still a git LFS pointer, and fails if the file is missing.
+    """
+    root = os.environ.get("DRP_PFS_DATA_DIR")
+    if not root:
+        pytest.skip("DRP_PFS_DATA_DIR is not set; point it at a drp_pfs_data checkout")
+
+    path = Path(root) / "guiders" / filename
+    if not path.is_file():
+        pytest.fail(f"{path} is missing; update the drp_pfs_data checkout")
+    with path.open("rb") as fd:
+        if fd.read(len(_LFS_POINTER)) == _LFS_POINTER:
+            pytest.skip(
+                f"{path} is a git LFS pointer; fetch it with: git -C {root} lfs pull --include 'guiders/**'"
+            )
+
+    return path
+
+
+@functools.cache
+def _readParquet(path: Path) -> pd.DataFrame:
+    return pd.read_parquet(path)
+
+
+@pytest.fixture(name="realAgcData")
+def realAgcDataFixture():
+    """Return a function reading real AG data from drp_pfs_data.
+
+    ``realAgcData(name)`` returns a fresh copy of ``agcData-<name>.parquet``:
+    the output of `pfs.drp.qa.guiders.queries.readAgcData`, in hardware
+    coordinates, for a few guide stars per camera. The names are
+    ``focusSweep``, ``raster`` and ``allSky``; drp_pfs_data's
+    ``guiders/makeGuiderFixtures.py`` says what each holds.
+    """
+
+    def read(name: str) -> pd.DataFrame:
+        return _readParquet(_realDataPath(f"agcData-{name}.parquet")).copy()
+
+    return read
+
+
+@pytest.fixture(name="realAgcStars")
+def realAgcStarsFixture():
+    """Return a function reading a visit's guide stars from drp_pfs_data.
+
+    ``realAgcStars(visit)`` returns `pfs.drp.qa.guiders.queries.readAGCStars`
+    for the visit (148258 or 148291), for the stars in `realAgcData`.
+    """
+
+    def read(visit: int) -> pd.DataFrame:
+        agcStars = _readParquet(_realDataPath("agcStars.parquet"))
+        return agcStars[agcStars.pfs_visit_id == visit].reset_index(drop=True)
+
+    return read

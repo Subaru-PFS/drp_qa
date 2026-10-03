@@ -55,8 +55,8 @@ the pipeline/config glue to run them.
   layers: `coordinates`, `queries` (the only code touching the opdb or a butler),
   `analysis` and `plotting` (DataFrames in, never a database). `compat` keeps drp_stella's
   four AG reader names as deprecated wrappers of `queries.readAgcData`; nothing in the
-  package may use it. Stack-free; tested in `tests/guiders/` with a fake `OpDB` and a stub
-  butler (fixtures in its `conftest.py`).
+  package may use it. Stack-free; tested in `tests/guiders/` with a fake `OpDB`, a stub
+  butler and real AG data from drp_pfs_data's `guiders/` (fixtures in its `conftest.py`).
 - **Support modules (`python/pfs/drp/qa/`)**:
   - `storageClasses.py`, `formatters.py` — custom Butler storage classes / formatters
   - `utils/` — shared helpers (`math.py`, `plotting.py`)

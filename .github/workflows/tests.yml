@@ -70,13 +70,14 @@ jobs:
       # pfs-datamodel and pfs-instdata from git, which the guider code doesn't
       # use. The second list is drp_qa's own dependencies from pyproject.toml
       # (less pfs-utils), then what pfs.utils.database and
-      # pfs.utils.coordinates import. Keep it in step with pyproject.toml.
+      # pfs.utils.coordinates import, then pyarrow, for the tests' parquet
+      # files. Keep it in step with pyproject.toml.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install --no-deps "pfs-utils @ git+https://github.com/Subaru-PFS/pfs_utils.git"
           python -m pip install numpy pandas matplotlib scipy seaborn \
-            astropy astroplan sqlalchemy pyyaml pytest
+            astropy astroplan sqlalchemy pyyaml pyarrow pytest
 
       # drp_pfs_data at this branch's name if it has one, else master. LFS
       # smudging is skipped and only guiders/ is pulled, so the rest of the

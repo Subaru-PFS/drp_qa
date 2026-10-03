@@ -78,6 +78,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **`boresight` and `model` references** in `pfs.drp.qa.guiders.coordinates`: `boresight` is
   `estimateGuideErrors`'s `nominal0` moved by each visit's shift, from the stars seen most often in
   that visit; `model` is where a fit in `analysis` puts each star (PIPE2D-1898).
+- **Guider regression tests on real AG data** — `tests/guiders/test_realData.py` runs the guider
+  analysis on engineering visits of Run 30 (a focus sweep, a raster scan, an all-sky exposure) from
+  drp_pfs_data's `guiders/`, read through the `realAgcData` and `realAgcStars` fixtures. The tests skip
+  when `DRP_PFS_DATA_DIR` is unset or the files are LFS pointers (PIPE2D-1900).
 
 ### Fixed
 
