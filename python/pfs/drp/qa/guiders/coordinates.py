@@ -90,8 +90,10 @@ OPDB_Y_COLUMNS = ("agc_center_y_mm", "agc_nominal_y_mm")
 # Marks a DataFrame that `opdbToHardware` has converted.
 _FRAME_ATTR = "agcFrame"
 
-REFERENCES = ("nominal", "nominal0", "nominal0_visit", "center0", "center0_visit")
+REFERENCES = ("nominal", "nominal0", "nominal0_visit", "center0", "center0_visit", "boresight", "model")
 _REFERENCE_STATS = ("mean", "median", "first", "last")
+# References whose columns come with the data rather than from addReferencePositions.
+_GIVEN_REFERENCES = ("nominal", "model")
 
 
 # Units
@@ -323,8 +325,17 @@ def addReferencePositions(agcData: pd.DataFrame, reference: str, stat: str = "me
         ``agc_center_[xy]_mm`` over all the rows.
     ``nominal0_visit``, ``center0_visit``
         The same, over each ``pfs_visit_id``.
+    ``boresight``
+        ``nominal0`` moved by each visit's ``stat`` of ``agc_nominal_[xy]_mm``
+        minus ``nominal0``, which follows the boresight from visit to visit.
+        Only the stars seen most often in the visit, normally those in every
+        exposure, give the shift, so stars that come and go don't bias it.
+    ``model``
+        ``agc_model_[xy]_mm``, where a fit in `pfs.drp.qa.guiders.analysis`
+        predicts the star; it comes with the data, so nothing is added.
 
-    Columns that are already present are recomputed.
+    Columns that are already present are recomputed, except those of
+    ``nominal`` and ``model``.
 
     Parameters
     ----------
@@ -342,27 +353,60 @@ def addReferencePositions(agcData: pd.DataFrame, reference: str, stat: str = "me
     agcData : `pandas.DataFrame`
         A copy, with the `referenceColumns` of ``reference``. Rows keep
         their order and index labels.
+
+    Raises
+    ------
+    ValueError
+        If ``reference`` is ``nominal`` or ``model`` and its columns are
+        missing.
     """
     _checkReference(reference)
     if stat not in _REFERENCE_STATS:
         raise ValueError(f"Unknown stat {stat!r}; valid: {', '.join(_REFERENCE_STATS)}")
 
     agcData = agcData.copy()
-    if reference == "nominal":
+    if reference in _GIVEN_REFERENCES:
+        missing = [column for column in referenceColumns(reference) if column not in agcData]
+        if missing:
+            hint = "; fit them with pfs.drp.qa.guiders.analysis" if reference == "model" else ""
+            raise ValueError(f"No {reference} positions ({', '.join(missing)}){hint}")
         return agcData
-
-    source = "nominal" if reference.startswith("nominal") else "center"
-    keys = ["pfs_visit_id", "guide_star_id"] if reference.endswith("_visit") else ["guide_star_id"]
 
     # A fresh index makes the result positional, whatever agcData's index.
     data = agcData.reset_index(drop=True)
     if stat in ("first", "last"):
         data = data.sort_values("agc_exposure_id", kind="stable")
-    grouped = data.groupby(keys)
-    for sourceColumn, column in zip(_positionColumns(source), referenceColumns(reference), strict=True):
-        agcData[column] = grouped[sourceColumn].transform(stat).sort_index().to_numpy()
+
+    if reference == "boresight":
+        positions = _boresightPositions(data, stat)
+    else:
+        source = "nominal" if reference.startswith("nominal") else "center"
+        keys = ["pfs_visit_id", "guide_star_id"] if reference.endswith("_visit") else ["guide_star_id"]
+        grouped = data.groupby(keys)
+        positions = [grouped[column].transform(stat) for column in _positionColumns(source)]
+
+    for column, values in zip(referenceColumns(reference), positions, strict=True):
+        agcData[column] = values.sort_index().to_numpy()
 
     return agcData
+
+
+def _boresightPositions(data: pd.DataFrame, stat: str) -> list[pd.Series]:
+    """Return the x and y ``boresight`` positions of ``data``'s rows.
+
+    ``data`` has a fresh index, and is in order of ``agc_exposure_id`` if
+    ``stat`` is ``first`` or ``last``.
+    """
+    nObs = data.groupby(["pfs_visit_id", "guide_star_id"]).agc_exposure_id.transform("count")
+    common = nObs == nObs.groupby(data.pfs_visit_id).transform("max")
+
+    positions = []
+    for column in _positionColumns("nominal"):
+        nominal0 = data.groupby("guide_star_id")[column].transform(stat)
+        shift = (data[column] - nominal0)[common].groupby(data.pfs_visit_id[common]).agg(stat)
+        positions.append(nominal0 + data.pfs_visit_id.map(shift))
+
+    return positions
 
 
 def addOffsets(agcData: pd.DataFrame, reference: str = "nominal", stat: str = "median") -> pd.DataFrame:

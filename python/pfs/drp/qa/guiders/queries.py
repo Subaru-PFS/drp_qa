@@ -57,7 +57,7 @@ AGC_DATA_COLUMNS = {
     "agc_nominal_y_mm": "where the guider expected the star (mm, hardware coordinates)",
     "agc_center_x_mm": "measured position of the star (mm, hardware coordinates)",
     "agc_center_y_mm": "measured position of the star (mm, hardware coordinates)",
-    "agc_match_flags": "agc_match.flags; 1 for a valid match",
+    "agc_match_flags": "agc_match.flags (SourceMatchingFlags); GOOD_MATCH (1) alone for a valid match",
     "agc_data_flags": "agc_data.flags (SourceDetectionFlags); if NULL, RIGHT from centroid_x_pix, as agActor",
     "guide_star_flag": "pfs_design_agc.guide_star_flag (SourceCatalogFlags); 0 if missing",
     "image_moment_00_pix": "zeroth image moment (flux)",
