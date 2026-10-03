@@ -51,6 +51,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   nothing calls `pd.set_option`; an exposure without a tel_status row keeps its stars; `shutter_open`
   doesn't depend on spectrograph camera 1; and `find_W_M2OFF3` names the right visit in its error
   (PIPE2D-1897).
+- **`pfs.drp.qa.guiders.compat`** — drp_stella's `readAGCPositionsForVisitByAgcExposureId`,
+  `readAgcDataFromOpdb`, `readAGCStarsForVisitByPfsVisitId` and `readAGCStarsForVisitSetByPfsVisitId`,
+  as wrappers of `readAgcData` that keep their arguments and columns and raise a `DeprecationWarning`
+  (PIPE2D-1897).
 
 ### Fixed
 

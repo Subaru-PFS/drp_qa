@@ -53,7 +53,9 @@ the pipeline/config glue to run them.
 - **Guider analysis (`python/pfs/drp/qa/guiders/`)** — notebook tools for the AG
   cameras, being moved from `pfs.drp.stella.utils.guiders` (epic PIPE2D-1891). Four
   layers: `coordinates`, `queries` (the only code touching the opdb or a butler),
-  `analysis` and `plotting` (DataFrames in, never a database). Stack-free; tested in `tests/guiders/` with a fake `OpDB` and a stub
+  `analysis` and `plotting` (DataFrames in, never a database). `compat` keeps drp_stella's
+  four AG reader names as deprecated wrappers of `queries.readAgcData`; nothing in the
+  package may use it. Stack-free; tested in `tests/guiders/` with a fake `OpDB` and a stub
   butler (fixtures in its `conftest.py`).
 - **Support modules (`python/pfs/drp/qa/`)**:
   - `storageClasses.py`, `formatters.py` — custom Butler storage classes / formatters
