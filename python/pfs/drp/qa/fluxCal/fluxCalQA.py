@@ -9,12 +9,13 @@ import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import psycopg2
 
 # import pickle
 from astropy.io import fits
 
 import pfs.datamodel as datamodel
+from pfs.utils.database.opdb import OpDB
+from pfs.utils.database.qadb import QaDB
 from pfs.utils.fibers import spectrographFromFiberId
 
 # from pfs.utils.coordinates.CoordTransp import rotation
@@ -25,8 +26,27 @@ class FluxCalQA:
     """A summary class to make flux calibration QA plots."""
 
     # -------------------------------------------------------------
-    def __init__(self, butler, verbose=False, isGen3=True, doAnonymize=True):
+    def __init__(self, butler, opdb: OpDB, qadb: QaDB, verbose=False, isGen3=True, doAnonymize=True):
+        """Set up the plots.
+
+        Parameters
+        ----------
+        butler : `lsst.daf.butler.Butler`
+            Butler with the reduced data; a Gen2 butler if ``isGen3`` is `False`.
+        opdb : `pfs.utils.database.opdb.OpDB`
+            The opdb, for each visit's exposure and telescope status.
+        qadb : `pfs.utils.database.qadb.QaDB`
+            The qadb, for the AG seeing and transparency.
+        verbose : `bool`, optional
+            Print progress messages.
+        isGen3 : `bool`, optional
+            Whether ``butler`` is a Gen3 butler.
+        doAnonymize : `bool`, optional
+            Hide the proposal, object, design name and pointing.
+        """
         self.butler = butler
+        self.opdb = opdb
+        self.qadb = qadb
         self.isGen3 = isGen3
         self.doAnonymize = doAnonymize
 
@@ -90,17 +110,19 @@ class FluxCalQA:
 
     def drawObsInfo(self, ax, pfsConfig, visit):
         # opdb query to get basic data - this set of data is actually in visitInfo
-        with psycopg2.connect("postgresql://pfs@pfsa-db:5432/opdb") as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT pfs_visit_id, time_exp_start, exptime, altitude, "
-                "azimuth, insrot, tel_ra, tel_dec, outside_humidity "
-                "FROM sps_exposure "
-                "JOIN tel_status USING (pfs_visit_id) "
-                "JOIN env_condition USING (pfs_visit_id) "
-                f"WHERE pfs_visit_id = {visit} LIMIT 1;"
+        data = self.opdb.query_row(
+            "SELECT pfs_visit_id, time_exp_start, exptime, altitude, "
+            "azimuth, insrot, tel_ra, tel_dec, outside_humidity "
+            "FROM sps_exposure "
+            "JOIN tel_status USING (pfs_visit_id) "
+            "JOIN env_condition USING (pfs_visit_id) "
+            "WHERE pfs_visit_id = :visit LIMIT 1;",
+            params={"visit": int(visit)},
+        )
+        if data is None:
+            raise RuntimeError(
+                f"No sps_exposure, tel_status and env_condition rows in the opdb for visit {visit}"
             )
-            data = cursor.fetchall()[0]
 
         # panel parameters
         dy = 0.17
@@ -183,15 +205,13 @@ class FluxCalQA:
 
     def drawAG(self, ax, visit):
         # qadb query to get seeing and transparency
-        with psycopg2.connect("postgresql://pfs@pfsa-db:5436/qadb") as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT seeing_agc_exposure.pfs_visit_id, agc_exposure_id, "
-                "transparency_median, seeing_median "
-                "FROM seeing_agc_exposure JOIN transparency_agc_exposure USING (agc_exposure_id) "
-                f"WHERE seeing_agc_exposure.pfs_visit_id = {visit} ORDER BY agc_exposure_id;"
-            )
-            data = cursor.fetchall()
+        data = self.qadb.query_rows(
+            "SELECT seeing_agc_exposure.pfs_visit_id, agc_exposure_id, "
+            "transparency_median, seeing_median "
+            "FROM seeing_agc_exposure JOIN transparency_agc_exposure USING (agc_exposure_id) "
+            "WHERE seeing_agc_exposure.pfs_visit_id = :visit ORDER BY agc_exposure_id;",
+            params={"visit": int(visit)},
+        )
 
         # parse the db data
         expId = np.full(len(data), np.nan)
@@ -1432,7 +1452,11 @@ def main():
 
     butler = Butler(args.datastore, collections=args.collections)
 
-    fluxcalqa = FluxCalQA(butler, verbose=True, doAnonymize=args.doAnonymize)
+    # The opdb on pfsa-db, alongside the qadb, not OpDB's default host db-ics
+    opdb = OpDB(host="pfsa-db")
+    qadb = QaDB()
+
+    fluxcalqa = FluxCalQA(butler, opdb, qadb, verbose=True, doAnonymize=args.doAnonymize)
     fluxcalqa.plot([int(args.visit)], saveFigDir=args.saveFigDir, skipFluxCal=args.skipFluxCal)
     res = fluxcalqa.results
     for k, v in res.items():
