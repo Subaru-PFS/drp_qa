@@ -40,7 +40,7 @@ AGC_DATA_COLUMNS = {
     "agc_camera_id": "AG camera, 0-5 (AG1 is 0)",
     "spot_id": "spot in the AG exposure and camera",
     "guide_star_id": "guide star the spot was matched to",
-    "taken_at": "time of the AG exposure",
+    "taken_at": "time of the AG exposure (HST), written by agcc as it starts the exposure",
     "agc_exptime": "AG exposure time (s)",
     "altitude": "telescope altitude (deg)",
     "azimuth": "telescope azimuth (deg)",
@@ -559,7 +559,8 @@ def readSpSInfo(
     opdb : `pfs.utils.database.opdb.OpDB`
         The operational database.
     taken_after : `str` or `datetime.datetime`, optional
-        Only visits whose exposures started after this time.
+        Only visits whose exposures started after this time (HST, like every
+        opdb time except the planned times in pfs_design and pfs_config).
     min_exptime : `float`
         Only exposures longer than this (s), if positive.
     exp_type : `str` or `None`
@@ -576,7 +577,7 @@ def readSpSInfo(
     Returns
     -------
     visits : `pandas.DataFrame`
-        One row per visit: ``pfs_visit_id``, ``taken_at``, ``exptime`` (s),
+        One row per visit: ``pfs_visit_id``, ``taken_at`` (HST), ``exptime`` (s),
         ``exp_type``, ``altitude``, ``azimuth``, ``insrot`` (deg),
         ``group_id``, ``group_name`` and ``design_name``. Times and angles are
         averaged over the cameras and tel_status rows. ``group_id`` and
