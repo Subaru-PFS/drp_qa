@@ -6,6 +6,7 @@ control showing that drp_stella's version fails the same check.
 
 import dataclasses
 import inspect
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -623,29 +624,36 @@ def testFitDriftRateOptions(makeAgcData, rng):
 
 
 # Comparison with pfs_utils
+#
+# These replace pfs_utils's model with a lookup. The model itself (its frame,
+# time and inputs) is checked against the guider's positions in test_realData.
 
 
 @pytest.fixture
-def fakeCoordinateTransform(monkeypatch):
-    """Replace pfs_utils's CoordinateTransform with a lookup of each star's position by RA.
+def fakeAgActorPositions(monkeypatch):
+    """Replace agActorPositions with a lookup of each star's position (hardware coordinates).
 
-    Positions are in the opdb's frame, as pfs_utils returns them. Each call's
-    keyword arguments are recorded in ``calls``.
+    Each call's AG exposures and ``instPaCorrection_arcsec`` are recorded in
+    ``calls``.
     """
 
     class Fake:
         def __init__(self):
-            self.positions = {}  # RA: (x_mm, y_mm) in the opdb's frame
+            self.positions = {}  # guide_star_id: (x_mm, y_mm)
             self.calls = []
 
-        def __call__(self, xyin, mode, **kwargs):
-            assert mode == "sky_pfi"
-            self.calls.append(kwargs)
-            xy = np.array([self.positions[ra] for ra in xyin[0]]).T
-            return np.vstack([xy, np.zeros((6, xy.shape[1]))])
+        def __call__(self, agcData, instPaCorrection_arcsec=0.0):
+            self.calls.append(
+                SimpleNamespace(
+                    exposures=sorted(agcData.agc_exposure_id.unique()),
+                    instPaCorrection_arcsec=instPaCorrection_arcsec,
+                )
+            )
+            xy = np.array([self.positions[gid] for gid in agcData.guide_star_id])
+            return xy[:, 0], xy[:, 1]
 
     fake = Fake()
-    monkeypatch.setattr(analysis.CoordTransp, "CoordinateTransform", fake)
+    monkeypatch.setattr(analysis, "agActorPositions", fake)
 
     return fake
 
@@ -658,37 +666,41 @@ def makeComparisonData(makeAgcData, fake, rotation_rad=0.0):
     """
     agcData = makeAgcData(nVisit=1, nExp=12).reset_index(drop=True)
     agcData["agc_nominal_x_mm"] += 1e-3 * (agcData.agc_exposure_id % 7)  # vary between exposures
+    agcData["guide_ra"], agcData["guide_dec"], agcData["guide_pa"] = 150.0, 2.0, -90.0
+    agcData["adc_pa"] = 0.5
     stars = agcData.drop_duplicates("guide_star_id")[["guide_star_id", "agc_camera_id"]].copy()
     stars["pfs_design_id"] = 1
     stars["pfs_visit_id"] = VISITS[0]
     stars["guide_star_ra"] = stars.guide_star_id.astype(float)
     for column in ("guide_star_dec", "guide_star_pm_ra", "guide_star_pm_dec", "guide_star_parallax"):
         stars[column] = 0.0
-    stars["ra_center_config"], stars["dec_center_config"], stars["pa_config"] = 150.0, 2.0, -90.0
 
     first = agcData[agcData.agc_exposure_id == agcData.agc_exposure_id.min()].set_index("guide_star_id")
     x, y = rotXY(-rotation_rad, first.agc_nominal_x_mm, first.agc_nominal_y_mm)
-    fake.positions = {float(gid): (x[gid], -y[gid]) for gid in first.index}
+    fake.positions = {gid: (x[gid], y[gid]) for gid in first.index}
 
     return stars, agcData
 
 
-def testComparePfsUtilsAverages(makeAgcData, fakeCoordinateTransform):
+def testComparePfsUtilsAverages(makeAgcData, fakeAgActorPositions):
     """The guider's positions are the median over the first nAgcExposures.
 
     drp_stella grouped by exposure and star, so each median was of one row,
     and returned each star nAgcExposures times.
     """
-    stars, agcData = makeComparisonData(makeAgcData, fakeCoordinateTransform)
+    stars, agcData = makeComparisonData(makeAgcData, fakeAgActorPositions)
     nAgcExposures = 5
 
-    result = comparePfsUtilsPositions(stars, agcData, nAgcExposures=nAgcExposures).stars
+    result = comparePfsUtilsPositions(stars, agcData, nAgcExposures=nAgcExposures)
 
     exposures = np.sort(agcData.agc_exposure_id.unique())[:nAgcExposures]
     first = agcData[agcData.agc_exposure_id.isin(exposures)]
     expected = first.groupby("guide_star_id").agc_nominal_x_mm.median()
-    assert len(result) == len(stars)
-    np.testing.assert_allclose(result.agc_nominal_x_mm, expected.loc[result.guide_star_id])
+    assert len(result.stars) == len(stars)
+    np.testing.assert_allclose(result.stars.agc_nominal_x_mm, expected.loc[result.stars.guide_star_id])
+    (call,) = fakeAgActorPositions.calls
+    assert call.exposures == list(exposures)
+    assert result.alignOffset_um is None
 
     # Negative control: drp_stella's medians, of one row each, vary between exposures.
     perExposure = first.groupby(["agc_exposure_id", "guide_star_id"]).agc_nominal_x_mm.median()
@@ -696,52 +708,45 @@ def testComparePfsUtilsAverages(makeAgcData, fakeCoordinateTransform):
     assert not np.allclose(perExposure.groupby("guide_star_id").first(), expected, rtol=0, atol=1e-6)
 
 
-def testComparePfsUtilsFrameAndTime(makeAgcData, fakeCoordinateTransform):
-    """pfs_utils's y is flipped to hardware coordinates, and it is given UTC rather than the opdb's HST."""
-    stars, agcData = makeComparisonData(makeAgcData, fakeCoordinateTransform)
+def testComparePfsUtilsInputs(makeAgcData, fakeAgActorPositions):
+    """AG exposures without the AG actor's inputs (no agc_guide_offset row) are skipped."""
+    stars, agcData = makeComparisonData(makeAgcData, fakeAgActorPositions)
+    exposures = np.sort(agcData.agc_exposure_id.unique())
+    agcData.loc[agcData.agc_exposure_id == exposures[0], "guide_ra"] = np.nan
 
-    result = comparePfsUtilsPositions(stars, agcData, nAgcExposures=1)
+    comparePfsUtilsPositions(stars, agcData, nAgcExposures=3)
 
-    np.testing.assert_allclose(result.stars.pfs_utils_y_mm, result.stars.agc_nominal_y_mm)
-    np.testing.assert_allclose(result.stars.delta_theta_arcsec, 0, atol=1e-6)
-    assert result.alignOffset_um is None
+    (call,) = fakeAgActorPositions.calls
+    assert call.exposures == list(exposures[1:4])
 
-    takenAt = agcData.taken_at.min()
-    (call,) = fakeCoordinateTransform.calls
-    assert call["time"] == (takenAt + pd.Timedelta(hours=10)).strftime("%Y-%m-%d %H:%M:%S")
-    assert call["pa"] == -90.0
-
-    # Negative controls: the opdb's y and the HST time are wrong.
-    assert not np.allclose(-result.stars.pfs_utils_y_mm, result.stars.agc_nominal_y_mm, atol=1)
-    assert call["time"] != takenAt.strftime("%Y-%m-%d %H:%M:%S")
+    with pytest.raises(ValueError, match="No guide star is in both"):
+        comparePfsUtilsPositions(stars, agcData.assign(guide_pa=np.nan))
 
 
-def testComparePfsUtilsRotation(makeAgcData, fakeCoordinateTransform):
+def testComparePfsUtilsRotation(makeAgcData, fakeAgActorPositions):
     """delta_theta is the guider's angle minus pfs_utils's, wrapped across -x."""
-    stars, agcData = makeComparisonData(
-        makeAgcData, fakeCoordinateTransform, rotation_rad=np.deg2rad(2 / 3600)
-    )
+    stars, agcData = makeComparisonData(makeAgcData, fakeAgActorPositions, rotation_rad=np.deg2rad(2 / 3600))
     # Put a star of AG4 just below -x, so that pfs_utils puts it just above.
     ag4 = agcData.guide_star_id == stars.guide_star_id[stars.agc_camera_id == 3].iloc[0]
     agcData.loc[ag4, "agc_nominal_y_mm"] = -1e-3
     star = agcData[ag4].sort_values("agc_exposure_id").iloc[0]
     x, y = rotXY(np.deg2rad(-2 / 3600), star.agc_nominal_x_mm, star.agc_nominal_y_mm)
-    fakeCoordinateTransform.positions[float(star.guide_star_id)] = (x, -y)
+    fakeAgActorPositions.positions[star.guide_star_id] = (x, y)
 
     result = comparePfsUtilsPositions(stars, agcData, nAgcExposures=1, instPaCorrection_arcsec=36).stars
 
     np.testing.assert_allclose(result.delta_theta_arcsec, 2, atol=1e-3)
-    assert fakeCoordinateTransform.calls[-1]["pa"] == pytest.approx(-90.0 + 0.01)
+    assert fakeAgActorPositions.calls[-1].instPaCorrection_arcsec == 36
 
     # Negative control: the unwrapped difference is a full turn out for the AG4 star.
     unwrapped = np.rad2deg(result.agc_nominal_theta_rad - result.pfs_utils_theta_rad) * 3600
     assert np.max(np.abs(unwrapped)) > 1e6
 
 
-def testComparePfsUtilsAlign(makeAgcData, fakeCoordinateTransform):
-    stars, agcData = makeComparisonData(makeAgcData, fakeCoordinateTransform)
-    fakeCoordinateTransform.positions = {
-        ra: (x + 0.01, y) for ra, (x, y) in fakeCoordinateTransform.positions.items()
+def testComparePfsUtilsAlign(makeAgcData, fakeAgActorPositions):
+    stars, agcData = makeComparisonData(makeAgcData, fakeAgActorPositions)
+    fakeAgActorPositions.positions = {
+        gid: (x + 0.01, y) for gid, (x, y) in fakeAgActorPositions.positions.items()
     }
 
     result = comparePfsUtilsPositions(stars, agcData, nAgcExposures=1, alignCenterPosition=True)

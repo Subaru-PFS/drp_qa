@@ -103,6 +103,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `psycopg2.connect` calls. Needs `pfs_utils` 7.4.18 or later. `main()` still reads the opdb on `pfsa-db`
   (PIPE2D-1893).
 - **`scipy` is a declared dependency** in `pyproject.toml`, for the guider fits (PIPE2D-1895).
+- **`comparePfsUtilsPositions` uses the AG actor's model** — pfs_utils's positions of the guide stars
+  come from the chain ics_agActor uses for its nominal positions (the new `agActorPositions`: pfs_utils's
+  `Subaru_POPT2_PFS` with each AG exposure's field center, PA, ADC and M2 positions and detector half),
+  and match the guider's to 0.2 µm on Run 30 data. drp_stella's `compareAGCPfsUtils`, and so this function
+  until now, used `CoordinateTransform`'s `sky_pfi` mode, pfs_utils's model for the cobras, which is about
+  550 µm off. `agcStars` needs only the stars' catalogue columns. It no longer fails under pandas 3, where
+  pfs_utils clamped a read-only parallax array (PIPE2D-1900).
 
 ### Removed
 
