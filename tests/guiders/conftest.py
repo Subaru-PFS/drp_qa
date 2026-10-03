@@ -10,19 +10,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from pfs.drp.qa.guiders.coordinates import AGC_CAMERA_CENTERS_MM
 from pfs.utils.datamodel.ag import SourceCatalogFlags
-
-# Approximate AG camera centers (mm), indexed by agc_camera_id, as in
-# drp_stella's guiders.agcCameraCenters. The synthetic data only needs
-# plausible positions.
-agcCameraCenters = {
-    0: (237.58, -0.50),
-    1: (120.19, 212.49),
-    2: (-120.02, 212.10),
-    3: (-242.08, 2.00),
-    4: (-122.58, -211.67),
-    5: (119.23, -209.79),
-}
 
 GAIA_ISOLATED = SourceCatalogFlags.GAIA | SourceCatalogFlags.NON_BINARY
 NOISE = 2e-3  # Centroiding noise (mm)
@@ -39,9 +28,10 @@ def makeAgcData(
 ) -> pd.DataFrame:
     """Make synthetic AG data.
 
-    Each agc_exposure has a random offset (~30 microns) and rotation (~1
-    arcmin) of the guide stars' centroids relative to their nominal positions,
-    plus centroiding noise. The rows are shuffled (the opdb doesn't guarantee
+    Positions are in hardware coordinates, as the readers return them. Each
+    agc_exposure has a random offset (~30 microns) and rotation (~1 arcmin)
+    of the guide stars' centroids relative to their nominal positions, plus
+    centroiding noise. The rows are shuffled (the opdb doesn't guarantee
     an order) and the per-visit frames are concatenated without resetting the
     index, as older versions of the readers did.
 
@@ -72,7 +62,7 @@ def makeAgcData(
     """
     nominal = {}
     for cid in range(6):
-        xc, yc = agcCameraCenters[cid]
+        xc, yc = AGC_CAMERA_CENTERS_MM[cid]
         for ss in range(nStar):
             nominal[1000 * cid + ss] = (cid, xc + rng.uniform(-5, 5), yc + rng.uniform(-5, 5))
 

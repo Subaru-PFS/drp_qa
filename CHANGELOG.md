@@ -33,6 +33,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `tests/guiders/conftest.py` provides a `makeAgcData` fixture for synthetic AG data (PIPE2D-1895).
 - **`opaqueColorbar`** in `pfs.drp.qa.utils.plotting`, from `pfs.drp.stella.utils.quality`. Unlike the
   original, it restores an alpha of 0 or `None` (PIPE2D-1895).
+- **`pfs.drp.qa.guiders.coordinates`** — the guider tools' frame, sign and unit conventions. Positions are
+  in hardware coordinates, converted from the opdb once by `opdbToHardware`; offsets are center minus a
+  named reference (`addOffsets`, columns `dx_<reference>_um`); columns carry their units; and unit
+  helpers replace bare factors. Also the AG constants, `rotXY`, and the zenith-frame conversions
+  (`pfiToZenith`, `zenithToPfi`) from drp_stella's `ag_to_zenith_offset`, which take hardware
+  coordinates rather than negated y. Constants are renamed with their units (`agcCameraCenters` is
+  `AGC_CAMERA_CENTERS_MM`, ...) (PIPE2D-1896).
 
 ### Fixed
 
