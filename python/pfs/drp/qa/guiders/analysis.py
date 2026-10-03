@@ -64,6 +64,7 @@ __all__ = [
     "selectGoodDetections",
     "selectIsolatedGaiaStars",
     "selectStars",
+    "selectValidMatches",
     "smoothAgcData",
 ]
 
@@ -111,6 +112,25 @@ def selectGoodDetections(agcData: pd.DataFrame) -> np.ndarray:
         One element per row.
     """
     return (agcData.agc_data_flags.to_numpy() & _BAD_DETECTION_FLAGS) == 0
+
+
+def selectValidMatches(agcData: pd.DataFrame) -> np.ndarray:
+    """Select the spots validly matched to their guide stars.
+
+    `pfs.drp.qa.guiders.queries.readAgcData` returns every match, whatever
+    its flags; the fits and averages here use only the valid ones.
+
+    Parameters
+    ----------
+    agcData : `pandas.DataFrame`
+        AG data with ``agc_match_flags``.
+
+    Returns
+    -------
+    valid : `numpy.ndarray` of `bool`
+        One element per row: ``agc_match_flags == 1``.
+    """
+    return agcData.agc_match_flags.to_numpy() == 1
 
 
 def selectIsolatedGaiaStars(agcData: pd.DataFrame) -> np.ndarray:
@@ -196,8 +216,8 @@ class GuiderFitConfig:
 def guideErrorsByExposure(agcData: pd.DataFrame, reference: str = "nominal") -> pd.Series:
     """Return the guide error of each AG exposure.
 
-    The guide error is the mean distance of the exposure's stars from their
-    reference positions.
+    The guide error is the mean distance of the exposure's valid matches
+    (`selectValidMatches`) from their reference positions.
 
     Parameters
     ----------
@@ -205,15 +225,17 @@ def guideErrorsByExposure(agcData: pd.DataFrame, reference: str = "nominal") -> 
         AG data in hardware coordinates.
     reference : `str`
         One of `pfs.drp.qa.guiders.coordinates.REFERENCES`; its positions are
-        computed with the default statistic if they aren't given.
+        computed from the valid matches, with the default statistic, if they
+        aren't given.
 
     Returns
     -------
     guideErrors : `pandas.Series`
-        Guide error (microns), indexed by ``agc_exposure_id``.
+        Guide error (microns), indexed by ``agc_exposure_id``. An exposure
+        with no valid match has none.
     """
     dx, dy = offsetColumns(reference)
-    data = addOffsets(agcData, reference).reset_index(drop=True)
+    data = addOffsets(agcData[selectValidMatches(agcData)], reference).reset_index(drop=True)
     dr = pd.Series(np.hypot(data[dx], data[dy]), name="guide_error_um")
 
     return dr.groupby(data.agc_exposure_id).mean()
@@ -226,6 +248,8 @@ def selectStars(
     guideErrors: pd.Series | None = None,
 ) -> np.ndarray:
     """Select the stars to use, as ``config`` says.
+
+    Only valid matches (`selectValidMatches`) are selected.
 
     Parameters
     ----------
@@ -266,7 +290,8 @@ def selectStars(
     exposurePasses = pd.Series(passes).groupby(exposureId).all().to_numpy()
     start = int(np.argmax(exposurePasses)) if exposurePasses.any() else 0
 
-    selected = passes & np.isin(exposureId, exposures[start :: config.agcExposureStride])
+    selected = passes & selectValidMatches(agcData)
+    selected &= np.isin(exposureId, exposures[start :: config.agcExposureStride])
     if agc_camera_id is not None:
         selected &= agcData.agc_camera_id.to_numpy() == agc_camera_id
     for column, limit, compare in [
@@ -413,11 +438,13 @@ def fitGuiderModel(
 
     These are the fits of drp_stella's ``showGuiderErrors``. With
     ``modelBoresightOffset``, a transform is fitted to each AG exposure's
-    stars (without bad detection flags), taking their centers to their
+    valid matches without bad detection flags, taking their centers to their
     nominal positions. With ``modelCCDOffset``, a transform is then fitted to
     each camera's selected stars (`selectStars`), taking their centers to the
     boresight model. Each star's model position is its nominal position moved
-    by the inverse of its exposure's and its camera's transforms.
+    by the inverse of its exposure's and its camera's transforms. Invalid
+    matches are kept in the result, with model positions, but are neither
+    fitted nor averaged.
 
     Parameters
     ----------
@@ -452,7 +479,7 @@ def fitGuiderModel(
     yCenter = data.agc_center_y_mm.to_numpy(dtype=float)
     xModel = data.agc_nominal_x_mm.to_numpy(dtype=float, copy=True)
     yModel = data.agc_nominal_y_mm.to_numpy(dtype=float, copy=True)
-    good = selectGoodDetections(data)
+    good = selectGoodDetections(data) & selectValidMatches(data)
 
     exposureTransforms = {}
     if config.modelBoresightOffset:
@@ -663,7 +690,7 @@ def fitGlobalModel(
     data = agcData.reset_index(drop=True)
     exposureId = data.agc_exposure_id.to_numpy()
     cameraId = data.agc_camera_id.to_numpy()
-    use = (data.agc_match_flags == 1).to_numpy() if valid is None else np.asarray(valid, dtype=bool)
+    use = selectValidMatches(data) if valid is None else np.asarray(valid, dtype=bool)
     insrot = data.groupby("agc_exposure_id").insrot.transform("median").to_numpy(dtype=float)
 
     dzNominal, dpNominal = pfiToZenith(data.agc_nominal_x_mm, data.agc_nominal_y_mm, insrot)
@@ -807,7 +834,7 @@ def estimateGuideErrors(
     for xy, column in zip("xy", referenceColumns(reference), strict=True):
         data[f"d{xy}_um"] = mmToUm(data[f"agc_{position}_{xy}_mm"] - data[column])
 
-    keep = data.agc_match_flags == 1
+    keep = selectValidMatches(data)
     if not includeClosedShutter:
         keep &= data.shutter_open > 0
     data = smoothAgcData(data[keep], smoothing)
@@ -882,8 +909,8 @@ def fitDriftRate(
 ) -> DriftFit:
     """Fit the drift of the guide stars against time.
 
-    Only AG exposures taken with the spectrograph shutters open
-    (``shutter_open == 1``) are used.
+    Only valid matches (`selectValidMatches`) in AG exposures taken with the
+    spectrograph shutters open (``shutter_open == 1``) are used.
 
     Parameters
     ----------
@@ -937,7 +964,7 @@ def fitDriftRate(
     data = addReferencePositions(data, reference, stat)
     for xy, column in zip("xy", referenceColumns(reference), strict=True):
         data[f"d{xy}_um"] = mmToUm(data[f"agc_{position}_{xy}_mm"] - data[column])
-    data = data[data.shutter_open == 1]
+    data = data[(data.shutter_open == 1).to_numpy() & selectValidMatches(data)]
     if data.empty:
         raise ValueError(f"No AG exposures with the shutters open to fit, from visit {visit}")
     means = data[["altitude", "azimuth", "insrot", "exptime"]].mean()
@@ -1134,7 +1161,7 @@ def addImageSizes(agcData: pd.DataFrame, useTraceRadius: bool = True) -> pd.Data
         rms = np.sqrt(np.where((mxx < 0) | (myy < 0), np.nan, 0.5 * (mxx + myy)))
     else:
         det = mxx * myy - mxy**2
-        rms = np.where(det < 0, np.nan, det) ** 0.25
+        rms = np.where((mxx < 0) | (myy < 0) | (det < 0), np.nan, det) ** 0.25
 
     agcData["rms_pix"] = rms
     agcData["fwhm_arcsec"] = pixToArcsec(GAUSSIAN_FWHM_PER_SIGMA * rms)
@@ -1211,7 +1238,8 @@ def estimateFocusErrors(
     ----------
     agcData : `pandas.DataFrame`
         AG data with ``rms_pix`` and ``left`` (see `addImageSizes`), of the
-        stars to use (e.g. `selectIsolatedGaiaStars`).
+        stars to use (e.g. `selectIsolatedGaiaStars`). Only the valid matches
+        (`selectValidMatches`) are used.
     byCamera : `bool`
         Estimate the focus error of each camera, rather than of the
         exposure.
@@ -1227,6 +1255,7 @@ def estimateFocusErrors(
         ``focusColumn``, ``rms_left_pix`` and ``rms_right_pix``, and
         ``focus_error_um``.
     """
+    agcData = agcData[selectValidMatches(agcData)]
     halves = agcData.groupby(["agc_exposure_id", "agc_camera_id", "left"]).rms_pix.median()
     keys = ["agc_exposure_id", "agc_camera_id"] if byCamera else ["agc_exposure_id"]
     rms = halves.groupby(level=[*keys, "left"]).median().unstack("left").reindex(columns=[True, False])

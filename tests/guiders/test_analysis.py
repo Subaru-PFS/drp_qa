@@ -31,6 +31,7 @@ from pfs.drp.qa.guiders.analysis import (
     selectGoodDetections,
     selectIsolatedGaiaStars,
     selectStars,
+    selectValidMatches,
     smoothAgcData,
 )
 from pfs.drp.qa.guiders.coordinates import (
@@ -157,9 +158,39 @@ def testSelectStarsCuts(makeAgcData):
     assert agcData.agc_exposure_id[selected].max() == exposures[-2]
 
 
+def invalidate(agcData, shift_mm=1.0):
+    """Return a copy of AG data with every fifth guide star's matches invalid, and its centers moved."""
+    agcData = agcData.copy()
+    invalid = (agcData.guide_star_id % 5 == 1).to_numpy()
+    agcData.loc[invalid, "agc_match_flags"] = 0
+    agcData.loc[invalid, "agc_center_x_mm"] += shift_mm
+    return agcData, invalid
+
+
+def testInvalidMatchesNotFitted(makeAgcData):
+    """Invalid matches are kept but neither fitted nor averaged; Copilot's review of drp_qa#84."""
+    agcData, invalid = invalidate(makeAgcData())
+
+    fit = fitGuiderModel(agcData, fitConfig())
+    assert len(fit.agcData) == len(agcData)
+    assert fit.agcData.agc_model_x_mm[invalid].notna().all()
+    assert not fit.agcData.selected[invalid].any()
+    assert not selectStars(agcData)[invalid].any()
+    assert guideErrorRms(fit) < 3
+
+    clean = guideErrorsByExposure(agcData[~invalid])
+    pd.testing.assert_series_equal(guideErrorsByExposure(agcData), clean)
+
+    # Negative control: counted as valid, the moved stars spoil the per-camera guide errors.
+    asValid = agcData.assign(agc_match_flags=1)
+    assert guideErrorRms(fitGuiderModel(asValid, fitConfig())) > 10
+    assert not np.allclose(guideErrorsByExposure(asValid), clean)
+
+
 def testSelectFlags():
     flags = pd.DataFrame(
         {
+            "agc_match_flags": [1, 0, 2],
             "agc_data_flags": [0, int(SourceDetectionFlags.RIGHT), int(SourceDetectionFlags.EDGE)],
             "guide_star_flag": [
                 int(SourceCatalogFlags.GAIA | SourceCatalogFlags.NON_BINARY),
@@ -170,6 +201,7 @@ def testSelectFlags():
     )
     np.testing.assert_array_equal(selectGoodDetections(flags), [True, True, False])
     np.testing.assert_array_equal(selectIsolatedGaiaStars(flags), [True, False, False])
+    np.testing.assert_array_equal(selectValidMatches(flags), [True, False, False])
 
 
 # Boresight and per-camera transforms
@@ -546,6 +578,20 @@ def testFitDriftRateRadialTangential(makeAgcData, rng):
         assert abs(fit.rates[f"{other}_rate_um_per_min"]) < 0.6
 
 
+def testFitDriftRateInvalidMatches(makeAgcData, rng):
+    """Invalid matches don't enter the drift rates."""
+    agcData = makeDriftData(makeAgcData, rng, (1.0, 0.0))
+    agcData, invalid = invalidate(agcData, shift_mm=0.0)
+    time_min = (agcData.taken_at - agcData.taken_at.min()).dt.total_seconds() / 60
+    agcData.loc[invalid, "agc_center_x_mm"] += 1e-3 * 50 * time_min[invalid]  # 50 microns/min more
+
+    rates = fitDriftRate(agcData, radialTangential=False).rates
+    assert rates.x_rate_um_per_min == pytest.approx(1.0, abs=0.05)
+    # Negative control: counted as valid, they pull the rate up.
+    wrong = fitDriftRate(agcData.assign(agc_match_flags=1), radialTangential=False).rates
+    assert wrong.x_rate_um_per_min > 2
+
+
 def testFitDriftRateIndependentCalls(makeAgcData, rng):
     """Each call returns its own rates; drp_stella's shared rates dict kept the first visit's."""
     first = makeDriftData(makeAgcData, rng, (1.0, 1.0))
@@ -713,21 +759,23 @@ def testComparePfsUtilsAlign(makeAgcData, fakeCoordinateTransform):
 def testAddImageSizes():
     stars = pd.DataFrame(
         {
-            "mxx": [4.0, 2.0, -1.0],
-            "myy": [4.0, 8.0, 1.0],
-            "mxy": [0.0, 1.0, 0.0],
-            "agc_data_flags": [0, int(SourceDetectionFlags.RIGHT), 0],
+            "mxx": [4.0, 2.0, -1.0, -2.0],
+            "myy": [4.0, 8.0, 1.0, -3.0],
+            "mxy": [0.0, 1.0, 0.0, 0.0],
+            "agc_data_flags": [0, int(SourceDetectionFlags.RIGHT), 0, 0],
         }
     )
     trace = addImageSizes(stars)
-    np.testing.assert_allclose(trace.rms_pix, [2.0, np.sqrt(5.0), np.nan])
+    np.testing.assert_allclose(trace.rms_pix, [2.0, np.sqrt(5.0), np.nan, np.nan])
     fwhmPerPix = 2 * np.sqrt(2 * np.log(2)) * AGC_PIXEL_SIZE_UM / AGC_PLATE_SCALE_UM_PER_ARCSEC
     np.testing.assert_allclose(trace.fwhm_arcsec, fwhmPerPix * trace.rms_pix)
     np.testing.assert_allclose(trace.fwhm_arcsec[0], 0.6466, atol=1e-4)  # 2 pixels rms, in arcsec
-    assert list(trace.left) == [True, False, True]
+    assert list(trace.left) == [True, False, True, True]
 
     det = addImageSizes(stars, useTraceRadius=False)
-    np.testing.assert_allclose(det.rms_pix, [2.0, 15.0**0.25, np.nan])
+    np.testing.assert_allclose(det.rms_pix, [2.0, 15.0**0.25, np.nan, np.nan])
+    # Negative control: the last row's determinant is positive, though its moments are impossible.
+    assert stars.mxx.iloc[-1] * stars.myy.iloc[-1] - stars.mxy.iloc[-1] ** 2 > 0
     assert "rms_pix" not in stars  # drp_stella's setImageSizes added it to its input
 
 
@@ -777,6 +825,7 @@ def makeFocusData(rms_pix):
                     "insrot": -30.0,
                     "m2_off3": 0.1 * aid,
                     "m2_pos3": 0.0,
+                    "agc_match_flags": 1,
                 }
             )
 
@@ -815,6 +864,13 @@ def testEstimateFocusErrors():
     np.testing.assert_allclose(byExposure.focus_error_um, expected[0])
 
     np.testing.assert_allclose(estimateFocusErrors(agcData, focusColumn="m2_pos3").focus_position_mm, 0)
+
+    # Invalid matches don't count; counted as valid, these would change the first camera's error.
+    bad = makeFocusData({(1, 0, True): 9.0}).assign(agc_match_flags=0)
+    withBad = estimateFocusErrors(pd.concat([agcData, bad]))
+    pd.testing.assert_frame_equal(withBad, byCamera)
+    wrong = estimateFocusErrors(pd.concat([agcData, bad.assign(agc_match_flags=1)]))
+    assert wrong.focus_error_um.iloc[0] != pytest.approx(byCamera.focus_error_um.iloc[0])
 
 
 def testAverageByFocusPosition():

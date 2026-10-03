@@ -65,7 +65,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `smoothAgcData`, `estimateGuideErrors`, `fitDriftRate`, `comparePfsUtilsPositions`
   (`compareAGCPfsUtils`), `addImageSizes`, `estimateFocusErrors` (one left/right focus estimate for
   `plotFocus` and `plotFocusByAG`), `averageByFocusPosition` and `correctAgActorFocus`. Fits predict
-  the new `model` reference. Compared with drp_stella: `MeasureXYRot` gets offsets in microns, not
+  the new `model` reference. Fits and averages use only valid matches (`agc_match_flags == 1`, see
+  `selectValidMatches`), keeping the others in their output. Compared with drp_stella: `MeasureXYRot` gets offsets in microns, not
   positions in mm; each camera's transform is fitted to its own stars; `solveForAGTransforms` refits;
   the guide error cut is matched to stars by exposure; smoothing follows each star and leaves IDs
   and flags alone; the per-visit references and closed-shutter data work in `estimateGuideErrors`;
