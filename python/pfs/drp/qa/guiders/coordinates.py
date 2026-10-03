@@ -95,21 +95,24 @@ _REFERENCE_STATS = ("mean", "median", "first", "last")
 
 
 # Units
+#
+# These use NumPy ufuncs rather than * and /, so that they accept any
+# array-like (a list too) and return a Series for a Series.
 
 
 def mmToUm(x_mm: ArrayLike) -> ArrayLike:
     """Convert mm to microns."""
-    return 1e3 * x_mm
+    return np.multiply(x_mm, 1e3)
 
 
 def umToMm(x_um: ArrayLike) -> ArrayLike:
     """Convert microns to mm."""
-    return 1e-3 * x_um
+    return np.multiply(x_um, 1e-3)
 
 
 def pixToUm(x_pix: ArrayLike) -> ArrayLike:
     """Convert AG detector pixels to microns on the focal plane."""
-    return AGC_PIXEL_SIZE_UM * x_pix
+    return np.multiply(x_pix, AGC_PIXEL_SIZE_UM)
 
 
 def pixToMm(x_pix: ArrayLike) -> ArrayLike:
@@ -119,7 +122,7 @@ def pixToMm(x_pix: ArrayLike) -> ArrayLike:
 
 def umToArcsec(x_um: ArrayLike) -> ArrayLike:
     """Convert microns on the focal plane to arcsec on the sky."""
-    return x_um / AGC_PLATE_SCALE_UM_PER_ARCSEC
+    return np.divide(x_um, AGC_PLATE_SCALE_UM_PER_ARCSEC)
 
 
 def pixToArcsec(x_pix: ArrayLike) -> ArrayLike:
@@ -129,22 +132,22 @@ def pixToArcsec(x_pix: ArrayLike) -> ArrayLike:
 
 def radToArcsec(angle_rad: ArrayLike) -> ArrayLike:
     """Convert radians to arcsec."""
-    return 3600 * np.rad2deg(angle_rad)
+    return np.multiply(np.rad2deg(angle_rad), 3600)
 
 
 def arcsecToRad(angle_arcsec: ArrayLike) -> ArrayLike:
     """Convert arcsec to radians."""
-    return np.deg2rad(angle_arcsec / 3600)
+    return np.deg2rad(np.divide(angle_arcsec, 3600))
 
 
 def guiderFocusToM2Off3(focus_um: ArrayLike) -> ArrayLike:
     """Convert a guider focus offset (microns) to M2_OFF3 (mm)."""
-    return focus_um / GUIDER_FOCUS_UM_PER_M2_OFF3_MM
+    return np.divide(focus_um, GUIDER_FOCUS_UM_PER_M2_OFF3_MM)
 
 
 def m2Off3ToGuiderFocus(m2Off3_mm: ArrayLike) -> ArrayLike:
     """Convert M2_OFF3 (mm) to a guider focus offset (microns)."""
-    return m2Off3_mm * GUIDER_FOCUS_UM_PER_M2_OFF3_MM
+    return np.multiply(m2Off3_mm, GUIDER_FOCUS_UM_PER_M2_OFF3_MM)
 
 
 # Frames
@@ -258,7 +261,7 @@ def rotXY(angle_rad: ArrayLike, x: ArrayLike, y: ArrayLike) -> tuple[ArrayLike, 
     """
     c, s = np.cos(angle_rad), np.sin(angle_rad)
 
-    return c * x - s * y, s * x + c * y
+    return np.multiply(c, x) - np.multiply(s, y), np.multiply(s, x) + np.multiply(c, y)
 
 
 # Signs

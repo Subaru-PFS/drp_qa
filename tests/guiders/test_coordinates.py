@@ -38,9 +38,28 @@ def testUnitRoundTrips(rng):
     np.testing.assert_allclose(coords.m2Off3ToGuiderFocus(coords.guiderFocusToM2Off3(x)), x)
 
 
-def testUnitConversionsKeepSeries():
-    x = pd.Series([1.0, 2.0], index=[7, 7])
-    pd.testing.assert_series_equal(coords.mmToUm(x), pd.Series([1000.0, 2000.0], index=[7, 7]))
+@pytest.mark.parametrize(
+    "func",
+    [
+        coords.mmToUm,
+        coords.umToMm,
+        coords.pixToUm,
+        coords.pixToMm,
+        coords.umToArcsec,
+        coords.pixToArcsec,
+        coords.radToArcsec,
+        coords.arcsecToRad,
+        coords.guiderFocusToM2Off3,
+        coords.m2Off3ToGuiderFocus,
+    ],
+)
+def testUnitConversionsTypes(func):
+    """Lists convert like arrays, and Series stay Series with their index."""
+    expected = np.array([func(1.0), func(2.0)])
+    np.testing.assert_allclose(func([1, 2]), expected)
+    pd.testing.assert_series_equal(
+        func(pd.Series([1.0, 2.0], index=[7, 7])), pd.Series(expected, index=[7, 7])
+    )
 
 
 def testConstantsMatchPfsUtils():
@@ -161,6 +180,11 @@ def testRotXY(rng):
     x, y = rng.normal(size=(2, 10))
     angle = rng.uniform(-np.pi, np.pi, 10)
     np.testing.assert_allclose(coords.rotXY(-angle, *coords.rotXY(angle, x, y)), (x, y))
+
+    np.testing.assert_allclose(coords.rotXY(np.pi / 2, [1, 0], [0, 1]), ([0, -1], [1, 0]), atol=1e-12)
+    xs, ys = coords.rotXY(0.1, pd.Series(x, index=[3] * 10), pd.Series(y, index=[3] * 10))
+    pd.testing.assert_index_equal(xs.index, pd.Index([3] * 10))
+    np.testing.assert_allclose((xs, ys), coords.rotXY(0.1, x, y))
 
 
 # Signs
