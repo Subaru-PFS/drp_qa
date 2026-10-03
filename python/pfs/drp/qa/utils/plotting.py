@@ -156,13 +156,14 @@ def scatterplot_with_outliers(
 def opaqueColorbar(S):
     """Make a mappable opaque (alpha=1) while its colorbar is drawn.
 
-    Copied from ``pfs.drp.stella.utils.quality``.
+    From ``pfs.drp.stella.utils.quality``, which doesn't restore an alpha
+    of 0 or `None`.
 
     Parameters
     ----------
     S : `matplotlib.cm.ScalarMappable`
-        The mappable, e.g. the return value of ``plt.scatter``. Its alpha is
-        restored on exit.
+        The mappable, e.g. the return value of ``plt.scatter``. Its alpha,
+        including `None`, is restored on exit.
 
     Examples
     --------
@@ -173,9 +174,11 @@ def opaqueColorbar(S):
     try:
         S.set_alpha(1)
     except AttributeError:
-        a = None
+        changed = False
+    else:
+        changed = True
     try:
         yield S
     finally:
-        if a:
+        if changed:
             S.set_alpha(a)

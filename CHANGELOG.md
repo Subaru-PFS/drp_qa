@@ -31,8 +31,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   guider tools moving from `pfs.drp.stella.utils.guiders`, and a `guiders` CI job that runs
   `tests/guiders/` with pfs-utils (installed `--no-deps`) and drp_pfs_data's `guiders/` directory.
   `tests/guiders/conftest.py` provides a `makeAgcData` fixture for synthetic AG data (PIPE2D-1895).
-- **`opaqueColorbar`** in `pfs.drp.qa.utils.plotting`, copied from `pfs.drp.stella.utils.quality`
-  (PIPE2D-1895).
+- **`opaqueColorbar`** in `pfs.drp.qa.utils.plotting`, from `pfs.drp.stella.utils.quality`. Unlike the
+  original, it restores an alpha of 0 or `None` (PIPE2D-1895).
 
 ### Fixed
 

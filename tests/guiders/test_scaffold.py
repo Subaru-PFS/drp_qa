@@ -33,13 +33,14 @@ def testPfsUtilsModulesImport(name):
     importlib.import_module(name)
 
 
-def testOpaqueColorbar():
+@pytest.mark.parametrize("alpha", [0.3, 0, None])
+def testOpaqueColorbar(alpha):
     ax = Figure().subplots()
-    S = ax.scatter([0, 1], [0, 1], c=[0, 1], alpha=0.3)
+    S = ax.scatter([0, 1], [0, 1], c=[0, 1], alpha=alpha)
     with opaqueColorbar(S):
         assert S.get_alpha() == 1
         ax.figure.colorbar(S)
-    assert S.get_alpha() == 0.3
+    assert S.get_alpha() == alpha
 
 
 def testMakeAgcData(makeAgcData):
