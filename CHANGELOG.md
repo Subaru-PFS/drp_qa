@@ -69,6 +69,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **`opaqueColorbar`** in `pfs.drp.qa.plotting.palettes`, from `pfs.drp.stella.utils.quality`. Unlike the
   original, it restores an alpha of 0 or `None` (PIPE2D-1895). It is re-exported from
   `pfs.drp.qa.utils.plotting`, so the import path given in PIPE2D-1895 keeps working.
+- **`pfs.drp.qa.guiders.coordinates`** — the guider tools' frame, sign and unit conventions. Positions are
+  in hardware coordinates, converted from the opdb once by `opdbToHardware`; offsets are center minus a
+  named reference (`addOffsets`, columns `dx_<reference>_um`); columns carry their units; and unit
+  helpers replace bare factors. Also the AG constants, `rotXY`, and the zenith-frame conversions
+  (`pfiToZenith`, `zenithToPfi`) from drp_stella's `ag_to_zenith_offset`, which take hardware
+  coordinates rather than negated y. Constants are renamed with their units (`agcCameraCenters` is
+  `AGC_CAMERA_CENTERS_MM`, ...) (PIPE2D-1896).
 
 ### Changed
 
@@ -156,6 +163,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Fixed
 
+- **`dmResiduals` import** — `getDescriptionCounts` is now imported from
+  `pfs.drp.stella.fitDetectorMap`. The former `pfs.drp.stella.fitDistortedDetectorMap` module no longer
+  exists in `drp_stella`, so `DetectorMapResidualsTask` failed to import and the `dmResiduals` pipeline
+  task could not run.
 - **`iqQaSpeciesMetrics` failed to write whenever it had rows.** The `fitSpecies*` metrics are
   ungated, so `status` was null on every row, and the Butler's parquet writer raises on a non-empty
   string column with no non-null value (`max() iterable argument is empty`). A missing string is now
