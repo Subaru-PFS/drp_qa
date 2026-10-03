@@ -2,9 +2,8 @@
 
 The data are engineering visits of Run 30 (2026-08-31), read with
 `pfs.drp.qa.guiders.queries.readAgcData` and trimmed to a few guide stars per
-camera: drp_pfs_data's ``guiders/``, made by its ``makeGuiderFixtures.py``. The
-`realAgcData` and `realAgcStars` fixtures read them, skipping the tests when
-drp_pfs_data isn't available.
+camera: ``data/``, made by ``data/makeGuiderFixtures.py``. The `realAgcData`
+and `realAgcStars` fixtures read them.
 
 The bounds are set from the values these data give, quoted in each test, with
 room for the trimming and for library versions. Each test has a negative
@@ -328,7 +327,7 @@ def testRealDataDriftRate(realAgcData):
 
 # Comparison with pfs_utils
 
-# The visits with their guide stars in drp_pfs_data, at rotator angles of -165 and 103 degrees.
+# The visits with their guide stars in data/, at rotator angles of -165 and 103 degrees.
 STAR_VISITS = [("allSky", 148258), ("raster", 148291)]
 
 

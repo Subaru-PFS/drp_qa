@@ -29,7 +29,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md` as symlinks to it.
 - **`pfs.drp.qa.guiders`** — empty `coordinates`, `queries`, `analysis` and `plotting` modules for the
   guider tools moving from `pfs.drp.stella.utils.guiders`, and a `guiders` CI job that runs
-  `tests/guiders/` with pfs-utils (installed `--no-deps`) and drp_pfs_data's `guiders/` directory.
+  `tests/guiders/` with pfs-utils (installed `--no-deps`).
   `tests/guiders/conftest.py` provides a `makeAgcData` fixture for synthetic AG data (PIPE2D-1895).
 - **`opaqueColorbar`** in `pfs.drp.qa.utils.plotting`, from `pfs.drp.stella.utils.quality`. Unlike the
   original, it restores an alpha of 0 or `None` (PIPE2D-1895).
@@ -79,9 +79,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `estimateGuideErrors`'s `nominal0` moved by each visit's shift, from the stars seen most often in
   that visit; `model` is where a fit in `analysis` puts each star (PIPE2D-1898).
 - **Guider regression tests on real AG data** — `tests/guiders/test_realData.py` runs the guider
-  analysis on engineering visits of Run 30 (a focus sweep, a raster scan, an all-sky exposure) from
-  drp_pfs_data's `guiders/`, read through the `realAgcData` and `realAgcStars` fixtures. The tests skip
-  when `DRP_PFS_DATA_DIR` is unset or the files are LFS pointers (PIPE2D-1900).
+  analysis on engineering visits of Run 30 (a focus sweep, a raster scan, an all-sky exposure), read
+  through the `realAgcData` and `realAgcStars` fixtures from `tests/guiders/data/` (0.63 MB of parquet,
+  made by `makeGuiderFixtures.py` there) (PIPE2D-1900).
 
 ### Fixed
 
