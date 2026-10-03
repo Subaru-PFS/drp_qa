@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import scipy.optimize
 import scipy.stats
+from astropy.time import Time
 from numpy.typing import ArrayLike
 
 from pfs.drp.qa.guiders.coordinates import (
@@ -34,15 +35,17 @@ from pfs.drp.qa.guiders.coordinates import (
     umToMm,
     zenithToPfi,
 )
-from pfs.utils.coordinates import CoordTransp
+from pfs.utils.coordinates import Subaru_POPT2_PFS
 from pfs.utils.coordinates.transform import MeasureDistortion
 from pfs.utils.datamodel.ag import SourceCatalogFlags, SourceDetectionFlags, SourceMatchingFlags
 
 __all__ = [
     "AGACTOR_FOCUS_FIX_VISIT",
+    "AG_WAVELENGTH_UM",
     "FOCUS_PISTON_MM_PER_PIX2",
     "FOCUS_PISTON_OFFSET_MM",
     "GAUSSIAN_FWHM_PER_SIGMA",
+    "GUIDE_STAR_EPOCH",
     "DriftFit",
     "GlobalModelFit",
     "GuiderFit",
@@ -50,6 +53,7 @@ __all__ = [
     "MeasureXYRot",
     "PfsUtilsComparison",
     "addImageSizes",
+    "agActorPositions",
     "averageByFocusPosition",
     "comparePfsUtilsPositions",
     "correctAgActorFocus",
@@ -93,6 +97,11 @@ _TRANSFORM_PARAMETERS = ("x0_mm", "y0_mm", "theta_deg", "dscale", "scale2_per_mm
 
 # HST is UTC-10 all year.
 _HST_TO_UTC = pd.Timedelta(hours=10)
+
+# ics_agActor's model of where the guide stars fall: its wavelength (microns),
+# and the epoch of the guide star catalogue (Gaia DR3).
+AG_WAVELENGTH_UM = 0.62
+GUIDE_STAR_EPOCH = 2016.0
 
 
 # Selection
@@ -1043,7 +1052,94 @@ def _hstToUtc(time) -> str:
     time = pd.Timestamp(time)
     time = time.tz_convert("UTC").tz_localize(None) if time.tzinfo is not None else time + _HST_TO_UTC
 
-    return time.strftime("%Y-%m-%d %H:%M:%S")
+    return time.strftime("%Y-%m-%d %H:%M:%S.%f")
+
+
+def agActorPositions(
+    agcData: pd.DataFrame, instPaCorrection_arcsec: float = 0.0
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return where ics_agActor's model puts each row's guide star.
+
+    This is the chain the AG actor uses for its nominal positions (its
+    ``makeBasis``), from pfs_utils's `pfs.utils.coordinates.Subaru_POPT2_PFS`,
+    with the inputs it used for each AG exposure. The guide stars are moved
+    to the exposure's time for proper motion and parallax
+    (``radec2radecplxpm``, from `GUIDE_STAR_EPOCH`). Their separations and
+    position angles from the field center (``guide_ra``, ``guide_dec``) at
+    `AG_WAVELENGTH_UM` are projected onto the focal plane by the AG cameras'
+    optical model (``celestial2focalplane``), with the exposure's ADC
+    (``adc_pa``) and M2 (``m2_pos3``) positions and the half of the detector
+    each spot is on, then taken to the PFI (``fp2pfi``) at the rotator angle
+    the actor computes from the field center and ``guide_pa``.
+
+    Parameters
+    ----------
+    agcData : `pandas.DataFrame`
+        AG data from `pfs.drp.qa.guiders.queries.readAgcData`, with the
+        ``guide_star_ra``, ``guide_star_dec``, ``guide_star_pm_ra``,
+        ``guide_star_pm_dec`` and ``guide_star_parallax`` of each row's star
+        from `pfs.drp.qa.guiders.queries.readAGCStars`.
+    instPaCorrection_arcsec : `float`
+        Add this to ``guide_pa`` (arcsec).
+
+    Returns
+    -------
+    x_mm, y_mm : `numpy.ndarray`
+        The positions, in hardware coordinates (pfs_utils's PFI frame), one
+        per row.
+
+    Notes
+    -----
+    pfs_utils's ``CoordinateTransform`` isn't used. Its ``sky_pfi`` mode,
+    which drp_stella's ``compareAGCPfsUtils`` used, is the cobras' model:
+    it puts the guide stars about 550 µm from the AG actor's positions (a
+    rotation of 445 arcsec, a scale of 430 ppm and an offset of 120 µm in
+    Run 30). Its ``sky_pfi_ag`` mode models the ADC and M2 positions from
+    the zenith angle and averages the two halves of the detectors, which
+    leaves about 42 µm.
+    """
+    subaru, popt2, pfs = Subaru_POPT2_PFS.Subaru(), Subaru_POPT2_PFS.POPT2(), Subaru_POPT2_PFS.PFS()
+    x_mm = np.full(len(agcData), np.nan)
+    y_mm = np.full(len(agcData), np.nan)
+    exposureId = agcData.agc_exposure_id.to_numpy()
+    for aid in np.unique(exposureId):
+        rows = np.flatnonzero(exposureId == aid)
+        exposure = agcData.iloc[rows]
+        first = exposure.iloc[0]
+        time = Time(_hstToUtc(first.taken_at), scale="utc")
+        ra, dec = subaru.radec2radecplxpm(
+            GUIDE_STAR_EPOCH,
+            exposure.guide_star_ra.to_numpy(dtype=float),
+            exposure.guide_star_dec.to_numpy(dtype=float),
+            # A copy: pfs_utils clamps the parallaxes in place, and to_numpy can return a read-only view.
+            np.array(exposure.guide_star_parallax, dtype=float),
+            exposure.guide_star_pm_ra.to_numpy(dtype=float),
+            exposure.guide_star_pm_dec.to_numpy(dtype=float),
+            time,
+        )
+        inr = subaru.radec2inr(first.guide_ra, first.guide_dec, time) + first.guide_pa
+        inr += instPaCorrection_arcsec / 3600
+        sep, zpa = subaru.starSepZPA(first.guide_ra, first.guide_dec, ra, dec, AG_WAVELENGTH_UM, time)
+        _, altitude = subaru.radec2azel(first.guide_ra, first.guide_dec, AG_WAVELENGTH_UM, time)
+        right = (exposure.agc_data_flags.to_numpy() & int(SourceDetectionFlags.RIGHT)) != 0
+        xfp, yfp = popt2.celestial2focalplane(
+            sep, zpa, first.adc_pa, inr, altitude, first.m2_pos3, AG_WAVELENGTH_UM, right.astype(float)
+        )
+        x_mm[rows], y_mm[rows] = pfs.fp2pfi(xfp, yfp, inr)
+
+    return x_mm, y_mm
+
+
+# The columns of readAGCStars that agActorPositions needs.
+_GUIDE_STAR_COLUMNS = [
+    "guide_star_ra",
+    "guide_star_dec",
+    "guide_star_pm_ra",
+    "guide_star_pm_dec",
+    "guide_star_parallax",
+]
+# The columns of readAgcData that agActorPositions needs.
+_AG_ACTOR_INPUTS = ["taken_at", "guide_ra", "guide_dec", "guide_pa", "adc_pa", "m2_pos3"]
 
 
 def comparePfsUtilsPositions(
@@ -1055,24 +1151,23 @@ def comparePfsUtilsPositions(
 ) -> PfsUtilsComparison:
     """Compare the guider's nominal positions of a visit's guide stars with pfs_utils's.
 
-    The guider's positions are the median of each star's
-    ``agc_nominal_[xy]_mm`` over the visit's first ``nAgcExposures`` AG
-    exposures; one exposure can miss a camera. pfs_utils's are from
-    `pfs.utils.coordinates.CoordTransp.CoordinateTransform` (``sky_pfi``)
-    at the config's field center and position angle, and the time of the
-    first AG exposure.
+    pfs_utils's positions are from the AG actor's model, with the inputs it
+    used (`agActorPositions`), so they should match the guider's to well
+    under a micron. Both are computed for every row of the visit's first
+    ``nAgcExposures`` AG exposures with those inputs, and each star's is the
+    median over those exposures; one exposure can miss a camera.
 
     Parameters
     ----------
     agcStars : `pandas.DataFrame`
         The visit's guide stars, from
-        `pfs.drp.qa.guiders.queries.readAGCStars` with ``pfs_visit_id``.
+        `pfs.drp.qa.guiders.queries.readAGCStars`.
     agcData : `pandas.DataFrame`
         The visit's AG data, from `pfs.drp.qa.guiders.queries.readAgcData`.
     nAgcExposures : `int`
         How many AG exposures to average.
     instPaCorrection_arcsec : `float`
-        Add this to the config's position angle (arcsec).
+        Add this to the AG actor's position angle (arcsec).
     alignCenterPosition : `bool`
         Shift pfs_utils's positions so that their mean matches the guider's.
 
@@ -1084,38 +1179,29 @@ def comparePfsUtilsPositions(
     Raises
     ------
     ValueError
-        If no guide star is in both ``agcStars`` and ``agcData``.
+        If no guide star is in both ``agcStars`` and AG exposures with the
+        AG actor's inputs.
 
     Notes
     -----
-    pfs_utils's PFI coordinates have the opdb's sign of y (see
-    `pfs.drp.qa.guiders.coordinates`), so ``pfs_utils_y_mm`` is negated. In
-    hardware coordinates angles run the other way, so
+    In hardware coordinates angles run the other way from the opdb's, so
     ``delta_theta_arcsec`` has the opposite sign of drp_stella's
-    ``delta_theta``, which was computed in the opdb's frame. The opdb's
-    times are HST; pfs_utils is given UTC.
+    ``delta_theta``. The opdb's times are HST; pfs_utils is given UTC.
     """
-    exposures = np.sort(agcData.agc_exposure_id.unique())[:nAgcExposures]
-    data = agcData[agcData.agc_exposure_id.isin(exposures)]
-    nominal = data.groupby("guide_star_id", as_index=False)[["agc_nominal_x_mm", "agc_nominal_y_mm"]].median()
-    first = data.sort_values("agc_exposure_id", kind="stable").drop_duplicates("guide_star_id")
-    first = first.drop(columns=["agc_nominal_x_mm", "agc_nominal_y_mm", "agc_camera_id", "pfs_visit_id"])
-    stars = agcStars.merge(first.merge(nominal, on="guide_star_id"), on="guide_star_id")
-    if stars.empty:
+    data = agcData.dropna(subset=_AG_ACTOR_INPUTS)
+    exposures = np.sort(data.agc_exposure_id.unique())[:nAgcExposures]
+    data = data[data.agc_exposure_id.isin(exposures)]
+    data = data.merge(agcStars[["guide_star_id", *_GUIDE_STAR_COLUMNS]], on="guide_star_id")
+    if data.empty:
         raise ValueError("No guide star is in both agcStars and agcData")
 
-    xy = CoordTransp.CoordinateTransform(
-        np.array([stars.guide_star_ra, stars.guide_star_dec], dtype=float),
-        "sky_pfi",
-        za=90.0 - stars.altitude.iloc[0],
-        cent=np.array([[stars.ra_center_config.mean()], [stars.dec_center_config.mean()]]),
-        time=_hstToUtc(stars.taken_at.iloc[0]),
-        pa=stars.pa_config.mean() + instPaCorrection_arcsec / 3600,
-        pm=np.array([stars.guide_star_pm_ra, stars.guide_star_pm_dec], dtype=float),
-        par=stars.guide_star_parallax.to_numpy(dtype=float),
-    )
-    stars["pfs_utils_x_mm"] = xy[0]
-    stars["pfs_utils_y_mm"] = -xy[1]
+    x_mm, y_mm = agActorPositions(data, instPaCorrection_arcsec)
+    data = data.assign(pfs_utils_x_mm=x_mm, pfs_utils_y_mm=y_mm)
+    positions = ["agc_nominal_x_mm", "agc_nominal_y_mm", "pfs_utils_x_mm", "pfs_utils_y_mm"]
+    medians = data.groupby("guide_star_id", as_index=False)[positions].median()
+    first = data.sort_values("agc_exposure_id", kind="stable").drop_duplicates("guide_star_id")
+    first = first.drop(columns=[*positions, *_GUIDE_STAR_COLUMNS, "agc_camera_id", "pfs_visit_id"])
+    stars = agcStars.merge(first.merge(medians, on="guide_star_id"), on="guide_star_id")
 
     alignOffset_um = None
     if alignCenterPosition:

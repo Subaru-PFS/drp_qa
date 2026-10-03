@@ -6,10 +6,13 @@ stack. CI runs them in their own job (``guiders`` in
 directory.
 
 Test modules can't import each other (``--import-mode=importlib``), so the
-test doubles here (`FakeOpDB`, `StubButler`) are handed out by fixtures.
+test doubles here (`FakeOpDB`, `StubButler`) are handed out by fixtures, as is
+the real AG data in `data/` (`realAgcData`, `realAgcStars`).
 """
 
+import functools
 import re
+from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
@@ -308,3 +311,44 @@ class StubButler:
 def stubButlerFixture():
     """Return the `StubButler` class."""
     return StubButler
+
+
+# Real AG data, made by data/makeGuiderFixtures.py.
+DATA_DIR = Path(__file__).parent / "data"
+
+
+@functools.cache
+def _readParquet(filename: str) -> pd.DataFrame:
+    return pd.read_parquet(DATA_DIR / filename)
+
+
+@pytest.fixture(name="realAgcData")
+def realAgcDataFixture():
+    """Return a function reading real AG data from ``data/``.
+
+    ``realAgcData(name)`` returns a fresh copy of ``agcData-<name>.parquet``:
+    the output of `pfs.drp.qa.guiders.queries.readAgcData`, in hardware
+    coordinates, for a few guide stars per camera. The names are
+    ``focusSweep``, ``raster`` and ``allSky``; ``data/makeGuiderFixtures.py``
+    says what each holds.
+    """
+
+    def read(name: str) -> pd.DataFrame:
+        return _readParquet(f"agcData-{name}.parquet").copy()
+
+    return read
+
+
+@pytest.fixture(name="realAgcStars")
+def realAgcStarsFixture():
+    """Return a function reading a visit's guide stars from ``data/``.
+
+    ``realAgcStars(visit)`` returns `pfs.drp.qa.guiders.queries.readAGCStars`
+    for the visit (148258 or 148291), for the stars in `realAgcData`.
+    """
+
+    def read(visit: int) -> pd.DataFrame:
+        agcStars = _readParquet("agcStars.parquet")
+        return agcStars[agcStars.pfs_visit_id == visit].reset_index(drop=True)
+
+    return read

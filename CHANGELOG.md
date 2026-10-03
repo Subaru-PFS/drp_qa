@@ -29,7 +29,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md` as symlinks to it.
 - **`pfs.drp.qa.guiders`** — empty `coordinates`, `queries`, `analysis` and `plotting` modules for the
   guider tools moving from `pfs.drp.stella.utils.guiders`, and a `guiders` CI job that runs
-  `tests/guiders/` with pfs-utils (installed `--no-deps`) and drp_pfs_data's `guiders/` directory.
+  `tests/guiders/` with pfs-utils (installed `--no-deps`).
   `tests/guiders/conftest.py` provides a `makeAgcData` fixture for synthetic AG data (PIPE2D-1895).
 - **`opaqueColorbar`** in `pfs.drp.qa.utils.plotting`, from `pfs.drp.stella.utils.quality`. Unlike the
   original, it restores an alpha of 0 or `None` (PIPE2D-1895).
@@ -78,6 +78,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **`boresight` and `model` references** in `pfs.drp.qa.guiders.coordinates`: `boresight` is
   `estimateGuideErrors`'s `nominal0` moved by each visit's shift, from the stars seen most often in
   that visit; `model` is where a fit in `analysis` puts each star (PIPE2D-1898).
+- **Guider regression tests on real AG data** — `tests/guiders/test_realData.py` runs the guider
+  analysis on engineering visits of Run 30 (a focus sweep, a raster scan, an all-sky exposure), read
+  through the `realAgcData` and `realAgcStars` fixtures from `tests/guiders/data/` (0.63 MB of parquet,
+  made by `makeGuiderFixtures.py` there) (PIPE2D-1900).
 
 ### Fixed
 
@@ -103,6 +107,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `psycopg2.connect` calls. Needs `pfs_utils` 7.4.18 or later. `main()` still reads the opdb on `pfsa-db`
   (PIPE2D-1893).
 - **`scipy` is a declared dependency** in `pyproject.toml`, for the guider fits (PIPE2D-1895).
+- **`comparePfsUtilsPositions` uses the AG actor's model** — pfs_utils's positions of the guide stars
+  come from the chain ics_agActor uses for its nominal positions (the new `agActorPositions`: pfs_utils's
+  `Subaru_POPT2_PFS` with each AG exposure's field center, PA, ADC and M2 positions and detector half),
+  and match the guider's to 0.2 µm on Run 30 data. drp_stella's `compareAGCPfsUtils`, and so this function
+  until now, used `CoordinateTransform`'s `sky_pfi` mode, pfs_utils's model for the cobras, which is about
+  550 µm off. `agcStars` needs only the stars' catalogue columns. It no longer fails under pandas 3, where
+  pfs_utils clamped a read-only parallax array (PIPE2D-1900).
 
 ### Removed
 

@@ -5,8 +5,6 @@ pfs_utils modules the guider code uses, and that the shared fixtures work.
 """
 
 import importlib
-import os
-from pathlib import Path
 
 import pytest
 from matplotlib.figure import Figure
@@ -65,11 +63,3 @@ def testMakeAgcDataStars(makeAgcData):
     for column in ("guide_star_flag", "m2_off3", "mxx", "myy", "mxy", "guide_delta_z", "guide_delta_z6"):
         assert column in agcData.columns, column
     assert {"rms", "FWHM", "left"}.isdisjoint(agcData.columns)
-
-
-def testDrpPfsDataDir():
-    """DRP_PFS_DATA_DIR points at a drp_pfs_data checkout when set (as in CI)."""
-    path = os.environ.get("DRP_PFS_DATA_DIR")
-    if path is None:
-        pytest.skip("DRP_PFS_DATA_DIR is not set")
-    assert (Path(path) / "ups" / "drp_pfs_data.table").is_file()

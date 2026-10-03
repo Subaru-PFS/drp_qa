@@ -55,8 +55,8 @@ the pipeline/config glue to run them.
   layers: `coordinates`, `queries` (the only code touching the opdb or a butler),
   `analysis` and `plotting` (DataFrames in, never a database). `compat` keeps drp_stella's
   four AG reader names as deprecated wrappers of `queries.readAgcData`; nothing in the
-  package may use it. Stack-free; tested in `tests/guiders/` with a fake `OpDB` and a stub
-  butler (fixtures in its `conftest.py`).
+  package may use it. Stack-free; tested in `tests/guiders/` with a fake `OpDB`, a stub
+  butler and real AG data in `tests/guiders/data/` (fixtures in its `conftest.py`).
 - **Support modules (`python/pfs/drp/qa/`)**:
   - `storageClasses.py`, `formatters.py` — custom Butler storage classes / formatters
   - `utils/` — shared helpers (`math.py`, `plotting.py`)
@@ -154,7 +154,7 @@ Two GitHub Actions workflows run on every pull request:
 
 | Workflow | Blocking | What it does |
 |---|---|---|
-| `.github/workflows/tests.yml` | yes | On Python 3.12 and 3.13: `pytest -v` with only pytest installed, and `pytest -v tests/guiders` with pfs-utils and drp_pfs_data |
+| `.github/workflows/tests.yml` | yes | On Python 3.12 and 3.13: `pytest -v` with only pytest installed, and `pytest -v tests/guiders` with pfs-utils |
 | `.github/workflows/lint.yml` | yes | `ruff check .` and `ruff format --check .` over the whole tree |
 
 **The repository is Ruff-clean and both checks gate the whole tree.** Keep it that way:
@@ -168,11 +168,10 @@ three other repositories. Only stack-free tests run, in two jobs:
 - **`stack-free`** installs only pytest, so its tests import nothing beyond the standard
   library.
 - **`guiders`** runs `tests/guiders/` against `python/` on `PYTHONPATH`. It installs
-  pfs-utils from git with `--no-deps`, plus the packages listed in the workflow, and
-  clones drp_pfs_data at the PR's branch name (else `master`) with LFS smudging skipped,
-  pulling only `guiders/`. `DRP_PFS_DATA_DIR` points at the clone. To give a PR new test
-  data, push a drp_pfs_data branch with the same name. Keep the workflow's package list
-  in step with `pyproject.toml`.
+  pfs-utils from git with `--no-deps`, plus the packages listed in the workflow. Keep that
+  list in step with `pyproject.toml`. Its real AG data are parquet files in
+  `tests/guiders/data/`, small enough for plain git; `makeGuiderFixtures.py` there remakes
+  them.
 
 `tests/conftest.py` ignores `tests/guiders/` when the imports of its `conftest.py`
 (numpy, pandas, pfs_utils) are missing, so the `stack-free` job skips it.
