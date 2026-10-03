@@ -38,7 +38,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 ### Changed
 
 - **Build and packaging** — `pyproject.toml` is now the single source of build, lint, and test configuration. Ruff
-  replaces Black, isort, and Flake8; `uv.lock` pins the development environment. EUPS `setup -r .` still works via
+  replaces Black, isort, and Flake8. EUPS `setup -r .` still works via
   `ups/drp_qa.table`, but there is no longer a build step.
 - **Lint and format sweep** — every pre-existing QA module reformatted under Ruff (`line-length = 110`,
   `target-version = "py312"`), including `typing.Union`/`Optional`
@@ -54,6 +54,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Removed
 
+- **`uv.lock`** — it had gone stale (`uv lock --check` failed) and nothing used it: CI installs its packages
+  without it, and the code runs in the LSST stack. It is now in `.gitignore`; `uv sync` still works and writes a
+  local lockfile (PIPE2D-1906).
 - **Log-artifact tests** — the `TestRealLogs` class in `tests/test_fitDetectorMapLogQa.py` depended on
   `run28-dm-02.log` / `run28-dm-03.log`, which are not in the repository, so all eight tests always
   skipped and provided no coverage.

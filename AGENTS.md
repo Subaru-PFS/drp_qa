@@ -109,7 +109,7 @@ There are no compiled components, so a plain install is enough:
 
 ```bash
 pip install -e .
-# or, using the checked-in lockfile
+# or, with uv (the lockfile it writes isn't tracked)
 uv sync
 # or build a wheel/sdist
 python -m pip install build && python -m build
