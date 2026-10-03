@@ -162,8 +162,9 @@ LEFT JOIN pfs_design_agc ON pfs_design_agc.pfs_design_id = pfs_visit.pfs_design_
 WHERE agc_exposure.pfs_visit_id = ANY(:visits)
 """
 
+# Every AG exposure, including those with no matched spots.
 _AGC_EXPOSURES_SQL = """
-SELECT pfs_visit_id, agc_exposure_id
+SELECT pfs_visit_id, agc_exposure_id, m2_pos3
 FROM agc_exposure
 WHERE pfs_visit_id = ANY(:visits)
 """
@@ -309,35 +310,41 @@ def readAgcData(
     if agcData.empty:
         return opdbToHardware(pd.DataFrame(columns=list(AGC_DATA_COLUMNS)))
 
-    telStatus = _pairTelStatus(
-        opdb.query_dataframe(_AGC_EXPOSURES_SQL, params=params),
-        opdb.query_dataframe(_AGC_TEL_STATUS_SQL, params=params),
-    )
+    agcExposures = opdb.query_dataframe(_AGC_EXPOSURES_SQL, params=params)
+    telStatus = _pairTelStatus(agcExposures, opdb.query_dataframe(_AGC_TEL_STATUS_SQL, params=params))
     # A left merge, so a star isn't dropped when its exposure has no tel_status row.
     agcData = agcData.merge(telStatus, on="agc_exposure_id", how="left", validate="many_to_one")
 
     agcData["guide_star_flag"] = agcData.guide_star_flag.fillna(0).astype(int)
     agcData["inst_pa"] = np.nan
     if butler is not None:
-        agcData = _addButlerColumns(agcData, butler, rawDataId)
+        agcData = _addButlerColumns(agcData, agcExposures, butler, rawDataId)
 
     agcData = agcData[list(AGC_DATA_COLUMNS)].sort_values(_AGC_DATA_ORDER, ignore_index=True)
 
     return opdbToHardware(agcData)
 
 
-def _addButlerColumns(agcData: pd.DataFrame, butler, rawDataId: Mapping | None) -> pd.DataFrame:
-    """Return a copy of ``agcData`` with ``inst_pa``, and missing ``m2_off3``, from the raws."""
+def _addButlerColumns(
+    agcData: pd.DataFrame, agcExposures: pd.DataFrame, butler, rawDataId: Mapping | None
+) -> pd.DataFrame:
+    """Return a copy of ``agcData`` with ``inst_pa``, and missing ``m2_off3``, from the raws.
+
+    ``agcExposures`` has the ``pfs_visit_id``, ``agc_exposure_id`` and
+    ``m2_pos3`` of every AG exposure, as M2 may move before the first
+    exposure with a matched spot.
+    """
     agcData = agcData.copy()
     instPa = readInstPa(butler, agcData.pfs_visit_id.unique(), rawDataId)
     agcData["inst_pa"] = agcData.pfs_visit_id.map(instPa).astype(float)
 
+    # m2_pos3 at each visit's first AG exposure (with an m2_pos3).
+    m2Pos3First = agcExposures.sort_values("agc_exposure_id").groupby("pfs_visit_id").m2_pos3.first()
     for visit, rows in agcData.groupby("pfs_visit_id"):
         if rows.m2_off3.notna().any():
             continue
-        # m2_pos3 at the visit's first AG exposure, whatever the row order.
-        m2Pos3First = rows.m2_pos3.iloc[np.argmin(rows.agc_exposure_id.to_numpy())]
-        agcData.loc[rows.index, "m2_off3"] = find_W_M2OFF3(butler, visit) + (rows.m2_pos3 - m2Pos3First)
+        moved = rows.m2_pos3 - m2Pos3First[visit]
+        agcData.loc[rows.index, "m2_off3"] = find_W_M2OFF3(butler, visit) + moved
 
     return agcData
 
@@ -571,7 +578,8 @@ def readSpSInfo(
         One row per visit: ``pfs_visit_id``, ``taken_at``, ``exptime`` (s),
         ``exp_type``, ``altitude``, ``azimuth``, ``insrot`` (deg),
         ``group_id``, ``group_name`` and ``design_name``. Times and angles are
-        averaged over the cameras and tel_status rows.
+        averaged over the cameras and tel_status rows. ``group_id`` and
+        ``group_name`` are missing for a visit in no sequence.
     """
     _checkOpdb(opdb)
     where = []
@@ -599,7 +607,7 @@ def readSpSInfo(
     JOIN sps_visit ON sps_visit.pfs_visit_id = sps_exposure.pfs_visit_id
     LEFT JOIN tel_status ON tel_status.pfs_visit_id = sps_exposure.pfs_visit_id
     LEFT JOIN visit_set ON visit_set.pfs_visit_id = sps_exposure.pfs_visit_id
-    JOIN iic_sequence ON iic_sequence.iic_sequence_id = visit_set.iic_sequence_id
+    LEFT JOIN iic_sequence ON iic_sequence.iic_sequence_id = visit_set.iic_sequence_id
     LEFT JOIN sequence_group ON sequence_group.group_id = iic_sequence.group_id
     {"WHERE " + " AND ".join(where) if where else ""}
     {"LIMIT :limit" if limit > 0 else ""}

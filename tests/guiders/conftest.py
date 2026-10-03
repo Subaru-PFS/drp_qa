@@ -229,7 +229,7 @@ def makeOpdbTables(agcData: pd.DataFrame) -> dict[str, pd.DataFrame]:
     rows["guide_delta_scale"] = 0.0
 
     exposures = agcData.groupby("agc_exposure_id", as_index=False).agg(
-        pfs_visit_id=("pfs_visit_id", "first"), m2_off3=("m2_off3", "first")
+        pfs_visit_id=("pfs_visit_id", "first"), m2_pos3=("m2_pos3", "first"), m2_off3=("m2_off3", "first")
     )
     telStatus = pd.DataFrame(
         {
@@ -243,7 +243,7 @@ def makeOpdbTables(agcData: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
     return {
         "agc_data": rows,
-        "agc_exposure": exposures[["pfs_visit_id", "agc_exposure_id"]],
+        "agc_exposure": exposures[["pfs_visit_id", "agc_exposure_id", "m2_pos3"]],
         "agc_tel_status": telStatus,
     }
 

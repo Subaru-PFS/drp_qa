@@ -171,9 +171,14 @@ def testReadAgcDataButler(makeOpdb, StubButler):
     telStatus = opdb.tables["agc_tel_status"]
     noM2Off3 = VISITS[1]  # e.g. before 2025-03-21
     telStatus.loc[telStatus.pfs_visit_id == noM2Off3, "m2_off3"] = np.nan
+    # M2 moves during each visit.
+    exposures = opdb.tables["agc_exposure"]
+    exposures["m2_pos3"] = 0.01 * (exposures.agc_exposure_id - 1000)
     rows = opdb.tables["agc_data"]
-    rows["m2_pos3"] = 0.01 * (rows.agc_exposure_id - 1000)  # moves during each visit
-    # Newest first, so the first row isn't the first exposure.
+    rows["m2_pos3"] = 0.01 * (rows.agc_exposure_id - 1000)
+    # The visit's first AG exposure has no matched spots, and the rows come newest first.
+    first = exposures[exposures.pfs_visit_id == noM2Off3].agc_exposure_id.min()
+    rows = rows[rows.agc_exposure_id != first]
     opdb.tables["agc_data"] = lambda params: rows.sort_values("agc_exposure_id", ascending=False)
     butler = StubButler([{"visit": v, "arm": arm, "spectrograph": 1} for v in VISITS for arm in "br"])
 
@@ -181,15 +186,18 @@ def testReadAgcDataButler(makeOpdb, StubButler):
 
     np.testing.assert_array_equal(data.inst_pa, 10.0 * data.pfs_visit_id + 1)  # the r arm
 
+    # W_M2OFF3 plus M2's movement since the first AG exposure, not the first with matched spots.
     visit = data.pfs_visit_id == noM2Off3
-    first = data[visit].agc_exposure_id.min()
-    m2Pos3First = data[data.agc_exposure_id == first].m2_pos3.iloc[0]
-    np.testing.assert_allclose(data[visit].m2_off3, -noM2Off3 / 1e6 + data[visit].m2_pos3 - m2Pos3First)
+    assert first not in set(data.agc_exposure_id)
+    np.testing.assert_allclose(
+        data[visit].m2_off3, -noM2Off3 / 1e6 + 0.01 * (data[visit].agc_exposure_id - first)
+    )
     assert data[visit].m2_off3.nunique() > 1
 
     # The other visits keep tel_status's m2_off3.
     expected = agcData.sort_values(["agc_exposure_id", "guide_star_id"], ignore_index=True)
-    np.testing.assert_allclose(data[~visit].m2_off3, expected[~visit].m2_off3)
+    expected = expected[expected.pfs_visit_id != noM2Off3]
+    np.testing.assert_allclose(data[~visit].m2_off3, expected.m2_off3)
 
 
 def testReadAgcDataNoButler(makeOpdb):
@@ -371,6 +379,8 @@ def testReadSpSInfo(FakeOpDB):
 
     call = opdb.calls[0]
     assert call.params == {"exp_type": "object"}
+    # A visit in no sequence is kept: the join after LEFT JOIN visit_set is a LEFT JOIN too.
+    assert re.search(r"LEFT JOIN visit_set .*\s+LEFT JOIN iic_sequence ", call.sql)
     assert "LIMIT" not in call.sql
     assert "time_exp_start >" not in call.sql
 
