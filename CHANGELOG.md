@@ -49,7 +49,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `readTelStatus`. Compared with drp_stella: `readAGCStars` has its missing comma, the schema's
   `*_designed` column names, and a qualified `guide_star_ra`, and reads only the visit's own config;
   nothing calls `pd.set_option`; an exposure without a tel_status row keeps its stars; `shutter_open`
-  doesn't depend on spectrograph camera 1; `readSpSInfo` keeps visits in no sequence; and
+  doesn't depend on spectrograph camera 1; `readSpSInfo` keeps visits in no sequence; NULL
+  `agc_data` flags get RIGHT from the centroid, as ics_agActor reads them; and
   `find_W_M2OFF3` names the right visit in its error
   (PIPE2D-1897).
 - **`pfs.drp.qa.guiders.compat`** — drp_stella's `readAGCPositionsForVisitByAgcExposureId`,

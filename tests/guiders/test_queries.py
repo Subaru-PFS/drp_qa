@@ -125,6 +125,13 @@ def testReadAgcDataNullTelStatus(makeOpdb, monkeypatch):
         assert data[column].isna().all()
 
 
+def testAgcDataFlagsFallback():
+    """NULL agc_data.flags get the RIGHT bit from the centroid, as ics_agActor reads them."""
+    assert "COALESCE(agc_data.flags, CAST(agc_data.centroid_x_pix >= 511.5 + 24 AS INTEGER))" in (
+        queries._AGC_DATA_SQL
+    )
+
+
 def testReadAgcDataGuideStarFlag(makeOpdb):
     """A star missing from pfs_design_agc gets guide_star_flag 0."""
     opdb, _ = makeOpdb(nVisit=1)

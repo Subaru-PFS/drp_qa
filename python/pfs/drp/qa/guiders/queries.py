@@ -58,7 +58,7 @@ AGC_DATA_COLUMNS = {
     "agc_center_x_mm": "measured position of the star (mm, hardware coordinates)",
     "agc_center_y_mm": "measured position of the star (mm, hardware coordinates)",
     "agc_match_flags": "agc_match.flags; 1 for a valid match",
-    "agc_data_flags": "agc_data.flags (pfs.utils.datamodel.ag.SourceDetectionFlags)",
+    "agc_data_flags": "agc_data.flags (SourceDetectionFlags); if NULL, RIGHT from centroid_x_pix, as agActor",
     "guide_star_flag": "pfs_design_agc.guide_star_flag (SourceCatalogFlags); 0 if missing",
     "image_moment_00_pix": "zeroth image moment (flux)",
     "centroid_x_pix": "centroid on the AG detector (pix)",
@@ -111,7 +111,8 @@ SELECT
     agc_match.agc_center_x_mm,
     agc_match.agc_center_y_mm,
     agc_match.flags AS agc_match_flags,
-    agc_data.flags AS agc_data_flags,
+    -- Older rows have no flags; infer RIGHT from the centroid, as agActor's query_agc_data does.
+    COALESCE(agc_data.flags, CAST(agc_data.centroid_x_pix >= 511.5 + 24 AS INTEGER)) AS agc_data_flags,
     pfs_design_agc.guide_star_flag,
     agc_data.image_moment_00_pix,
     agc_data.centroid_x_pix,
