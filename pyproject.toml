@@ -25,6 +25,7 @@ dependencies = [
     "numpy >= 2.0",
     "pandas",
     "matplotlib",
+    "scipy",
     "seaborn",
     "pfs-utils @ git+https://github.com/Subaru-PFS/pfs_utils.git",
 ]

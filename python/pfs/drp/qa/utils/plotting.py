@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from contextlib import contextmanager
 
 import pandas as pd
 import seaborn as sb
@@ -149,3 +150,35 @@ def scatterplot_with_outliers(
     ax.grid(True, alpha=0.15)
 
     return ax
+
+
+@contextmanager
+def opaqueColorbar(S):
+    """Make a mappable opaque (alpha=1) while its colorbar is drawn.
+
+    From ``pfs.drp.stella.utils.quality``, which doesn't restore an alpha
+    of 0 or `None`.
+
+    Parameters
+    ----------
+    S : `matplotlib.cm.ScalarMappable`
+        The mappable, e.g. the return value of ``plt.scatter``. Its alpha,
+        including `None`, is restored on exit.
+
+    Examples
+    --------
+    >>> with opaqueColorbar(S):
+    ...     plt.colorbar(S, label="Wavelength (nm)")
+    """
+    a = S.get_alpha()
+    try:
+        S.set_alpha(1)
+    except AttributeError:
+        changed = False
+    else:
+        changed = True
+    try:
+        yield S
+    finally:
+        if changed:
+            S.set_alpha(a)
