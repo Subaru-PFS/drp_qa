@@ -36,7 +36,7 @@ from pfs.drp.qa.guiders.coordinates import (
 )
 from pfs.utils.coordinates import CoordTransp
 from pfs.utils.coordinates.transform import MeasureDistortion
-from pfs.utils.datamodel.ag import SourceCatalogFlags, SourceDetectionFlags
+from pfs.utils.datamodel.ag import SourceCatalogFlags, SourceDetectionFlags, SourceMatchingFlags
 
 __all__ = [
     "AGACTOR_FOCUS_FIX_VISIT",
@@ -118,7 +118,9 @@ def selectValidMatches(agcData: pd.DataFrame) -> np.ndarray:
     """Select the spots validly matched to their guide stars.
 
     `pfs.drp.qa.guiders.queries.readAgcData` returns every match, whatever
-    its flags; the fits and averages here use only the valid ones.
+    its flags; the fits and averages here use only the valid ones: those
+    whose ``agc_match_flags`` (`SourceMatchingFlags`) are ``GOOD_MATCH`` and
+    nothing else. ics_agActor writes 1 (``GOOD_MATCH``) or 0 so far.
 
     Parameters
     ----------
@@ -128,9 +130,9 @@ def selectValidMatches(agcData: pd.DataFrame) -> np.ndarray:
     Returns
     -------
     valid : `numpy.ndarray` of `bool`
-        One element per row: ``agc_match_flags == 1``.
+        One element per row.
     """
-    return agcData.agc_match_flags.to_numpy() == 1
+    return agcData.agc_match_flags.to_numpy() == int(SourceMatchingFlags.GOOD_MATCH)
 
 
 def selectIsolatedGaiaStars(agcData: pd.DataFrame) -> np.ndarray:

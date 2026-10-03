@@ -42,7 +42,7 @@ from pfs.drp.qa.guiders.coordinates import (
     rotXY,
     zenithToPfi,
 )
-from pfs.utils.datamodel.ag import SourceCatalogFlags, SourceDetectionFlags
+from pfs.utils.datamodel.ag import SourceCatalogFlags, SourceDetectionFlags, SourceMatchingFlags
 
 VISITS = [120000, 120001, 120002]
 
@@ -190,7 +190,7 @@ def testInvalidMatchesNotFitted(makeAgcData):
 def testSelectFlags():
     flags = pd.DataFrame(
         {
-            "agc_match_flags": [1, 0, 2],
+            "agc_match_flags": [1, 0, int(SourceMatchingFlags.GOOD_MATCH | SourceMatchingFlags.BAD_RESIDUAL)],
             "agc_data_flags": [0, int(SourceDetectionFlags.RIGHT), int(SourceDetectionFlags.EDGE)],
             "guide_star_flag": [
                 int(SourceCatalogFlags.GAIA | SourceCatalogFlags.NON_BINARY),

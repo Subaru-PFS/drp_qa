@@ -27,7 +27,7 @@ from collections.abc import Iterable
 
 import pandas as pd
 
-from pfs.drp.qa.guiders.analysis import addImageSizes
+from pfs.drp.qa.guiders.analysis import addImageSizes, selectValidMatches
 from pfs.drp.qa.guiders.coordinates import _FRAME_ATTR, OPDB_Y_COLUMNS
 from pfs.drp.qa.guiders.queries import readAgcData
 
@@ -60,7 +60,7 @@ def _toOpdbFrame(agcData: pd.DataFrame) -> pd.DataFrame:
 def _readStars(opdb, visits, flipToHardwareCoords: bool, useTraceRadius: bool, butler) -> pd.DataFrame:
     """Return the valid matches, with the star readers' extra columns."""
     stars = readAgcData(opdb, visits, butler=butler)
-    stars = stars[stars.agc_match_flags == 1].reset_index(drop=True)
+    stars = stars[selectValidMatches(stars)].reset_index(drop=True)
     stars["flags"] = stars.agc_data_flags
     stars["guide_delta_az"] = stars.guide_delta_azimuth
     stars["guide_delta_el"] = stars.guide_delta_altitude
