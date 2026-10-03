@@ -49,6 +49,11 @@ the pipeline/config glue to run them.
   - `fluxCalQa.py`, `fluxCal/fluxCalQA.py` — flux calibration validation
   - `fiberNormsQa.py` — **not** a `PipelineTask`; a standalone Butler-driven CLI module
     whose `main()` is invoked from `bin.src/fiberNormsQa.py`
+- **Guider analysis (`python/pfs/drp/qa/guiders/`)** — notebook tools for the AG
+  cameras, being moved from `pfs.drp.stella.utils.guiders` (epic PIPE2D-1891). Four
+  layers: `coordinates`, `queries` (the only code touching the opdb or a butler),
+  `analysis` and `plotting` (DataFrames in, never a database). Stack-free; tested in
+  `tests/guiders/`.
 - **Support modules (`python/pfs/drp/qa/`)**:
   - `storageClasses.py`, `formatters.py` — custom Butler storage classes / formatters
   - `utils/` — shared helpers (`math.py`, `plotting.py`)
@@ -110,7 +115,7 @@ There are no compiled components, so a plain install is enough:
 
 ```bash
 pip install -e .
-# or, using the checked-in lockfile
+# or, with uv (the lockfile it writes isn't tracked)
 uv sync
 # or build a wheel/sdist
 python -m pip install build && python -m build
@@ -146,7 +151,7 @@ Two GitHub Actions workflows run on every pull request:
 
 | Workflow | Blocking | What it does |
 |---|---|---|
-| `.github/workflows/tests.yml` | yes | `pytest -v` on Python 3.12 and 3.13 |
+| `.github/workflows/tests.yml` | yes | On Python 3.12 and 3.13: `pytest -v` with the stack-free PyPI wheels, and `pytest -v tests/guiders` with pfs-utils and drp_pfs_data |
 | `.github/workflows/lint.yml` | yes | `ruff check .` and `ruff format --check .` over the whole tree |
 
 **The repository is Ruff-clean and both checks gate the whole tree.** Keep it that way:
@@ -155,9 +160,22 @@ fix findings in the code you touch rather than widening the ignore list in
 
 **The package is not installed in CI.** `pip install -e .` would pull `pfs-utils` (and
 transitively `pfs-datamodel`, `pfs-instdata`) from GitHub, making every run depend on
-three other repositories. CI installs only ordinary PyPI wheels (`pytest`, `numpy`,
-`pandas`, `scipy`, `matplotlib`, `seaborn`, `pyyaml`) and `tests/conftest.py` puts `python/` on
-`sys.path`, so the stack-free suite imports `pfs.drp.qa.*` straight from the checkout.
+three other repositories. Only stack-free tests run, in two jobs:
+
+- **`stack-free`** installs ordinary PyPI wheels with no PFS dependency (`pytest`, `numpy`,
+  `pandas`, `scipy`, `matplotlib`, `seaborn`, `pyyaml`) — what the stack-free modules under
+  `pfs.drp.qa.metrics` and `pfs.drp.qa.plotting` need. `tests/conftest.py` puts `python/` on
+  `sys.path`, so the suite imports `pfs.drp.qa.*` straight from the checkout.
+- **`guiders`** runs `tests/guiders/` against `python/` on `PYTHONPATH`. It installs
+  pfs-utils from git with `--no-deps`, plus the packages listed in the workflow, and
+  clones drp_pfs_data at the PR's branch name (else `master`) with LFS smudging skipped,
+  pulling only `guiders/`. `DRP_PFS_DATA_DIR` points at the clone. To give a PR new test
+  data, push a drp_pfs_data branch with the same name. Keep the workflow's package list
+  in step with `pyproject.toml`.
+
+`tests/conftest.py` ignores `tests/guiders/` when the imports of its `conftest.py`
+(numpy, pandas, pfs_utils) are missing. The `stack-free` job installs numpy and pandas but
+not pfs_utils, so it still skips them.
 
 **Tests that need the stack** cannot be collected without it — a module-level
 `import lsst.utils.tests` fails during collection and aborts the whole run, so an in-test
@@ -374,6 +392,8 @@ notebooks and external callers; prefer the new paths in new code.
 - `detector_palette` — arm color mapping: `{"b": blue, "r": red, "n": goldenrod, "m": pink}`.
 - `spectrograph_plot_markers` — marker shapes per spectrograph: `{1: "s", 2: "o", 3: "X", 4: "P"}`.
 - `scatterplot_with_outliers()` — standard scatter function used across residual plots.
+- `opaqueColorbar()` — context manager that draws a translucent mappable's colorbar
+  opaque.
 
 ### Shared math utilities (`utils/math.py`)
 

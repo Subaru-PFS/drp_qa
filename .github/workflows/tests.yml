@@ -45,13 +45,9 @@ jobs:
       # `pfs.drp.qa.metrics` and `pfs.drp.qa.plotting` need; nothing here pulls
       # in the LSST stack.
       #
-      # `uv sync --frozen` is not an option either: uv.lock is stale with
-      # respect to pyproject.toml (`uv lock --check` fails), so it cannot
-      # reproduce the declared environment. Refresh the lockfile before relying
-      # on it here.
-      #
       # Tests needing the LSST/PFS stack are skipped by tests/conftest.py.
-      # See the stack-tests job below.
+      # See the stack-tests job below. tests/guiders is skipped too; it runs
+      # in the guiders job.
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
@@ -59,6 +55,63 @@ jobs:
 
       - name: Run tests
         run: pytest -v
+
+  guiders:
+    name: Guiders tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # pfs-utils is installed with --no-deps: its declared dependencies pull
+      # pfs-datamodel and pfs-instdata from git, which the guider code doesn't
+      # use. The second list is drp_qa's own dependencies from pyproject.toml
+      # (less pfs-utils), then what pfs.utils.database and
+      # pfs.utils.coordinates import. Keep it in step with pyproject.toml.
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --no-deps "pfs-utils @ git+https://github.com/Subaru-PFS/pfs_utils.git"
+          python -m pip install numpy pandas matplotlib scipy seaborn \
+            astropy astroplan sqlalchemy pyyaml pytest
+
+      # drp_pfs_data at this branch's name if it has one, else master. LFS
+      # smudging is skipped and only guiders/ is pulled, so the rest of the
+      # checkout stays as LFS pointers.
+      - name: Check out drp_pfs_data
+        env:
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          URL: https://github.com/Subaru-PFS/drp_pfs_data.git
+        run: |
+          if git ls-remote --exit-code --heads "$URL" "refs/heads/$BRANCH" > /dev/null; then
+            ref="$BRANCH"
+          else
+            status=$?
+            [ "$status" -eq 2 ] || exit "$status"  # 2: no such branch; anything else is an error
+            ref=master
+          fi
+          echo "Using drp_pfs_data branch $ref"
+          dir="$RUNNER_TEMP/drp_pfs_data"
+          GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 --branch "$ref" "$URL" "$dir"
+          git -C "$dir" lfs pull --include "guiders/**"
+          echo "DRP_PFS_DATA_DIR=$dir" >> "$GITHUB_ENV"
+
+      # As in the stack-free job, the package isn't installed. It is imported
+      # from python/, where pfs and pfs.drp are namespace packages, so it
+      # coexists with the installed pfs.utils.
+      - name: Run tests
+        env:
+          PYTHONPATH: python
+        run: pytest -v tests/guiders
 
   stack-tests:
     name: Stack tests (LSST/PFS)

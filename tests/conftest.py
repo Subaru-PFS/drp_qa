@@ -19,6 +19,11 @@ When adding a test module that imports the stack at module scope, add it to
 ``_STACK_MODULES``. Better still, keep the logic under test in a pure function
 that takes arrays or DataFrames so the test needs no stack at all — see
 ``doc/qa-rebuild-plan.md``.
+
+Directories in ``_OPTIONAL_DIRS`` need packages beyond the standard library
+(numpy, pandas, pfs_utils, ...) but not the stack. Each is ignored when the
+imports of its ``conftest.py`` cannot be satisfied, and CI runs it in its own
+job with those packages installed.
 """
 
 import ast
@@ -34,6 +39,11 @@ from pathlib import Path
 # guards. This list stays as the escape hatch for a module that genuinely cannot
 # use importorskip, e.g. one that subclasses ``lsst.utils.tests.TestCase``.
 _STACK_MODULES: list[str] = []
+
+# Test directories whose conftest.py imports non-stdlib packages.
+_OPTIONAL_DIRS = [
+    "guiders",
+]
 
 _HERE = Path(__file__).parent
 
@@ -96,12 +106,12 @@ def _importable(name: str) -> bool:
 
 
 def _unsatisfied(filename: str) -> bool:
-    """Return True when a test module's module-scope imports cannot be met.
+    """Return True when a test file's module-scope imports cannot be met.
 
     Parameters
     ----------
     filename : `str`
-        Test module file name, relative to this directory.
+        Test module or conftest.py path, relative to this directory.
 
     Returns
     -------
@@ -115,3 +125,4 @@ def _unsatisfied(filename: str) -> bool:
 
 
 collect_ignore = [name for name in _STACK_MODULES if _unsatisfied(name)]
+collect_ignore += [name for name in _OPTIONAL_DIRS if _unsatisfied(f"{name}/conftest.py")]

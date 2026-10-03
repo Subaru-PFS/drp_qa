@@ -24,3 +24,6 @@ tests/.tests
 .junie/plans
 
 docker-compose.yml
+
+# uv sync writes one locally; the LSST stack, not a lockfile, pins the runtime.
+uv.lock

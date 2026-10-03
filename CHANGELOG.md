@@ -62,6 +62,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   and associated tests and documentation.
 - **`AGENTS.md`** — single source of instructions for AI coding assistants, with
   `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md` as symlinks to it.
+- **`pfs.drp.qa.guiders`** — empty `coordinates`, `queries`, `analysis` and `plotting` modules for the
+  guider tools moving from `pfs.drp.stella.utils.guiders`, and a `guiders` CI job that runs
+  `tests/guiders/` with pfs-utils (installed `--no-deps`) and drp_pfs_data's `guiders/` directory.
+  `tests/guiders/conftest.py` provides a `makeAgcData` fixture for synthetic AG data (PIPE2D-1895).
+- **`opaqueColorbar`** in `pfs.drp.qa.plotting.palettes`, from `pfs.drp.stella.utils.quality`. Unlike the
+  original, it restores an alpha of 0 or `None` (PIPE2D-1895). It is re-exported from
+  `pfs.drp.qa.utils.plotting`, so the import path given in PIPE2D-1895 keeps working.
 
 ### Changed
 
@@ -132,12 +139,20 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **CI installs the PyPI wheels the stack-free suite needs** (numpy, pandas, matplotlib, seaborn,
   pyyaml). None pulls in the stack or another PFS repository.
 - **Build and packaging** — `pyproject.toml` is now the single source of build, lint, and test configuration. Ruff
-  replaces Black, isort, and Flake8; `uv.lock` pins the development environment. EUPS `setup -r .` still works via
+  replaces Black, isort, and Flake8. EUPS `setup -r .` still works via
   `ups/drp_qa.table`, but there is no longer a build step.
 - **Lint and format sweep** — every pre-existing QA module reformatted under Ruff (`line-length = 110`,
   `target-version = "py312"`), including `typing.Union`/`Optional`
   → PEP 604 unions and `typing.Iterable` → `collections.abc.Iterable`. No behaviour changes. LSST camelCase naming is
   preserved; the corresponding pep8-naming rules are in the ignore list.
+- **`pfs` and `pfs.drp` are PEP 420 namespace packages** — the `pkgutil`-style `python/pfs/__init__.py` and
+  `python/pfs/drp/__init__.py` are removed (and no longer ship in the wheel), matching `drp_stella`, `pfs_utils` and
+  `datamodel`. Module names are unchanged (PIPE2D-1904).
+- **`FluxCalQA` takes the databases** — `FluxCalQA(butler, opdb, qadb, ...)` now requires a
+  `pfs.utils.database` `OpDB` and `QaDB` and queries them with bound parameters, replacing its own
+  `psycopg2.connect` calls. Needs `pfs_utils` 7.4.18 or later. `main()` still reads the opdb on `pfsa-db`
+  (PIPE2D-1893).
+- **`scipy` is a declared dependency** in `pyproject.toml`, for the guider fits (PIPE2D-1895).
 
 ### Fixed
 
@@ -199,6 +214,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 ### Removed
 
 - **`tests/SConscript`** — the last SCons file; it imported `lsst.sconsUtils` and did nothing.
+- **`uv.lock`** — it had gone stale (`uv lock --check` failed) and nothing used it: CI installs its packages
+  without it, and the code runs in the LSST stack. It is now in `.gitignore`; `uv sync` still works and writes a
+  local lockfile (PIPE2D-1906).
 - **Log-artifact tests** — the `TestRealLogs` class in `tests/test_fitDetectorMapLogQa.py` depended on
   `run28-dm-02.log` / `run28-dm-03.log`, which are not in the repository, so all eight tests always
   skipped and provided no coverage.
