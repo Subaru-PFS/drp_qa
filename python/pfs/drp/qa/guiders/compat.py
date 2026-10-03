@@ -25,12 +25,11 @@ They differ from the originals in that:
 import warnings
 from collections.abc import Iterable
 
-import numpy as np
 import pandas as pd
 
-from pfs.drp.qa.guiders.coordinates import _FRAME_ATTR, OPDB_Y_COLUMNS, pixToArcsec
+from pfs.drp.qa.guiders.analysis import addImageSizes
+from pfs.drp.qa.guiders.coordinates import _FRAME_ATTR, OPDB_Y_COLUMNS
 from pfs.drp.qa.guiders.queries import readAgcData
-from pfs.utils.datamodel.ag import SourceDetectionFlags
 
 __all__ = [
     "readAGCPositionsForVisitByAgcExposureId",
@@ -38,8 +37,6 @@ __all__ = [
     "readAGCStarsForVisitSetByPfsVisitId",
     "readAgcDataFromOpdb",
 ]
-
-_GAUSSIAN_FWHM_PER_SIGMA = 2 * np.sqrt(2 * np.log(2))
 
 
 def _warn(name: str) -> None:
@@ -60,21 +57,6 @@ def _toOpdbFrame(agcData: pd.DataFrame) -> pd.DataFrame:
     return agcData
 
 
-def _addImageSizes(agcData: pd.DataFrame, useTraceRadius: bool) -> pd.DataFrame:
-    """Add drp_stella's ``rms`` (pix), ``FWHM`` (arcsec) and ``left`` columns."""
-    mxx, myy, mxy = agcData.mxx, agcData.myy, agcData.mxy
-    if useTraceRadius:
-        rms = np.sqrt(np.where((mxx < 0) | (myy < 0), np.nan, 0.5 * (mxx + myy)))
-    else:
-        det = mxx * myy - mxy**2
-        rms = np.where(det < 0, np.nan, det) ** 0.25
-    agcData["rms"] = rms
-    agcData["FWHM"] = pixToArcsec(_GAUSSIAN_FWHM_PER_SIGMA * agcData.rms)
-    agcData["left"] = (agcData.agc_data_flags & int(SourceDetectionFlags.RIGHT)) == 0
-
-    return agcData
-
-
 def _readStars(opdb, visits, flipToHardwareCoords: bool, useTraceRadius: bool, butler) -> pd.DataFrame:
     """Return the valid matches, with the star readers' extra columns."""
     stars = readAgcData(opdb, visits, butler=butler)
@@ -82,7 +64,7 @@ def _readStars(opdb, visits, flipToHardwareCoords: bool, useTraceRadius: bool, b
     stars["flags"] = stars.agc_data_flags
     stars["guide_delta_az"] = stars.guide_delta_azimuth
     stars["guide_delta_el"] = stars.guide_delta_altitude
-    stars = _addImageSizes(stars, useTraceRadius)
+    stars = addImageSizes(stars, useTraceRadius).rename(columns={"rms_pix": "rms", "fwhm_arcsec": "FWHM"})
 
     return stars if flipToHardwareCoords else _toOpdbFrame(stars)
 

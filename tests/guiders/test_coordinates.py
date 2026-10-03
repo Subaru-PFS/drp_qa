@@ -209,7 +209,7 @@ def testOffsetSign():
 
 
 @pytest.mark.parametrize("stat", ["mean", "median"])
-@pytest.mark.parametrize("reference", coords.REFERENCES)
+@pytest.mark.parametrize("reference", ["nominal", "nominal0", "nominal0_visit", "center0", "center0_visit"])
 def testAddOffsets(makeAgcData, reference, stat):
     """Each reference is the per-star (and per-visit) stat of its source column."""
     agcData = makeAgcData()
@@ -249,6 +249,85 @@ def testFirstLastByExposure(makeAgcData, stat, row):
     assert nUnordered > 0
 
 
+@pytest.mark.parametrize("stat", ["mean", "median"])
+def testBoresightReference(makeAgcData, stat):
+    """The boresight reference follows the nominal positions' shift from visit to visit.
+
+    Only the stars seen most often in a visit give the shift.
+    """
+    agcData = makeAgcData(nStar=2).reset_index(drop=True)
+    shifts = {120000: (0.0, 0.0), 120001: (0.010, -0.005), 120002: (0.030, 0.020)}
+    for xy, i in (("x", 0), ("y", 1)):
+        shift = agcData.pfs_visit_id.map({visit: s[i] for visit, s in shifts.items()})
+        agcData[f"agc_nominal_{xy}_mm"] += shift
+        agcData[f"agc_center_{xy}_mm"] += shift
+    # A star seen in only some of visit 0's exposures, at a position of its own.
+    transient = agcData[(agcData.guide_star_id == 0) & (agcData.pfs_visit_id == 120000)].iloc[:3].copy()
+    transient["guide_star_id"] = 9999
+    transient["agc_nominal_x_mm"] += 0.1
+    agcData = pd.concat([agcData, transient], ignore_index=True)
+
+    result = coords.addOffsets(agcData, "boresight", stat)
+
+    common = result.guide_star_id != 9999
+    for xy in "xy":
+        # Each star's nominal positions don't move within a visit, so that's where the boresight puts them.
+        np.testing.assert_allclose(
+            result[f"agc_boresight_{xy}_mm"][common], result[f"agc_nominal_{xy}_mm"][common], atol=1e-12
+        )
+        np.testing.assert_allclose(
+            result[f"d{xy}_boresight_um"],
+            1e3 * (result[f"agc_center_{xy}_mm"] - result[f"agc_boresight_{xy}_mm"]),
+        )
+
+    # Negative control: with the transient star, the mean shift of visit 0 would be off.
+    nominal0 = agcData.groupby("guide_star_id").agc_nominal_x_mm.transform("mean")
+    visit0 = agcData.pfs_visit_id == 120000
+    assert stat != "mean" or not np.isclose(
+        (agcData.agc_nominal_x_mm - nominal0)[visit0].mean(),
+        (agcData.agc_nominal_x_mm - nominal0)[visit0 & (agcData.guide_star_id != 9999)].mean(),
+        rtol=0,
+        atol=1e-6,
+    )
+
+
+def testBoresightReferenceDesigns(makeAgcData):
+    """Each visit's shift comes from its own stars, so visits of different designs all get one.
+
+    drp_stella took the stars seen most often over all the visits, and
+    dropped the rows of visits without them.
+    """
+    agcData = makeAgcData(nStar=2).reset_index(drop=True)
+    agcData["guide_star_id"] += 100000 * (agcData.pfs_visit_id - 120000)  # a design per visit
+    later = (agcData.pfs_visit_id > 120000).to_numpy()
+    agcData = agcData[
+        ~later | (agcData.agc_exposure_id % 2 == 0).to_numpy()
+    ]  # the later with fewer exposures
+
+    result = coords.addReferencePositions(agcData, "boresight")
+
+    assert len(result) == len(agcData)
+    assert result.agc_boresight_x_mm.notna().all()
+
+    # Negative control: the stars seen most often overall are all in the first visit.
+    nObs = agcData.groupby("guide_star_id").agc_exposure_id.count()
+    assert set(agcData.pfs_visit_id[agcData.guide_star_id.isin(nObs.index[nObs == nObs.max()])]) == {120000}
+
+
+def testModelReference(makeAgcData):
+    """Model positions come with the data, from a fit."""
+    agcData = makeAgcData(nVisit=1, nExp=2)
+    with pytest.raises(ValueError, match=r"No model positions .*analysis"):
+        coords.addOffsets(agcData, "model")
+
+    agcData = agcData.assign(
+        agc_model_x_mm=agcData.agc_center_x_mm - 0.001, agc_model_y_mm=agcData.agc_center_y_mm
+    )
+    result = coords.addOffsets(agcData, "model")
+    np.testing.assert_allclose(result.dx_model_um, 1)
+    np.testing.assert_allclose(result.dy_model_um, 0)
+
+
 def testReferencePositionsRecomputed(makeAgcData):
     agcData = makeAgcData()
     means = coords.addReferencePositions(agcData, "center0", "mean")
@@ -267,6 +346,6 @@ def testUnknownReferenceOrStat(makeAgcData):
     with pytest.raises(ValueError, match="Unknown reference"):
         coords.referenceColumns("center")
     with pytest.raises(ValueError, match="Unknown reference"):
-        coords.addOffsets(agcData, "boresight")
+        coords.addOffsets(agcData, "boresight0")
     with pytest.raises(ValueError, match="Unknown stat"):
         coords.addReferencePositions(agcData, "center0", "max")

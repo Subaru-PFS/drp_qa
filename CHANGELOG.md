@@ -57,6 +57,26 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `readAgcDataFromOpdb`, `readAGCStarsForVisitByPfsVisitId` and `readAGCStarsForVisitSetByPfsVisitId`,
   as wrappers of `readAgcData` that keep their arguments and columns and raise a `DeprecationWarning`
   (PIPE2D-1897).
+- **`pfs.drp.qa.guiders.analysis`** — the guider tools' fits and statistics, taken out of drp_stella's
+  plotting routines. They take DataFrames, return their results, and modify neither their inputs nor
+  shared state: `fitGuiderModel` (`showGuiderErrors`'s boresight and per-camera fits, configured by
+  `GuiderFitConfig` and returning a `GuiderFit` in place of `GuiderConfig`'s cache of transforms),
+  `fitGlobalModel` (`ag_to_zenith_offset`'s fits, in hardware coordinates), `selectStars`,
+  `smoothAgcData`, `estimateGuideErrors`, `fitDriftRate`, `comparePfsUtilsPositions`
+  (`compareAGCPfsUtils`), `addImageSizes`, `estimateFocusErrors` (one left/right focus estimate for
+  `plotFocus` and `plotFocusByAG`), `averageByFocusPosition` and `correctAgActorFocus`. Fits predict
+  the new `model` reference. Compared with drp_stella: `MeasureXYRot` gets offsets in microns, not
+  positions in mm; each camera's transform is fitted to its own stars; `solveForAGTransforms` refits;
+  the guide error cut is matched to stars by exposure; smoothing follows each star and leaves IDs
+  and flags alone; the per-visit references and closed-shutter data work in `estimateGuideErrors`;
+  drift rates keep x and y apart; `compareAGCPfsUtils` averages over the first N exposures, gives
+  pfs_utils UTC rather than the opdb's HST, and wraps `delta_theta` (whose sign flips, as it is now
+  in hardware coordinates); focus positions round correctly; the INSTRM-2501 correction applies to
+  each visit before 122129 whatever the others; and the zenith fits no longer append to
+  `pandas.DataFrame._metadata` (PIPE2D-1898).
+- **`boresight` and `model` references** in `pfs.drp.qa.guiders.coordinates`: `boresight` is
+  `estimateGuideErrors`'s `nominal0` moved by each visit's shift, from the stars seen most often in
+  that visit; `model` is where a fit in `analysis` puts each star (PIPE2D-1898).
 
 ### Fixed
 

@@ -5,7 +5,8 @@ import pandas as pd
 import pytest
 
 from pfs.drp.qa.guiders import compat
-from pfs.drp.qa.guiders.coordinates import AGC_PIXEL_SIZE_UM, AGC_PLATE_SCALE_UM_PER_ARCSEC, opdbToHardware
+from pfs.drp.qa.guiders.analysis import addImageSizes
+from pfs.drp.qa.guiders.coordinates import opdbToHardware
 from pfs.drp.qa.guiders.queries import AGC_DATA_COLUMNS, readAgcData
 
 VISITS = [120000, 120001]
@@ -104,22 +105,14 @@ def testReadAGCStarsEmpty(makeOpdb):
         compat.readAGCStarsForVisitSetByPfsVisitId(opdb, [VISITS[0]])
 
 
-def testImageSizes():
-    """drp_stella's rms (pix), FWHM (arcsec) and left."""
-    stars = pd.DataFrame(
-        {
-            "mxx": [4.0, 2.0, -1.0],
-            "myy": [4.0, 8.0, 1.0],
-            "mxy": [0.0, 1.0, 0.0],
-            "agc_data_flags": [0, 1, 0],
-        }
-    )
-    trace = compat._addImageSizes(stars.copy(), useTraceRadius=True)
-    np.testing.assert_allclose(trace.rms, [2.0, np.sqrt(5.0), np.nan])
-    fwhmPerPix = 2 * np.sqrt(2 * np.log(2)) * AGC_PIXEL_SIZE_UM / AGC_PLATE_SCALE_UM_PER_ARCSEC
-    np.testing.assert_allclose(trace.FWHM, fwhmPerPix * trace.rms)
-    np.testing.assert_allclose(trace.FWHM[0], 0.6466, atol=1e-4)  # 2 pixels rms, in arcsec
-    assert list(trace.left) == [True, False, True]
+@pytest.mark.parametrize("useTraceRadius", [True, False])
+def testImageSizes(makeOpdb, useTraceRadius):
+    """drp_stella's rms (pix), FWHM (arcsec) and left, from analysis.addImageSizes."""
+    opdb, _ = makeOpdb(nVisit=1)
+    stars = compat.readAGCStarsForVisitByPfsVisitId(opdb, VISITS[0], useTraceRadius=useTraceRadius)
 
-    det = compat._addImageSizes(stars.copy(), useTraceRadius=False)
-    np.testing.assert_allclose(det.rms, [2.0, 15.0**0.25, np.nan])
+    expected = addImageSizes(readAgcData(opdb, VISITS[0]), useTraceRadius)
+    expected = expected[expected.agc_match_flags == 1].reset_index(drop=True)
+    np.testing.assert_allclose(stars.rms, expected.rms_pix)
+    np.testing.assert_allclose(stars.FWHM, expected.fwhm_arcsec)
+    np.testing.assert_array_equal(stars.left, expected.left)
