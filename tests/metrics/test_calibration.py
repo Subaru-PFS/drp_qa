@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.calibration import addSpecies, calibrate, compareRuns, labelRows
+from pfs.drp.qa.metrics.calibration import addSpecies, calibrate, compareRuns, labelRows, summarizeRuns
 from pfs.drp.qa.metrics.validationVisits import ValidationVisit, ValidationVisitSet
 
 ARC_VISITS = tuple(range(1000, 1030))
@@ -208,3 +208,18 @@ def testBadEntryExcludesOnlyItsMetric():
     flags = labelRows(makeMetrics(), visitSet, "pctFlagged")
     assert set(fwhm.loc[fwhm["visit"] == 1000, "validation"]) == {"good"}
     assert set(flags.loc[flags["visit"] == 1000, "validation"]) == {"bad:WARN"}
+
+
+def testDxIsNotDerivedByDefault():
+    """An offset from the calibration is near zero in its own run: not a percentile threshold."""
+    table = calibrate(makeMetrics(), makeVisitSet())
+    assert "medDxCenter" not in set(table["metric"])
+
+
+def testSummarizeRunsDescribesEachRun():
+    metrics = makeMetrics().reset_index(drop=True)
+    metrics.loc[metrics["visit"].between(1015, 1029), "medDxCenter"] = -0.5
+    summary = summarizeRuns(metrics, makeRunVisitSet(), ["medDxCenter"])
+    b = summary[summary["group"] == "b/arc"].set_index("run")
+    assert b.loc[25, "reference"] and b.loc[25, "median"] < 0.1
+    assert b.loc[27, "median"] == pytest.approx(0.5), "absolute values, as the gate sees them"

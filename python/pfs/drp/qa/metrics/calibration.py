@@ -31,6 +31,7 @@ __all__ = [
     "compareRuns",
     "labelRows",
     "selectGroup",
+    "summarizeRuns",
 ]
 
 
@@ -74,8 +75,12 @@ METRIC_SPECS = {
     )
 }
 
-#: The metrics gated by ``imageQualityQa``.
-DEFAULT_METRICS = ("medFwhm", "pctFlagged", "medDxCenter")
+#: The metrics whose thresholds are derived from the reference run.
+#: ``medDxCenter`` is gated by ``imageQualityQa`` but not derived: an offset
+#: from ``detectorMap_calib`` is near zero in the run the calibrations were made
+#: from, so its percentiles say nothing about the drift to tolerate. Its
+#: thresholds are a tolerance (PIPE2D-1921); `summarizeRuns` reports it.
+DEFAULT_METRICS = ("medFwhm", "pctFlagged")
 
 #: Values of the ``validation`` column added by `labelRows`: known good in a
 #: reference run (thresholds come from these), known good in another run (held
@@ -434,4 +439,59 @@ def compareRuns(
                         "flaggedFail": float(flaggedFail.mean()),
                     }
                 )
+    return pd.DataFrame(rows)
+
+
+def summarizeRuns(
+    metrics: pd.DataFrame,
+    visitSet: ValidationVisitSet,
+    metricNames: Sequence[str],
+    groupBy: Sequence[str] | None = None,
+) -> pd.DataFrame:
+    """Describe each run's known-good values of metrics that have no derived thresholds.
+
+    Parameters
+    ----------
+    metrics : `pandas.DataFrame`
+        Concatenated metrics rows, as given to `calibrate`.
+    visitSet : `ValidationVisitSet`
+        The validation visit set.
+    metricNames : sequence of `str`
+        Metrics to describe.
+    groupBy : sequence of `str`, optional
+        Override each metric's grouping, as in `calibrate`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        One row per metric, population and run: ``metric``, ``group``, ``run``,
+        ``reference``, ``n``, ``median``, ``robustRms``, ``p99`` and ``max``,
+        of the absolute values for a metric gated on them.
+    """
+    rows = []
+    for name in metricNames:
+        spec = METRIC_SPECS.get(name, MetricSpec(name))
+        labelled = labelRows(metrics, visitSet, name)
+        labelled = labelled[labelled["validation"].isin((GOOD, HELD_OUT))]
+        values = labelled[name].astype(float)
+        labelled = labelled.assign(_value=values.abs() if spec.absolute else values)
+        labelled = labelled[np.isfinite(labelled["_value"])]
+        columns = [column for column in (spec.groupBy if groupBy is None else groupBy) if column in labelled]
+        for key, data in labelled.groupby([*columns, "run"], dropna=False, sort=True):
+            *group, run = key if isinstance(key, tuple) else (key,)
+            value = data["_value"].to_numpy()
+            q25, q75 = np.percentile(value, [25.0, 75.0])
+            rows.append(
+                {
+                    "metric": name,
+                    "group": "/".join(str(item) for item in group) if columns else "all",
+                    "run": run,
+                    "reference": bool((data["validation"] == GOOD).all()),
+                    "n": len(value),
+                    "median": float(np.median(value)),
+                    "robustRms": float(0.741 * (q75 - q25)),
+                    "p99": float(np.percentile(value, 99.0)),
+                    "max": float(value.max()),
+                }
+            )
     return pd.DataFrame(rows)

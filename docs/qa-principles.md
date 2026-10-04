@@ -76,7 +76,9 @@ In short: `WARN` at the 95th and `FAIL` at the 99th percentile of the reference 
 (Run25's) known-good values,
 separately for each population (arm, observation type, lamp), rounded outwards to a step
 well under the scatter, or `FAIL` at a physical limit. Every known-bad visit must reach
-the verdict it expects, and other runs are compared against the result.
+the verdict it expects, and other runs are compared against the result. Offsets from a
+calibration (`medDxCenter`) are not derived this way: they are near zero in the run the
+calibration came from, so their thresholds are a tolerance.
 
 ## Metric checklist
 
