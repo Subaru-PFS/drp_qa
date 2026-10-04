@@ -82,6 +82,25 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   analysis on engineering visits of Run 30 (a focus sweep, a raster scan, an all-sky exposure), read
   through the `realAgcData` and `realAgcStars` fixtures from `tests/guiders/data/` (0.63 MB of parquet,
   made by `makeGuiderFixtures.py` there) (PIPE2D-1900).
+- **`pfs.drp.qa.guiders.plotting`** — drp_stella's guider plots: `showAgcErrorsForVisits`,
+  `showAgcErrorsForVisitsByCamera`, `showGuiderErrors` and `showGuiderErrorsByParams` (drawing a `GuiderFit`, with
+  the plotting options of `GuiderConfig` in `GuiderPlotConfig`), `showTelescopeErrors`, `plotDriftRate` (a
+  `DriftFit`), `plotGuideErrors` (`estimateGuideErrors(plot=True)`), `plotPfsUtilsComparison` (`compareAGCPfsUtils`),
+  `plotFocus`, `plotFocusByAG`, and the helpers `FormatCoord`, `ShowFocusFit` and `showAGCameraCartoon`. They take
+  DataFrames or `analysis` results, never the opdb; draw on given axes or figure, without pyplot state; return a
+  `GuiderPlot` of their artists; and update the colorbars they are given, as ics_pfsPlotActor needs. Cameras are
+  `agcCameraIds` (0-5) rather than `AGC` (1-6), and `plotFocus`'s `mmToMicrons` is gone. Compared with drp_stella:
+  `showAgcErrorsForVisits` plots center minus nominal (its signs were flipped); 2-D axes work in every helper; axes
+  can be given without the figure; `plotFrac` subsets every array; per-visit means reach every panel; label colours
+  match the cameras; float camera IDs work; per-camera XY panels take any number of cameras; closed-shutter points
+  are plotted, and open-shutter ones once; `plotFocusByAG` applies `onlyGuideStars`; titles give the visit range and
+  say "closed shutter"; `showTheta` and an axes-only `showTelescopeErrors` work; the arrows' legend works with
+  matplotlib 3.9; FWHM points are drawn once; the cursor readout reads correctly and needs no database; and the
+  averages use only valid matches. `README.md` has a "Guider tools" section, and the notebook
+  `docs/guider-plots.ipynb` describes each plot (what it shows, its data, how to read it, what to look for) beside
+  an annotated sample drawn from the tests' AG data; with `USE_OPDB = True` it runs on the opdb and checks the
+  readers and fits the plots don't use. `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its
+  drp_qa replacement, on a real opdb (PIPE2D-1899).
 
 ### Fixed
 
@@ -114,6 +133,12 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   until now, used `CoordinateTransform`'s `sky_pfi` mode, pfs_utils's model for the cobras, which is about
   550 µm off. `agcStars` needs only the stars' catalogue columns. It no longer fails under pandas 3, where
   pfs_utils clamped a read-only parallax array (PIPE2D-1900).
+
+- **`smoothAgcData` smooths only valid matches** — each valid match is averaged with the star's other valid
+  matches, and invalid ones are left as they are. Smoothing every row averaged invalid matches, hundreds of microns
+  off, into the valid ones: on the tests' all-sky exposure (148258) the valid matches' x scatter went from 19.7 to
+  89.4 µm, where it now falls to 15.9 µm (`testRealDataSmoothValidMatches`). `estimateGuideErrors` and
+  `fitDriftRate` already gave it only valid matches (PIPE2D-1899).
 
 ### Removed
 

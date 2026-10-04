@@ -15,12 +15,16 @@ import re
 from pathlib import Path
 from types import SimpleNamespace
 
+import matplotlib
 import numpy as np
 import pandas as pd
 import pytest
 
 from pfs.drp.qa.guiders.coordinates import AGC_CAMERA_CENTERS_MM, OPDB_Y_COLUMNS
 from pfs.utils.datamodel.ag import SourceCatalogFlags
+
+# The plots are drawn without a display, before anything imports pyplot.
+matplotlib.use("Agg")
 
 GAIA_ISOLATED = SourceCatalogFlags.GAIA | SourceCatalogFlags.NON_BINARY
 NOISE = 2e-3  # Centroiding noise (mm)

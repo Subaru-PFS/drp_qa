@@ -26,8 +26,14 @@ from pfs.drp.qa.guiders.analysis import (
     fitGuiderModel,
     guideErrorsByExposure,
     selectValidMatches,
+    smoothAgcData,
 )
-from pfs.drp.qa.guiders.coordinates import AGC_CAMERA_CENTERS_MM, addReferencePositions, opdbToHardware
+from pfs.drp.qa.guiders.coordinates import (
+    AGC_CAMERA_CENTERS_MM,
+    addOffsets,
+    addReferencePositions,
+    opdbToHardware,
+)
 from pfs.drp.qa.guiders.queries import AGC_DATA_COLUMNS
 from pfs.utils.coordinates import CoordTransp
 from pfs.utils.datamodel.ag import SourceDetectionFlags
@@ -323,6 +329,29 @@ def testRealDataDriftRate(realAgcData):
     driftRates = fitDriftRate(drifting, radialTangential=False).rates
     assert driftRates.x_rate_um_per_min - rates.x_rate_um_per_min == pytest.approx(2, abs=0.1)
     assert driftRates.y_rate_um_per_min == pytest.approx(rates.y_rate_um_per_min)
+
+
+def testRealDataSmoothValidMatches(realAgcData):
+    """Smoothing reduces the scatter of the valid matches' offsets, invalid matches present.
+
+    The x offsets' scatter of the all-sky exposure's valid matches: 19.7 µm, 15.9 µm smoothed over 5 AG
+    exposures.
+    """
+    agcData = realAgcData("allSky")
+    valid = selectValidMatches(agcData)
+
+    def scatter(data):
+        return float(addOffsets(data[valid]).dx_nominal_um.std())
+
+    raw = scatter(agcData)
+    assert scatter(smoothAgcData(agcData, 5)) < raw
+
+    # Negative control: every row smoothed together, invalid matches included, as smoothAgcData did: 89.4 µm.
+    data = agcData.reset_index(drop=True)
+    columns = ["agc_center_x_mm", "agc_nominal_x_mm"]
+    everyRow = data.sort_values(["guide_star_id", "agc_exposure_id"]).groupby("guide_star_id")[columns]
+    data[columns] = everyRow.rolling(5, min_periods=1, center=True).mean().droplevel(0).sort_index()
+    assert scatter(data) > 2 * raw
 
 
 # Comparison with pfs_utils

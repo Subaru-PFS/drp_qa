@@ -57,6 +57,11 @@ the pipeline/config glue to run them.
   four AG reader names as deprecated wrappers of `queries.readAgcData`; nothing in the
   package may use it. Stack-free; tested in `tests/guiders/` with a fake `OpDB`, a stub
   butler and real AG data in `tests/guiders/data/` (fixtures in its `conftest.py`).
+  Each plot is described, with an annotated sample, in the notebook
+  `docs/guider-plots.ipynb`, committed with its outputs: when you add or change a plot,
+  update its section and rerun it (`jupyter nbconvert --to notebook --execute --inplace`).
+  `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its replacement
+  (needs the opdb; committed without outputs): keep it in step with renamed arguments.
 - **Support modules (`python/pfs/drp/qa/`)**:
   - `storageClasses.py`, `formatters.py` — custom Butler storage classes / formatters
   - `utils/` — shared helpers (`math.py`, `plotting.py`)

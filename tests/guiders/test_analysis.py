@@ -484,6 +484,31 @@ def testSmoothAgcData(makeAgcData):
     assert (byCamera.pfs_visit_id % 1 != 0).any()
 
 
+def testSmoothAgcDataValidMatchesOnly(makeAgcData):
+    """Only valid matches are smoothed, along the star's other valid matches; invalid ones are left alone.
+
+    An invalid match 1 mm off would otherwise move its neighbours by 0.33 mm.
+    """
+    agcData = makeAgcData(nVisit=1, nExp=6).reset_index(drop=True)
+    star = (agcData.guide_star_id == 2003).to_numpy()
+    rows = agcData[star].sort_values("agc_exposure_id").index
+    bad = rows[2]
+    agcData.loc[bad, "agc_match_flags"] = 0
+    agcData.loc[bad, "agc_center_x_mm"] += 1.0
+
+    smoothed = smoothAgcData(agcData, 3)
+
+    assert smoothed.agc_center_x_mm[bad] == agcData.agc_center_x_mm[bad]
+    good = rows.drop(bad)
+    expected = agcData.agc_center_x_mm[good].rolling(3, min_periods=1, center=True).mean()
+    np.testing.assert_allclose(smoothed.agc_center_x_mm[good], expected)
+
+    # Negative control: every row smoothed together, as before; the bad match drags its neighbours by 1/3 mm.
+    everyRow = agcData.agc_center_x_mm[rows].rolling(3, min_periods=1, center=True).mean()
+    neighbours = [rows[1], rows[3]]
+    assert (everyRow[neighbours] - smoothed.agc_center_x_mm[neighbours]).abs().min() > 0.25
+
+
 @pytest.mark.parametrize("reference", ["center0_visit", "nominal0_visit"])
 def testEstimateGuideErrorsPerVisit(makeAgcData, reference):
     """The per-visit references work; drp_stella raised "Test me"."""

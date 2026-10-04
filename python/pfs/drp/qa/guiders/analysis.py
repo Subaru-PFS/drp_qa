@@ -745,10 +745,13 @@ def fitGlobalModel(
 def smoothAgcData(agcData: pd.DataFrame, nExposures: int) -> pd.DataFrame:
     """Return a copy of AG data smoothed along each guide star's exposures.
 
-    Each numeric column is replaced by its running mean over ``nExposures``
-    of the star's AG exposures, centered, in order of ``agc_exposure_id``.
-    IDs, flags (columns ending in ``_flag`` or ``_flags``) and
-    ``shutter_open`` aren't smoothed, nor are times and booleans.
+    In each valid match (`selectValidMatches`), each numeric column is
+    replaced by its running mean over ``nExposures`` of the star's valid
+    matches, centered, in order of ``agc_exposure_id``. Invalid matches are
+    left as they are: they can be hundreds of microns from the star, and
+    would drag its valid matches with them. IDs, flags (columns ending in
+    ``_flag`` or ``_flags``) and ``shutter_open`` aren't smoothed, nor are
+    times and booleans; the smoothed columns become floats.
 
     Parameters
     ----------
@@ -769,12 +772,14 @@ def smoothAgcData(agcData: pd.DataFrame, nExposures: int) -> pd.DataFrame:
             for column in data.select_dtypes("number").columns
             if column not in _UNSMOOTHED and not column.endswith(("_flag", "_flags"))
         ]
-        ordered = data.sort_values(["guide_star_id", "agc_exposure_id"], kind="stable")
+        valid = data[selectValidMatches(data)]
+        ordered = valid.sort_values(["guide_star_id", "agc_exposure_id"], kind="stable")
         rolling = ordered.groupby("guide_star_id", dropna=False)[columns].rolling(
             nExposures, min_periods=1, center=True
         )
-        smoothed = rolling.mean().droplevel(0).sort_index()
-        data[columns] = smoothed[columns].to_numpy()
+        smoothed = rolling.mean().droplevel(0)
+        data[columns] = data[columns].astype(float)
+        data.loc[smoothed.index, columns] = smoothed[columns].to_numpy()
 
     data.index = agcData.index
 
