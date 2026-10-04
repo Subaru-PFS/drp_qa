@@ -29,8 +29,6 @@ from pfs.drp.qa.plotting.dmCombined import (
 from pfs.drp.qa.storageClasses import MultipagePdfFigure
 from pfs.drp.stella import DetectorMap
 
-# The plotting functions are in `pfs.drp.qa.plotting.dmCombined`; they are
-# re-exported here for existing callers.
 __all__ = [
     "DetectorMapCombinedResidualsTask",
     "make_report",

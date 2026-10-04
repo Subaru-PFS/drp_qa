@@ -293,8 +293,6 @@ def plot_residual(
 
     # Upper row
     # Fiber residual
-    # Select the two columns the lambda reads: pandas deprecates apply() over the
-    # grouping columns. (`include_groups=False` would need pandas >= 2.2.)
     fiber_avg = (
         plotData.groupby(["fiberId", "status", "isOutlier"])[[column, f"{column[0]}Err"]]
         .apply(
