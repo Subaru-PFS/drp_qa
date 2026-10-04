@@ -128,6 +128,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   Older pandas took `robustRms` as `numeric_only` and computed the median; pandas 3 raises, which left both
   residual-by-wavelength panels of `plot_detectormap_residuals` empty. It now calls `.agg("median")`. Its
   per-fiber `groupby().apply()` no longer warns about operating on the grouping columns (PIPE2D-1916).
+- **`get_fit_stats` at zero dof** — with zero degrees of freedom and zero residuals, the softening solve
+  raised from `scipy.optimize.bisect` and `dmResiduals` wrote nothing for the quantum. `softenFit` is now NaN
+  there, as it already was at zero dof with nonzero residuals (PIPE2D-1916).
 
 ### Changed
 

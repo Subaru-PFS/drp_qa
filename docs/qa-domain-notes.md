@@ -119,7 +119,8 @@ is, separately for `RESERVED` and `USED` lines of each species — via the `FitS
 `FitStat` dataclasses (`pfs.drp.qa.metrics.fitStats`). Each row carries `dof`, `chi2X`, `chi2Y`, and a `spatial.` and
 `wavelength.` block of `median`, `robustRms`, `weightedRms`, `softenFit`, `dof`,
 `num_fibers`, `num_lines`. The RMS values are **error-weighted** (`getWeightedRMS`) with
-a robust variant (`robustRms`); `softenFit` is solved by bisection. Prefer these over
+a robust variant (`robustRms`); `softenFit` is solved by bisection, and is NaN when it
+can't be (more than `maxSoften` needed, or zero dof). Prefer these over
 adding parallel unweighted metrics.
 
 `dmCombinedResiduals` aggregates across detectors into `dmQaDetectorStats` and renders a

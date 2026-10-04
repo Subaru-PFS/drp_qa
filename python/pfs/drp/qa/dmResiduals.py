@@ -576,19 +576,32 @@ def get_fit_stats(
     f_x = partial(getSoften, arc_data.xResid, arc_data.xErr, xDof)
     f_y = partial(getSoften, lines.yResid, lines.yErr, yDof)
 
-    if f_x(0) < 0:
-        xSoftFit = 0.0
-    elif f_x(maxSoften) > 0:
-        xSoftFit = np.nan
-    else:
-        xSoftFit = bisect(f_x, 0, maxSoften)
+    def solveSoften(f):
+        """Solve ``f(soften) == 0`` for the softening that brings chi2/dof to 1.
 
-    if f_y(0) < 0:
-        ySoftFit = 0.0
-    elif f_y(maxSoften) > 0:
-        ySoftFit = np.nan
-    else:
-        ySoftFit = bisect(f_y, 0, maxSoften)
+        Parameters
+        ----------
+        f : `callable`
+            Softening residual function.
+
+        Returns
+        -------
+        `float`
+            The softening; 0.0 when none is needed, NaN when ``maxSoften`` is
+            not enough or an endpoint is NaN (0/0 at zero dof), from which
+            `scipy.optimize.bisect` would raise.
+        """
+        low, high = f(0), f(maxSoften)
+        if np.isnan(low) or np.isnan(high):
+            return np.nan
+        if low <= 0:
+            return 0.0
+        if high > 0:
+            return np.nan
+        return bisect(f, 0, maxSoften)
+
+    xSoftFit = solveSoften(f_x)
+    ySoftFit = solveSoften(f_y)
 
     xFibers = len(traces.fiberId.unique())
     yFibers = len(lines.fiberId.unique())
