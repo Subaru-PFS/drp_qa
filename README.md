@@ -365,9 +365,8 @@ If config options are not passed, the default values come from `mergeArms_config
 Thresholds are derived from data, by a fixed procedure, and checked against visits whose
 verdict is known:
 
-- [`docs/deriving-thresholds.md`](docs/deriving-thresholds.md) — **the procedure, step by step**:
-  run `imageQualityQa` over the validation visits, run
-  [`docs/qa-thresholds.ipynb`](docs/qa-thresholds.ipynb), read the results and adopt them.
+- [`docs/qa-thresholds.ipynb`](docs/qa-thresholds.ipynb) — **the procedure, step by step**, as a notebook run top
+  to bottom: run `imageQualityQa` over the validation visits, derive the thresholds, review them and adopt them.
 - [`docs/validation-visits.md`](docs/validation-visits.md) — which visits are in the validation set, why, and
   how to change it.
 - [`docs/qa-principles.md`](docs/qa-principles.md) — the rules every metric and threshold follows, and the checklist

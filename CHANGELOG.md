@@ -32,9 +32,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   WARN/FAIL per population (arm and `obsType`; flag rates per species) from the known-good `iqQaMetrics`,
   rounded outwards to a step set by the scatter, with a distribution-free interval on FAIL, and checks
   each known-bad visit against its expected verdict; `metrics.readers.readMetrics` reads the metrics from
-  a Butler; `plotting.plotThresholds` draws the result. `docs/qa-thresholds.ipynb` runs it;
-  `docs/deriving-thresholds.md` is the step-by-step procedure, `docs/validation-visits.md` describes the set,
-  and `docs/qa-principles.md` holds rules R1–R7 and the metric checklist. `pyyaml` is now a
+  a Butler; `plotting.plotThresholds` draws the result. `docs/qa-thresholds.ipynb` is the step-by-step
+  procedure, from `pipetask` to review; `docs/validation-visits.md` describes the set, and `docs/qa-principles.md` holds rules R1–R7 and the metric checklist. `pyyaml` is now a
   dependency.
 - **`pfs.drp.qa.guiders`** — empty `coordinates`, `queries`, `analysis` and `plotting` modules for the
   guider tools moving from `pfs.drp.stella.utils.guiders`, and a `guiders` CI job that runs

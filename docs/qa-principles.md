@@ -27,7 +27,7 @@ constant, or the same measurement from another epoch.
 ### R2 — Thresholds are measured, never invented
 
 No threshold enters the code before it has been derived from known-good data by the
-procedure in [`deriving-thresholds.md`](deriving-thresholds.md). The config field's `doc`
+procedure in [`qa-thresholds.ipynb`](qa-thresholds.ipynb). The config field's `doc`
 records the visits and the date it was derived from. A threshold whose origin is unknown
 says so ("origin unrecorded"), rather than guessing a history.
 
@@ -69,8 +69,8 @@ moments, calexp trace widths, sky frames).
 
 - [`validation-visits.md`](validation-visits.md): the visits with known verdicts that every
   threshold and metric is checked against, and how to change the set.
-- [`deriving-thresholds.md`](deriving-thresholds.md): the step-by-step procedure, from
-  running `imageQualityQa` over those visits to adopting the thresholds.
+- [`qa-thresholds.ipynb`](qa-thresholds.ipynb): the step-by-step procedure, as a notebook,
+  from running `imageQualityQa` over those visits to adopting the thresholds.
 
 In short: `WARN` at the 95th and `FAIL` at the 99th percentile of the known-good values,
 separately for each population (arm, observation type, lamp), rounded outwards to a step

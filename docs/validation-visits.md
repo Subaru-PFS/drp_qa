@@ -8,7 +8,7 @@ or passes a known-bad one, does not merge.
   [`python/pfs/drp/qa/metrics/data/validationVisits.yaml`](../python/pfs/drp/qa/metrics/data/validationVisits.yaml),
   shipped with the package. Its header comment defines the entry schema.
 - **Loader:** `pfs.drp.qa.metrics.validationVisits.loadValidationVisits()`.
-- **Using it:** [`deriving-thresholds.md`](deriving-thresholds.md) is the step-by-step
+- **Using it:** [`qa-thresholds.ipynb`](qa-thresholds.ipynb) is the step-by-step
   procedure: run `imageQualityQa` over these visits, then derive and check thresholds.
 
 ## Where the visits come from
@@ -204,6 +204,6 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 
    Paste the output between the `GENERATED` markers in this file.
 4. Update the prose in [What is in it](#what-is-in-it) if a new kind of visit was added.
-5. Rerun the threshold derivation ([`deriving-thresholds.md`](deriving-thresholds.md)): a
+5. Rerun the threshold derivation ([`qa-thresholds.ipynb`](qa-thresholds.ipynb)): a
    new known-bad visit has to be caught by the current thresholds, and a new known-good one
    changes them.

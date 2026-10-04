@@ -73,9 +73,9 @@ the pipeline/config glue to run them.
   with known verdicts), `thresholds` derives WARN/FAIL from a distribution, `calibration`
   turns stored `iqQaMetrics` into a table of suggestions, and `readers` reads them from a
   Butler it is given. Read [`docs/qa-principles.md`](docs/qa-principles.md) (rules R1–R7,
-  the metric checklist) before adding a metric or a threshold. The procedure is
-  [`docs/deriving-thresholds.md`](docs/deriving-thresholds.md), run through
-  `docs/qa-thresholds.ipynb` (committed with outputs); the set is described in
+  the metric checklist) before adding a metric or a threshold. The procedure is the
+  notebook [`docs/qa-thresholds.ipynb`](docs/qa-thresholds.ipynb), from `pipetask` to
+  review (committed with outputs); the set is described in
   [`docs/validation-visits.md`](docs/validation-visits.md), whose tables are generated
   from the YAML (`python -m pfs.drp.qa.metrics.validationVisits tables`) and checked by a
   test.
