@@ -1,9 +1,13 @@
-"""Consistency checks over the Butler connections of the tasks in drpQA.yaml.
+"""Consistency checks over the Butler connections of the QA tasks.
 
 The task modules are read as source, not imported, so these run without the
-LSST stack. The defect they catch only shows when every task is resolved into
-one graph, which needs a Butler repository: running the tasks one at a time
-with ``pipetask run -p drpQA.yaml#label`` hides it.
+LSST stack. The defect they catch only shows when tasks are resolved into one
+graph, which needs a Butler repository: running the tasks one at a time with
+``pipetask run -p drpQA.yaml#label`` hides it.
+
+Every task in the package is checked, not only those in drpQA.yaml: the others
+(``fluxCalQa``, ``skySubtractionQa``) run in pipelines of their own, which may
+combine them with any of the rest.
 """
 
 import ast
@@ -13,6 +17,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+PACKAGE = ROOT / "python" / "pfs" / "drp" / "qa"
 PIPELINE = ROOT / "pipelines" / "drpQA.yaml"
 
 # The lsst.pipe.base.connectionTypes a connection can be built from.
@@ -208,8 +213,8 @@ class TaskBConnections:
 
 @pytest.fixture(scope="module")
 def connections():
-    """Return the connections of the tasks in drpQA.yaml."""
-    return collectConnections([path.read_text() for path in pipelineModules()])
+    """Return the connections of every task in the package."""
+    return collectConnections([path.read_text() for path in sorted(PACKAGE.rglob("*.py"))])
 
 
 def testPipelineModulesExist():
@@ -220,14 +225,19 @@ def testPipelineModulesExist():
 
 
 def testConnectionsCollected(connections):
-    assert set(connections["pfsConfig"]) == {"PrerequisiteInput"}
     assert "detectorMap" in connections
+    # Tasks in drpQA.yaml and outside it.
+    assert {"ImageQualityQaConnections", "FluxCalQaConnections", "SkyArmSubtractionConnections"} <= set(
+        connections["pfsConfig"]["PrerequisiteInput"]
+    )
 
 
 def testNoDatasetTypeIsBothPrerequisiteAndInput(connections):
     """A dataset type must be a prerequisite to every task in a graph, or none.
 
     Otherwise the graph fails to build with ``ConnectionTypeConsistencyError``.
+    ``pfsConfig`` was a plain input to ``imageQualityQa`` and
+    ``skyArmSubtractionQa``, and a prerequisite to the others.
     """
     assert mixedDatasetTypes(connections) == {}
 

@@ -111,8 +111,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **`drpQA.yaml` builds as a whole** — `imageQualityQa` declared `pfsConfig` as a plain input while
   `extractionQa` and `extractionQaCombined` declare it as a prerequisite, so `pipetask build` of the whole
   pipeline failed with `ConnectionTypeConsistencyError`; running one task at a time with `#label` hid it. It
-  is now a prerequisite there too, still optional (`minimum=0`). `tests/test_connections.py` reads the
-  tasks' connections from source, without the stack, and checks that no dataset type is declared both
+  is now a prerequisite there too, still optional (`minimum=0`), and in `skyArmSubtractionQa`, so a pipeline
+  combining it with `extractionQa` or `fluxCalQa` builds as well. `tests/test_connections.py` reads every
+  task's connections from source, without the stack, and checks that no dataset type is declared both
   ways (PIPE2D-1913).
 - **`fluxCalQa` import** — `FilterCurve` and `TransmissionCurve` are imported from
   `pfs.drp.stella.fitFluxReference`; `pfs.drp.stella.fitReference` no longer exists (PIPE2D-1913).
