@@ -136,8 +136,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 - **`smoothAgcData` smooths only valid matches** — each valid match is averaged with the star's other valid
   matches, and invalid ones are left as they are. Smoothing every row averaged invalid matches, hundreds of microns
-  off, into the valid ones: on Run 30's all-sky exposure the valid matches' x scatter went from 21 to 99 µm, where it
-  now falls to 17 µm. `estimateGuideErrors` and `fitDriftRate` already gave it only valid matches (PIPE2D-1899).
+  off, into the valid ones: on the tests' all-sky exposure (148258) the valid matches' x scatter went from 19.7 to
+  89.4 µm, where it now falls to 15.9 µm (`testRealDataSmoothValidMatches`). `estimateGuideErrors` and
+  `fitDriftRate` already gave it only valid matches (PIPE2D-1899).
 
 ### Removed
 

@@ -876,21 +876,33 @@ def testPlotFocusAgActorMedians(focusSweep):
     assert nShown == nValues > 5 * sum(len(line.get_xdata()) for line in medians)
 
 
-def testPlotFocusMedianMarkers(focusSweep):
+@pytest.mark.parametrize("connectMedian", [True, False])
+def testPlotFocusMedianMarkers(focusSweep, connectMedian):
     """Each half keeps its symbol in the medians: circles for the left halves, stars for the right.
 
-    drp_stella drew the left halves' medians as stars, the right halves' symbol.
+    The medians are joined in order of x with ``connectMedian``. drp_stella drew the left halves' medians as
+    stars, the right halves' symbol, and never joined them.
     """
-    plot = plotFocus(focusSweep, showCameraId=True, showMedian=True, fig=Figure())
+    plot = plotFocus(
+        focusSweep, showCameraId=True, showMedian=True, connectMedian=connectMedian, fig=Figure()
+    )
     data = plot.data
     medians = [line for line in fwhmPanel(plot).lines if len(line.get_xdata())]
 
     assert {line.get_marker() for line in medians} == {"o", "*"}
     for line in medians:
+        assert line.get_linestyle() == ("-" if connectMedian else "None")
         camera = data[data.agc_camera_id == int(line.get_color()[1:])]
         isLeft = line.get_marker() == "o"
-        half = camera[camera.left == isLeft].groupby("agc_exposure_id").fwhm_arcsec.median()
-        np.testing.assert_allclose(line.get_ydata(), half)
+        half = (
+            camera[camera.left == isLeft]
+            .groupby("agc_exposure_id")
+            .agg(x=("focus_position_mm", "mean"), y=("fwhm_arcsec", "median"))
+            .sort_values("x", kind="stable")
+        )
+        np.testing.assert_allclose(line.get_xdata(), half.x)
+        np.testing.assert_allclose(line.get_ydata(), half.y)
+        half = half.y
         # Negative control: the other half's medians, in the same AG exposures.
         other = (
             camera[camera.left != isLeft].groupby("agc_exposure_id").fwhm_arcsec.median().reindex(half.index)

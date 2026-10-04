@@ -1929,7 +1929,7 @@ def plotFocus(
         the stars' (each camera's, or in black with ``colorBy`` other than
         ``camera``), and of the stars' FWHM (each half's; with
         ``showCameraId``, each camera's and half's in each AG exposure, in
-        the halves' symbols).
+        the halves' symbols, joined if ``connectMedian``).
     showOnlyMedian : `bool`
         Plot only those medians.
     connectMedian : `bool`
@@ -2251,16 +2251,18 @@ def _plotFwhm(
         if showCameraId:
             for cid in np.sort(stars.agc_camera_id.unique()):
                 camera = stars[stars.agc_camera_id == cid]
-                # The halves' symbols, as for the stars, larger and outlined.
+                # The halves' symbols, as for the stars, larger and outlined; joined in order of x.
                 for isLeft, marker, size in [(True, "o", 8), (False, "*", 11)]:
                     half = camera[camera.left == isLeft]
                     medians = half.groupby("agc_exposure_id").agg(
                         x=(what, "mean"), y=("fwhm_arcsec", "median")
                     )
+                    medians = medians.sort_values("x", kind="stable")
                     artists += ax.plot(
                         medians.x,
                         medians.y,
-                        marker,
+                        marker=marker,
+                        linestyle="-" if connectMedian else "None",
                         markersize=size,
                         markeredgecolor="black",
                         color=_CAMERA_COLORS[cid],
