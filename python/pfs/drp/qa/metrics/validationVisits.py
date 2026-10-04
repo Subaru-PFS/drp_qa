@@ -28,6 +28,7 @@ __all__ = [
     "loadValidationVisits",
     "matchRows",
     "selectRows",
+    "unmatchedEntries",
     "visitExpression",
 ]
 
@@ -69,7 +70,7 @@ class ValidationVisit:
         Free-form context.
     unconfirmed : `bool`
         True when the verdict is suspected but not established: a real visit,
-        flagged at the telescope, whose metrics nobody has checked. It is loaded
+        noted as suspect in the run summary, whose metrics nobody has checked. It is loaded
         and reported like any other entry but never decides a verdict, because
         a guess that fails the build is worse than no entry.
     placeholder : `bool`
@@ -293,6 +294,28 @@ def selectRows(frame, entries: Iterable[ValidationVisit]):
         The matching rows, in their original order.
     """
     return frame[matchRows(frame, entries)]
+
+
+def unmatchedEntries(frame, visitSet: ValidationVisitSet) -> tuple[ValidationVisit, ...]:
+    """Return the entries that match no row of a metrics table.
+
+    An entry can match nothing because its visits were not processed, or
+    because a selector is wrong: a ``seqType`` must equal ``W_SEQNAM``
+    exactly, typos included. Either way its check silently does not run.
+
+    Parameters
+    ----------
+    frame : `pandas.DataFrame`
+        Metrics rows; see `matchRows`.
+    visitSet : `ValidationVisitSet`
+        The validation visit set.
+
+    Returns
+    -------
+    `tuple` [`ValidationVisit`]
+        The entries with no matching row, ``known_good`` first.
+    """
+    return tuple(entry for entry in visitSet if not matchRows(frame, [entry]).any())
 
 
 def visitExpression(visits: Iterable[int]) -> str:

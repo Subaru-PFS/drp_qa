@@ -43,7 +43,7 @@ pipetask qgraph -b /work/datastore \
 ```
 
 The log reports how many quanta the graph has: one per detector and visit, up to about
-3,500 for the current set. If it is far fewer, some visits lack `fitDetectorMap` outputs in
+2,000 for the current set (124 visits). If it is far fewer, some visits lack `fitDetectorMap` outputs in
 those input collections. Find them, or reduce them first, before going on. Step 4 lists any
 visit that ends up with no metrics.
 
@@ -92,8 +92,10 @@ For each metric the notebook shows a table, one row per population (arm and obse
 type; flag rates also per lamp; line counts per lamp), and one plot panel per row. Go
 through these in order:
 
-1. **Missing visits.** The notebook lists validation visits with no metrics. A missing
-   known-bad visit is a check that didn't run.
+1. **Missing visits and unmatched entries.** The notebook lists validation visits with no
+   metrics, and entries that match no row. Either is a check that didn't run. An entry
+   whose visits are present but which matches nothing has a wrong selector: compare its
+   `seqType` with the `seqName` column, which must agree character for character.
 2. **Known-bad checks.** In each population with known-bad rows, `badOk` must be true. If
    it isn't, the threshold doesn't separate the fault: look at the panel. A marker on the
    good side of `FAIL` (left of it; right of it for `nLines`) is a missed fault. Either the

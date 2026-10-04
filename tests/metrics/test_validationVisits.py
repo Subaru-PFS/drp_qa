@@ -16,6 +16,7 @@ from pfs.drp.qa.metrics.validationVisits import (
     main,
     matchRows,
     selectRows,
+    unmatchedEntries,
     visitExpression,
 )
 
@@ -48,25 +49,36 @@ class TestCheckedInSet:
         visitSet = loadValidationVisits()
         assert visitSet.path == defaultValidationVisitsPath()
 
-    def testSm1FocusRangeIsKnownBad(self):
-        """The documented SM1 optics failure is the anchor known_bad entry."""
+    def testSm1DefocusIsKnownBad(self):
+        """The Run27 SM1-defocused sequences: spectrograph 1 only, caught by medFwhm."""
         visitSet = loadValidationVisits()
-        sm1 = [entry for entry in visitSet.knownBad if 140005 in entry.visits]
-        assert len(sm1) == 1, "expected exactly one entry covering the SM1 focus range"
-        (entry,) = sm1
-        assert entry.expect == "FAIL"
-        assert entry.spectrographs == (1,)
-        assert entry.visits[-1] == 140138
-        assert len(entry.visits) == 140138 - 140005 + 1
-        assert entry.metric, "a known_bad entry must name the metric that identifies the fault"
-        assert entry.reason
+        sm1 = [entry for entry in visitSet.knownBad if entry.reason and "SM1 defocused" in entry.reason]
+        assert len(sm1) == 7
+        assert {visit for entry in sm1 for visit in entry.visits} >= {140005, 140032, 140138}
+        assert all(entry.spectrographs == (1,) and entry.metric == "medFwhm" for entry in sm1)
+        assert visitSet.expectationFor(140130, arm="b", spectrograph=1, seqType="Arc: Neon") == "FAIL"
+        assert visitSet.expectationFor(140130, arm="b", spectrograph=2) is None
+        assert visitSet.expectationFor(140075) is None, "unlogged visits in the range carry no verdict"
+
+    def testUnlitSpectrographsAreKnownBad(self):
+        visitSet = loadValidationVisits()
+        assert visitSet.expectationFor(140640, arm="b", spectrograph=2) == "FAIL"
+        assert visitSet.expectationFor(140640, arm="b", spectrograph=1) is None
+
+    def testSingleVisitHeliumTestsNeedNoSeqType(self):
+        """The hand-written summary misspells 150779's sequence; no selector depends on it."""
+        visitSet = loadValidationVisits()
+        for visit in (150779, 150782):
+            (entry,) = visitSet.find(visit, arm="b", spectrograph=1)
+            assert entry.seqType is None
+            assert entry.metric == "medDxCenter"
 
     def testKnownGoodIsPopulated(self):
         """The Run25 stable set; thresholds cannot be derived without it."""
         visitSet = loadValidationVisits()
         assert visitSet.knownGood, "no usable known_good entries"
         assert visitSet.goodVisits[0] == 133025
-        assert visitSet.goodVisits[-1] == 135850
+        assert visitSet.goodVisits[-1] == 150844
 
     def testKnownGoodEntriesAreScopedToTheArmsThatWereRead(self):
         """Run25 block A read b/r/n and block B read b/m; neither covers the other."""
@@ -309,6 +321,13 @@ class TestRowMatching:
             ]
             assert matchRows(frame, [entry]).tolist() == expected
 
+    def testUnmatchedEntries(self):
+        matched = ValidationVisit(visits=(100,), expect="PASS", seqType="Arc: Neon")
+        typo = ValidationVisit(visits=(100,), expect="PASS", seqType="Arc: Noen")
+        absent = ValidationVisit(visits=(999,), expect="PASS")
+        visitSet = ValidationVisitSet(knownGood=(matched, typo, absent))
+        assert unmatchedEntries(self.frame(), visitSet) == (typo, absent)
+
     def testSelectRowsKeepsOrder(self):
         entry = ValidationVisit(visits=(100, 102), expect="PASS")
         assert selectRows(self.frame(), [entry])["visit"].tolist() == [100, 100, 102]
@@ -351,7 +370,7 @@ class TestTables:
             sum(line.startswith("| ") and "---" not in line for line in text.splitlines())
             == len(visitSet) + 4
         ), "one row per entry plus a header per table"
-        assert "| 140005–140138 | b, r, n, m | 1 | any | FAIL | `medFwhm` |" in text
+        assert "| 140005–140006 | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` |" in text
 
     def testPipesAreEscaped(self):
         entry = ValidationVisit(visits=(1,), expect="PASS", note="a | b")

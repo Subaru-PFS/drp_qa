@@ -44,7 +44,7 @@
 #
 # Bookkeeping:
 #   unconfirmed: true   marks a verdict that is suspected but not established --
-#                       a real visit, flagged at the telescope, whose metrics
+#                       a real visit, noted in the run's calibration summary, whose metrics
 #                       nobody has checked. It is loaded and reported like any
 #                       other entry, but it is excluded from the check that a
 #                       threshold separates the known-bad data, because a guess
@@ -232,8 +232,21 @@ known_good:
       Run25 uniformity set, 2025-11-28, az 290, insrot 90. 180 s. Reference case
       for the O2/OH sky-line check, as for the other twilight entries.
 
+  # Run30 twilight sky, a second epoch for the same check. The 2026-09-02 set
+  # (148624-148628) is left out: taken at 70 deg elevation, ~30 deg from the Moon.
+  - visitRange: [148908, 148911]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Twilight sky"
+    note: "Run30 twilight sky, 2026-09-04, alt 80, az 270. 180 s."
+  - visitRange: [150840, 150844]
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Twilight sky"
+    note: "Run30 twilight sky, 2026-09-16, alt 80, az 267. 180 s."
+
 known_bad:
-  # Run25 twilight sky taken through cloud. Unlike the SM1 entry above this is
+  # Run25 twilight sky taken through cloud. Unlike the SM1 entries this is
   # an observing condition rather than an instrument fault, but the degraded
   # image quality is what QA should catch.
   - visitRange: [134334, 134337]
@@ -244,16 +257,60 @@ known_bad:
     metric: medFwhm
     reason: "Cloudy; 180 s twilight sky taken through cloud."
 
-  # Documented genuine optics failure: SM1 showed FWHM 3.83-4.86 px across all
-  # lamp types over this visit range, independent of species, which rules out
-  # the lamp-physics explanation that covers high b-arm flag rates elsewhere.
-  # See docs/qa-domain-notes.md, "SM1 exception".
-  - visitRange: [140005, 140138]
-    arms: [b, r, n, m]
+  # Run27, 2026-03-09/10: SM1 defocused, noted on every sequence below.
+  # FWHM 3.83-4.86 px across every lamp, independent of species, which rules out
+  # the lamp physics behind high b-arm flag rates elsewhere. See
+  # docs/qa-domain-notes.md, "SM1 exception". Only the noted sequences are
+  # listed; the visits between them carry no verdict. Run27 read no m arm.
+  - visitRange: [140005, 140006]
+    arms: [b, r, n]
     spectrographs: [1]
+    seqType: "Arc: Argon"
     expect: FAIL
     metric: medFwhm
-    reason: "SM1 focus/mirror alignment; FWHM 3.83-4.86 px across all lamp types."
+    reason: "SM1 defocused (Run27). 15 s, az 90."
+  - visitRange: [140032, 140035]
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "Trace"
+    expect: FAIL
+    metric: medFwhm
+    reason: "SM1 defocused (Run27). 30 s, az 226."
+  - visitRange: [140124, 140126]
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "Arc: Argon"
+    expect: FAIL
+    metric: medFwhm
+    reason: "SM1 defocused (Run27). 15 s, az 336."
+  - visitRange: [140127, 140129]
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "Arc: Xenon"
+    expect: FAIL
+    metric: medFwhm
+    reason: "SM1 defocused (Run27). 45 s, az 336."
+  - visitRange: [140130, 140132]
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "Arc: Neon"
+    expect: FAIL
+    metric: medFwhm
+    reason: "SM1 defocused (Run27). 5 s, az 336."
+  - visitRange: [140133, 140135]
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "Arc: Krypton"
+    expect: FAIL
+    metric: medFwhm
+    reason: "SM1 defocused (Run27). 70 s, az 336."
+  - visitRange: [140136, 140138]
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "Arc: HgCd"
+    expect: FAIL
+    metric: medFwhm
+    reason: "SM1 defocused (Run27). 45 s, az 336."
 
   # TODO(PIPE2D-1921): find a visit reduced against an out-of-date
   # detectorMap_calib. This is the reference case for the PIPE2D-1921 drift
@@ -273,6 +330,45 @@ known_bad:
     metric: pctSaturatedPixels
     reason: "Saturated exposure; peak pixels flagged SAT."
 
+  # Run27 nightly ImageQuality arcs where one spectrograph's lamp gave no light,
+  # as noted in the run's calibration summary. That spectrograph's detectors have no lines; QA must not pass
+  # them. The other spectrographs in the same exposures carry no verdict here.
+  - visit: 139971
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "ImageQuality"
+    expect: FAIL
+    metric: nLines
+    reason: "SM1 lamp didn't turn on. (Run27, 1 s arc)"
+  - visit: 140477
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "ImageQuality"
+    expect: FAIL
+    metric: nLines
+    reason: "No light on SM1. (Run27, 1 s arc)"
+  - visit: 140640
+    arms: [b, r, n]
+    spectrographs: [2]
+    seqType: "ImageQuality"
+    expect: FAIL
+    metric: nLines
+    reason: "No light on SM2. (Run27, 1 s arc)"
+  - visit: 140649
+    arms: [b, r, n]
+    spectrographs: [1, 2]
+    seqType: "ImageQuality"
+    expect: FAIL
+    metric: nLines
+    reason: "No light on SM1 or SM2. (Run27, 1 s arc)"
+  - visit: 140651
+    arms: [b, r, n]
+    spectrographs: [2]
+    seqType: "ImageQuality"
+    expect: FAIL
+    metric: nLines
+    reason: "No light on SM2. (Run27, 1 s arc)"
+
   # ---- Run30 -------------------------------------------------------------
   # Frames taken with the light path obstructed. These are mis-taken frames
   # rather than instrument faults, but they must not pass: a QA gate that
@@ -288,9 +384,9 @@ known_bad:
     spectrographs: [1, 2, 3, 4]
     expect: FAIL
     metric: pctFlagged
-    reason: "Mirror cover and top screen both closed; flagged at the telescope as to be ignored."
+    reason: "Mirror cover and top screen both closed; noted in the calibration summary as to be ignored."
   # Suspected faults, recorded so that somebody looks at them. Both were
-  # flagged at the telescope with a note nobody has yet tied to a number, so
+  # noted in the calibration summary in words nobody has yet tied to a number, so
   # the verdict below is a suspicion, not a finding: `unconfirmed: true` keeps
   # them out of the check that a threshold must separate the known-bad data.
   # Once their metrics have been compared against the Run25 set, drop the flag
@@ -302,7 +398,7 @@ known_bad:
     expect: FAIL
     unconfirmed: true
     reason: >-
-      Tagged "Mirror cover open, but screen is wrong position". Probably a
+      Noted "Mirror cover open, but screen is wrong position" in the calibration summary. Probably a
       failure; neither the verdict nor the metric that should catch it has been
       established.
   - visit: 149883
@@ -312,7 +408,7 @@ known_bad:
     expect: FAIL
     unconfirmed: true
     reason: >-
-      Tagged "Home" at the telescope, a note whose meaning is not settled. Other
+      Noted "Home" in the calibration summary, a note whose meaning is not settled. Other
       visits carry the same tag. Recorded so its metrics can be compared against
       the Run25 set; probably a failure, but unestablished.
 
@@ -362,14 +458,12 @@ known_bad:
   - visit: 150779
     arms: [b, m, n]
     spectrographs: [1, 2, 3, 4]
-    seqType: "DetectorMap test pre-exposure (Helium)"
     expect: WARN
     metric: medDxCenter
-    reason: "Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib."
+    reason: "DetectorMap test pre-exposure (Helium). Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib."
   - visit: 150782
     arms: [b, m, n]
     spectrographs: [1, 2, 3, 4]
-    seqType: "DetectorMap test post-exposure (Helium)"
     expect: WARN
     metric: medDxCenter
-    reason: "Alt 49, az 53, insrot 5; flexure against a zenith-derived detectorMap_calib."
+    reason: "DetectorMap test post-exposure (Helium). Alt 49, az 53, insrot 5; flexure against a zenith-derived detectorMap_calib."

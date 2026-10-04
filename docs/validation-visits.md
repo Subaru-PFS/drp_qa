@@ -11,6 +11,15 @@ or passes a known-bad one, does not merge.
 - **Using it:** [`deriving-thresholds.md`](deriving-thresholds.md) is the step-by-step
   procedure: run `imageQualityQa` over these visits, then derive and check thresholds.
 
+## Where the visits come from
+
+Every entry was checked against the run's calibration summary (`calib_data.csv`, one row
+per sequence: `sequence_type`, sequence name, cameras read, notes) for Runs 25, 27 and
+30. Run27 took calibration data only. A `known_bad` reason quotes the summary's note
+where there is one. The summaries are written by hand, so a sequence name there can
+differ from the `W_SEQNAM` header that `seqType` is matched against. The threshold
+notebook lists any entry that matches no data, which is how such a mismatch shows up.
+
 ## What belongs in the set
 
 A visit belongs only if it has a **verdict**: someone has established that it should pass,
@@ -22,7 +31,7 @@ or that it should warn or fail for a stated reason.
 - **`known_bad`:** expected to `WARN` or `FAIL`. Each entry names the metric that should
   catch it, because a known-bad visit must fail *for the right reason*. An entry holds only
   for the metric it names; it says nothing about the others.
-- **`unconfirmed: true`:** a suspected fault, flagged at the telescope, whose numbers no one
+- **`unconfirmed: true`:** a suspected fault, noted in the run's calibration summary, whose numbers no one
   has checked yet. It is reported beside the thresholds but never decides anything. Once
   its metrics have been compared with the known-good data, either name the metric and drop
   the flag, or move the visit to `known_good`.
@@ -47,16 +56,21 @@ identified by visit number, with no observer, target or design names.
   under a different gravity vector, and it brings b-arm HgCd above the 20-sample floor.
 - **Run25 uniformity traces (2025-11-12 and 11-21):** extra quartz frames, so that trace
   widths can have thresholds of their own rather than borrowing the arcs'.
-- **Run25 twilight sky (2025-11-25 and 11-28; one set at insrot 90):** the reference for a
-  future sky-line check (PIPE2D-1925). Whether they should also be held to the FWHM and
-  flag-rate gates is not yet established.
+- **Twilight sky, Run25 (2025-11-25 and 11-28; one set at insrot 90) and Run30
+  (2026-09-04 and 09-16):** the reference for a future sky-line check (PIPE2D-1925).
+  Whether they should also be held to the FWHM and flag-rate gates is not yet
+  established. The Run30 set of 2026-09-02 is left out: it was taken near the Moon.
 
 ### Known bad
 
 - **Cloudy twilight (Run25):** image quality degraded by observing conditions; `medFwhm`.
-- **SM1 focus range (140005–140138, spectrograph 1):** a documented optics fault, with FWHM
-  3.83–4.86 px across every lamp type; `medFwhm`. See "SM1 exception" in
-  [`qa-domain-notes.md`](qa-domain-notes.md).
+- **SM1 defocused (Run27, 2026-03-09/10, spectrograph 1):** the seven arc and trace
+  sequences noted "SM1 defocused", with FWHM 3.83–4.86 px across every lamp type;
+  `medFwhm`. See "SM1 exception" in [`qa-domain-notes.md`](qa-domain-notes.md). The
+  visits between them that the summary does not list carry no verdict and are not included.
+- **Unlit spectrograph (Run27 nightly `ImageQuality` arcs):** exposures noted "No light on
+  SM1" or "SM2". The unlit spectrograph's detectors have no lines; `nLines`, `FAIL`. The
+  other spectrographs in those exposures carry no verdict.
 - **Obstructed frames (Run30):** taken with the M1 cover or the top screen closed;
   `pctFlagged`.
 - **Partial slit illumination (Run30):** only one fiber group lit. Shapes are fine and the
@@ -109,29 +123,42 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 133536–133537 | b, r | 1, 2, 3, 4 | Trace | PASS |  | Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace; n arm not read. |
 | 134338–134339 | b, r, n | 1, 2, 3, 4 | Trace | PASS |  | Run25 uniformity set, 2025-11-21, az 290. 20 s scienceTrace. |
 | 135275–135279 | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run25 uniformity set, 2025-11-28, az 290, insrot 90. 180 s. Reference case for the O2/OH sky-line check, as for the other twilight entries. |
+| 148908–148911 | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run30 twilight sky, 2026-09-04, alt 80, az 270. 180 s. |
+| 150840–150844 | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run30 twilight sky, 2026-09-16, alt 80, az 267. 180 s. |
 
 ### Known bad
 
 | Visits | Arms | Spectrographs | Sequence | Expect | Metric | Reason |
 |---|---|---|---|---|---|---|
 | 134334–134337 | b, r, n | 1, 2, 3, 4 | Twilight sky | FAIL | `medFwhm` | Cloudy; 180 s twilight sky taken through cloud. |
-| 140005–140138 | b, r, n, m | 1 | any | FAIL | `medFwhm` | SM1 focus/mirror alignment; FWHM 3.83-4.86 px across all lamp types. |
+| 140005–140006 | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` | SM1 defocused (Run27). 15 s, az 90. |
+| 140032–140035 | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
+| 140124–140126 | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` | SM1 defocused (Run27). 15 s, az 336. |
+| 140127–140129 | b, r, n | 1 | Arc: Xenon | FAIL | `medFwhm` | SM1 defocused (Run27). 45 s, az 336. |
+| 140130–140132 | b, r, n | 1 | Arc: Neon | FAIL | `medFwhm` | SM1 defocused (Run27). 5 s, az 336. |
+| 140133–140135 | b, r, n | 1 | Arc: Krypton | FAIL | `medFwhm` | SM1 defocused (Run27). 70 s, az 336. |
+| 140136–140138 | b, r, n | 1 | Arc: HgCd | FAIL | `medFwhm` | SM1 defocused (Run27). 45 s, az 336. |
+| 139971 | b, r, n | 1 | ImageQuality | FAIL | `nLines` | SM1 lamp didn't turn on. (Run27, 1 s arc) |
+| 140477 | b, r, n | 1 | ImageQuality | FAIL | `nLines` | No light on SM1. (Run27, 1 s arc) |
+| 140640 | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
+| 140649 | b, r, n | 1, 2 | ImageQuality | FAIL | `nLines` | No light on SM1 or SM2. (Run27, 1 s arc) |
+| 140651 | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
 | 150115–150116 | b, r, n | 1, 2, 3, 4 | any | FAIL | `pctFlagged` | M1 cover closed. |
-| 150641–150642 | b, r, n | 1, 2, 3, 4 | any | FAIL | `pctFlagged` | Mirror cover and top screen both closed; flagged at the telescope as to be ignored. |
+| 150641–150642 | b, r, n | 1, 2, 3, 4 | any | FAIL | `pctFlagged` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
 | 149217 | b, m | 1, 2, 3, 4 | Trace | WARN | `nLines` | Only group 2 was illuminated. |
 | 149398 | b, r, n | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 3 was illuminated. |
 | 149881 | b, m | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 2 was illuminated. |
 | 150367 | b, r, n | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 4 was illuminated. |
 | 150413 | b, r, n | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 1 was illuminated. |
-| 150779 | b, m, n | 1, 2, 3, 4 | DetectorMap test pre-exposure (Helium) | WARN | `medDxCenter` | Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib. |
-| 150782 | b, m, n | 1, 2, 3, 4 | DetectorMap test post-exposure (Helium) | WARN | `medDxCenter` | Alt 49, az 53, insrot 5; flexure against a zenith-derived detectorMap_calib. |
+| 150779 | b, m, n | 1, 2, 3, 4 | any | WARN | `medDxCenter` | DetectorMap test pre-exposure (Helium). Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib. |
+| 150782 | b, m, n | 1, 2, 3, 4 | any | WARN | `medDxCenter` | DetectorMap test post-exposure (Helium). Alt 49, az 53, insrot 5; flexure against a zenith-derived detectorMap_calib. |
 
 ### Unconfirmed
 
 | Visits | Arms | Spectrographs | Sequence | Expect | Metric | Reason |
 |---|---|---|---|---|---|---|
-| 150661 | b, r, n | 1, 2, 3, 4 | Trace | FAIL |  | Tagged "Mirror cover open, but screen is wrong position". Probably a failure; neither the verdict nor the metric that should catch it has been established. |
-| 149883 | b, r, n | 1, 2, 3, 4 | Arc: Neon | FAIL |  | Tagged "Home" at the telescope, a note whose meaning is not settled. Other visits carry the same tag. Recorded so its metrics can be compared against the Run25 set; probably a failure, but unestablished. |
+| 150661 | b, r, n | 1, 2, 3, 4 | Trace | FAIL |  | Noted "Mirror cover open, but screen is wrong position" in the calibration summary. Probably a failure; neither the verdict nor the metric that should catch it has been established. |
+| 149883 | b, r, n | 1, 2, 3, 4 | Arc: Neon | FAIL |  | Noted "Home" in the calibration summary, a note whose meaning is not settled. Other visits carry the same tag. Recorded so its metrics can be compared against the Run25 set; probably a failure, but unestablished. |
 
 ### Placeholders
 
@@ -143,10 +170,15 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 
 ## Changing the set
 
-1. Edit the YAML. Every entry needs `visit` or `visitRange`. A `known_bad` entry needs
+1. Check the visits in the run's calibration summary: `sps_camera_name` says which arms
+   and spectrographs were read, and the sequence `name` is normally the `W_SEQNAM` that
+   `seqType` must equal, character for character. The summary is typed by hand: when in
+   doubt, read `W_SEQNAM` from a header, or leave `seqType` out of an entry whose visits
+   are a single sequence.
+2. Edit the YAML. Every entry needs `visit` or `visitRange`. A `known_bad` entry needs
    `expect` and should name a `metric` and a `reason`. Restrict `arms`, `spectrographs` and
    `seqType` to what was actually read: an omitted selector means "every value".
-2. Regenerate the tables above and check the loader still accepts the file:
+3. Regenerate the tables above and check the loader still accepts the file:
 
    ```bash
    python -m pfs.drp.qa.metrics.validationVisits tables
@@ -154,7 +186,7 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
    ```
 
    Paste the output between the `GENERATED` markers in this file.
-3. Update the prose in [What is in it](#what-is-in-it) if a new kind of visit was added.
-4. Rerun the threshold derivation ([`deriving-thresholds.md`](deriving-thresholds.md)): a
+4. Update the prose in [What is in it](#what-is-in-it) if a new kind of visit was added.
+5. Rerun the threshold derivation ([`deriving-thresholds.md`](deriving-thresholds.md)): a
    new known-bad visit has to be caught by the current thresholds, and a new known-good one
    changes them.
