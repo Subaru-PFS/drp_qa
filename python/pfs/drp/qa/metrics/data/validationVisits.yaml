@@ -17,6 +17,11 @@
 #   visit:        int          a single visit
 #   visitRange:   [first, last]  an inclusive range of visits
 #
+# Required, except in a placeholder:
+#   sequenceType: str  the IIC sequence type, one of scienceArc, scienceTrace,
+#                      scienceObject. Not a selector: it decides how the visit
+#                      is reduced, as drpActor reduces that type.
+#
 # Optional selectors (omitted means "every value"):
 #   arms:           list of str, e.g. [b, r, n, m]
 #   spectrographs:  list of int, e.g. [1, 2, 3, 4]
@@ -65,26 +70,31 @@ known_good:
   #
   # Block A -- b, r and n arms, spectrographs 1-4.
   - visitRange: [133025, 133027]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Argon"
     note: "Run25 stable set, block A. 10 s exposures."
   - visitRange: [133028, 133030]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Xenon"
     note: "Run25 stable set, block A. 45 s exposures."
   - visitRange: [133031, 133033]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
     note: "Run25 stable set, block A. 5 s exposures."
   - visitRange: [133034, 133036]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Krypton"
     note: "Run25 stable set, block A. 70 s exposures."
   - visitRange: [133037, 133039]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: HgCd"
@@ -93,6 +103,7 @@ known_good:
       b-arm coverage, so b-arm flag rates here are genuine rather than lamp
       physics.
   - visitRange: [133040, 133041]
+    sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
@@ -100,26 +111,31 @@ known_good:
 
   # Block B -- b and m arms, spectrographs 1-4. No HgCd was taken in this block.
   - visitRange: [133042, 133044]
+    sequenceType: scienceArc
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Argon"
     note: "Run25 stable set, block B. 10 s exposures."
   - visitRange: [133045, 133047]
+    sequenceType: scienceArc
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Xenon"
     note: "Run25 stable set, block B. 45 s exposures."
   - visitRange: [133048, 133050]
+    sequenceType: scienceArc
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
     note: "Run25 stable set, block B. 5 s exposures."
   - visitRange: [133051, 133053]
+    sequenceType: scienceArc
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Krypton"
     note: "Run25 stable set, block B. 45 s exposures."
   - visitRange: [133054, 133055]
+    sequenceType: scienceTrace
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
@@ -132,56 +148,67 @@ known_good:
   # second epoch under a different gravity vector -- the external reference the
   # drift metrics of PIPE2D-1921 compare against (R1).
   - visitRange: [135828, 135829]
+    sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
     note: "Run25 block C, az 168. 20 s scienceTrace."
   - visitRange: [135830, 135831]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Argon"
     note: "Run25 block C, az 168. 10 s exposures."
   - visitRange: [135832, 135833]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Xenon"
     note: "Run25 block C, az 168. 45 s exposures."
   - visitRange: [135834, 135835]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
     note: "Run25 block C, az 168. 5 s exposures."
   - visitRange: [135836, 135837]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Krypton"
     note: "Run25 block C, az 168. 70 s exposures."
   - visitRange: [135838, 135840]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: HgCd"
     note: "Run25 block C, az 168. 45 s exposures. The second HgCd block; see above."
   - visitRange: [135841, 135842]
+    sequenceType: scienceArc
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Argon"
     note: "Run25 block C, az 168, m arm. 10 s exposures."
   - visitRange: [135843, 135844]
+    sequenceType: scienceArc
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Xenon"
     note: "Run25 block C, az 168, m arm. 45 s exposures."
   - visitRange: [135845, 135846]
+    sequenceType: scienceArc
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
     note: "Run25 block C, az 168, m arm. 5 s exposures."
   - visitRange: [135847, 135848]
+    sequenceType: scienceArc
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Krypton"
     note: "Run25 block C, az 168, m arm. 45 s exposures."
   - visitRange: [135849, 135850]
+    sequenceType: scienceTrace
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
@@ -193,11 +220,13 @@ known_good:
   # available (a candidate in PIPE2D-1925). Recorded as known_good on that basis; whether
   # they should also be held to the FWHM and flag-rate gates is unconfirmed.
   - visitRange: [134880, 134883]
+    sequenceType: scienceObject
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Twilight sky"
     note: "Run25 twilight sky, 180 s. Reference case for the O2/OH sky-line check."
   - visitRange: [134884, 134886]
+    sequenceType: scienceObject
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Twilight sky"
@@ -207,16 +236,19 @@ known_good:
   # threshold derivable: the fiber-profile path is gated on medFwhm, and a
   # threshold for it has to come from quartz frames, not from the arc ones.
   - visitRange: [133532, 133533]
+    sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
     note: "Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace."
   - visitRange: [133536, 133537]
+    sequenceType: scienceTrace
     arms: [b, r]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
     note: "Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace; n arm not read."
   - visitRange: [134338, 134339]
+    sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
@@ -225,6 +257,7 @@ known_good:
   # Twilight sky at insrot 90 rather than 0 -- the only entry at a different
   # rotator angle, which is why it is worth having.
   - visitRange: [135275, 135279]
+    sequenceType: scienceObject
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Twilight sky"
@@ -235,11 +268,13 @@ known_good:
   # Run30 twilight sky, a second epoch for the same check. The 2026-09-02 set
   # (148624-148628) is left out: taken at 70 deg elevation, ~30 deg from the Moon.
   - visitRange: [148908, 148911]
+    sequenceType: scienceObject
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Twilight sky"
     note: "Run30 twilight sky, 2026-09-04, alt 80, az 270. 180 s."
   - visitRange: [150840, 150844]
+    sequenceType: scienceObject
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Twilight sky"
@@ -250,61 +285,73 @@ known_good:
   # spectrograph, so a metric must fail the faulty spectrograph and pass the
   # others in the same frames -- it has found the cause, not the exposure.
   - visitRange: [140005, 140006]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2, 3, 4]
     seqType: "Arc: Argon"
     note: "Run27 control for SM1 defocused, same exposures."
   - visitRange: [140032, 140035]
+    sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [2, 3, 4]
     seqType: "Trace"
     note: "Run27 control for SM1 defocused, same exposures."
   - visitRange: [140124, 140126]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2, 3, 4]
     seqType: "Arc: Argon"
     note: "Run27 control for SM1 defocused, same exposures."
   - visitRange: [140127, 140129]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2, 3, 4]
     seqType: "Arc: Xenon"
     note: "Run27 control for SM1 defocused, same exposures."
   - visitRange: [140130, 140132]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2, 3, 4]
     seqType: "Arc: Neon"
     note: "Run27 control for SM1 defocused, same exposures."
   - visitRange: [140133, 140135]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2, 3, 4]
     seqType: "Arc: Krypton"
     note: "Run27 control for SM1 defocused, same exposures."
   - visitRange: [140136, 140138]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2, 3, 4]
     seqType: "Arc: HgCd"
     note: "Run27 control for SM1 defocused, same exposures."
   - visit: 139971
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2, 3, 4]
     seqType: "ImageQuality"
     note: "Run27 control for SM1 unlit, same exposure."
   - visit: 140477
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2, 3, 4]
     seqType: "ImageQuality"
     note: "Run27 control for SM1 unlit, same exposure."
   - visit: 140640
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 3, 4]
     seqType: "ImageQuality"
     note: "Run27 control for SM2 unlit; SM1 after its 03-11 slit home update, same exposure."
   - visit: 140649
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [3, 4]
     seqType: "ImageQuality"
     note: "Run27 control for SM1 and SM2 unlit, same exposure."
   - visit: 140651
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 3, 4]
     seqType: "ImageQuality"
@@ -315,6 +362,7 @@ known_bad:
   # an observing condition rather than an instrument fault, but the degraded
   # image quality is what QA should catch.
   - visitRange: [134334, 134337]
+    sequenceType: scienceObject
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Twilight sky"
@@ -328,6 +376,7 @@ known_bad:
   # docs/qa-domain-notes.md, "SM1 exception". Only the noted sequences are
   # listed; the visits between them carry no verdict. Run27 read no m arm.
   - visitRange: [140005, 140006]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1]
     seqType: "Arc: Argon"
@@ -335,6 +384,7 @@ known_bad:
     metric: medFwhm
     reason: "SM1 defocused (Run27). 15 s, az 90."
   - visitRange: [140032, 140035]
+    sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1]
     seqType: "Trace"
@@ -342,6 +392,7 @@ known_bad:
     metric: medFwhm
     reason: "SM1 defocused (Run27). 30 s, az 226."
   - visitRange: [140124, 140126]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1]
     seqType: "Arc: Argon"
@@ -349,6 +400,7 @@ known_bad:
     metric: medFwhm
     reason: "SM1 defocused (Run27). 15 s, az 336."
   - visitRange: [140127, 140129]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1]
     seqType: "Arc: Xenon"
@@ -356,6 +408,7 @@ known_bad:
     metric: medFwhm
     reason: "SM1 defocused (Run27). 45 s, az 336."
   - visitRange: [140130, 140132]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1]
     seqType: "Arc: Neon"
@@ -363,6 +416,7 @@ known_bad:
     metric: medFwhm
     reason: "SM1 defocused (Run27). 5 s, az 336."
   - visitRange: [140133, 140135]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1]
     seqType: "Arc: Krypton"
@@ -370,6 +424,7 @@ known_bad:
     metric: medFwhm
     reason: "SM1 defocused (Run27). 70 s, az 336."
   - visitRange: [140136, 140138]
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1]
     seqType: "Arc: HgCd"
@@ -399,6 +454,7 @@ known_bad:
   # as noted in the run's calibration summary. That spectrograph's detectors have no lines; QA must not pass
   # them. The other spectrographs are known_good controls in the same exposures.
   - visit: 139971
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1]
     seqType: "ImageQuality"
@@ -406,6 +462,7 @@ known_bad:
     metric: nLines
     reason: "SM1 lamp didn't turn on. (Run27, 1 s arc)"
   - visit: 140477
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1]
     seqType: "ImageQuality"
@@ -413,6 +470,7 @@ known_bad:
     metric: nLines
     reason: "No light on SM1. (Run27, 1 s arc)"
   - visit: 140640
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2]
     seqType: "ImageQuality"
@@ -420,6 +478,7 @@ known_bad:
     metric: nLines
     reason: "No light on SM2. (Run27, 1 s arc)"
   - visit: 140649
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2]
     seqType: "ImageQuality"
@@ -427,6 +486,7 @@ known_bad:
     metric: nLines
     reason: "No light on SM1 or SM2. (Run27, 1 s arc)"
   - visit: 140651
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2]
     seqType: "ImageQuality"
@@ -438,13 +498,29 @@ known_bad:
   # Frames taken with the light path obstructed. These are mis-taken frames
   # rather than instrument faults, but they must not pass: a QA gate that
   # greenlights a frame shot through a closed cover is not a gate.
-  - visitRange: [150115, 150116]
+  - visit: 150115
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     expect: FAIL
     metric: pctFlagged
     reason: "M1 cover closed."
-  - visitRange: [150641, 150642]
+  - visit: 150116
+    sequenceType: scienceTrace
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    expect: FAIL
+    metric: pctFlagged
+    reason: "M1 cover closed."
+  - visit: 150641
+    sequenceType: scienceArc
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    expect: FAIL
+    metric: pctFlagged
+    reason: "Mirror cover and top screen both closed; noted in the calibration summary as to be ignored."
+  - visit: 150642
+    sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     expect: FAIL
@@ -457,6 +533,7 @@ known_bad:
   # Once their metrics have been compared against the Run25 set, drop the flag
   # and name the metric -- or move them to known_good if they turn out fine.
   - visit: 150661
+    sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
@@ -467,6 +544,7 @@ known_bad:
       failure; neither the verdict nor the metric that should catch it has been
       established.
   - visit: 149883
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
@@ -480,6 +558,7 @@ known_bad:
   # Partial slit illumination: only one fiber group was lit, so most fibers
   # have no usable measurement. The defect is the count, not the shape.
   - visit: 149217
+    sequenceType: scienceTrace
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Trace"
@@ -487,6 +566,7 @@ known_bad:
     metric: nLines
     reason: "Only group 2 was illuminated."
   - visit: 149398
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
@@ -494,6 +574,7 @@ known_bad:
     metric: nLines
     reason: "Only group 3 was illuminated."
   - visit: 149881
+    sequenceType: scienceArc
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
@@ -501,6 +582,7 @@ known_bad:
     metric: nLines
     reason: "Only group 2 was illuminated."
   - visit: 150367
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
@@ -508,6 +590,7 @@ known_bad:
     metric: nLines
     reason: "Only group 4 was illuminated."
   - visit: 150413
+    sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     seqType: "Arc: Neon"
@@ -521,12 +604,14 @@ known_bad:
   # detectorMap_calib, which is what the PIPE2D-1921 drift metrics must detect and
   # attribute correctly. WARN rather than FAIL is provisional.
   - visit: 150779
+    sequenceType: scienceArc
     arms: [b, m, n]
     spectrographs: [1, 2, 3, 4]
     expect: WARN
     metric: medDxCenter
     reason: "DetectorMap test pre-exposure (Helium). Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib."
   - visit: 150782
+    sequenceType: scienceArc
     arms: [b, m, n]
     spectrographs: [1, 2, 3, 4]
     expect: WARN

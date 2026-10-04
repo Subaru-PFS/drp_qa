@@ -100,89 +100,91 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 
 | Visits | Arms | Spectrographs | Sequence | Expect | Metric | Note |
 |---|---|---|---|---|---|---|
-| 133025–133027 | b, r, n | 1, 2, 3, 4 | Arc: Argon | PASS |  | Run25 stable set, block A. 10 s exposures. |
-| 133028–133030 | b, r, n | 1, 2, 3, 4 | Arc: Xenon | PASS |  | Run25 stable set, block A. 45 s exposures. |
-| 133031–133033 | b, r, n | 1, 2, 3, 4 | Arc: Neon | PASS |  | Run25 stable set, block A. 5 s exposures. |
-| 133034–133036 | b, r, n | 1, 2, 3, 4 | Arc: Krypton | PASS |  | Run25 stable set, block A. 70 s exposures. |
-| 133037–133039 | b, r, n | 1, 2, 3, 4 | Arc: HgCd | PASS |  | Run25 stable set, block A. 45 s exposures. HgCd gives dense, well-measured b-arm coverage, so b-arm flag rates here are genuine rather than lamp physics. |
-| 133040–133041 | b, r, n | 1, 2, 3, 4 | Trace | PASS |  | Run25 stable set, block A. 20 s scienceTrace; exercises the calexp trace-width path. |
-| 133042–133044 | b, m | 1, 2, 3, 4 | Arc: Argon | PASS |  | Run25 stable set, block B. 10 s exposures. |
-| 133045–133047 | b, m | 1, 2, 3, 4 | Arc: Xenon | PASS |  | Run25 stable set, block B. 45 s exposures. |
-| 133048–133050 | b, m | 1, 2, 3, 4 | Arc: Neon | PASS |  | Run25 stable set, block B. 5 s exposures. |
-| 133051–133053 | b, m | 1, 2, 3, 4 | Arc: Krypton | PASS |  | Run25 stable set, block B. 45 s exposures. |
-| 133054–133055 | b, m | 1, 2, 3, 4 | Trace | PASS |  | Run25 stable set, block B. 20 s scienceTrace. |
-| 135828–135829 | b, r, n | 1, 2, 3, 4 | Trace | PASS |  | Run25 block C, az 168. 20 s scienceTrace. |
-| 135830–135831 | b, r, n | 1, 2, 3, 4 | Arc: Argon | PASS |  | Run25 block C, az 168. 10 s exposures. |
-| 135832–135833 | b, r, n | 1, 2, 3, 4 | Arc: Xenon | PASS |  | Run25 block C, az 168. 45 s exposures. |
-| 135834–135835 | b, r, n | 1, 2, 3, 4 | Arc: Neon | PASS |  | Run25 block C, az 168. 5 s exposures. |
-| 135836–135837 | b, r, n | 1, 2, 3, 4 | Arc: Krypton | PASS |  | Run25 block C, az 168. 70 s exposures. |
-| 135838–135840 | b, r, n | 1, 2, 3, 4 | Arc: HgCd | PASS |  | Run25 block C, az 168. 45 s exposures. The second HgCd block; see above. |
-| 135841–135842 | b, m | 1, 2, 3, 4 | Arc: Argon | PASS |  | Run25 block C, az 168, m arm. 10 s exposures. |
-| 135843–135844 | b, m | 1, 2, 3, 4 | Arc: Xenon | PASS |  | Run25 block C, az 168, m arm. 45 s exposures. |
-| 135845–135846 | b, m | 1, 2, 3, 4 | Arc: Neon | PASS |  | Run25 block C, az 168, m arm. 5 s exposures. |
-| 135847–135848 | b, m | 1, 2, 3, 4 | Arc: Krypton | PASS |  | Run25 block C, az 168, m arm. 45 s exposures. |
-| 135849–135850 | b, m | 1, 2, 3, 4 | Trace | PASS |  | Run25 block C, az 168, m arm. 20 s scienceTrace. |
-| 134880–134883 | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run25 twilight sky, 180 s. Reference case for the O2/OH sky-line check. |
-| 134884–134886 | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run25 twilight sky, 180 s. Reference case for the O2/OH sky-line check. |
-| 133532–133533 | b, r, n | 1, 2, 3, 4 | Trace | PASS |  | Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace. |
-| 133536–133537 | b, r | 1, 2, 3, 4 | Trace | PASS |  | Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace; n arm not read. |
-| 134338–134339 | b, r, n | 1, 2, 3, 4 | Trace | PASS |  | Run25 uniformity set, 2025-11-21, az 290. 20 s scienceTrace. |
-| 135275–135279 | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run25 uniformity set, 2025-11-28, az 290, insrot 90. 180 s. Reference case for the O2/OH sky-line check, as for the other twilight entries. |
-| 148908–148911 | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run30 twilight sky, 2026-09-04, alt 80, az 270. 180 s. |
-| 150840–150844 | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run30 twilight sky, 2026-09-16, alt 80, az 267. 180 s. |
-| 140005–140006 | b, r, n | 2, 3, 4 | Arc: Argon | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140032–140035 | b, r, n | 2, 3, 4 | Trace | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140124–140126 | b, r, n | 2, 3, 4 | Arc: Argon | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140127–140129 | b, r, n | 2, 3, 4 | Arc: Xenon | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140130–140132 | b, r, n | 2, 3, 4 | Arc: Neon | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140133–140135 | b, r, n | 2, 3, 4 | Arc: Krypton | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140136–140138 | b, r, n | 2, 3, 4 | Arc: HgCd | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 139971 | b, r, n | 2, 3, 4 | ImageQuality | PASS |  | Run27 control for SM1 unlit, same exposure. |
-| 140477 | b, r, n | 2, 3, 4 | ImageQuality | PASS |  | Run27 control for SM1 unlit, same exposure. |
-| 140640 | b, r, n | 1, 3, 4 | ImageQuality | PASS |  | Run27 control for SM2 unlit; SM1 after its 03-11 slit home update, same exposure. |
-| 140649 | b, r, n | 3, 4 | ImageQuality | PASS |  | Run27 control for SM1 and SM2 unlit, same exposure. |
-| 140651 | b, r, n | 1, 3, 4 | ImageQuality | PASS |  | Run27 control for SM2 unlit; SM1 after its 03-11 slit home update, same exposure. |
+| 133025–133027 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Argon | PASS |  | Run25 stable set, block A. 10 s exposures. |
+| 133028–133030 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Xenon | PASS |  | Run25 stable set, block A. 45 s exposures. |
+| 133031–133033 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | PASS |  | Run25 stable set, block A. 5 s exposures. |
+| 133034–133036 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Krypton | PASS |  | Run25 stable set, block A. 70 s exposures. |
+| 133037–133039 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: HgCd | PASS |  | Run25 stable set, block A. 45 s exposures. HgCd gives dense, well-measured b-arm coverage, so b-arm flag rates here are genuine rather than lamp physics. |
+| 133040–133041 | scienceTrace | b, r, n | 1, 2, 3, 4 | Trace | PASS |  | Run25 stable set, block A. 20 s scienceTrace; exercises the calexp trace-width path. |
+| 133042–133044 | scienceArc | b, m | 1, 2, 3, 4 | Arc: Argon | PASS |  | Run25 stable set, block B. 10 s exposures. |
+| 133045–133047 | scienceArc | b, m | 1, 2, 3, 4 | Arc: Xenon | PASS |  | Run25 stable set, block B. 45 s exposures. |
+| 133048–133050 | scienceArc | b, m | 1, 2, 3, 4 | Arc: Neon | PASS |  | Run25 stable set, block B. 5 s exposures. |
+| 133051–133053 | scienceArc | b, m | 1, 2, 3, 4 | Arc: Krypton | PASS |  | Run25 stable set, block B. 45 s exposures. |
+| 133054–133055 | scienceTrace | b, m | 1, 2, 3, 4 | Trace | PASS |  | Run25 stable set, block B. 20 s scienceTrace. |
+| 135828–135829 | scienceTrace | b, r, n | 1, 2, 3, 4 | Trace | PASS |  | Run25 block C, az 168. 20 s scienceTrace. |
+| 135830–135831 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Argon | PASS |  | Run25 block C, az 168. 10 s exposures. |
+| 135832–135833 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Xenon | PASS |  | Run25 block C, az 168. 45 s exposures. |
+| 135834–135835 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | PASS |  | Run25 block C, az 168. 5 s exposures. |
+| 135836–135837 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Krypton | PASS |  | Run25 block C, az 168. 70 s exposures. |
+| 135838–135840 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: HgCd | PASS |  | Run25 block C, az 168. 45 s exposures. The second HgCd block; see above. |
+| 135841–135842 | scienceArc | b, m | 1, 2, 3, 4 | Arc: Argon | PASS |  | Run25 block C, az 168, m arm. 10 s exposures. |
+| 135843–135844 | scienceArc | b, m | 1, 2, 3, 4 | Arc: Xenon | PASS |  | Run25 block C, az 168, m arm. 45 s exposures. |
+| 135845–135846 | scienceArc | b, m | 1, 2, 3, 4 | Arc: Neon | PASS |  | Run25 block C, az 168, m arm. 5 s exposures. |
+| 135847–135848 | scienceArc | b, m | 1, 2, 3, 4 | Arc: Krypton | PASS |  | Run25 block C, az 168, m arm. 45 s exposures. |
+| 135849–135850 | scienceTrace | b, m | 1, 2, 3, 4 | Trace | PASS |  | Run25 block C, az 168, m arm. 20 s scienceTrace. |
+| 134880–134883 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run25 twilight sky, 180 s. Reference case for the O2/OH sky-line check. |
+| 134884–134886 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run25 twilight sky, 180 s. Reference case for the O2/OH sky-line check. |
+| 133532–133533 | scienceTrace | b, r, n | 1, 2, 3, 4 | Trace | PASS |  | Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace. |
+| 133536–133537 | scienceTrace | b, r | 1, 2, 3, 4 | Trace | PASS |  | Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace; n arm not read. |
+| 134338–134339 | scienceTrace | b, r, n | 1, 2, 3, 4 | Trace | PASS |  | Run25 uniformity set, 2025-11-21, az 290. 20 s scienceTrace. |
+| 135275–135279 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run25 uniformity set, 2025-11-28, az 290, insrot 90. 180 s. Reference case for the O2/OH sky-line check, as for the other twilight entries. |
+| 148908–148911 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run30 twilight sky, 2026-09-04, alt 80, az 270. 180 s. |
+| 150840–150844 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run30 twilight sky, 2026-09-16, alt 80, az 267. 180 s. |
+| 140005–140006 | scienceArc | b, r, n | 2, 3, 4 | Arc: Argon | PASS |  | Run27 control for SM1 defocused, same exposures. |
+| 140032–140035 | scienceTrace | b, r, n | 2, 3, 4 | Trace | PASS |  | Run27 control for SM1 defocused, same exposures. |
+| 140124–140126 | scienceArc | b, r, n | 2, 3, 4 | Arc: Argon | PASS |  | Run27 control for SM1 defocused, same exposures. |
+| 140127–140129 | scienceArc | b, r, n | 2, 3, 4 | Arc: Xenon | PASS |  | Run27 control for SM1 defocused, same exposures. |
+| 140130–140132 | scienceArc | b, r, n | 2, 3, 4 | Arc: Neon | PASS |  | Run27 control for SM1 defocused, same exposures. |
+| 140133–140135 | scienceArc | b, r, n | 2, 3, 4 | Arc: Krypton | PASS |  | Run27 control for SM1 defocused, same exposures. |
+| 140136–140138 | scienceArc | b, r, n | 2, 3, 4 | Arc: HgCd | PASS |  | Run27 control for SM1 defocused, same exposures. |
+| 139971 | scienceArc | b, r, n | 2, 3, 4 | ImageQuality | PASS |  | Run27 control for SM1 unlit, same exposure. |
+| 140477 | scienceArc | b, r, n | 2, 3, 4 | ImageQuality | PASS |  | Run27 control for SM1 unlit, same exposure. |
+| 140640 | scienceArc | b, r, n | 1, 3, 4 | ImageQuality | PASS |  | Run27 control for SM2 unlit; SM1 after its 03-11 slit home update, same exposure. |
+| 140649 | scienceArc | b, r, n | 3, 4 | ImageQuality | PASS |  | Run27 control for SM1 and SM2 unlit, same exposure. |
+| 140651 | scienceArc | b, r, n | 1, 3, 4 | ImageQuality | PASS |  | Run27 control for SM2 unlit; SM1 after its 03-11 slit home update, same exposure. |
 
 ### Known bad
 
 | Visits | Arms | Spectrographs | Sequence | Expect | Metric | Reason |
 |---|---|---|---|---|---|---|
-| 134334–134337 | b, r, n | 1, 2, 3, 4 | Twilight sky | FAIL | `medFwhm` | Cloudy; 180 s twilight sky taken through cloud. |
-| 140005–140006 | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` | SM1 defocused (Run27). 15 s, az 90. |
-| 140032–140035 | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
-| 140124–140126 | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` | SM1 defocused (Run27). 15 s, az 336. |
-| 140127–140129 | b, r, n | 1 | Arc: Xenon | FAIL | `medFwhm` | SM1 defocused (Run27). 45 s, az 336. |
-| 140130–140132 | b, r, n | 1 | Arc: Neon | FAIL | `medFwhm` | SM1 defocused (Run27). 5 s, az 336. |
-| 140133–140135 | b, r, n | 1 | Arc: Krypton | FAIL | `medFwhm` | SM1 defocused (Run27). 70 s, az 336. |
-| 140136–140138 | b, r, n | 1 | Arc: HgCd | FAIL | `medFwhm` | SM1 defocused (Run27). 45 s, az 336. |
-| 139971 | b, r, n | 1 | ImageQuality | FAIL | `nLines` | SM1 lamp didn't turn on. (Run27, 1 s arc) |
-| 140477 | b, r, n | 1 | ImageQuality | FAIL | `nLines` | No light on SM1. (Run27, 1 s arc) |
-| 140640 | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
-| 140649 | b, r, n | 1, 2 | ImageQuality | FAIL | `nLines` | No light on SM1 or SM2. (Run27, 1 s arc) |
-| 140651 | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
-| 150115–150116 | b, r, n | 1, 2, 3, 4 | any | FAIL | `pctFlagged` | M1 cover closed. |
-| 150641–150642 | b, r, n | 1, 2, 3, 4 | any | FAIL | `pctFlagged` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
-| 149217 | b, m | 1, 2, 3, 4 | Trace | WARN | `nLines` | Only group 2 was illuminated. |
-| 149398 | b, r, n | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 3 was illuminated. |
-| 149881 | b, m | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 2 was illuminated. |
-| 150367 | b, r, n | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 4 was illuminated. |
-| 150413 | b, r, n | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 1 was illuminated. |
-| 150779 | b, m, n | 1, 2, 3, 4 | any | WARN | `medDxCenter` | DetectorMap test pre-exposure (Helium). Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib. |
-| 150782 | b, m, n | 1, 2, 3, 4 | any | WARN | `medDxCenter` | DetectorMap test post-exposure (Helium). Alt 49, az 53, insrot 5; flexure against a zenith-derived detectorMap_calib. |
+| 134334–134337 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | FAIL | `medFwhm` | Cloudy; 180 s twilight sky taken through cloud. |
+| 140005–140006 | scienceArc | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` | SM1 defocused (Run27). 15 s, az 90. |
+| 140032–140035 | scienceTrace | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
+| 140124–140126 | scienceArc | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` | SM1 defocused (Run27). 15 s, az 336. |
+| 140127–140129 | scienceArc | b, r, n | 1 | Arc: Xenon | FAIL | `medFwhm` | SM1 defocused (Run27). 45 s, az 336. |
+| 140130–140132 | scienceArc | b, r, n | 1 | Arc: Neon | FAIL | `medFwhm` | SM1 defocused (Run27). 5 s, az 336. |
+| 140133–140135 | scienceArc | b, r, n | 1 | Arc: Krypton | FAIL | `medFwhm` | SM1 defocused (Run27). 70 s, az 336. |
+| 140136–140138 | scienceArc | b, r, n | 1 | Arc: HgCd | FAIL | `medFwhm` | SM1 defocused (Run27). 45 s, az 336. |
+| 139971 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `nLines` | SM1 lamp didn't turn on. (Run27, 1 s arc) |
+| 140477 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `nLines` | No light on SM1. (Run27, 1 s arc) |
+| 140640 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
+| 140649 | scienceArc | b, r, n | 1, 2 | ImageQuality | FAIL | `nLines` | No light on SM1 or SM2. (Run27, 1 s arc) |
+| 140651 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
+| 150115 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `pctFlagged` | M1 cover closed. |
+| 150116 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `pctFlagged` | M1 cover closed. |
+| 150641 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `pctFlagged` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
+| 150642 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `pctFlagged` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
+| 149217 | scienceTrace | b, m | 1, 2, 3, 4 | Trace | WARN | `nLines` | Only group 2 was illuminated. |
+| 149398 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 3 was illuminated. |
+| 149881 | scienceArc | b, m | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 2 was illuminated. |
+| 150367 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 4 was illuminated. |
+| 150413 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 1 was illuminated. |
+| 150779 | scienceArc | b, m, n | 1, 2, 3, 4 | any | WARN | `medDxCenter` | DetectorMap test pre-exposure (Helium). Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib. |
+| 150782 | scienceArc | b, m, n | 1, 2, 3, 4 | any | WARN | `medDxCenter` | DetectorMap test post-exposure (Helium). Alt 49, az 53, insrot 5; flexure against a zenith-derived detectorMap_calib. |
 
 ### Unconfirmed
 
 | Visits | Arms | Spectrographs | Sequence | Expect | Metric | Reason |
 |---|---|---|---|---|---|---|
-| 150661 | b, r, n | 1, 2, 3, 4 | Trace | FAIL |  | Noted "Mirror cover open, but screen is wrong position" in the calibration summary. Probably a failure; neither the verdict nor the metric that should catch it has been established. |
-| 149883 | b, r, n | 1, 2, 3, 4 | Arc: Neon | FAIL |  | Noted "Home" in the calibration summary, a note whose meaning is not settled. Other visits carry the same tag. Recorded so its metrics can be compared against the Run25 set; probably a failure, but unestablished. |
+| 150661 | scienceTrace | b, r, n | 1, 2, 3, 4 | Trace | FAIL |  | Noted "Mirror cover open, but screen is wrong position" in the calibration summary. Probably a failure; neither the verdict nor the metric that should catch it has been established. |
+| 149883 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | FAIL |  | Noted "Home" in the calibration summary, a note whose meaning is not settled. Other visits carry the same tag. Recorded so its metrics can be compared against the Run25 set; probably a failure, but unestablished. |
 
 ### Placeholders
 
 | Visits | Arms | Spectrographs | Sequence | Expect | Metric | Reason |
 |---|---|---|---|---|---|---|
-| *to find* | all | all | any | WARN | `medDxCenter` | Reduced against a stale detectorMap_calib; bulk spatial offset. |
-| *to find* | all | all | any | FAIL | `pctSaturatedPixels` | Saturated exposure; peak pixels flagged SAT. |
+| *to find* |  | all | all | any | WARN | `medDxCenter` | Reduced against a stale detectorMap_calib; bulk spatial offset. |
+| *to find* |  | all | all | any | FAIL | `pctSaturatedPixels` | Saturated exposure; peak pixels flagged SAT. |
 <!-- END GENERATED: validationVisits tables -->
 
 ## Changing the set
@@ -192,7 +194,9 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
    `seqType` must equal, character for character. The summary is typed by hand: when in
    doubt, read `W_SEQNAM` from a header, or leave `seqType` out of an entry whose visits
    are a single sequence.
-2. Edit the YAML. Every entry needs `visit` or `visitRange`. A `known_bad` entry needs
+2. Edit the YAML. Every entry needs `visit` or `visitRange`, and the `sequenceType` from the
+   summary (`scienceArc`, `scienceTrace` or `scienceObject`): it decides how the visit is
+   reduced, so an entry covers visits of one type only. A `known_bad` entry needs
    `expect` and should name a `metric` and a `reason`. Restrict `arms`, `spectrographs` and
    `seqType` to what was actually read: an omitted selector means "every value".
 3. Regenerate the tables above and check the loader still accepts the file:

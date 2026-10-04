@@ -16,6 +16,7 @@ from pfs.drp.qa.metrics.validationVisits import (
     main,
     matchRows,
     selectRows,
+    sequenceTypeMismatches,
     unmatchedEntries,
     visitExpression,
 )
@@ -203,7 +204,7 @@ class TestUnconfirmedVerdicts:
                 assert entry.reason
 
     def testConfirmedEntriesDefaultToConfirmed(self, writeYaml):
-        path = writeYaml("version: 1\nknown_bad:\n  - {visit: 1, expect: FAIL}\n")
+        path = writeYaml("version: 1\nknown_bad:\n  - {visit: 1, sequenceType: scienceArc, expect: FAIL}\n")
         (entry,) = loadValidationVisits(path).knownBad
         assert not entry.unconfirmed
 
@@ -238,10 +239,13 @@ class TestExpectation:
             version: 1
             known_good:
               - visit: 100
+                sequenceType: scienceArc
             known_bad:
               - visit: 100
+                sequenceType: scienceArc
                 expect: WARN
               - visit: 100
+                sequenceType: scienceArc
                 expect: FAIL
             """
         )
@@ -250,7 +254,7 @@ class TestExpectation:
 
 class TestParsing:
     def testVisitRangeIsInclusive(self, writeYaml):
-        path = writeYaml("version: 1\nknown_good:\n  - visitRange: [10, 12]\n")
+        path = writeYaml("version: 1\nknown_good:\n  - {visitRange: [10, 12], sequenceType: scienceTrace}\n")
         (entry,) = loadValidationVisits(path).knownGood
         assert entry.visits == (10, 11, 12)
         assert entry.expect == "PASS", "known_good defaults to PASS"
@@ -268,14 +272,22 @@ class TestParsing:
             ("version: 1\nknown_good:\n  - {visit: notanint}\n", "must be an integer"),
             ("version: 1\nknown_good:\n  - {visit: true}\n", "must be an integer"),
             ("version: 1\nknown_good:\n  - {visit: 1, expect: MAYBE}\n", "invalid expect"),
-            ("version: 1\nknown_good:\n  - {visit: 1, arms: b}\n", "must be a list"),
+            (
+                "version: 1\nknown_good:\n  - {visit: 1, sequenceType: scienceArc, arms: b}\n",
+                "must be a list",
+            ),
             ("version: 1\nknown_bad:\n  - {visit: 1}\n", "'expect' is required"),
-            ("version: 1\nknown_good:\n  - {visit: 1, expect: FAIL}\n", "must expect PASS"),
+            (
+                "version: 1\nknown_good:\n  - {visit: 1, sequenceType: scienceArc, expect: FAIL}\n",
+                "must expect PASS",
+            ),
+            ("version: 1\nknown_good:\n  - {visit: 1}\n", "'sequenceType' is required"),
+            ("version: 1\nknown_good:\n  - {visit: 1, sequenceType: arc}\n", "invalid sequenceType"),
             ("version: 1\nknown_good:\n  - {visit: 1, arm: [b]}\n", "unknown keys: arm"),
             ("version: 1\nknown_goods: []\n", "unknown top-level keys"),
             ('version: 1\nknown_good:\n  - {visit: 1, placeholder: "false"}\n', "must be true or false"),
             (
-                "version: 1\nknown_bad:\n  - {visit: 1, expect: FAIL, unconfirmed: yes please}\n",
+                "version: 1\nknown_bad:\n  - {visit: 1, sequenceType: scienceArc, expect: FAIL, unconfirmed: yes please}\n",
                 "must be true or false",
             ),
         ],
@@ -338,6 +350,23 @@ class TestRowMatching:
             ]
             assert matchRows(frame, [entry]).tolist() == expected
 
+    def testSequenceTypeMismatches(self):
+        """The obsType column comes from W_SEQTYP; a disagreeing sequenceType is reported."""
+        frame = self.frame().assign(obsType=["arc", "arc", "trace", "trace"])
+        arcs = ValidationVisit(visits=(100, 101), expect="PASS", sequenceType="scienceArc")
+        traces = ValidationVisit(visits=(102,), expect="PASS", sequenceType="scienceTrace")
+        mismatched = sequenceTypeMismatches(frame, ValidationVisitSet(knownGood=(arcs, traces)))
+        assert mismatched["visit"].tolist() == [101]
+        assert mismatched["sequenceType"].tolist() == ["scienceArc"]
+
+    def testVisitsOfType(self):
+        visitSet = loadValidationVisits()
+        objects = visitSet.visitsOfType("scienceObject")
+        assert 134880 in objects and 133025 not in objects
+        assert set(visitSet.visitsOfType("scienceArc", "scienceTrace", "scienceObject")) == set(
+            visitSet.visits
+        )
+
     def testUnmatchedEntries(self):
         matched = ValidationVisit(visits=(100,), expect="PASS", seqType="Arc: Neon")
         typo = ValidationVisit(visits=(100,), expect="PASS", seqType="Arc: Noen")
@@ -387,7 +416,7 @@ class TestTables:
             sum(line.startswith("| ") and "---" not in line for line in text.splitlines())
             == len(visitSet) + 4
         ), "one row per entry plus a header per table"
-        assert "| 140005–140006 | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` |" in text
+        assert "| 140005–140006 | scienceArc | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` |" in text
 
     def testPipesAreEscaped(self):
         entry = ValidationVisit(visits=(1,), expect="PASS", note="a | b")

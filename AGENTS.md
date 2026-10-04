@@ -37,6 +37,9 @@ the pipeline/config glue to run them.
   currently registers **five** task labels, and only these run under `pipetask`:
   `dmResiduals`, `dmCombinedResiduals`, `extractionQa`, `extractionQaCombined`,
   `imageQualityQa`.
+- **Threshold pipeline (`pipelines/qaThresholds.yaml`)** — drp_stella's `reduceExposure`
+  (less `mergeArms`) plus `imageQualityQa`, so `docs/qa-thresholds.ipynb` reduces the
+  validation visits from raw data. The notebook applies `drpActor`'s per-sequence-type config.
 - **Tasks in the pipeline (`python/pfs/drp/qa/`)**:
   - `imageQualityQa.py` — image quality (FWHM, flag rates); plots in `plotting/iqQa.py`
   - `dmResiduals.py`, `dmCombinedResiduals.py` — detector map residuals (per-detector

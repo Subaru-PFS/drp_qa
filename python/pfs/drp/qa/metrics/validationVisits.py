@@ -28,6 +28,7 @@ __all__ = [
     "loadValidationVisits",
     "matchRows",
     "selectRows",
+    "sequenceTypeMismatches",
     "unmatchedEntries",
     "visitExpression",
 ]
@@ -37,6 +38,14 @@ VALID_EXPECTATIONS = ("PASS", "WARN", "FAIL")
 
 #: The schema version this loader understands.
 SCHEMA_VERSION = 1
+
+#: IIC sequence types an entry may have, and the ``obsType`` that
+#: ``imageQualityQa`` derives from ``W_SEQTYP`` for each.
+SEQUENCE_TYPES = {
+    "scienceArc": ("arc",),
+    "scienceTrace": ("trace",),
+    "scienceObject": ("science", "allsky"),
+}
 
 
 @dataclass(frozen=True)
@@ -52,6 +61,9 @@ class ValidationVisit:
     ----------
     visits : `tuple` [`int`]
         The visits this entry covers, expanded from ``visit``/``visitRange``.
+    sequenceType : `str` or `None`
+        The IIC sequence type (`SEQUENCE_TYPES`). Not a selector: it decides
+        how the visits are reduced. `None` only in a placeholder.
     expect : `str`
         The expected verdict, one of ``PASS``, ``WARN`` or ``FAIL``.
     arms : `tuple` [`str`]
@@ -80,6 +92,7 @@ class ValidationVisit:
 
     visits: tuple[int, ...]
     expect: str
+    sequenceType: str | None = None
     arms: tuple[str, ...] = ()
     spectrographs: tuple[int, ...] = ()
     seqType: str | None = None
@@ -175,6 +188,23 @@ class ValidationVisitSet:
     def unconfirmedBad(self) -> tuple[ValidationVisit, ...]:
         """The ``known_bad`` entries whose verdict is only suspected."""
         return tuple(entry for entry in self.knownBad if entry.unconfirmed)
+
+    def visitsOfType(self, *sequenceTypes: str) -> tuple[int, ...]:
+        """Return the visits of the given sequence types, sorted.
+
+        Parameters
+        ----------
+        *sequenceTypes : `str`
+            IIC sequence types, e.g. ``"scienceArc"``.
+
+        Returns
+        -------
+        `tuple` [`int`]
+            The visits, deduplicated.
+        """
+        return tuple(
+            sorted({visit for entry in self if entry.sequenceType in sequenceTypes for visit in entry.visits})
+        )
 
     def find(
         self,
@@ -318,6 +348,42 @@ def unmatchedEntries(frame, visitSet: ValidationVisitSet) -> tuple[ValidationVis
     return tuple(entry for entry in visitSet if not matchRows(frame, [entry]).any())
 
 
+def sequenceTypeMismatches(frame, visitSet: ValidationVisitSet):
+    """Return the metrics rows whose ``obsType`` disagrees with their entry's sequence type.
+
+    ``imageQualityQa`` derives ``obsType`` from the ``W_SEQTYP`` header, so a
+    disagreement means the ``sequenceType`` in the YAML is wrong, and the
+    visit was reduced as the wrong kind of sequence.
+
+    Parameters
+    ----------
+    frame : `pandas.DataFrame`
+        Metrics rows with ``visit`` and ``obsType`` columns; see `matchRows`.
+    visitSet : `ValidationVisitSet`
+        The validation visit set.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        The disagreeing rows, with the entry's sequence type in
+        ``sequenceType``. Empty when ``frame`` has no ``obsType``.
+    """
+    if "obsType" not in frame.columns:
+        return frame.iloc[0:0]
+    expected = np.full(len(frame), None, dtype=object)
+    for entry in visitSet:
+        if entry.sequenceType is not None:
+            expected[matchRows(frame, [entry])] = entry.sequenceType
+    allowed = np.array(
+        [
+            sequenceType is None or obsType in SEQUENCE_TYPES[sequenceType]
+            for sequenceType, obsType in zip(expected, frame["obsType"], strict=True)
+        ],
+        dtype=bool,
+    )
+    return frame[~allowed].assign(sequenceType=expected[~allowed])
+
+
 def visitExpression(visits: Iterable[int]) -> str:
     """Return a Butler query expression selecting ``visits``.
 
@@ -390,6 +456,7 @@ def formatTables(visitSet: ValidationVisitSet) -> str:
                 visits = "*to find*"
             cells = (
                 visits,
+                entry.sequenceType or "",
                 ", ".join(entry.arms) or "all",
                 ", ".join(str(s) for s in entry.spectrographs) or "all",
                 entry.seqType or "any",
@@ -483,6 +550,7 @@ _ENTRY_KEYS = frozenset(
     {
         "visit",
         "visitRange",
+        "sequenceType",
         "arms",
         "spectrographs",
         "seqType",
@@ -538,9 +606,18 @@ def _parseEntry(item: Any, defaultExpect: str | None, where: str) -> ValidationV
             f"{where}: invalid expect {expect!r}, must be one of {', '.join(VALID_EXPECTATIONS)}"
         )
 
+    sequenceType = _optionalStr(item.get("sequenceType"))
+    if sequenceType is None and not placeholder:
+        raise ValueError(f"{where}: 'sequenceType' is required ({', '.join(SEQUENCE_TYPES)})")
+    if sequenceType is not None and sequenceType not in SEQUENCE_TYPES:
+        raise ValueError(
+            f"{where}: invalid sequenceType {sequenceType!r}, must be one of {', '.join(SEQUENCE_TYPES)}"
+        )
+
     return ValidationVisit(
         visits=visits,
         expect=expect,
+        sequenceType=sequenceType,
         arms=_parseSequence(item.get("arms"), str, "arms", where),
         spectrographs=_parseSequence(item.get("spectrographs"), int, "spectrographs", where),
         seqType=_optionalStr(item.get("seqType")),

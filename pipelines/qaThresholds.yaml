@@ -1,0 +1,13 @@
+description: >-
+  Reduce the validation visits from raw data and measure their image quality, for
+  deriving QA thresholds (docs/qa-thresholds.ipynb). The reduction is drp_stella's
+  reduceExposure, as drpActor runs it; the notebook applies drpActor's per-sequence-type
+  config overrides.
+instrument: lsst.obs.pfs.PrimeFocusSpectrograph
+imports:
+  - location: $DRP_STELLA_DIR/pipelines/reduceExposure.yaml
+    exclude:
+      - mergeArms
+  - location: $DRP_QA_DIR/pipelines/drpQA.yaml
+    include:
+      - imageQualityQa
