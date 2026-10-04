@@ -32,6 +32,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from matplotlib.artist import Artist
 from matplotlib.axes import Axes
+from matplotlib.collections import PathCollection
 from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure, SubFigure
 from matplotlib.lines import Line2D
@@ -1924,11 +1925,11 @@ def plotFocus(
     averageByFocusPosition : `bool`
         Plot the median focus error of each camera at each focus position.
     showMedian : `bool`
-        Join the medians of the stars' focus errors at each x (each
-        camera's, or in black with ``colorBy`` other than ``camera``), and
-        of their FWHM (each half's; with ``showCameraId``, each camera's and
-        half's in each AG exposure, in the halves' symbols). The AG actor's
-        focus errors have none.
+        Join the medians of the focus errors at each x, the AG actor's and
+        the stars' (each camera's, or in black with ``colorBy`` other than
+        ``camera``), and of the stars' FWHM (each half's; with
+        ``showCameraId``, each camera's and half's in each AG exposure, in
+        the halves' symbols).
     showOnlyMedian : `bool`
         Plot only those medians.
     connectMedian : `bool`
@@ -2054,87 +2055,65 @@ def plotFocus(
     nPerCamera = len(byCamera) / max(1, byCamera.agc_camera_id.nunique())
     marker, alpha = ("o", 1) if averageByFocusPosition else _markerAndAlpha(nPerCamera, forceAlpha)
 
+    def drawFocusErrors(ax, x, y, c, color, label) -> list[Artist]:
+        """Draw focus errors, as points coloured by ``c`` or in ``color``, and their medians at each x."""
+        drawn = []
+        if not showOnlyMedian:
+            if c is None:
+                drawn += ax.plot(x, y, marker, alpha=alpha, color=color, label=label)
+            else:
+                drawn.append(
+                    ax.scatter(x, y, c=c, norm=norm, marker=marker, s=scatterMarkerSize, alpha=alpha)
+                )
+        if showMedian and len(x):
+            xm, ym = _medianByX(x, y, resolution)
+            drawn += ax.plot(
+                xm,
+                ym,
+                "-" if connectMedian else marker,
+                color=color,
+                alpha=1 if connectMedian else alpha,
+                label=label if showOnlyMedian else None,
+            )
+        return drawn
+
     artists = []
     mappable = None
     for i, row in enumerate(rows):
         for j, cameras in enumerate(panelCameras):
             ax = axes[i, j]
-            if row == "agActor":
+            if row in ("agActor", "opdb"):
                 if colorBy == "camera":
                     for cid in cameras:
-                        cam = byCamera[byCamera.agc_camera_id == cid].dropna(subset="ag_actor_focus_error_um")
+                        if row == "agActor":
+                            cam = byCamera[byCamera.agc_camera_id == cid].dropna(
+                                subset="ag_actor_focus_error_um"
+                            )
+                            y = cam.ag_actor_focus_error_um.to_numpy()
+                        else:
+                            cam = cameraFocusErrors[cameraFocusErrors.agc_camera_id == cid]
+                            y = cam.focus_error_um.to_numpy()
                         if cam.empty:
                             continue
-                        x, y = cam[what].to_numpy(), cam.ag_actor_focus_error_um.to_numpy()
+                        x = cam[what].to_numpy()
                         if averageByFocusPosition:
                             x, y = analysis.averageByFocusPosition(cam.focus_position_mm, x, y)
-                        artists += ax.plot(
-                            x, y, marker, alpha=alpha, color=_CAMERA_COLORS[cid], label=f"AG{cid + 1}"
-                        )
+                        artists += drawFocusErrors(ax, x, y, None, _CAMERA_COLORS[cid], f"AG{cid + 1}")
                 else:
-                    if plotPerCamera:
+                    if row == "opdb":
+                        stars = data[data.agc_camera_id.isin(cameras)]
+                        points = estimateFocusErrors(stars, byCamera=False, focusColumn=focusColumn)
+                        y = points.focus_error_um
+                    elif plotPerCamera:
                         points = byCamera[byCamera.agc_camera_id == cameras[0]]
                         y = points.ag_actor_focus_error_um
                     else:
                         points = byCamera.groupby("agc_exposure_id", as_index=False).first()
                         y = points.exposure_focus_error_um
-                    mappable = ax.scatter(
-                        points[what],
-                        y,
-                        c=points[colorColumn],
-                        norm=norm,
-                        marker=marker,
-                        s=scatterMarkerSize,
-                        alpha=alpha,
-                    )
-                    artists.append(mappable)
-                ylabel = "AG actor focus error"
-            elif row == "opdb":
-                if colorBy == "camera":
-                    for cid in cameras:
-                        cam = cameraFocusErrors[cameraFocusErrors.agc_camera_id == cid]
-                        if cam.empty:
-                            continue
-                        x, y = cam[what].to_numpy(), cam.focus_error_um.to_numpy()
-                        if averageByFocusPosition:
-                            x, y = analysis.averageByFocusPosition(cam.focus_position_mm, x, y)
-                        color = _CAMERA_COLORS[cid]
-                        if not showOnlyMedian:
-                            artists += ax.plot(x, y, marker, alpha=alpha, color=color, label=f"AG{cid + 1}")
-                        if showMedian and len(x):
-                            xm, ym = _medianByX(x, y, resolution)
-                            artists += ax.plot(
-                                xm,
-                                ym,
-                                "-" if connectMedian else marker,
-                                color=color,
-                                alpha=1 if connectMedian else alpha,
-                                label=f"AG{cid + 1}" if showOnlyMedian else None,
-                            )
-                else:
-                    stars = data[data.agc_camera_id.isin(cameras)]
-                    focusErrors = estimateFocusErrors(stars, byCamera=False, focusColumn=focusColumn)
-                    if not showOnlyMedian:
-                        mappable = ax.scatter(
-                            focusErrors[what],
-                            focusErrors.focus_error_um,
-                            c=focusErrors[colorColumn],
-                            norm=norm,
-                            marker=marker,
-                            s=scatterMarkerSize,
-                            alpha=alpha,
-                        )
-                        artists.append(mappable)
-                    if showMedian and len(focusErrors):
-                        xm, ym = _medianByX(focusErrors[what], focusErrors.focus_error_um, resolution)
-                        artists += ax.plot(
-                            xm,
-                            ym,
-                            "-" if connectMedian else marker,
-                            color="black",
-                            alpha=1 if connectMedian else alpha,
-                        )
-                ylabel = r"$\Delta$ focus"
+                    newArtists = drawFocusErrors(ax, points[what], y, points[colorColumn], "black", None)
+                    mappable = next((a for a in newArtists if isinstance(a, PathCollection)), mappable)
+                    artists += newArtists
+                ylabel = "AG actor focus error" if row == "agActor" else r"$\Delta$ focus"
             else:
                 stars = data[data.agc_camera_id.isin(cameras)]
                 artists += _plotFwhm(

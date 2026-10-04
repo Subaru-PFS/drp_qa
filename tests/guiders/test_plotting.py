@@ -824,27 +824,56 @@ def testPlotFocusStarsFocusError(focusSweep):
 
 @pytest.mark.parametrize("connectMedian", [True, False])
 def testPlotFocusMediansByVisit(focusSweep, connectMedian):
-    """With ``colorBy`` other than camera, the median options apply to the stars' focus errors too."""
-    kwargs = {
-        "colorBy": "visit",
-        "showAGActorFocus": False,
-        "showFWHM": False,
-        "connectMedian": connectMedian,
-    }
+    """With ``colorBy`` other than camera, the median options apply to both rows of focus errors."""
+    kwargs = {"colorBy": "visit", "showFWHM": False, "connectMedian": connectMedian}
     plot = plotFocus(focusSweep, showOnlyMedian=True, fig=Figure(), **kwargs)
-    ax = plot.axes[0, 0]
-
-    assert nPoints(ax) == 0
-    (median,) = [line for line in ax.lines if line.get_color() == "black" and len(line.get_xdata()) > 2]
-    assert (median.get_linestyle() == "-") == connectMedian
+    agActorPanel, starsPanel = plot.axes[:, 0]
     focusErrors = estimateFocusErrors(plot.data, byCamera=False)
-    expected = focusErrors.groupby(focusErrors.focus_position_mm.round(3)).focus_error_um.median()
-    np.testing.assert_allclose(median.get_ydata(), expected)
+    byExposure = plot.data.groupby("agc_exposure_id").first()
+
+    for ax, x, y in [
+        (starsPanel, focusErrors.focus_position_mm, focusErrors.focus_error_um),
+        (agActorPanel, byExposure.focus_position_mm, 1e3 * byExposure.guide_delta_z),
+    ]:
+        assert nPoints(ax) == 0
+        (median,) = [line for line in ax.lines if line.get_color() == "black" and len(line.get_xdata()) > 2]
+        assert (median.get_linestyle() == "-") == connectMedian
+        expected = y.groupby(x.round(3).to_numpy()).median()
+        np.testing.assert_allclose(median.get_ydata(), expected)
 
     # Negative control: without the options, every AG exposure's point and no median.
-    plain = plotFocus(focusSweep, fig=Figure(), **kwargs).axes[0, 0]
-    assert nPoints(plain) == len(focusErrors)
-    assert not [line for line in plain.lines if len(line.get_xdata()) > 2]
+    plain = plotFocus(focusSweep, fig=Figure(), **kwargs)
+    assert nPoints(plain.axes[1, 0]) == len(focusErrors)
+    assert nPoints(plain.axes[0, 0]) == len(byExposure)
+    assert not [line for ax in plain.axes.flat for line in ax.lines if len(line.get_xdata()) > 2]
+
+
+def testPlotFocusAgActorMedians(focusSweep):
+    """The median options apply to the AG actor's focus errors: each camera's median at each M2_OFF3.
+
+    drp_stella drew every AG exposure's point in this row whatever the options.
+    """
+    plot = plotFocus(focusSweep, showOpdbFocus=False, showFWHM=False, showOnlyMedian=True, fig=Figure())
+    ax = plot.axes[0, 0]
+    byCamera = plot.data.groupby(["agc_exposure_id", "agc_camera_id"]).first().reset_index()
+
+    medians = [line for line in ax.lines if line.get_label().startswith("AG")]
+    assert medians
+    for line in medians:
+        cid = int(line.get_label()[2:]) - 1
+        camera = byCamera[byCamera.agc_camera_id == cid].dropna(subset=f"guide_delta_z{cid + 1}")
+        expected = 1e3 * camera.groupby(camera.focus_position_mm.round(3))[f"guide_delta_z{cid + 1}"].median()
+        np.testing.assert_allclose(line.get_xdata(), expected.index)
+        np.testing.assert_allclose(line.get_ydata(), expected)
+        assert line.get_linestyle() == "-"
+
+    # Negative control: without the options, one point per AG exposure and camera (338, against 39 medians).
+    plain = plotFocus(focusSweep, showOpdbFocus=False, showFWHM=False, fig=Figure()).axes[0, 0]
+    nShown = sum(len(line.get_xdata()) for line in plain.lines if line.get_label().startswith("AG"))
+    nValues = sum(
+        byCamera[f"guide_delta_z{cid + 1}"][byCamera.agc_camera_id == cid].notna().sum() for cid in range(6)
+    )
+    assert nShown == nValues > 5 * sum(len(line.get_xdata()) for line in medians)
 
 
 def testPlotFocusMedianMarkers(focusSweep):
