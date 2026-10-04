@@ -1,15 +1,16 @@
-"""Read stored QA metrics from a Butler.
+"""Read stored QA metrics from a Butler, and name the runs that hold them.
 
 The only code in `pfs.drp.qa.metrics` that touches a Butler. It takes the
 Butler as an argument and never imports one, so the package stays stack-free
 and the reader is tested with a stub.
 """
 
+import re
 from collections.abc import Iterable
 
 import pandas as pd
 
-__all__ = ["readMetrics"]
+__all__ = ["chooseRun", "readMetrics"]
 
 #: Data ID keys copied onto each row when the stored table lacks them.
 _DATA_ID_KEYS = ("visit", "arm", "spectrograph")
@@ -86,3 +87,43 @@ def readMetrics(
     metrics = pd.concat(tables, ignore_index=True)
     sortKeys = [key for key in _DATA_ID_KEYS if key in metrics.columns]
     return metrics.sort_values(sortKeys, ignore_index=True)
+
+
+def chooseRun(existing: Iterable[str], prefix: str, newRun: bool, runName: str | None = None) -> str:
+    """Return the collection of a numbered threshold-derivation run.
+
+    Runs are ``<prefix>/001``, ``<prefix>/002``, ... A new run takes the
+    next free number; otherwise the latest run is read again.
+
+    Parameters
+    ----------
+    existing : iterable of `str`
+        Collection names that exist, e.g. the output of
+        ``butler query-collections <repo> "<prefix>/*"``; lines that are not
+        numbered runs under ``prefix`` are ignored.
+    prefix : `str`
+        The runs' common prefix, e.g. ``"u/someone/qa-thresholds"``.
+    newRun : `bool`
+        True for the next free number, False for the latest run.
+    runName : `str`, optional
+        An explicit collection, returned unchanged: to read an older run.
+
+    Returns
+    -------
+    `str`
+        The collection.
+
+    Raises
+    ------
+    LookupError
+        If ``newRun`` is False and there is no run yet.
+    """
+    if runName:
+        return runName
+    pattern = re.compile(rf"(?:^|\s){re.escape(prefix)}/(\d+)(?:\s|$)")
+    numbers = sorted({int(match.group(1)) for line in existing for match in pattern.finditer(line)})
+    if newRun:
+        return f"{prefix}/{(numbers[-1] if numbers else 0) + 1:03d}"
+    if not numbers:
+        raise LookupError(f"No runs under {prefix}/ yet: set RUN_PIPELINE = True to make the first")
+    return f"{prefix}/{numbers[-1]:03d}"

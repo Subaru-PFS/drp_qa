@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.readers import readMetrics
+from pfs.drp.qa.metrics.readers import chooseRun, readMetrics
 
 
 @dataclass(frozen=True)
@@ -94,3 +94,34 @@ def testNothingFoundRaises(butler):
 def testNoVisitsRaises(butler):
     with pytest.raises(ValueError, match="No visits"):
         readMetrics(butler, [])
+
+
+class TestChooseRun:
+    PREFIX = "u/someone/qa-thresholds"
+    # As `butler query-collections` prints them: a table, with other collections around.
+    LISTING = (
+        "Name                          Type",
+        "----------------------------- ----",
+        "u/someone/qa-thresholds/001   RUN",
+        "u/someone/qa-thresholds/003   RUN",
+        "u/someone/qa-thresholds/0004x RUN",
+        "u/someone/qa-thresholds-old/9 RUN",
+        "u/other/qa-thresholds/007     RUN",
+    )
+
+    def testNewRunTakesTheNextNumber(self):
+        assert chooseRun(self.LISTING, self.PREFIX, newRun=True) == f"{self.PREFIX}/004"
+
+    def testFirstRunIsOne(self):
+        assert chooseRun([], self.PREFIX, newRun=True) == f"{self.PREFIX}/001"
+
+    def testReadingTakesTheLatest(self):
+        assert chooseRun(self.LISTING, self.PREFIX, newRun=False) == f"{self.PREFIX}/003"
+
+    def testReadingWithNoRunsRaises(self):
+        with pytest.raises(LookupError, match="RUN_PIPELINE"):
+            chooseRun(self.LISTING[:2], self.PREFIX, newRun=False)
+
+    def testExplicitNameWins(self):
+        name = f"{self.PREFIX}/001"
+        assert chooseRun(self.LISTING, self.PREFIX, newRun=True, runName=name) == name
