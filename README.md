@@ -357,6 +357,51 @@ If config options are not passed, the default values come from `mergeArms_config
 |------------------------|--------------------------|---------------------------------------------------------------------------------------------| 
 | `skySubtractionQaPlot` | `instrument, visit, arm` | PDF of various plots related to sky subtraction <br/>built from all the arms for the visit. |
 
+## Guider tools
+
+`pfs.drp.qa.guiders` analyses the AG (guider) cameras' data in notebooks: guide errors, the boresight and
+per-camera models, drift, focus and image sizes. It replaces `pfs.drp.stella.utils.guiders`, and needs `pfs_utils`
+but not the LSST stack.
+
+- `queries` reads the opdb (and, for INST-PA and early M2_OFF3, a butler). It is the only module that does.
+- `analysis` fits and averages; `plotting` draws. Both take DataFrames and return their results, leaving their
+  inputs alone.
+- `coordinates` holds the conventions: positions in hardware coordinates, offsets as a center minus a named
+  reference in microns, units in the column names. 1 AG pixel is 13 µm, or 0.14 arcsec.
+
+```python
+from pfs.drp.qa.guiders import analysis, plotting, queries
+from pfs.utils.database.opdb import OpDB
+
+opdb = OpDB(host="pfsa-db", user="public_user")
+agcData = queries.readAgcData(opdb, range(148284, 148292))
+
+plotting.showAgcErrorsForVisits(agcData)
+
+fit = analysis.fitGuiderModel(agcData, analysis.GuiderFitConfig(maxGuideError_um=100))
+plotting.showGuiderErrors(fit, plotting.GuiderPlotConfig(guideStarFrac=0.3))
+
+plotting.plotFocus(agcData, plotBy="agc_exposure_id", showFocusSets=True)
+```
+
+Each plot draws on a new figure, or on the `fig`, `ax` or `axes` it is given, and returns a `GuiderPlot` holding
+the figure, its panels, the artists and the colorbars. Given the `colorbars` of an earlier call, it updates them,
+so a figure can be redrawn in place. [`docs/guider-plots`](docs/guider-plots/README.md) describes each plot: what
+it shows, where its data come from and what to look for, with an annotated sample.
+
+Coming from drp_stella:
+
+- Fit, then plot. `GuiderConfig` is split into `analysis.GuiderFitConfig` and `plotting.GuiderPlotConfig`;
+  `estimateGuideErrors(plot=True)`, `plotDriftRate` and `compareAGCPfsUtils` are `analysis` functions whose results
+  `plotGuideErrors`, `plotDriftRate` and `plotPfsUtilsComparison` draw.
+- The plots take AG data, not an opdb connection. Cameras are `agcCameraIds`, 0-5, rather than `AGC`, 1-6, and the
+  cursor readout takes design names by visit (`designNames`).
+- The readers become `queries.readAgcData`; `compat` keeps their names, deprecated.
+
+A raster scan visit holds two pointings: once its shutters close, the telescope moves to the next position. The
+`boresight` reference, and the plots using it, are only right for its shutter-open rows (`shutter_open == 1`)
+(PIPE2D-1910).
+
 ## Command-line tools
 
 Scripts live in `bin.src/` and are run directly — there is no SCons step to copy them into a `bin/` directory on `PATH`:
