@@ -134,6 +134,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `psycopg2.connect` calls. Needs `pfs_utils` 7.4.18 or later. `main()` still reads the opdb on `pfsa-db`
   (PIPE2D-1893).
 - **`scipy` is a declared dependency** in `pyproject.toml`, for the guider fits (PIPE2D-1895).
+- **CI's `guiders` job is now `deps`** and runs every stack-free test, not only `tests/guiders/`. A test
+  needing packages beyond the standard library goes in a `tests/` subdirectory listed in `_OPTIONAL_DIRS`
+  (PIPE2D-1913).
 - **`comparePfsUtilsPositions` uses the AG actor's model** — pfs_utils's positions of the guide stars
   come from the chain ics_agActor uses for its nominal positions (the new `agActorPositions`: pfs_utils's
   `Subaru_POPT2_PFS` with each AG exposure's field center, PA, ADC and M2 positions and detector half),
@@ -157,8 +160,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `run28-dm-02.log` / `run28-dm-03.log`, which are not in the repository, so all eight tests always
   skipped and provided no coverage.
 
-- **SCons build** — `SConstruct`, `bin.src/SConscript`, and `ups/drp_qa.cfg`. The `bin/`
-  directory is no longer generated; scripts are run as `python bin.src/<name>.py`.
+- **SCons build** — `SConstruct`, `bin.src/SConscript`, `tests/SConscript` and `ups/drp_qa.cfg`. The `bin/`
+  directory is no longer generated; scripts are run as `python bin.src/<name>.py` (`tests/SConscript`:
+  PIPE2D-1913).
 - **`setup.cfg`** and **`mypy.ini`** — superseded by `pyproject.toml`. No static type checker is configured for this
   repository.
 - **Unused `database` pytest marker** — the marker declaration and the `-m 'not database'` filter in
