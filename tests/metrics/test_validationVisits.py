@@ -57,13 +57,30 @@ class TestCheckedInSet:
         assert {visit for entry in sm1 for visit in entry.visits} >= {140005, 140032, 140138}
         assert all(entry.spectrographs == (1,) and entry.metric == "medFwhm" for entry in sm1)
         assert visitSet.expectationFor(140130, arm="b", spectrograph=1, seqType="Arc: Neon") == "FAIL"
-        assert visitSet.expectationFor(140130, arm="b", spectrograph=2) is None
+        assert visitSet.expectationFor(140130, arm="b", spectrograph=2, seqType="Arc: Neon") == "PASS"
         assert visitSet.expectationFor(140075) is None, "unlogged visits in the range carry no verdict"
 
     def testUnlitSpectrographsAreKnownBad(self):
         visitSet = loadValidationVisits()
         assert visitSet.expectationFor(140640, arm="b", spectrograph=2) == "FAIL"
-        assert visitSet.expectationFor(140640, arm="b", spectrograph=1) is None
+        assert visitSet.expectationFor(140640, arm="b", spectrograph=1) == "PASS"
+
+    def testFaultsHaveSameExposureControls(self):
+        """Every Run27 fault entry has a known_good twin on the other spectrographs."""
+        visitSet = loadValidationVisits()
+        faults = [
+            entry
+            for entry in visitSet.knownBad
+            if entry.reason
+            and any(text in entry.reason for text in ("SM1 defocused", "No light", "didn't turn on"))
+        ]
+        assert len(faults) == 12
+        for fault in faults:
+            controls = [good for good in visitSet.knownGood if good.visits == fault.visits]
+            assert len(controls) == 1, fault
+            (control,) = controls
+            assert not set(control.spectrographs) & set(fault.spectrographs)
+            assert set(control.spectrographs) | set(fault.spectrographs) == {1, 2, 3, 4}
 
     def testSingleVisitHeliumTestsNeedNoSeqType(self):
         """The hand-written summary misspells 150779's sequence; no selector depends on it."""

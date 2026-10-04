@@ -245,6 +245,71 @@ known_good:
     seqType: "Twilight sky"
     note: "Run30 twilight sky, 2026-09-16, alt 80, az 267. 180 s."
 
+  # Same-exposure controls: the spectrographs not named in a Run27 fault note.
+  # Paired with the known_bad entries for SM1 defocus and for an unlit
+  # spectrograph, so a metric must fail the faulty spectrograph and pass the
+  # others in the same frames -- it has found the cause, not the exposure.
+  - visitRange: [140005, 140006]
+    arms: [b, r, n]
+    spectrographs: [2, 3, 4]
+    seqType: "Arc: Argon"
+    note: "Run27 control for SM1 defocused, same exposures."
+  - visitRange: [140032, 140035]
+    arms: [b, r, n]
+    spectrographs: [2, 3, 4]
+    seqType: "Trace"
+    note: "Run27 control for SM1 defocused, same exposures."
+  - visitRange: [140124, 140126]
+    arms: [b, r, n]
+    spectrographs: [2, 3, 4]
+    seqType: "Arc: Argon"
+    note: "Run27 control for SM1 defocused, same exposures."
+  - visitRange: [140127, 140129]
+    arms: [b, r, n]
+    spectrographs: [2, 3, 4]
+    seqType: "Arc: Xenon"
+    note: "Run27 control for SM1 defocused, same exposures."
+  - visitRange: [140130, 140132]
+    arms: [b, r, n]
+    spectrographs: [2, 3, 4]
+    seqType: "Arc: Neon"
+    note: "Run27 control for SM1 defocused, same exposures."
+  - visitRange: [140133, 140135]
+    arms: [b, r, n]
+    spectrographs: [2, 3, 4]
+    seqType: "Arc: Krypton"
+    note: "Run27 control for SM1 defocused, same exposures."
+  - visitRange: [140136, 140138]
+    arms: [b, r, n]
+    spectrographs: [2, 3, 4]
+    seqType: "Arc: HgCd"
+    note: "Run27 control for SM1 defocused, same exposures."
+  - visit: 139971
+    arms: [b, r, n]
+    spectrographs: [2, 3, 4]
+    seqType: "ImageQuality"
+    note: "Run27 control for SM1 unlit, same exposure."
+  - visit: 140477
+    arms: [b, r, n]
+    spectrographs: [2, 3, 4]
+    seqType: "ImageQuality"
+    note: "Run27 control for SM1 unlit, same exposure."
+  - visit: 140640
+    arms: [b, r, n]
+    spectrographs: [1, 3, 4]
+    seqType: "ImageQuality"
+    note: "Run27 control for SM2 unlit; SM1 after its 03-11 slit home update, same exposure."
+  - visit: 140649
+    arms: [b, r, n]
+    spectrographs: [3, 4]
+    seqType: "ImageQuality"
+    note: "Run27 control for SM1 and SM2 unlit, same exposure."
+  - visit: 140651
+    arms: [b, r, n]
+    spectrographs: [1, 3, 4]
+    seqType: "ImageQuality"
+    note: "Run27 control for SM2 unlit; SM1 after its 03-11 slit home update, same exposure."
+
 known_bad:
   # Run25 twilight sky taken through cloud. Unlike the SM1 entries this is
   # an observing condition rather than an instrument fault, but the degraded
@@ -332,7 +397,7 @@ known_bad:
 
   # Run27 nightly ImageQuality arcs where one spectrograph's lamp gave no light,
   # as noted in the run's calibration summary. That spectrograph's detectors have no lines; QA must not pass
-  # them. The other spectrographs in the same exposures carry no verdict here.
+  # them. The other spectrographs are known_good controls in the same exposures.
   - visit: 139971
     arms: [b, r, n]
     spectrographs: [1]
