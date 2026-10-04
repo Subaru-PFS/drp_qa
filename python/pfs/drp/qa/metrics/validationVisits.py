@@ -24,9 +24,11 @@ __all__ = [
     "ValidationVisit",
     "ValidationVisitSet",
     "defaultValidationVisitsPath",
+    "formatTables",
     "loadValidationVisits",
     "matchRows",
     "selectRows",
+    "visitExpression",
 ]
 
 #: Verdicts an entry may expect, in increasing severity. Mirrors ``qaStatus``.
@@ -291,6 +293,90 @@ def selectRows(frame, entries: Iterable[ValidationVisit]):
         The matching rows, in their original order.
     """
     return frame[matchRows(frame, entries)]
+
+
+def visitExpression(visits: Iterable[int]) -> str:
+    """Return a Butler query expression selecting ``visits``.
+
+    Consecutive visits collapse into ``first..last`` ranges, so the expression
+    stays short enough to paste.
+
+    Parameters
+    ----------
+    visits : iterable of `int`
+        Visit numbers, in any order; duplicates are ignored.
+
+    Returns
+    -------
+    `str`
+        E.g. ``"visit IN (133025..133055, 149217)"``.
+
+    Raises
+    ------
+    ValueError
+        If there are no visits.
+    """
+    ordered = sorted(set(visits))
+    if not ordered:
+        raise ValueError("No visits")
+    ranges = [[ordered[0], ordered[0]]]
+    for visit in ordered[1:]:
+        if visit == ranges[-1][1] + 1:
+            ranges[-1][1] = visit
+        else:
+            ranges.append([visit, visit])
+    terms = [str(first) if first == last else f"{first}..{last}" for first, last in ranges]
+    return f"visit IN ({', '.join(terms)})"
+
+
+def formatTables(visitSet: ValidationVisitSet) -> str:
+    """Return the set as Markdown tables, for ``docs/validation-visits.md``.
+
+    Parameters
+    ----------
+    visitSet : `ValidationVisitSet`
+        The set, loaded with ``includePlaceholders=True`` so that the gaps show.
+
+    Returns
+    -------
+    `str`
+        One table per kind of entry: known good, known bad, unconfirmed and
+        placeholders, each preceded by a heading.
+    """
+    sections = (
+        ("Known good", visitSet.knownGood, "note"),
+        ("Known bad", tuple(e for e in visitSet.confirmedBad if not e.placeholder), "reason"),
+        ("Unconfirmed", visitSet.unconfirmedBad, "reason"),
+        ("Placeholders", tuple(e for e in visitSet.knownBad if e.placeholder), "reason"),
+    )
+    blocks = []
+    for title, entries, textField in sections:
+        if not entries:
+            continue
+        lines = [
+            f"### {title}",
+            "",
+            f"| Visits | Arms | Spectrographs | Sequence | Expect | Metric | {textField.capitalize()} |",
+            "|---|---|---|---|---|---|---|",
+        ]
+        for entry in entries:
+            if entry.visits:
+                first, last = entry.visits[0], entry.visits[-1]
+                visits = str(first) if first == last else f"{first}–{last}"
+            else:
+                visits = "*to find*"
+            cells = (
+                visits,
+                ", ".join(entry.arms) or "all",
+                ", ".join(str(s) for s in entry.spectrographs) or "all",
+                entry.seqType or "any",
+                entry.expect,
+                f"`{entry.metric}`" if entry.metric else "",
+                " ".join((getattr(entry, textField) or "").split()),
+            )
+            lines.append("| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks) + "\n"
 
 
 def defaultValidationVisitsPath() -> Path:
@@ -583,3 +669,34 @@ def _parseSequence(value: Any, itemType: type, name: str, where: str) -> tuple:
 def _optionalStr(value: Any) -> str | None:
     """Return ``value`` as a string, or ``None`` when it is absent."""
     return None if value is None else str(value)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    """Print the visit set for a command line or for the docs.
+
+    ``expression`` prints the Butler query expression for every visit in the
+    set, to paste into ``pipetask -d``; ``tables`` prints the Markdown tables
+    of ``docs/validation-visits.md``.
+
+    Parameters
+    ----------
+    argv : sequence of `str`, optional
+        Command-line arguments; defaults to `sys.argv`.
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="python -m pfs.drp.qa.metrics.validationVisits",
+        description="Print the validation visit set.",
+    )
+    parser.add_argument("what", choices=("expression", "tables"))
+    parser.add_argument("--path", default=None, help="Visit set YAML (default: the one in the package).")
+    args = parser.parse_args(argv)
+    if args.what == "expression":
+        print(visitExpression(loadValidationVisits(args.path).visits))
+    else:
+        print(formatTables(loadValidationVisits(args.path, includePlaceholders=True)), end="")
+
+
+if __name__ == "__main__":
+    main()

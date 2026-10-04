@@ -27,9 +27,9 @@ constant, or the same measurement from another epoch.
 ### R2 — Thresholds are measured, never invented
 
 No threshold enters the code before it has been derived from known-good data by the
-[procedure](#deriving-thresholds) below. The config field's `doc` records the visits and
-the date it was derived from. A threshold whose origin is unknown says so
-("origin unrecorded"), rather than guessing a history.
+procedure in [`deriving-thresholds.md`](deriving-thresholds.md). The config field's `doc`
+records the visits and the date it was derived from. A threshold whose origin is unknown
+says so ("origin unrecorded"), rather than guessing a history.
 
 ### R3 — Separate measurement from judgement
 
@@ -65,54 +65,17 @@ is dense). A metric aggregated across species measures the species mix. Compute 
 per species. The same holds for any mixture of populations: arms, and estimators (arc
 moments, calexp trace widths, sky frames).
 
-## The validation visit set
+## Thresholds and the validation visit set
 
-[`python/pfs/drp/qa/metrics/data/validationVisits.yaml`](../python/pfs/drp/qa/metrics/data/validationVisits.yaml)
-lists visits with known verdicts: `known_good` entries expected to pass every metric, and
-`known_bad` entries expected to `WARN` or `FAIL`, each naming the metric that should catch
-it. A metric that flags a `known_good` visit, or passes a `known_bad` one, does not merge.
+- [`validation-visits.md`](validation-visits.md): the visits with known verdicts that every
+  threshold and metric is checked against, and how to change the set.
+- [`deriving-thresholds.md`](deriving-thresholds.md): the step-by-step procedure, from
+  running `imageQualityQa` over those visits to adopting the thresholds.
 
-- Only visits with a verdict belong. A run's calibration block or a drift series carries
-  none; select those from the Butler when needed.
-- A suspected but unestablished verdict is `unconfirmed: true`: reported, never decisive.
-- An entry awaiting a visit number is `placeholder: true` and is not loaded.
-- The file is public. Use engineering and calibration visits only, identified by visit
-  number.
-
-`pfs.drp.qa.metrics.validationVisits` loads it strictly: a malformed entry, an unknown key
-or a `known_good` entry expecting anything but `PASS` is an error.
-
-## Deriving thresholds
-
-`pfs.drp.qa.metrics.calibration.calibrate` does steps 2–5 and returns a table, one row per
-metric and population; `pfs.drp.qa.plotting.plotThresholds` draws it, and
-[`qa-thresholds.ipynb`](qa-thresholds.ipynb) runs both on the stored `iqQaMetrics` of the
-validation visits.
-
-1. Run the metric over the validation visits with no gating.
-2. Split the known-good values into populations (by default arm and `obsType`; flag rates
-   also by species, line counts by lamp) and take each distribution.
-3. `WARN` at the 95th percentile and `FAIL` at the 99th, rounded *outwards* (so rounding
-   never flags more of the good data) to the power of ten between a hundredth and a tenth
-   of the good scatter. Rounding to significant figures instead would round an FWHM of
-   2.7 px in 0.1 px steps, wider than the gap between p95 and p99. Where a physical limit
-   exists (saturation, fiber pitch), `FAIL` is that limit, exactly.
-4. Check that each `known_bad` value reaches the verdict its entry expects.
-5. Copy the provenance sentence into the config field's `doc`.
-
-Judge each suggestion before using it:
-
-- **n and visits.** Fewer than 20 values is unreliable. Detectors of one visit and
-  back-to-back exposures are correlated, so the number of visits is the more honest size.
-- **The interval on FAIL.** A distribution-free 95 % interval on the FAIL percentile. When
-  the sample cannot bound it (about 370 values are needed for p99), FAIL sits at the
-  sample's extreme and more data will move it.
-- **In-sample flag rates.** What the rounded thresholds flag of the good data; near 5 % and
-  1 % by construction, more if the distribution has ties.
-- **Degenerate pairs.** If WARN is not below FAIL, WARN can never fire. It happens with ties
-  in the tail (a metric that is mostly zero) or a physical limit inside the good data.
-- **Populations without good data.** Known-bad rows there are listed but cannot be
-  checked.
+In short: `WARN` at the 95th and `FAIL` at the 99th percentile of the known-good values,
+separately for each population (arm, observation type, lamp), rounded outwards to a step
+well under the scatter, or `FAIL` at a physical limit. Every known-bad visit must reach
+the verdict it expects.
 
 ## Metric checklist
 

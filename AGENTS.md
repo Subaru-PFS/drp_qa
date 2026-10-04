@@ -72,10 +72,13 @@ the pipeline/config glue to run them.
   machinery: `validationVisits` loads `data/validationVisits.yaml` (package data; visits
   with known verdicts), `thresholds` derives WARN/FAIL from a distribution, `calibration`
   turns stored `iqQaMetrics` into a table of suggestions, and `readers` reads them from a
-  Butler it is given. Rules R1–R7, the derivation procedure and the metric checklist are
-  in [`docs/qa-principles.md`](docs/qa-principles.md): read it before adding a metric or
-  a threshold. `docs/qa-thresholds.ipynb` runs the derivation on real data (committed
-  with outputs; rerun it when the metrics or the visit set change).
+  Butler it is given. Read [`docs/qa-principles.md`](docs/qa-principles.md) (rules R1–R7,
+  the metric checklist) before adding a metric or a threshold. The procedure is
+  [`docs/deriving-thresholds.md`](docs/deriving-thresholds.md), run through
+  `docs/qa-thresholds.ipynb` (committed with outputs); the set is described in
+  [`docs/validation-visits.md`](docs/validation-visits.md), whose tables are generated
+  from the YAML (`python -m pfs.drp.qa.metrics.validationVisits tables`) and checked by a
+  test.
 - **Support modules (`python/pfs/drp/qa/`)**:
   - `storageClasses.py`, `formatters.py` — custom Butler storage classes / formatters
   - `utils/` — shared helpers (`math.py`; `plotting.py` re-exports `plotting.palettes`)

@@ -1,5 +1,6 @@
 """Tests for the validation visit set and its loader."""
 
+from pathlib import Path
 from textwrap import dedent
 
 import pandas as pd
@@ -8,10 +9,14 @@ import pytest
 from pfs.drp.qa.metrics.thresholds import MIN_SAMPLES
 from pfs.drp.qa.metrics.validationVisits import (
     ValidationVisit,
+    ValidationVisitSet,
     defaultValidationVisitsPath,
+    formatTables,
     loadValidationVisits,
+    main,
     matchRows,
     selectRows,
+    visitExpression,
 )
 
 
@@ -311,3 +316,55 @@ class TestRowMatching:
     def testNoVisitColumnRaises(self):
         with pytest.raises(KeyError, match="visit"):
             matchRows(pd.DataFrame({"arm": ["b"]}), [])
+
+
+class TestVisitExpression:
+    def testCollapsesRuns(self):
+        assert visitExpression([5, 1, 2, 3, 3, 9, 10]) == "visit IN (1..3, 5, 9..10)"
+
+    def testCoversTheSet(self):
+        """Every visit, and only those: expand the ranges back and compare."""
+        visitSet = loadValidationVisits()
+        terms = visitExpression(visitSet.visits).removeprefix("visit IN (").removesuffix(")").split(", ")
+        expanded = set()
+        for term in terms:
+            first, _, last = term.partition("..")
+            expanded.update(range(int(first), int(last or first) + 1))
+        assert expanded == set(visitSet.visits)
+
+    def testEmptyRaises(self):
+        with pytest.raises(ValueError):
+            visitExpression([])
+
+    def testCommandLine(self, capsys):
+        main(["expression"])
+        assert capsys.readouterr().out.startswith("visit IN (133025..")
+
+
+class TestTables:
+    def testSectionsAndRows(self):
+        visitSet = loadValidationVisits(includePlaceholders=True)
+        text = formatTables(visitSet)
+        for heading in ("### Known good", "### Known bad", "### Unconfirmed", "### Placeholders"):
+            assert heading in text
+        assert (
+            sum(line.startswith("| ") and "---" not in line for line in text.splitlines())
+            == len(visitSet) + 4
+        ), "one row per entry plus a header per table"
+        assert "| 140005–140138 | b, r, n, m | 1 | any | FAIL | `medFwhm` |" in text
+
+    def testPipesAreEscaped(self):
+        entry = ValidationVisit(visits=(1,), expect="PASS", note="a | b")
+        assert "a \\| b" in formatTables(ValidationVisitSet(knownGood=(entry,)))
+
+    def testDocsMatchTheYaml(self, capsys):
+        """docs/validation-visits.md carries the generated tables; regenerate them when the YAML changes."""
+        doc = (Path(__file__).parents[2] / "docs" / "validation-visits.md").read_text()
+        begin = "<!-- BEGIN GENERATED: validationVisits tables -->\n"
+        end = "<!-- END GENERATED: validationVisits tables -->"
+        stored = doc[doc.index(begin) + len(begin) : doc.index(end)]
+        main(["tables"])
+        assert stored == capsys.readouterr().out, (
+            "docs/validation-visits.md is out of date: paste the output of "
+            "`python -m pfs.drp.qa.metrics.validationVisits tables` between its GENERATED markers"
+        )

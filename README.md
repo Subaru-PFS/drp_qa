@@ -171,6 +171,9 @@ is applied to the cross-dispersion intensity profile measured at regular row int
 
 ##### Pass/Warn/Fail Thresholds
 
+New thresholds are derived from the validation visits, never chosen by hand: see
+[QA thresholds and the validation visit set](#qa-thresholds-and-the-validation-visit-set).
+
 | Metric            | WARN                               | FAIL                               |
 |-------------------|------------------------------------|------------------------------------|
 | `medFwhm`         | ≥ 3.2 px (`fwhmWarnThreshold`)     | ≥ 3.5 px (`fwhmFailThreshold`)     |
@@ -356,6 +359,19 @@ If config options are not passed, the default values come from `mergeArms_config
 | DataSet Type           | Dimensions               | Description                                                                                 |
 |------------------------|--------------------------|---------------------------------------------------------------------------------------------| 
 | `skySubtractionQaPlot` | `instrument, visit, arm` | PDF of various plots related to sky subtraction <br/>built from all the arms for the visit. |
+
+## QA thresholds and the validation visit set
+
+Thresholds are derived from data, by a fixed procedure, and checked against visits whose
+verdict is known:
+
+- [`docs/deriving-thresholds.md`](docs/deriving-thresholds.md) — **the procedure, step by step**:
+  run `imageQualityQa` over the validation visits, run
+  [`docs/qa-thresholds.ipynb`](docs/qa-thresholds.ipynb), read the results and adopt them.
+- [`docs/validation-visits.md`](docs/validation-visits.md) — which visits are in the validation set, why, and
+  how to change it.
+- [`docs/qa-principles.md`](docs/qa-principles.md) — the rules every metric and threshold follows, and the checklist
+  for a PR that adds one.
 
 ## Guider tools
 
