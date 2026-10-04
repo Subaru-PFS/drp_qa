@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.calibration import addSpecies, calibrate, labelRows
+from pfs.drp.qa.metrics.calibration import addSpecies, calibrate, compareRuns, labelRows
 from pfs.drp.qa.metrics.validationVisits import ValidationVisit, ValidationVisitSet
 
 ARC_VISITS = tuple(range(1000, 1030))
@@ -161,3 +161,50 @@ def testAddSpeciesFollowsTheTask():
     """Same rule as imageQualityQa's flag-rate keys."""
     frame = addSpecies(pd.DataFrame({"seqName": ["Arc: HgCd", "Trace", None]}))
     assert frame["species"].tolist() == ["HgCd", "", ""]
+
+
+def makeRunVisitSet() -> ValidationVisitSet:
+    """Arcs of visits 1000-1014 are the reference run; 1015-1029 are another run."""
+    runs = {25: (1000, 1014), 27: (1015, 3999)}
+    good = (
+        ValidationVisit(visits=tuple(range(1000, 1015)), expect="PASS", sequenceType="scienceArc", run=25),
+        ValidationVisit(visits=tuple(range(1015, 1030)), expect="PASS", sequenceType="scienceArc", run=27),
+    )
+    return ValidationVisitSet(knownGood=good, runs=runs, referenceRuns=(25,))
+
+
+class TestRuns:
+    def testOtherRunsAreHeldOut(self):
+        labelled = labelRows(makeMetrics(), makeRunVisitSet(), "medFwhm")
+        assert set(labelled.loc[labelled["visit"] < 1015, "validation"]) == {"good"}
+        assert set(labelled.loc[labelled["visit"] >= 1015, "validation"]) == {"heldOut"}
+        assert set(labelled["run"]) == {25, 27}
+
+    def testThresholdsComeFromTheReferenceOnly(self):
+        metrics = makeMetrics().reset_index(drop=True)
+        metrics.loc[metrics["visit"].between(1015, 1029), "medFwhm"] += 1.0  # the other run is worse
+        b = row(calibrate(metrics, makeRunVisitSet(), ["medFwhm"]), "medFwhm", "b/arc")
+        assert b["nGood"] == 15 and b["nHeldOut"] == 15
+        assert b["fail"] < 2.8, "the held-out run did not move the thresholds"
+        assert b["heldOutFlaggedFail"] == 1.0
+
+    def testCompareRunsPerRun(self):
+        metrics = makeMetrics().reset_index(drop=True)
+        metrics.loc[metrics["visit"].between(1015, 1029), "medFwhm"] += 1.0
+        visitSet = makeRunVisitSet()
+        comparison = compareRuns(metrics, visitSet, calibrate(metrics, visitSet, ["medFwhm"]), ["medFwhm"])
+        b = comparison[comparison["group"] == "b/arc"].set_index("run")
+        assert b.loc[25, "reference"] and not b.loc[27, "reference"]
+        assert b.loc[25, "flaggedFail"] <= 0.1 and b.loc[27, "flaggedFail"] == 1.0
+
+
+def testBadEntryExcludesOnlyItsMetric():
+    """A known_bad entry naming pctFlagged leaves its rows good for medFwhm."""
+    visitSet = ValidationVisitSet(
+        knownGood=(ValidationVisit(visits=ARC_VISITS, expect="PASS"),),
+        knownBad=(ValidationVisit(visits=(1000,), expect="WARN", metric="pctFlagged"),),
+    )
+    fwhm = labelRows(makeMetrics(), visitSet, "medFwhm")
+    flags = labelRows(makeMetrics(), visitSet, "pctFlagged")
+    assert set(fwhm.loc[fwhm["visit"] == 1000, "validation"]) == {"good"}
+    assert set(flags.loc[flags["visit"] == 1000, "validation"]) == {"bad:WARN"}

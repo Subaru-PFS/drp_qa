@@ -11,6 +11,13 @@
 # ``pfs.drp.qa.metrics.validationVisits.loadValidationVisits``, and derive thresholds
 # from it with ``bin.src/calibrateQaThresholds.py``.
 #
+# Runs
+# ----
+#   runs:           run number -> [first, last] visit, from each run's
+#                   calibration summary. Every entry lies within one run.
+#   referenceRuns:  the runs thresholds are derived from. Known-good visits of
+#                   other runs are held out and compared against them.
+#
 # Entry schema
 # ------------
 # Exactly one of:
@@ -62,6 +69,15 @@
 # =============================================================================
 
 version: 1
+
+# Run25 is the reference: its calibrations were made for it, and it is the most
+# complete stable set. Run27 had no science and no calibrations of its own, so it
+# was reduced against older ones and is suspect; Run30 is compared as well.
+runs:
+  25: [132657, 135850]
+  27: [139870, 140871]
+  30: [143087, 150896]
+referenceRuns: [25]
 
 known_good:
   # Run25, 2025-11-10/11. A stable calibration sequence at fixed pointing
@@ -358,6 +374,142 @@ known_good:
     note: "Run27 control for SM2 unlit; SM1 after its 03-11 slit home update, same exposure."
 
 known_bad:
+  # Run25 b-arm arcs of the faint and crowded lamps: most of their lines are
+  # flagged, because adjustDetectorMap applies one S/N cut to all lines together.
+  # The exposures are good for the other metrics (these entries hold only for
+  # pctFlagged); the flag rate is a pipeline limitation under work in drp_stella.
+  # Recorded as bad so that today's rates are the baseline a fix is measured
+  # against, rather than becoming the threshold. HgCd is not listed: its b-arm
+  # flags are genuine.
+  - visitRange: [133025, 133027]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Argon (Run25 block A): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [133028, 133030]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Xenon (Run25 block A): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [133031, 133033]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Neon (Run25 block A): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [133034, 133036]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Krypton (Run25 block A): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [133042, 133044]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Argon (Run25 block B): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [133045, 133047]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Xenon (Run25 block B): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [133048, 133050]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Neon (Run25 block B): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [133051, 133053]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Krypton (Run25 block B): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [135830, 135831]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Argon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [135832, 135833]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Xenon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [135834, 135835]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Neon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [135836, 135837]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Krypton (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [135841, 135842]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Argon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [135843, 135844]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Xenon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [135845, 135846]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Neon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut."
+  - visitRange: [135847, 135848]
+    sequenceType: scienceArc
+    arms: [b]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    expect: WARN
+    metric: pctFlagged
+    reason: "b-arm Krypton (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut."
+
   # Run25 twilight sky taken through cloud. Unlike the SM1 entries this is
   # an observing condition rather than an instrument fault, but the degraded
   # image quality is what QA should catch.

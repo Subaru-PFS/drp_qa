@@ -416,7 +416,14 @@ class TestTables:
             sum(line.startswith("| ") and "---" not in line for line in text.splitlines())
             == len(visitSet) + 4
         ), "one row per entry plus a header per table"
-        assert "| 140005–140006 | scienceArc | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` |" in text
+        assert "| 140005–140006 | 27 | scienceArc | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` |" in text
+
+    def testEveryRowHasTheHeadersColumns(self):
+        """A cell added to the rows but not the header breaks the Markdown table."""
+        for block in formatTables(loadValidationVisits(includePlaceholders=True)).split("### ")[1:]:
+            rows = [line for line in block.splitlines() if line.startswith("|")]
+            widths = {line.count(" | ") for line in rows if "---" not in line}
+            assert len(widths) == 1, block.splitlines()[0]
 
     def testPipesAreEscaped(self):
         entry = ValidationVisit(visits=(1,), expect="PASS", note="a | b")
@@ -433,3 +440,72 @@ class TestTables:
             "docs/validation-visits.md is out of date: paste the output of "
             "`python -m pfs.drp.qa.metrics.validationVisits tables` between its GENERATED markers"
         )
+
+
+class TestRuns:
+    BODY = """
+        version: 1
+        runs:
+          25: [100, 199]
+          27: [300, 399]
+        referenceRuns: [25]
+        known_good:
+          - {visit: 100, sequenceType: scienceArc}
+          - {visit: 300, sequenceType: scienceArc}
+        """
+
+    def testEntriesGetTheirRun(self, writeYaml):
+        visitSet = loadValidationVisits(writeYaml(self.BODY))
+        assert [entry.run for entry in visitSet.knownGood] == [25, 27]
+        assert visitSet.runOf(150) == 25 and visitSet.runOf(250) is None
+
+    def testReferenceAndHeldOut(self, writeYaml):
+        visitSet = loadValidationVisits(writeYaml(self.BODY))
+        assert [entry.visits for entry in visitSet.referenceGood] == [(100,)]
+        assert [entry.visits for entry in visitSet.heldOutGood] == [(300,)]
+
+    def testNoRunsTableMeansEveryEntryIsReference(self, writeYaml):
+        visitSet = loadValidationVisits(
+            writeYaml("version: 1\nknown_good:\n  - {visit: 1, sequenceType: scienceArc}\n")
+        )
+        assert visitSet.referenceGood == visitSet.knownGood and not visitSet.heldOutGood
+
+    @pytest.mark.parametrize(
+        ("runs", "entry", "message"),
+        [
+            ("{25: [100, 199], 27: [150, 399]}", "{visit: 100, sequenceType: scienceArc}", "overlap"),
+            ("{25: [100, 199]}", "{visit: 250, sequenceType: scienceArc}", "within one run"),
+            (
+                "{25: [100, 199], 27: [200, 299]}",
+                "{visitRange: [190, 210], sequenceType: scienceArc}",
+                "within one run",
+            ),
+        ],
+    )
+    def testMalformedRunsRaise(self, writeYaml, runs, entry, message):
+        with pytest.raises(ValueError, match=message):
+            loadValidationVisits(writeYaml(f"version: 1\nruns: {runs}\nknown_good:\n  - {entry}\n"))
+
+    def testReferenceRunMustBeARun(self, writeYaml):
+        with pytest.raises(ValueError, match="referenceRuns not in runs"):
+            loadValidationVisits(writeYaml("version: 1\nruns: {25: [1, 9]}\nreferenceRuns: [30]\n"))
+
+    def testCheckedInSetDerivesFromRun25Only(self):
+        visitSet = loadValidationVisits()
+        assert visitSet.referenceRuns == (25,)
+        assert {entry.run for entry in visitSet.referenceGood} == {25}
+        assert {entry.run for entry in visitSet.heldOutGood} == {27, 30}
+
+    def testBArmFlagRatesAreRecordedAsBad(self):
+        """The baseline for drp_stella's adjustDetectorMap work: bad for pctFlagged only."""
+        visitSet = loadValidationVisits()
+        flagged = [
+            entry for entry in visitSet.knownBad if entry.metric == "pctFlagged" and entry.arms == ("b",)
+        ]
+        assert {entry.seqType for entry in flagged} == {
+            "Arc: Argon",
+            "Arc: Xenon",
+            "Arc: Neon",
+            "Arc: Krypton",
+        }
+        assert all(entry.run == 25 for entry in flagged)

@@ -72,10 +72,11 @@ moments, calexp trace widths, sky frames).
 - [`qa-thresholds.ipynb`](qa-thresholds.ipynb): the step-by-step procedure, as a notebook,
   from running `imageQualityQa` over those visits to adopting the thresholds.
 
-In short: `WARN` at the 95th and `FAIL` at the 99th percentile of the known-good values,
+In short: `WARN` at the 95th and `FAIL` at the 99th percentile of the reference run's
+(Run25's) known-good values,
 separately for each population (arm, observation type, lamp), rounded outwards to a step
 well under the scatter, or `FAIL` at a physical limit. Every known-bad visit must reach
-the verdict it expects.
+the verdict it expects, and other runs are compared against the result.
 
 ## Metric checklist
 

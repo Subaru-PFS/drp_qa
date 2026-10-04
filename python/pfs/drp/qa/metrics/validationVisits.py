@@ -12,8 +12,9 @@ This module imports neither the LSST stack nor the Butler, so it runs in CI.
 """
 
 from collections.abc import Iterable, Iterator, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib.resources import files
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +65,9 @@ class ValidationVisit:
     sequenceType : `str` or `None`
         The IIC sequence type (`SEQUENCE_TYPES`). Not a selector: it decides
         how the visits are reduced. `None` only in a placeholder.
+    run : `int` or `None`
+        The observing run the visits belong to, from the set's ``runs``
+        table; `None` when the set has no table, or in a placeholder.
     expect : `str`
         The expected verdict, one of ``PASS``, ``WARN`` or ``FAIL``.
     arms : `tuple` [`str`]
@@ -93,6 +97,7 @@ class ValidationVisit:
     visits: tuple[int, ...]
     expect: str
     sequenceType: str | None = None
+    run: int | None = None
     arms: tuple[str, ...] = ()
     spectrographs: tuple[int, ...] = ()
     seqType: str | None = None
@@ -149,13 +154,39 @@ class ValidationVisitSet:
         Entries expected to pass every metric.
     knownBad : `tuple` [`ValidationVisit`]
         Entries expected to WARN or FAIL, for a stated reason.
+    runs : `dict` [`int`, `tuple` [`int`, `int`]]
+        Each observing run's inclusive visit range.
+    referenceRuns : `tuple` [`int`]
+        The runs whose ``known_good`` visits thresholds are derived from.
+        Known-good visits of other runs are held out and compared against
+        those thresholds. Empty means every run is a reference.
     path : `pathlib.Path` or `None`
         Where the set was loaded from, for error messages and provenance.
     """
 
     knownGood: tuple[ValidationVisit, ...] = ()
     knownBad: tuple[ValidationVisit, ...] = ()
+    runs: dict[int, tuple[int, int]] = field(default_factory=dict)
+    referenceRuns: tuple[int, ...] = ()
     path: Path | None = field(default=None, compare=False)
+
+    def isReference(self, entry: ValidationVisit) -> bool:
+        """Return True when thresholds are derived from ``entry``'s run."""
+        return not self.referenceRuns or entry.run in self.referenceRuns
+
+    @property
+    def referenceGood(self) -> tuple[ValidationVisit, ...]:
+        """The ``known_good`` entries of the reference runs: what thresholds come from."""
+        return tuple(entry for entry in self.knownGood if self.isReference(entry))
+
+    @property
+    def heldOutGood(self) -> tuple[ValidationVisit, ...]:
+        """The ``known_good`` entries of other runs, compared against the thresholds."""
+        return tuple(entry for entry in self.knownGood if not self.isReference(entry))
+
+    def runOf(self, visit: int) -> int | None:
+        """Return the run whose visit range holds ``visit``, or `None`."""
+        return next((run for run, (first, last) in self.runs.items() if first <= visit <= last), None)
 
     def __iter__(self) -> Iterator[ValidationVisit]:
         """Iterate over every entry, good then bad."""
@@ -445,8 +476,9 @@ def formatTables(visitSet: ValidationVisitSet) -> str:
         lines = [
             f"### {title}",
             "",
-            f"| Visits | Arms | Spectrographs | Sequence | Expect | Metric | {textField.capitalize()} |",
-            "|---|---|---|---|---|---|---|",
+            "| Visits | Run | Type | Arms | Spectrographs | Sequence | Expect | Metric | "
+            f"{textField.capitalize()} |",
+            "|---|---|---|---|---|---|---|---|---|",
         ]
         for entry in entries:
             if entry.visits:
@@ -456,6 +488,7 @@ def formatTables(visitSet: ValidationVisitSet) -> str:
                 visits = "*to find*"
             cells = (
                 visits,
+                "" if entry.run is None else str(entry.run),
                 entry.sequenceType or "",
                 ", ".join(entry.arms) or "all",
                 ", ".join(str(s) for s in entry.spectrographs) or "all",
@@ -522,9 +555,15 @@ def loadValidationVisits(
     if version != SCHEMA_VERSION:
         raise ValueError(f"{path}: unsupported schema version {version!r}, expected {SCHEMA_VERSION}")
 
-    unknown = set(doc) - {"version", "known_good", "known_bad"}
+    unknown = set(doc) - {"version", "runs", "referenceRuns", "known_good", "known_bad"}
     if unknown:
         raise ValueError(f"{path}: unknown top-level keys: {', '.join(sorted(unknown))}")
+
+    runs = _parseRuns(doc.get("runs") or {}, f"{path}: runs")
+    referenceRuns = _parseSequence(doc.get("referenceRuns"), int, "referenceRuns", str(path))
+    missing = set(referenceRuns) - set(runs)
+    if missing:
+        raise ValueError(f"{path}: referenceRuns not in runs: {sorted(missing)}")
 
     sections = {}
     for section, defaultExpect in (("known_good", "PASS"), ("known_bad", None)):
@@ -533,7 +572,10 @@ def loadValidationVisits(
             raise ValueError(f"{path}: '{section}' must be a list, got {type(raw).__name__}")
         entries = []
         for index, item in enumerate(raw):
-            entry = _parseEntry(item, defaultExpect, f"{path}: {section}[{index}]")
+            where = f"{path}: {section}[{index}]"
+            entry = _parseEntry(item, defaultExpect, where)
+            if runs and entry.visits:
+                entry = replace(entry, run=_runOf(entry.visits, runs, where))
             if section == "known_good" and entry.expect != "PASS":
                 raise ValueError(f"{path}: {section}[{index}]: a known_good entry must expect PASS")
             if entry.placeholder and not includePlaceholders:
@@ -541,7 +583,56 @@ def loadValidationVisits(
             entries.append(entry)
         sections[section] = tuple(entries)
 
-    return ValidationVisitSet(knownGood=sections["known_good"], knownBad=sections["known_bad"], path=path)
+    return ValidationVisitSet(
+        knownGood=sections["known_good"],
+        knownBad=sections["known_bad"],
+        runs=runs,
+        referenceRuns=referenceRuns,
+        path=path,
+    )
+
+
+def _parseRuns(raw: Any, where: str) -> dict[int, tuple[int, int]]:
+    """Parse the ``runs`` table: run number to an inclusive, non-overlapping visit range.
+
+    Parameters
+    ----------
+    raw : `Any`
+        The raw YAML value, a mapping.
+    where : `str`
+        Human-readable location, used in error messages.
+
+    Returns
+    -------
+    `dict` [`int`, `tuple` [`int`, `int`]]
+        The table.
+
+    Raises
+    ------
+    ValueError
+        If the table is malformed or two ranges overlap.
+    """
+    if not isinstance(raw, dict):
+        raise ValueError(f"{where}: must be a mapping of run to [first, last], got {type(raw).__name__}")
+    runs = {}
+    for run, bounds in raw.items():
+        run = _asInt(run, "run", where)
+        visits = _parseVisits({"visitRange": bounds}, f"{where}[{run}]", placeholder=False)
+        runs[run] = (visits[0], visits[-1])
+    ordered = sorted(runs.items(), key=lambda item: item[1])
+    for (runA, (_, lastA)), (runB, (firstB, _)) in pairwise(ordered):
+        if firstB <= lastA:
+            raise ValueError(f"{where}: runs {runA} and {runB} overlap")
+    return runs
+
+
+def _runOf(visits: Sequence[int], runs: dict[int, tuple[int, int]], where: str) -> int:
+    """Return the one run holding all ``visits``, or raise."""
+    found = {run for visit in visits for run, (first, last) in runs.items() if first <= visit <= last}
+    covered = all(any(first <= visit <= last for first, last in runs.values()) for visit in visits)
+    if len(found) != 1 or not covered:
+        raise ValueError(f"{where}: visits {visits[0]}-{visits[-1]} must lie within one run of 'runs'")
+    return found.pop()
 
 
 #: Keys an entry may carry. Anything else is a typo, and a typo in a selector
