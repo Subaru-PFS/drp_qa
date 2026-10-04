@@ -106,7 +106,8 @@ def chooseRun(existing: Iterable[str], prefix: str, newRun: bool, runName: str |
     newRun : `bool`
         True for the next free number, False for the latest run.
     runName : `str`, optional
-        An explicit collection, returned unchanged: to read an older run.
+        An explicit collection, returned unchanged: to read an older run. Not
+        allowed with ``newRun``, which would write into an existing run.
 
     Returns
     -------
@@ -115,9 +116,13 @@ def chooseRun(existing: Iterable[str], prefix: str, newRun: bool, runName: str |
 
     Raises
     ------
+    ValueError
+        If both ``runName`` and ``newRun`` are given.
     LookupError
         If ``newRun`` is False and there is no run yet.
     """
+    if runName and newRun:
+        raise ValueError("RUN_NAME is for reading an older run: leave it unset to make a new one")
     if runName:
         return runName
     pattern = re.compile(rf"(?:^|\s){re.escape(prefix)}/(\d+)(?:\s|$)")

@@ -122,6 +122,15 @@ class TestChooseRun:
         with pytest.raises(LookupError, match="RUN_PIPELINE"):
             chooseRun(self.LISTING[:2], self.PREFIX, newRun=False)
 
-    def testExplicitNameWins(self):
+    def testExplicitNameIsRead(self):
         name = f"{self.PREFIX}/001"
-        assert chooseRun(self.LISTING, self.PREFIX, newRun=True, runName=name) == name
+        assert chooseRun(self.LISTING, self.PREFIX, newRun=False, runName=name) == name
+
+    def testExplicitNameCannotBeWrittenInto(self):
+        with pytest.raises(ValueError, match="RUN_NAME"):
+            chooseRun(self.LISTING, self.PREFIX, newRun=True, runName=f"{self.PREFIX}/001")
+
+    def testErrorTextIsNotARun(self):
+        """The CLI's error for a missing collection names it; that is not a listing."""
+        error = [f"Collection '{self.PREFIX}/001' not found"]
+        assert chooseRun(error, self.PREFIX, newRun=True) == f"{self.PREFIX}/001"
