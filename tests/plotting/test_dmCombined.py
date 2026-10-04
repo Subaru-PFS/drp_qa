@@ -1,5 +1,7 @@
 """Smoke tests for `pfs.drp.qa.plotting.dmCombined`."""
 
+import warnings
+
 import pandas as pd
 import pytest
 from matplotlib.figure import Figure
@@ -30,7 +32,18 @@ def testPlotDetectorSummary(makeStats):
 
 def testPlotDetectorSummaryPerDescription(makeStats):
     stats = makeStats(ccds=("b1", "r1")).query("status_type == 'RESERVED'")
-    assert isinstance(plot_detector_summary_per_desc(stats), Figure)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        figure = plot_detector_summary_per_desc(stats)
+
+    assert isinstance(figure, Figure)
+    # Drawn without matplotlib's deprecation of `vert` in Axes.bxp.
+    assert [str(w.message) for w in caught if "vert" in str(w.message)] == []
+    # And still vertically: the synthetic values are constant, so a horizontal box
+    # would have no width.
+    boxes = [patch for ax in figure.axes for patch in ax.patches]
+    assert boxes
+    assert all(box.get_path().get_extents().width > 0 for box in boxes)
 
 
 def testPlotVisits(makeStats):

@@ -34,9 +34,6 @@ from pfs.drp.stella.fitDetectorMap import getDescriptionCounts
 from pfs.drp.stella.utils.math import robustRms
 from pfs.utils.fiberids import FiberIds
 
-# `FitStat` and `FitStats` are in `pfs.drp.qa.metrics.fitStats`, and the plotting
-# functions in `pfs.drp.qa.plotting.dmResiduals`; they are re-exported here for
-# existing callers.
 __all__ = [
     "DetectorMapResidualsTask",
     "FitStat",

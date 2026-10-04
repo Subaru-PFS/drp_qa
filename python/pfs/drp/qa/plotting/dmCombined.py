@@ -28,7 +28,6 @@ __all__ = [
     "reportFigures",
 ]
 
-#: Columns of ``dmQaResidualData`` the per-detector residual pages are drawn from.
 REPORT_PLOT_COLUMNS = [
     "fiberId",
     "wavelength",
@@ -102,8 +101,6 @@ def reportFigures(
 
             residFig = plot_detectormap_residuals(plot_data, visit_stats, detectorMaps[str(ccd)])
             residFig.suptitle(f"DetectorMap Residuals - Median of all visits - {ccd}", weight="bold")
-            # Yielded before the next page is drawn, so the residual page is
-            # kept if the per-visit page fails.
             yield residFig
 
             descFig = plot_visits(visit_stats.query('status_type == "RESERVED"'), palette=description_palette)
@@ -224,6 +221,7 @@ def plot_detector_summary_per_desc(stats: pd.DataFrame) -> Figure:
         height=3,
         aspect=2.5,
         flierprops={"marker": ".", "ms": 2},
+        vert=None,
     )
     fg.figure.suptitle("DetectorMap Residuals by description", y=1)
     for i, ax in enumerate(fg.figure.axes):

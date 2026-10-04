@@ -131,6 +131,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **`get_fit_stats` at zero dof** — with zero degrees of freedom and zero residuals, the softening solve
   raised from `scipy.optimize.bisect` and `dmResiduals` wrote nothing for the quantum. `softenFit` is now NaN
   there, as it already was at zero dof with nonzero residuals (PIPE2D-1916).
+- **`plot_detector_summary_per_desc` on matplotlib ≥ 3.10** — seaborn 0.13 passes `vert` to `Axes.bxp`,
+  which matplotlib 3.10 pending-deprecates and 3.11 deprecates for removal in 3.13. The plot now passes
+  `vert=None`, so matplotlib uses `orientation`, whose default is vertical. The output is pixel-identical.
+  This needs matplotlib 3.10, now the minimum in `pyproject.toml` (PIPE2D-1916).
 
 ### Changed
 
@@ -149,6 +153,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `psycopg2.connect` calls. Needs `pfs_utils` 7.4.18 or later. `main()` still reads the opdb on `pfsa-db`
   (PIPE2D-1893).
 - **`scipy` is a declared dependency** in `pyproject.toml`, for the guider fits (PIPE2D-1895).
+- **matplotlib 3.10 or later is required** (`pyproject.toml`), for `Axes.bxp`'s `orientation` (PIPE2D-1916).
 - **CI's `guiders` job is now `deps`** and runs every stack-free test, not only `tests/guiders/`. A test
   needing packages beyond the standard library goes in a `tests/` subdirectory listed in `_OPTIONAL_DIRS`
   (PIPE2D-1913).
