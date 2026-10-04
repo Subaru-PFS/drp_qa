@@ -85,8 +85,9 @@ the pipeline/config glue to run them.
 - `bin.src/` — command-line scripts, run directly as `python bin.src/<name>.py`.
   There is no SCons `shebang()` step and no generated `bin/` directory.
 - `ups/` — EUPS configuration (`drp_qa.table`, dependencies and `PATH`/`PYTHONPATH`)
-- `tests/` — pytest-based tests (may rely on the LSST/PFS stack). `tests/SConscript` is
-  the one surviving SCons file; it is vestigial and not exercised by `pytest`.
+- `tests/` — pytest-based tests (some rely on the LSST/PFS stack). Tests needing packages
+  beyond the standard library live in subdirectories with their own `conftest.py`
+  (`tests/guiders/`).
 - `pyproject.toml` — build config (setuptools) and **all** tool configs (Ruff, pytest).
   Keep it that way: don't add standalone per-tool config files.
 - `README.md` — project overview and usage notes
@@ -114,8 +115,7 @@ so both must be available.
 
 EUPS is still used for dependency resolution via `ups/drp_qa.table`, but **there is no
 SCons build** — `SConstruct` and `bin.src/SConscript` were removed. `setup -r .` only
-prepends `PATH` and `PYTHONPATH`; nothing is compiled or generated. (`tests/SConscript`
-still exists but is vestigial.)
+prepends `PATH` and `PYTHONPATH`; nothing is compiled or generated.
 
 ### Install
 
@@ -159,7 +159,7 @@ Two GitHub Actions workflows run on every pull request:
 
 | Workflow | Blocking | What it does |
 |---|---|---|
-| `.github/workflows/tests.yml` | yes | On Python 3.12 and 3.13: `pytest -v` with only pytest installed, and `pytest -v tests/guiders` with pfs-utils |
+| `.github/workflows/tests.yml` | yes | On Python 3.12 and 3.13: `pytest -v` with only pytest installed, and again with pfs-utils and the scientific packages |
 | `.github/workflows/lint.yml` | yes | `ruff check .` and `ruff format --check .` over the whole tree |
 
 **The repository is Ruff-clean and both checks gate the whole tree.** Keep it that way:
@@ -172,14 +172,17 @@ three other repositories. Only stack-free tests run, in two jobs:
 
 - **`stack-free`** installs only pytest, so its tests import nothing beyond the standard
   library.
-- **`guiders`** runs `tests/guiders/` against `python/` on `PYTHONPATH`. It installs
+- **`deps`** runs every stack-free test against `python/` on `PYTHONPATH`. It installs
   pfs-utils from git with `--no-deps`, plus the packages listed in the workflow. Keep that
-  list in step with `pyproject.toml`. Its real AG data are parquet files in
-  `tests/guiders/data/`, small enough for plain git; `makeGuiderFixtures.py` there remakes
-  them.
+  list in step with `pyproject.toml`.
 
-`tests/conftest.py` ignores `tests/guiders/` when the imports of its `conftest.py`
-(numpy, pandas, pfs_utils) are missing, so the `stack-free` job skips it.
+A test needing packages beyond the standard library goes in a subdirectory of `tests/`
+whose `conftest.py` imports them at module scope, listed in `_OPTIONAL_DIRS` in
+`tests/conftest.py`. That directory is ignored when those imports are missing, so the
+`stack-free` job skips it and the `deps` job runs it. `tests/guiders/` is the example: its
+`conftest.py` holds the fixtures and test doubles, and its real AG data are parquet files in
+`tests/guiders/data/`, small enough for plain git, which `makeGuiderFixtures.py` there
+remakes.
 
 **Tests that need the stack** cannot be collected without it — a module-level
 `import lsst.utils.tests` fails during collection and aborts the whole run, so an in-test

@@ -25,6 +25,9 @@ from lsst.pipe.base.connectionTypes import (
 from lsst.pipe.base.connectionTypes import (
     Output as OutputConnection,
 )
+from lsst.pipe.base.connectionTypes import (
+    PrerequisiteInput as PrerequisiteConnection,
+)
 from matplotlib.axes import Axes
 from matplotlib.colors import SymLogNorm
 from matplotlib.figure import Figure
@@ -75,7 +78,9 @@ class SkyArmSubtractionConnections(
         dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
 
-    pfsConfig = InputConnection(
+    # A prerequisite, as in the other QA tasks: a graph with this task and one
+    # of them doesn't build if they declare it differently.
+    pfsConfig = PrerequisiteConnection(
         name="pfsConfig",
         doc="PfsConfig data",
         storageClass="PfsConfig",
