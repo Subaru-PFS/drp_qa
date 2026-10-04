@@ -98,7 +98,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   matplotlib 3.9; FWHM points are drawn once; the cursor readout reads correctly and needs no database; and the
   averages use only valid matches. `README.md` has a "Guider tools" section, and the notebook
   `docs/guider-plots.ipynb` describes each plot (what it shows, its data, how to read it, what to look for) beside
-  an annotated sample drawn from the tests' AG data (PIPE2D-1899).
+  an annotated sample drawn from the tests' AG data; with `USE_OPDB = True` it runs on the opdb and checks the
+  readers and fits the plots don't use. `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its
+  drp_qa replacement, on a real opdb (PIPE2D-1899).
 
 ### Fixed
 
@@ -131,6 +133,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   until now, used `CoordinateTransform`'s `sky_pfi` mode, pfs_utils's model for the cobras, which is about
   550 µm off. `agcStars` needs only the stars' catalogue columns. It no longer fails under pandas 3, where
   pfs_utils clamped a read-only parallax array (PIPE2D-1900).
+
+- **`smoothAgcData` smooths only valid matches** — each valid match is averaged with the star's other valid
+  matches, and invalid ones are left as they are. Smoothing every row averaged invalid matches, hundreds of microns
+  off, into the valid ones: on Run 30's all-sky exposure the valid matches' x scatter went from 21 to 99 µm, where it
+  now falls to 17 µm. `estimateGuideErrors` and `fitDriftRate` already gave it only valid matches (PIPE2D-1899).
 
 ### Removed
 
