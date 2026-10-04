@@ -13,6 +13,7 @@ from collections.abc import Iterator
 from itertools import product
 from typing import Any
 
+import matplotlib
 import pandas as pd
 import seaborn as sb
 from matplotlib.figure import Figure
@@ -210,6 +211,9 @@ def plot_detector_summary_per_desc(stats: pd.DataFrame) -> Figure:
         f"{b}.{a}" for a, b in product(["median", "weightedRms", "softenFit"], ["spatial", "wavelength"])
     ]
 
+    # seaborn 0.13 passes `vert` to `Axes.bxp`, which matplotlib 3.10 deprecates in
+    # favour of `orientation` (default vertical). Override it where `orientation` exists.
+    boxKwargs = {"vert": None} if matplotlib.__version_info__ >= (3, 10) else {}
     fg = sb.catplot(
         data=plot_data.dropna(),
         x="ccd",
@@ -224,6 +228,7 @@ def plot_detector_summary_per_desc(stats: pd.DataFrame) -> Figure:
         height=3,
         aspect=2.5,
         flierprops={"marker": ".", "ms": 2},
+        **boxKwargs,
     )
     fg.figure.suptitle("DetectorMap Residuals by description", y=1)
     for i, ax in enumerate(fg.figure.axes):

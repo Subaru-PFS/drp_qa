@@ -131,6 +131,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **`get_fit_stats` at zero dof** — with zero degrees of freedom and zero residuals, the softening solve
   raised from `scipy.optimize.bisect` and `dmResiduals` wrote nothing for the quantum. `softenFit` is now NaN
   there, as it already was at zero dof with nonzero residuals (PIPE2D-1916).
+- **`plot_detector_summary_per_desc` on matplotlib ≥ 3.10** — seaborn 0.13 passes `vert` to `Axes.bxp`,
+  which matplotlib 3.10 pending-deprecates and 3.11 deprecates for removal in 3.13. The plot now passes
+  `vert=None`, so matplotlib uses `orientation`, whose default is vertical. The output is pixel-identical
+  (PIPE2D-1916).
 
 ### Changed
 
