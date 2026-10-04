@@ -832,6 +832,12 @@ def showAgcErrorsForVisitsByCamera(
                 axes[i, 0].set_xlim(-xLimit_um, xLimit_um)
             if yLimit_um > 0 and not showAltInsrot:
                 axes[i, 0].set_ylim(-yLimit_um, yLimit_um)
+        if showAltInsrot and yLimit_um <= 0:
+            # One colour scale for every panel, as they share the colorbar.
+            values = np.concatenate([np.ma.filled(hexbin.get_array(), np.nan) for hexbin in artists])
+            limit = float(np.nanmax(np.abs(values))) if np.isfinite(values).any() else 1.0
+            for hexbin in artists:
+                hexbin.set_clim(-limit, limit)
         xlabel = r"$\Delta$ focus (µm)" if plotDzDfocus else "altitude" if showAltInsrot else plotBy
         _xLabel(fig, axes, ownPanels, xlabel)
 
@@ -1646,7 +1652,13 @@ def plotGuideErrors(
             )
             if drawTrack:
                 artists += ax.plot(xMean[meanRows], yMean[meanRows], color="black", alpha=0.25, zorder=-1)
-    ax.plot(centers.agc_nominal_x_mm / expand, centers.agc_nominal_y_mm / expand, "+", color="red", zorder=10)
+    xCenter, yCenter = (
+        centers.agc_nominal_x_mm.to_numpy() / expand,
+        centers.agc_nominal_y_mm.to_numpy() / expand,
+    )
+    if rotateToAG1Down:
+        xCenter, yCenter = rotXY(-insrot, xCenter, yCenter)
+    ax.plot(xCenter, yCenter, "+", color="red", zorder=10)
 
     label = {"pfs_visit_id": "pfs_visit_id", "time": "time (s)", "agc_exposure_id": "agc_exposure_id"}[
         colorBy
@@ -1912,12 +1924,15 @@ def plotFocus(
     averageByFocusPosition : `bool`
         Plot the median focus error of each camera at each focus position.
     showMedian : `bool`
-        Join the medians of the stars' focus errors, and of their FWHM, at
-        each x.
+        Join the medians of the stars' focus errors at each x (each
+        camera's, or in black with ``colorBy`` other than ``camera``), and
+        of their FWHM (each half's; with ``showCameraId``, each camera's and
+        half's in each AG exposure, in the halves' symbols). The AG actor's
+        focus errors have none.
     showOnlyMedian : `bool`
         Plot only those medians.
     connectMedian : `bool`
-        Draw the medians as lines, rather than points.
+        Draw the medians at each x as lines, rather than points.
     showCameraId : `bool`
         Colour the FWHM by camera, with the halves of the detectors as
         markers.
@@ -2099,16 +2114,26 @@ def plotFocus(
                 else:
                     stars = data[data.agc_camera_id.isin(cameras)]
                     focusErrors = estimateFocusErrors(stars, byCamera=False, focusColumn=focusColumn)
-                    mappable = ax.scatter(
-                        focusErrors[what],
-                        focusErrors.focus_error_um,
-                        c=focusErrors[colorColumn],
-                        norm=norm,
-                        marker=marker,
-                        s=scatterMarkerSize,
-                        alpha=alpha,
-                    )
-                    artists.append(mappable)
+                    if not showOnlyMedian:
+                        mappable = ax.scatter(
+                            focusErrors[what],
+                            focusErrors.focus_error_um,
+                            c=focusErrors[colorColumn],
+                            norm=norm,
+                            marker=marker,
+                            s=scatterMarkerSize,
+                            alpha=alpha,
+                        )
+                        artists.append(mappable)
+                    if showMedian and len(focusErrors):
+                        xm, ym = _medianByX(focusErrors[what], focusErrors.focus_error_um, resolution)
+                        artists += ax.plot(
+                            xm,
+                            ym,
+                            "-" if connectMedian else marker,
+                            color="black",
+                            alpha=1 if connectMedian else alpha,
+                        )
                 ylabel = r"$\Delta$ focus"
             else:
                 stars = data[data.agc_camera_id.isin(cameras)]
@@ -2119,6 +2144,7 @@ def plotFocus(
                     showCameraId,
                     showMedian,
                     showOnlyMedian,
+                    connectMedian,
                     plotFrac,
                     ditherScale,
                     forceAlpha,
@@ -2196,6 +2222,7 @@ def _plotFwhm(
     showCameraId: bool,
     showMedian: bool,
     showOnlyMedian: bool,
+    connectMedian: bool,
     plotFrac: float,
     ditherScale: float,
     forceAlpha: float | None,
@@ -2245,17 +2272,25 @@ def _plotFwhm(
         if showCameraId:
             for cid in np.sort(stars.agc_camera_id.unique()):
                 camera = stars[stars.agc_camera_id == cid]
-                for isLeft, marker in [(True, "*"), (False, ".")]:
+                # The halves' symbols, as for the stars, larger and outlined.
+                for isLeft, marker, size in [(True, "o", 8), (False, "*", 11)]:
                     half = camera[camera.left == isLeft]
                     medians = half.groupby("agc_exposure_id").agg(
                         x=(what, "mean"), y=("fwhm_arcsec", "median")
                     )
-                    artists += ax.plot(medians.x, medians.y, marker, color=_CAMERA_COLORS[cid])
+                    artists += ax.plot(
+                        medians.x,
+                        medians.y,
+                        marker,
+                        markersize=size,
+                        markeredgecolor="black",
+                        color=_CAMERA_COLORS[cid],
+                    )
         else:
             for isLeft, color in [(True, "red"), (False, "green")]:
                 half = stars[stars.left == isLeft]
                 xm, ym = _medianByX(half[what], half.fwhm_arcsec, resolution)
-                artists += ax.plot(xm, ym, "-", color=color)
+                artists += ax.plot(xm, ym, "-" if connectMedian else "o", color=color)
 
     handles = []
     if showCameraId:

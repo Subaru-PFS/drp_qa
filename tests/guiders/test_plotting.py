@@ -534,6 +534,22 @@ def testShowAgcErrorsForVisitsByCameraOffsets(realAgcData):
     assert not np.allclose(offsets.dx_um, unrotated.dx_um, atol=1)
 
 
+def testShowAgcErrorsForVisitsByCameraHexbinScale(realAgcData):
+    """With ``showAltInsrot`` every panel shares the colorbar's scale, symmetric about 0."""
+    plot = showAgcErrorsForVisitsByCamera(realAgcData("raster"), showAltInsrot=True, fig=Figure())
+
+    limits = {hexbin.get_clim() for hexbin in plot.artists}
+    assert len(limits) == 1
+    ((vmin, vmax),) = limits
+    assert vmin == -vmax
+    assert all(np.nanmax(np.abs(hexbin.get_array())) <= vmax for hexbin in plot.artists)
+    assert plot.colorbars[0].norm.vmax == vmax
+
+    # Negative control: each panel's own range, which each hexbin would take by itself.
+    ranges = {(float(np.nanmin(h.get_array())), float(np.nanmax(h.get_array()))) for h in plot.artists}
+    assert len(ranges) > 1
+
+
 def testShowGuiderErrorsPlotActorAllSky(realAgcData):
     """With ics_pfsPlotActor's settings every AG exposure of the all-sky visit is plotted.
 
@@ -709,6 +725,28 @@ def testPlotGuideErrorsPoints(realAgcData):
     assert nPoints(plot.axes[0, 0]) != 2 * nOpen
 
 
+def testPlotGuideErrorsRotatedCenters(realAgcData):
+    """With ``rotateToAG1Down`` the cameras' centers are rotated with their points."""
+    guideErrors = estimateGuideErrors(realAgcData("allSky"))
+    plot = plotGuideErrors(guideErrors, rotateToAG1Down=True, fig=Figure())
+
+    (centers,) = [
+        line for line in plot.axes[0, 0].lines if line.get_marker() == "+" and len(line.get_xdata()) > 1
+    ]
+    medians = guideErrors.groupby("agc_camera_id")[["agc_nominal_x_mm", "agc_nominal_y_mm"]].median()
+    x, y = rotXY(-np.deg2rad(guideErrors.insrot.mean()), medians.agc_nominal_x_mm, medians.agc_nominal_y_mm)
+    np.testing.assert_allclose(centers.get_xdata(), x)
+    np.testing.assert_allclose(centers.get_ydata(), y)
+
+    # Negative control: the centers unrotated, 165 degrees away (insrot -165).
+    assert (
+        np.hypot(
+            centers.get_xdata() - medians.agc_nominal_x_mm, centers.get_ydata() - medians.agc_nominal_y_mm
+        ).min()
+        > 100
+    )
+
+
 def testPlotGuideErrorsSharedColours(realAgcData):
     """The cameras' points and their means share one colour scale."""
     guideErrors = estimateGuideErrors(realAgcData("raster"), includeClosedShutter=True)
@@ -782,6 +820,53 @@ def testPlotFocusStarsFocusError(focusSweep):
     swapped = addImageSizes(plot.data).assign(left=lambda d: ~d.left)
     swappedErrors = estimateFocusErrors(swapped, byCamera=True)
     assert np.polyfit(swappedErrors.focus_position_mm, swappedErrors.focus_error_um, 1)[0] < -300
+
+
+@pytest.mark.parametrize("connectMedian", [True, False])
+def testPlotFocusMediansByVisit(focusSweep, connectMedian):
+    """With ``colorBy`` other than camera, the median options apply to the stars' focus errors too."""
+    kwargs = {
+        "colorBy": "visit",
+        "showAGActorFocus": False,
+        "showFWHM": False,
+        "connectMedian": connectMedian,
+    }
+    plot = plotFocus(focusSweep, showOnlyMedian=True, fig=Figure(), **kwargs)
+    ax = plot.axes[0, 0]
+
+    assert nPoints(ax) == 0
+    (median,) = [line for line in ax.lines if line.get_color() == "black" and len(line.get_xdata()) > 2]
+    assert (median.get_linestyle() == "-") == connectMedian
+    focusErrors = estimateFocusErrors(plot.data, byCamera=False)
+    expected = focusErrors.groupby(focusErrors.focus_position_mm.round(3)).focus_error_um.median()
+    np.testing.assert_allclose(median.get_ydata(), expected)
+
+    # Negative control: without the options, every AG exposure's point and no median.
+    plain = plotFocus(focusSweep, fig=Figure(), **kwargs).axes[0, 0]
+    assert nPoints(plain) == len(focusErrors)
+    assert not [line for line in plain.lines if len(line.get_xdata()) > 2]
+
+
+def testPlotFocusMedianMarkers(focusSweep):
+    """Each half keeps its symbol in the medians: circles for the left halves, stars for the right.
+
+    drp_stella drew the left halves' medians as stars, the right halves' symbol.
+    """
+    plot = plotFocus(focusSweep, showCameraId=True, showMedian=True, fig=Figure())
+    data = plot.data
+    medians = [line for line in fwhmPanel(plot).lines if len(line.get_xdata())]
+
+    assert {line.get_marker() for line in medians} == {"o", "*"}
+    for line in medians:
+        camera = data[data.agc_camera_id == int(line.get_color()[1:])]
+        isLeft = line.get_marker() == "o"
+        half = camera[camera.left == isLeft].groupby("agc_exposure_id").fwhm_arcsec.median()
+        np.testing.assert_allclose(line.get_ydata(), half)
+        # Negative control: the other half's medians, in the same AG exposures.
+        other = (
+            camera[camera.left != isLeft].groupby("agc_exposure_id").fwhm_arcsec.median().reindex(half.index)
+        )
+        assert np.nanmax(np.abs(other.to_numpy() - half.to_numpy())) > 0.05
 
 
 def testPlotFocusAxes2d(focusSweep):

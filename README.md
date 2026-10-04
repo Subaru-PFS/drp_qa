@@ -392,9 +392,10 @@ and runs on the tests' AG data or the opdb.
 
 Coming from drp_stella:
 
-- Fit, then plot. `GuiderConfig` is split into `analysis.GuiderFitConfig` and `plotting.GuiderPlotConfig`;
-  `estimateGuideErrors(plot=True)`, `plotDriftRate` and `compareAGCPfsUtils` are `analysis` functions whose results
-  `plotGuideErrors`, `plotDriftRate` and `plotPfsUtilsComparison` draw.
+- Fit, then plot. `GuiderConfig` is split into `analysis.GuiderFitConfig` and `plotting.GuiderPlotConfig`.
+  drp_stella's `estimateGuideErrors(plot=True)`, `plotDriftRate` and `compareAGCPfsUtils` become
+  `analysis.estimateGuideErrors`, `analysis.fitDriftRate` and `analysis.comparePfsUtilsPositions`, whose results
+  `plotting.plotGuideErrors`, `plotting.plotDriftRate` and `plotting.plotPfsUtilsComparison` draw.
 - The plots take AG data, not an opdb connection. Cameras are `agcCameraIds`, 0-5, rather than `AGC`, 1-6, and the
   cursor readout takes design names by visit (`designNames`).
 - The readers become `queries.readAgcData`; `compat` keeps their names, deprecated.
