@@ -38,7 +38,7 @@ the pipeline/config glue to run them.
   `dmResiduals`, `dmCombinedResiduals`, `extractionQa`, `extractionQaCombined`,
   `imageQualityQa`.
 - **Tasks in the pipeline (`python/pfs/drp/qa/`)**:
-  - `imageQualityQa.py` — image quality (FWHM, flag rates); plots in `iqQaPlots.py`
+  - `imageQualityQa.py` — image quality (FWHM, flag rates); plots in `plotting/iqQa.py`
   - `dmResiduals.py`, `dmCombinedResiduals.py` — detector map residuals (per-detector
     and cross-visit combined)
   - `extractionQa.py`, `extractionQaCombined.py` — fiber extraction quality
@@ -62,16 +62,23 @@ the pipeline/config glue to run them.
   update its section and rerun it (`jupyter nbconvert --to notebook --execute --inplace`).
   `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its replacement
   (needs the opdb; committed without outputs): keep it in step with renamed arguments.
+- **Plotting (`python/pfs/drp/qa/plotting/`)** — the QA plots: DataFrames in, figures
+  out (`dmResiduals`, `dmCombined`, `iqQa`, and `palettes` for the shared palettes and
+  `scatterplot_with_outliers`). It imports no Butler, stack or task module, so plots can
+  be drawn from stored data; `tests/plotting/test_imports.py` enforces this. The task
+  modules, `iqQaPlots` and `utils.plotting` re-export the names they used to define.
+- **Metrics (`python/pfs/drp/qa/metrics/`)** — stack-free metric containers
+  (`fitStats`: `FitStat`/`FitStats`, the rows of `dmQaResidualStats`).
 - **Support modules (`python/pfs/drp/qa/`)**:
   - `storageClasses.py`, `formatters.py` — custom Butler storage classes / formatters
-  - `utils/` — shared helpers (`math.py`, `plotting.py`)
+  - `utils/` — shared helpers (`math.py`; `plotting.py` re-exports `plotting.palettes`)
   - `tasks/` — auxiliary task helpers (e.g. `overlapRegionLines.py`)
 - **Command-line tools (`bin.src/`)** — run as `python bin.src/<name>.py`:
   - `fitDetectorMapLogQa.py` — stdlib-only OK/WARN/BAD gate over `fitDetectorMap` logs;
     exits non-zero on BAD. Keep it stack-free.
   - `imageQualityLogQa.py` — per-visit report from `reduceExposure`/`imageQualityQa`
     logs or a direct Butler query; dashboard plot, markdown report, JSON dump
-  - `plotIqQaTimeSeries.py` — cross-visit `iqQaMetrics` time series via `iqQaPlots.py`
+  - `plotIqQaTimeSeries.py` — cross-visit `iqQaMetrics` time series via `plotting/iqQa.py`
   - `fiberNormsQa.py` — entry point for `fiberNormsQa.main`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),
   which contains the core reduction logic and C++ primitives, and on `pfs_utils`. Both
@@ -139,7 +146,7 @@ pytest tests/
 pytest tests/test_fitDetectorMapLogQa.py
 
 # Single test
-pytest tests/test_dmResiduals.py::TestDetectorMapResiduals::testResiduals
+pytest tests/plotting/test_dmResiduals.py::testPlotResidual
 ```
 
 `pyproject.toml` sets `addopts = "-ra --import-mode=importlib"`. Note the `importlib`
@@ -322,8 +329,11 @@ not crash the pipeline. Only write outputs when `run()` succeeds.
 - Single-figure tasks: return a `matplotlib.figure.Figure` in the `Struct`; Butler stores
   it via `storageClass="Plot"` using `PdfMatplotlibFormatter`.
 - Multi-page tasks: return a `MultipagePdfFigure`; call `.append(fig)` for each page.
+- Draw in `pfs.drp.qa.plotting`, never in the task module: the task binds the figures
+  to the storage class (as `dmCombinedResiduals.make_report` wraps
+  `plotting.dmCombined.reportFigures`).
 
-### Shared plotting utilities (`utils/plotting.py`)
+### Shared plotting utilities (`plotting/palettes.py`)
 
 - `div_palette` — diverging colormap with over/under/bad colors for residual plots.
 - `detector_palette` — arm color mapping: `{"b": blue, "r": red, "n": goldenrod, "m": pink}`.
@@ -417,7 +427,7 @@ drpQA.yaml#extractionQaCombined      ← extQaImage_pickle (multiple)
 
 bin.src/plotIqQaTimeSeries.py
     ← reads: iqQaMetrics (all quanta in a collection)
-    → writes: time-series PNG via pfs.drp.qa.iqQaPlots.plotIqTimeSeries
+    → writes: time-series PNG via pfs.drp.qa.plotting.iqQa.plotIqTimeSeries
 ```
 
 `reduceExposure` is **not** required between `fitDetectorMap` and `imageQualityQa`. The
