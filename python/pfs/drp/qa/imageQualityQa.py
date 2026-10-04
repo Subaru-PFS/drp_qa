@@ -120,7 +120,12 @@ class ImageQualityQaConnections(
         minimum=0,
     )
 
-    pfsConfig = InputConnection(
+    # A prerequisite, as in extractionQa and extractionQaCombined: a dataset
+    # type that is a prerequisite to one task in a graph must be one to all of
+    # them, or the pipeline doesn't build. Prerequisites are resolved when the
+    # graph is built and default to minimum=1, so minimum=0 is what lets a
+    # collection without a pfsConfig still get a quantum.
+    pfsConfig = PrerequisiteConnection(
         name="pfsConfig",
         doc=(
             "Fiber configuration for this visit.  When provided alongside"
