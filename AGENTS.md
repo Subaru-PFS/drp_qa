@@ -60,6 +60,8 @@ the pipeline/config glue to run them.
   Each plot is described, with an annotated sample, in the notebook
   `docs/guider-plots.ipynb`, committed with its outputs: when you add or change a plot,
   update its section and rerun it (`jupyter nbconvert --to notebook --execute --inplace`).
+  `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its replacement
+  (needs the opdb; committed without outputs): keep it in step with renamed arguments.
 - **Support modules (`python/pfs/drp/qa/`)**:
   - `storageClasses.py`, `formatters.py` — custom Butler storage classes / formatters
   - `utils/` — shared helpers (`math.py`, `plotting.py`)

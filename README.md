@@ -387,10 +387,12 @@ plotting.plotFocus(agcData, plotBy="agc_exposure_id", showFocusSets=True)
 Each plot draws on a new figure, or on the `fig`, `ax` or `axes` it is given, and returns a `GuiderPlot` holding
 the figure, its panels, the artists and the colorbars. Given the `colorbars` of an earlier call, it updates them,
 so a figure can be redrawn in place. The notebook [`docs/guider-plots.ipynb`](docs/guider-plots.ipynb) describes
-each plot (what it shows, where its data come from, how to read it and what to look for) beside an annotated sample,
-and runs on the tests' AG data or the opdb.
+each plot (what it shows, where its data come from, how to read it and what to look for) beside an annotated sample.
+It runs on the tests' AG data or, with `USE_OPDB = True`, on the opdb, where it also checks the readers and fits the
+plots don't use.
 
-Coming from drp_stella:
+Coming from drp_stella ([`docs/guiders-migration.ipynb`](docs/guiders-migration.ipynb) runs each of its calls
+beside the replacement):
 
 - Fit, then plot. `GuiderConfig` is split into `analysis.GuiderFitConfig` and `plotting.GuiderPlotConfig`.
   drp_stella's `estimateGuideErrors(plot=True)`, `plotDriftRate` and `compareAGCPfsUtils` become
