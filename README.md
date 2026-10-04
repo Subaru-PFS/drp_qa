@@ -386,8 +386,9 @@ plotting.plotFocus(agcData, plotBy="agc_exposure_id", showFocusSets=True)
 
 Each plot draws on a new figure, or on the `fig`, `ax` or `axes` it is given, and returns a `GuiderPlot` holding
 the figure, its panels, the artists and the colorbars. Given the `colorbars` of an earlier call, it updates them,
-so a figure can be redrawn in place. [`docs/guider-plots`](docs/guider-plots/README.md) describes each plot: what
-it shows, where its data come from and what to look for, with an annotated sample.
+so a figure can be redrawn in place. The notebook [`docs/guider-plots.ipynb`](docs/guider-plots.ipynb) describes
+each plot (what it shows, where its data come from, how to read it and what to look for) beside an annotated sample,
+and runs on the tests' AG data or the opdb.
 
 Coming from drp_stella:
 

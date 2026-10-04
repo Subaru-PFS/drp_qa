@@ -96,9 +96,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   are plotted, and open-shutter ones once; `plotFocusByAG` applies `onlyGuideStars`; titles give the visit range and
   say "closed shutter"; `showTheta` and an axes-only `showTelescopeErrors` work; the arrows' legend works with
   matplotlib 3.9; FWHM points are drawn once; the cursor readout reads correctly and needs no database; and the
-  averages use only valid matches. `README.md` has a "Guider tools" section, and `docs/guider-plots/` describes
-  each plot (what it shows, its data, what to look for) beside an annotated sample drawn from the test fixtures by
-  `makeGuiderPlotDocs.py` (PIPE2D-1899).
+  averages use only valid matches. `README.md` has a "Guider tools" section, and the notebook
+  `docs/guider-plots.ipynb` describes each plot (what it shows, its data, how to read it, what to look for) beside
+  an annotated sample drawn from the tests' AG data (PIPE2D-1899).
 
 ### Fixed
 
