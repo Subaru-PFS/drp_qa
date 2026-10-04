@@ -63,12 +63,19 @@ the pipeline/config glue to run them.
   `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its replacement
   (needs the opdb; committed without outputs): keep it in step with renamed arguments.
 - **Plotting (`python/pfs/drp/qa/plotting/`)** — the QA plots: DataFrames in, figures
-  out (`dmResiduals`, `dmCombined`, `iqQa`, and `palettes` for the shared palettes and
-  `scatterplot_with_outliers`). It imports no Butler, stack or task module, so plots can
+  out (`dmResiduals`, `dmCombined`, `iqQa`, `thresholds`, and `palettes` for the shared
+  palettes and `scatterplot_with_outliers`). It imports no Butler, stack or task module, so plots can
   be drawn from stored data; `tests/plotting/test_imports.py` enforces this. The task
   modules, `iqQaPlots` and `utils.plotting` re-export the names they used to define.
 - **Metrics (`python/pfs/drp/qa/metrics/`)** — stack-free metric containers
-  (`fitStats`: `FitStat`/`FitStats`, the rows of `dmQaResidualStats`).
+  (`fitStats`: `FitStat`/`FitStats`, the rows of `dmQaResidualStats`), and the threshold
+  machinery: `validationVisits` loads `data/validationVisits.yaml` (package data; visits
+  with known verdicts), `thresholds` derives WARN/FAIL from a distribution, `calibration`
+  turns stored `iqQaMetrics` into a table of suggestions, and `readers` reads them from a
+  Butler it is given. Rules R1–R7, the derivation procedure and the metric checklist are
+  in [`docs/qa-principles.md`](docs/qa-principles.md): read it before adding a metric or
+  a threshold. `docs/qa-thresholds.ipynb` runs the derivation on real data (committed
+  with outputs; rerun it when the metrics or the visit set change).
 - **Support modules (`python/pfs/drp/qa/`)**:
   - `storageClasses.py`, `formatters.py` — custom Butler storage classes / formatters
   - `utils/` — shared helpers (`math.py`; `plotting.py` re-exports `plotting.palettes`)

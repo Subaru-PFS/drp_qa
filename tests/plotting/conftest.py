@@ -1,6 +1,6 @@
 """Shared fixtures for the ``pfs.drp.qa.plotting`` tests.
 
-These tests need numpy, pandas, matplotlib and seaborn but not the LSST stack.
+These tests need numpy, pandas, matplotlib, seaborn, scipy and pyyaml but not the LSST stack.
 CI runs them in the ``deps`` job; the standard-library job ignores this
 directory.
 
@@ -12,7 +12,9 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import pytest
+import scipy  # noqa: F401 (pfs.drp.qa.metrics needs it; listed so the directory is skipped without it)
 import seaborn  # noqa: F401 (pfs.drp.qa.plotting needs it; listed so the directory is skipped without it)
+import yaml  # noqa: F401 (pfs.drp.qa.metrics needs it; listed so the directory is skipped without it)
 from matplotlib import pyplot as plt
 
 from pfs.drp.qa.metrics.fitStats import FitStat, FitStats

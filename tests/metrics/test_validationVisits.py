@@ -1,0 +1,313 @@
+"""Tests for the validation visit set and its loader."""
+
+from textwrap import dedent
+
+import pandas as pd
+import pytest
+
+from pfs.drp.qa.metrics.thresholds import MIN_SAMPLES
+from pfs.drp.qa.metrics.validationVisits import (
+    ValidationVisit,
+    defaultValidationVisitsPath,
+    loadValidationVisits,
+    matchRows,
+    selectRows,
+)
+
+
+@pytest.fixture
+def writeYaml(tmp_path):
+    """Return a helper writing YAML text to a temporary file."""
+
+    def write(text):
+        path = tmp_path / "validationVisits.yaml"
+        path.write_text(dedent(text))
+        return path
+
+    return write
+
+
+class TestCheckedInSet:
+    """The validation set that ships with the repository must stay loadable."""
+
+    def testDefaultPathResolves(self):
+        path = defaultValidationVisitsPath()
+        assert path.name == "validationVisits.yaml"
+        assert path.exists(), f"validation visit set missing at {path}"
+
+    def testShipsAsPackageData(self):
+        """The set is read at run time, so it lives in the package, not in tests/."""
+        assert defaultValidationVisitsPath().parent.parent.name == "metrics"
+
+    def testLoads(self):
+        visitSet = loadValidationVisits()
+        assert visitSet.path == defaultValidationVisitsPath()
+
+    def testSm1FocusRangeIsKnownBad(self):
+        """The documented SM1 optics failure is the anchor known_bad entry."""
+        visitSet = loadValidationVisits()
+        sm1 = [entry for entry in visitSet.knownBad if 140005 in entry.visits]
+        assert len(sm1) == 1, "expected exactly one entry covering the SM1 focus range"
+        (entry,) = sm1
+        assert entry.expect == "FAIL"
+        assert entry.spectrographs == (1,)
+        assert entry.visits[-1] == 140138
+        assert len(entry.visits) == 140138 - 140005 + 1
+        assert entry.metric, "a known_bad entry must name the metric that identifies the fault"
+        assert entry.reason
+
+    def testKnownGoodIsPopulated(self):
+        """The Run25 stable set; thresholds cannot be derived without it."""
+        visitSet = loadValidationVisits()
+        assert visitSet.knownGood, "no usable known_good entries"
+        assert visitSet.goodVisits[0] == 133025
+        assert visitSet.goodVisits[-1] == 135850
+
+    def testKnownGoodEntriesAreScopedToTheArmsThatWereRead(self):
+        """Run25 block A read b/r/n and block B read b/m; neither covers the other."""
+        visitSet = loadValidationVisits()
+        assert visitSet.expectationFor(133037, arm="b", spectrograph=1) == "PASS"
+        assert visitSet.expectationFor(133037, arm="m", spectrograph=1) is None, "m was not read in block A"
+        assert visitSet.expectationFor(133042, arm="m", spectrograph=1) == "PASS"
+        assert visitSet.expectationFor(133042, arm="n", spectrograph=1) is None, "n was not read in block B"
+
+    def testHgCdClearsTheThresholdSampleFloor(self):
+        """b:HgCd needs both HgCd blocks to reach the 20-sample floor."""
+        detectors = sum(
+            len(entry.visits) * len(entry.spectrographs)
+            for entry in loadValidationVisits().knownGood
+            if entry.seqType == "Arc: HgCd" and "b" in entry.arms
+        )
+        assert detectors >= MIN_SAMPLES, f"only {detectors} b-arm HgCd detectors"
+
+    def testCloudyTwilightIsKnownBadButTheClearOnesAreNot(self):
+        """Same seqType, opposite verdicts; matching is by visit, not sequence name."""
+        visitSet = loadValidationVisits()
+        assert visitSet.expectationFor(134334, arm="b", spectrograph=1) == "FAIL"
+        assert visitSet.expectationFor(134880, arm="b", spectrograph=1) == "PASS"
+
+    def testEveryEntryCarriesAVerdict(self):
+        """The file's entire content is verdicts; a visit with none does not belong."""
+        for entry in loadValidationVisits(includePlaceholders=True):
+            assert entry.expect in ("PASS", "WARN", "FAIL")
+
+    def testTraceVisitsClearTheThresholdSampleFloor(self):
+        """The trace FWHM gate needs thresholds derived from quartz, not arcs.
+
+        b, r and n clear the floor; m does not, because the only m-arm traces are
+        the two short block B and block C sequences.
+        """
+        visitSet = loadValidationVisits()
+        perArm = {}
+        for entry in visitSet.knownGood:
+            if entry.seqType != "Trace":
+                continue
+            for arm in entry.arms:
+                perArm[arm] = perArm.get(arm, 0) + len(entry.visits) * len(entry.spectrographs)
+        for arm in ("b", "r", "n"):
+            assert perArm.get(arm, 0) >= MIN_SAMPLES, f"{arm}: only {perArm.get(arm, 0)} trace detectors"
+
+    def testEveryKnownGoodEntryNamesItsSequence(self):
+        """The flag-rate threshold key is derived from seqType; it cannot be blank."""
+        for entry in loadValidationVisits().knownGood:
+            assert entry.seqType, f"{entry.visits[0]} does not name its W_SEQNAM"
+
+    def testPlaceholdersExcludedByDefault(self):
+        """An unfilled entry must never silently validate a threshold."""
+        assert not any(entry.placeholder for entry in loadValidationVisits())
+        assert any(entry.placeholder for entry in loadValidationVisits(includePlaceholders=True))
+
+    def testPlaceholdersCarryNoVisits(self):
+        visitSet = loadValidationVisits(includePlaceholders=True)
+        for entry in visitSet:
+            if entry.placeholder:
+                assert entry.visits == ()
+
+
+class TestRun30KnownBad:
+    def testObstructedFramesFail(self):
+        visitSet = loadValidationVisits()
+        assert visitSet.expectationFor(150115, arm="b", spectrograph=1) == "FAIL"
+        assert visitSet.expectationFor(150641, arm="b", spectrograph=1) == "FAIL"
+
+    def testPartialIlluminationWarnsOnTheLineCount(self):
+        """The defect is how many fibers were measured, not their shape."""
+        visitSet = loadValidationVisits()
+        (entry,) = [e for e in visitSet.knownBad if 149398 in e.visits]
+        assert entry.expect == "WARN"
+        assert entry.metric == "nLines"
+
+    def testFlexureCaseIsAttributedToTheCalibComparison(self):
+        """Phase 2's reference case: a real offset against detectorMap_calib."""
+        visitSet = loadValidationVisits()
+        flexure = [e for e in visitSet.knownBad if e.visits[0] in (150779, 150782)]
+        assert len(flexure) == 2
+        assert all(entry.metric == "medDxCenter" for entry in flexure)
+        assert all(entry.expect == "WARN" for entry in flexure)
+
+
+class TestUnconfirmedVerdicts:
+    """Suspected faults, recorded so somebody checks them."""
+
+    def testUnconfirmedEntriesAreLoaded(self):
+        """They are real visits; hiding them defeats the point of recording them."""
+        visitSet = loadValidationVisits()
+        suspect = {entry.visits[0] for entry in visitSet.knownBad if entry.unconfirmed}
+        assert suspect == {149883, 150661}
+
+    def testConfirmedBadExcludesThem(self):
+        """A guess must not decide whether a threshold separates the bad data."""
+        visitSet = loadValidationVisits()
+        assert len(visitSet.confirmedBad) == len(visitSet.knownBad) - 2
+        assert all(not entry.unconfirmed for entry in visitSet.confirmedBad)
+
+    def testTheyStillCarryAVerdictAndAReason(self):
+        """Unconfirmed means "not established", not "unspecified"."""
+        for entry in loadValidationVisits().knownBad:
+            if entry.unconfirmed:
+                assert entry.expect == "FAIL"
+                assert entry.reason
+
+    def testConfirmedEntriesDefaultToConfirmed(self, writeYaml):
+        path = writeYaml("version: 1\nknown_bad:\n  - {visit: 1, expect: FAIL}\n")
+        (entry,) = loadValidationVisits(path).knownBad
+        assert not entry.unconfirmed
+
+
+class TestEntryMatching:
+    def testMatchesRespectsSelectors(self):
+        entry = ValidationVisit(visits=(100, 101), expect="FAIL", arms=("b",), spectrographs=(1,))
+        assert entry.matches(100, arm="b", spectrograph=1)
+        assert not entry.matches(102, arm="b", spectrograph=1)
+        assert not entry.matches(100, arm="r", spectrograph=1)
+        assert not entry.matches(100, arm="b", spectrograph=2)
+
+    def testOmittedSelectorMatchesEverything(self):
+        entry = ValidationVisit(visits=(100,), expect="PASS")
+        assert entry.matches(100, arm="n", spectrograph=4, seqType="Quartz")
+
+    def testUnknownSelectorIsNotApplied(self):
+        """Passing ``None`` means "do not filter on this", not "no match"."""
+        entry = ValidationVisit(visits=(100,), expect="PASS", arms=("b",))
+        assert entry.matches(100, arm=None)
+
+
+class TestExpectation:
+    def testUnknownVisitHasNoExpectation(self):
+        """Absence from the set is "no expectation", never an implied PASS."""
+        visitSet = loadValidationVisits()
+        assert visitSet.expectationFor(1) is None
+
+    def testWorstExpectationWins(self, writeYaml):
+        path = writeYaml(
+            """
+            version: 1
+            known_good:
+              - visit: 100
+            known_bad:
+              - visit: 100
+                expect: WARN
+              - visit: 100
+                expect: FAIL
+            """
+        )
+        assert loadValidationVisits(path).expectationFor(100) == "FAIL"
+
+
+class TestParsing:
+    def testVisitRangeIsInclusive(self, writeYaml):
+        path = writeYaml("version: 1\nknown_good:\n  - visitRange: [10, 12]\n")
+        (entry,) = loadValidationVisits(path).knownGood
+        assert entry.visits == (10, 11, 12)
+        assert entry.expect == "PASS", "known_good defaults to PASS"
+
+    @pytest.mark.parametrize(
+        ("body", "message"),
+        [
+            ("version: 2\n", "unsupported schema version"),
+            ("version: 1\nknown_good: 3\n", "must be a list"),
+            ("version: 1\nknown_good:\n  - 3\n", "expected a mapping"),
+            ("version: 1\nknown_good:\n  - {}\n", "one of 'visit' or 'visitRange' is required"),
+            ("version: 1\nknown_good:\n  - {visit: 1, visitRange: [1, 2]}\n", "not both"),
+            ("version: 1\nknown_good:\n  - {visitRange: [9, 1]}\n", "inverted"),
+            ("version: 1\nknown_good:\n  - {visitRange: [1]}\n", "two-element list"),
+            ("version: 1\nknown_good:\n  - {visit: notanint}\n", "must be an integer"),
+            ("version: 1\nknown_good:\n  - {visit: true}\n", "must be an integer"),
+            ("version: 1\nknown_good:\n  - {visit: 1, expect: MAYBE}\n", "invalid expect"),
+            ("version: 1\nknown_good:\n  - {visit: 1, arms: b}\n", "must be a list"),
+            ("version: 1\nknown_bad:\n  - {visit: 1}\n", "'expect' is required"),
+            ("version: 1\nknown_good:\n  - {visit: 1, expect: FAIL}\n", "must expect PASS"),
+            ("version: 1\nknown_good:\n  - {visit: 1, arm: [b]}\n", "unknown keys: arm"),
+            ("version: 1\nknown_goods: []\n", "unknown top-level keys"),
+            ('version: 1\nknown_good:\n  - {visit: 1, placeholder: "false"}\n', "must be true or false"),
+            (
+                "version: 1\nknown_bad:\n  - {visit: 1, expect: FAIL, unconfirmed: yes please}\n",
+                "must be true or false",
+            ),
+        ],
+    )
+    def testMalformedEntriesRaise(self, writeYaml, body, message):
+        """Validation is strict: a dropped entry stops being a reference."""
+        with pytest.raises(ValueError, match=message):
+            loadValidationVisits(writeYaml(body))
+
+    def testMissingFileRaises(self, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            loadValidationVisits(tmp_path / "nope.yaml")
+
+
+class TestRowMatching:
+    """Matching a metrics table against entries, as `calibrate` does."""
+
+    @staticmethod
+    def frame():
+        return pd.DataFrame(
+            {
+                "visit": [100, 100, 101, 102],
+                "arm": ["b", "r", "b", "b"],
+                "spectrograph": [1, 1, 2, 1],
+                "seqName": ["Arc: Neon", "Arc: Neon", None, "Trace"],
+            },
+            # Duplicated, as after a plain pd.concat: matching must be positional.
+            index=[0, 0, 1, 1],
+        )
+
+    def testSelectorsApply(self):
+        entry = ValidationVisit(visits=(100, 101, 102), expect="PASS", arms=("b",), seqType="Arc: Neon")
+        assert matchRows(self.frame(), [entry]).tolist() == [True, False, True, False]
+
+    def testNullColumnValueDoesNotRestrict(self):
+        """Visit 101 has no seqName: unknown, so the seqType selector is not applied."""
+        entry = ValidationVisit(visits=(101,), expect="PASS", seqType="Arc: Neon")
+        assert matchRows(self.frame(), [entry]).tolist() == [False, False, True, False]
+
+    def testMissingColumnDoesNotRestrict(self):
+        entry = ValidationVisit(visits=(100,), expect="PASS", spectrographs=(1,))
+        frame = self.frame().drop(columns="spectrograph")
+        assert matchRows(frame, [entry]).tolist() == [True, True, False, False]
+
+    def testAgreesWithEntryMatches(self):
+        """The vectorised match and `ValidationVisit.matches` are the same rule."""
+        visitSet = loadValidationVisits()
+        frame = pd.DataFrame(
+            [
+                {"visit": visit, "arm": arm, "spectrograph": spectrograph, "seqName": seqName}
+                for visit in (133025, 133037, 133042, 134334, 140005, 149883, 150779)
+                for arm in ("b", "r", "m")
+                for spectrograph in (1, 2)
+                for seqName in ("Arc: Argon", "Arc: HgCd", "Twilight sky", "Arc: Neon")
+            ]
+        )
+        for entry in visitSet:
+            expected = [
+                entry.matches(row.visit, row.arm, row.spectrograph, row.seqName) for row in frame.itertuples()
+            ]
+            assert matchRows(frame, [entry]).tolist() == expected
+
+    def testSelectRowsKeepsOrder(self):
+        entry = ValidationVisit(visits=(100, 102), expect="PASS")
+        assert selectRows(self.frame(), [entry])["visit"].tolist() == [100, 100, 102]
+
+    def testNoVisitColumnRaises(self):
+        with pytest.raises(KeyError, match="visit"):
+            matchRows(pd.DataFrame({"arm": ["b"]}), [])

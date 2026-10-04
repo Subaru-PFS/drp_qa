@@ -24,6 +24,7 @@ keywords = ["astronomy", "spectrograph", "subaru", "pfs", "autoguider"]
 dependencies = [
     "numpy >= 2.0",
     "pandas",
+    "pyyaml",
     "matplotlib >= 3.10",
     "scipy",
     "seaborn",
@@ -45,6 +46,9 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["python"]
 include = ["pfs", "pfs.*"]
+
+[tool.setuptools.package-data]
+"pfs.drp.qa.metrics" = ["data/*.yaml"]
 
 # ==============================================================================
 # DYNAMIC VERSION
