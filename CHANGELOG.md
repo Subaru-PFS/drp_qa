@@ -101,6 +101,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   an annotated sample drawn from the tests' AG data; with `USE_OPDB = True` it runs on the opdb and checks the
   readers and fits the plots don't use. `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its
   drp_qa replacement, on a real opdb (PIPE2D-1899).
+- **`pfs.drp.qa.plotting`** — the QA plots, moved unchanged out of `dmResiduals`, `dmCombinedResiduals`,
+  `iqQaPlots` and `utils.plotting` (into `plotting.dmResiduals`, `.dmCombined`, `.iqQa` and `.palettes`), which
+  re-export them. The subpackage imports no Butler, stack or task module, so the plots can be drawn from stored
+  data; `tests/plotting/` checks that and smoke-tests each plot. `plot_detectormap_residuals` takes a
+  `DetectorGeometry` (a `DetectorMap` still works), and `dmCombinedResiduals.make_report` wraps the page
+  generator `plotting.dmCombined.reportFigures`. `FitStat`/`FitStats` move to `pfs.drp.qa.metrics.fitStats`.
+  Rendered output is unchanged (PIPE2D-1916).
 
 ### Fixed
 
@@ -117,6 +124,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   ways (PIPE2D-1913).
 - **`fluxCalQa` import** — `FilterCurve` and `TransmissionCurve` are imported from
   `pfs.drp.stella.fitFluxReference`; `pfs.drp.stella.fitReference` no longer exists (PIPE2D-1913).
+- **`plot_residual` with pandas 3** — the binned wavelength panel called `.agg("median", robustRms)`.
+  Older pandas took `robustRms` as `numeric_only` and computed the median; pandas 3 raises, which left both
+  residual-by-wavelength panels of `plot_detectormap_residuals` empty. It now calls `.agg("median")`. Its
+  per-fiber `groupby().apply()` no longer warns about operating on the grouping columns (PIPE2D-1916).
+- **`get_fit_stats` at zero dof** — with zero degrees of freedom and zero residuals, the softening solve
+  raised from `scipy.optimize.bisect` and `dmResiduals` wrote nothing for the quantum. `softenFit` is now NaN
+  there, as it already was at zero dof with nonzero residuals (PIPE2D-1916).
 
 ### Changed
 

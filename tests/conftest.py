@@ -38,6 +38,8 @@ _STACK_MODULES = [
 # Test directories whose conftest.py imports non-stdlib packages.
 _OPTIONAL_DIRS = [
     "guiders",
+    "metrics",
+    "plotting",
 ]
 
 _HERE = Path(__file__).parent

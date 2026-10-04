@@ -116,16 +116,18 @@ per-fiber arrays).
 `dmResiduals` writes `dmQaResidualData`, `dmQaResidualStats` and `dmQaResidualPlot`.
 `get_fit_stats` builds `dmQaResidualStats` **per `(status_type, description)`** — that
 is, separately for `RESERVED` and `USED` lines of each species — via the `FitStats` /
-`FitStat` dataclasses. Each row carries `dof`, `chi2X`, `chi2Y`, and a `spatial.` and
+`FitStat` dataclasses (`pfs.drp.qa.metrics.fitStats`). Each row carries `dof`, `chi2X`, `chi2Y`, and a `spatial.` and
 `wavelength.` block of `median`, `robustRms`, `weightedRms`, `softenFit`, `dof`,
 `num_fibers`, `num_lines`. The RMS values are **error-weighted** (`getWeightedRMS`) with
-a robust variant (`robustRms`); `softenFit` is solved by bisection. Prefer these over
+a robust variant (`robustRms`); `softenFit` is solved by bisection, and is NaN when it
+can't be (more than `maxSoften` needed, or zero dof). Prefer these over
 adding parallel unweighted metrics.
 
 `dmCombinedResiduals` aggregates across detectors into `dmQaDetectorStats` and renders a
-multi-page `dmQaCombinedResidualPlot` via `make_report`.
+multi-page `dmQaCombinedResidualPlot` via `make_report`, whose pages are drawn by
+`pfs.drp.qa.plotting.dmCombined.reportFigures`.
 
-The task writes **data only**. Plotting lives in `iqQaPlots.py` and is driven after the
+The task writes **data only**. Plotting lives in `plotting/iqQa.py` and is driven after the
 fact by `bin.src/plotIqQaTimeSeries.py`; there is no `iqQaPlot` dataset.
 
 ---

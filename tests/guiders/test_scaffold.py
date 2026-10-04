@@ -9,7 +9,7 @@ import importlib
 import pytest
 from matplotlib.figure import Figure
 
-from pfs.drp.qa.utils.plotting import opaqueColorbar
+from pfs.drp.qa.plotting.palettes import opaqueColorbar
 
 
 @pytest.mark.parametrize("name", ["coordinates", "queries", "compat", "analysis", "plotting"])

@@ -66,7 +66,7 @@ from pfs.drp.qa.guiders.coordinates import (
     rotXY,
     umToMm,
 )
-from pfs.drp.qa.utils.plotting import opaqueColorbar
+from pfs.drp.qa.plotting.palettes import opaqueColorbar
 
 __all__ = [
     "FormatCoord",

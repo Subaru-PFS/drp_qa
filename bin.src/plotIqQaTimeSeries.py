@@ -139,7 +139,7 @@ def main():
         metrics = metrics[metrics["obsType"].isin(obs_types_to_keep)]
         print(f"Filtered to obsType(s): {obs_types_to_keep} ({len(metrics)} rows remaining)")
 
-    from pfs.drp.qa.iqQaPlots import plotIqTimeSeries
+    from pfs.drp.qa.plotting.iqQa import plotIqTimeSeries
 
     # Construct identifying title
     source = args.csv if args.csv else args.collection
