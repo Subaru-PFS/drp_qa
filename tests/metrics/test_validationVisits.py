@@ -267,6 +267,9 @@ class TestParsing:
         [
             ("version: 2\n", "unsupported schema version"),
             ("version: 1\nknown_good: 3\n", "must be a list"),
+            ("version: 1\nknown_good: 0\n", "must be a list"),
+            ("version: 1\nruns: []\n", "must be a mapping"),
+            ("version: 1\nruns: 0\n", "must be a mapping"),
             ("version: 1\nknown_good:\n  - 3\n", "expected a mapping"),
             ("version: 1\nknown_good:\n  - {}\n", "one of 'visit' or 'visitRange' is required"),
             ("version: 1\nknown_good:\n  - {visit: 1, visitRange: [1, 2]}\n", "not both"),
