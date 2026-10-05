@@ -319,6 +319,12 @@ known_good:
     spectrographs: [2, 3, 4]
     seqType: "Trace"
     note: "Run27 control for SM1 defocused, same exposures."
+  - visitRange: [140139, 140148]
+    sequenceType: scienceTrace
+    arms: [b, r, n]
+    spectrographs: [2, 3, 4]
+    seqType: "Trace"
+    note: "Run27 control for SM1 defocused, same exposures."
   - visitRange: [140124, 140126]
     sequenceType: scienceArc
     arms: [b, r, n]
@@ -559,6 +565,14 @@ known_bad:
     expect: FAIL
     metric: medFwhm
     reason: "SM1 defocused (Run27). 30 s, az 226."
+  - visitRange: [140139, 140148]
+    sequenceType: scienceTrace
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "Trace"
+    expect: FAIL
+    metric: medFwhm
+    reason: "SM1 defocused (Run27). 30 s, az 336."
   - visitRange: [140124, 140126]
     sequenceType: scienceArc
     arms: [b, r, n]

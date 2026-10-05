@@ -29,6 +29,7 @@ __all__ = [
     "loadValidationVisits",
     "matchRows",
     "selectRows",
+    "sequenceGroups",
     "sequenceTypeMismatches",
     "unmatchedEntries",
     "visitExpression",
@@ -413,6 +414,46 @@ def sequenceTypeMismatches(frame, visitSet: ValidationVisitSet):
         dtype=bool,
     )
     return frame[~allowed].assign(sequenceType=expected[~allowed])
+
+
+def sequenceGroups(visitSet: ValidationVisitSet, visits: Iterable[int] | None = None) -> dict[int, int]:
+    """Return each visit's sequence, as cosmic-ray grouping needs it.
+
+    ``cosmicray`` combines the repeated exposures of a camera. ``drpActor``
+    reduces one sequence at a time, so it never combines exposures of
+    different sequences; reducing many sequences in one graph with the
+    ``auto`` grouping can. An entry covers one sequence, and entries sharing a
+    visit are the same sequence.
+
+    Parameters
+    ----------
+    visitSet : `ValidationVisitSet`
+        The validation visit set.
+    visits : iterable of `int`, optional
+        Restrict the mapping to these visits.
+
+    Returns
+    -------
+    `dict` [`int`, `int`]
+        Visit to group, the group being the sequence's first visit: the
+        ``groups`` of ``cosmicray`` with ``grouping="manual"``.
+    """
+    parent: dict[int, int] = {}
+
+    def root(visit: int) -> int:
+        while parent[visit] != visit:
+            parent[visit] = parent[parent[visit]]
+            visit = parent[visit]
+        return visit
+
+    for entry in visitSet:
+        for visit in entry.visits:
+            parent.setdefault(visit, visit)
+        for visit in entry.visits[1:]:
+            a, b = root(entry.visits[0]), root(visit)
+            parent[max(a, b)] = min(a, b)
+    wanted = set(parent) if visits is None else set(visits) & set(parent)
+    return {visit: root(visit) for visit in sorted(wanted)}
 
 
 def visitExpression(visits: Iterable[int]) -> str:

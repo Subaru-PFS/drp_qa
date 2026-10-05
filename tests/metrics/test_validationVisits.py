@@ -16,6 +16,7 @@ from pfs.drp.qa.metrics.validationVisits import (
     main,
     matchRows,
     selectRows,
+    sequenceGroups,
     sequenceTypeMismatches,
     unmatchedEntries,
     visitExpression,
@@ -54,9 +55,9 @@ class TestCheckedInSet:
         """The Run27 SM1-defocused sequences: spectrograph 1 only, caught by medFwhm."""
         visitSet = loadValidationVisits()
         sm1 = [entry for entry in visitSet.knownBad if entry.reason and "SM1 defocused" in entry.reason]
-        assert len(sm1) == 8
+        assert len(sm1) == 9
         visits = {visit for entry in sm1 for visit in entry.visits}
-        assert visits >= {140005, 140032, 140035, 140138}
+        assert visits >= {140005, 140032, 140035, 140138, 140139, 140148}
         assert not visits & {140033, 140034}, "no raw data"
         assert all(entry.spectrographs == (1,) and entry.metric == "medFwhm" for entry in sm1)
         assert visitSet.expectationFor(140130, arm="b", spectrograph=1, seqType="Arc: Neon") == "FAIL"
@@ -77,7 +78,7 @@ class TestCheckedInSet:
             if entry.reason
             and any(text in entry.reason for text in ("SM1 defocused", "No light", "didn't turn on"))
         ]
-        assert len(faults) == 13
+        assert len(faults) == 14
         for fault in faults:
             controls = [good for good in visitSet.knownGood if good.visits == fault.visits]
             assert len(controls) == 1, fault
@@ -511,3 +512,27 @@ class TestRuns:
             "Arc: Krypton",
         }
         assert all(entry.run == 25 for entry in flagged)
+
+
+class TestSequenceGroups:
+    def testOneGroupPerSequence(self):
+        a = ValidationVisit(visits=(10, 11, 12), expect="PASS")
+        b = ValidationVisit(visits=(20, 21), expect="PASS")
+        groups = sequenceGroups(ValidationVisitSet(knownGood=(a, b)))
+        assert groups == {10: 10, 11: 10, 12: 10, 20: 20, 21: 20}
+
+    def testEntriesSharingAVisitAreOneSequence(self):
+        """A fault and its control cover the same exposures."""
+        fault = ValidationVisit(visits=(10, 11), expect="FAIL", spectrographs=(1,))
+        control = ValidationVisit(visits=(11, 12), expect="PASS", spectrographs=(2,))
+        groups = sequenceGroups(ValidationVisitSet(knownGood=(control,), knownBad=(fault,)))
+        assert set(groups.values()) == {10}
+
+    def testRestrictedToVisits(self):
+        a = ValidationVisit(visits=(10, 11), expect="PASS")
+        assert sequenceGroups(ValidationVisitSet(knownGood=(a,)), visits=[11, 99]) == {11: 10}
+
+    def testCheckedInSetKeepsBlocksApart(self):
+        """Run25 block A and block B argon are different sequences."""
+        groups = sequenceGroups(loadValidationVisits())
+        assert groups[133025] == groups[133027] != groups[133042]

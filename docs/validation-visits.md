@@ -80,7 +80,7 @@ identified by visit number, with no observer, target or design names.
   exposures are good for every other metric; these entries hold for `pctFlagged` only, so
   today's rates are the baseline for the drp_stella work rather than the threshold.
 - **Cloudy twilight (Run25):** image quality degraded by observing conditions; `medFwhm`.
-- **SM1 defocused (Run27, 2026-03-09/10, spectrograph 1):** the seven arc and trace
+- **SM1 defocused (Run27, 2026-03-09/10, spectrograph 1):** the eight arc and trace
   sequences noted "SM1 defocused", with FWHM 3.83–4.86 px across every lamp type;
   `medFwhm`. See "SM1 exception" in [`qa-domain-notes.md`](qa-domain-notes.md). The
   other visits in 140005–140138 carry no verdict and are not included: darks, the
@@ -146,6 +146,7 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 140005–140006 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: Argon | PASS |  | Run27 control for SM1 defocused, same exposures. |
 | 140032 | 27 | scienceTrace | b, r, n | 2, 3, 4 | Trace | PASS |  | Run27 control for SM1 defocused, same exposures. |
 | 140035 | 27 | scienceTrace | b, r, n | 2, 3, 4 | Trace | PASS |  | Run27 control for SM1 defocused, same exposures. |
+| 140139–140148 | 27 | scienceTrace | b, r, n | 2, 3, 4 | Trace | PASS |  | Run27 control for SM1 defocused, same exposures. |
 | 140124–140126 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: Argon | PASS |  | Run27 control for SM1 defocused, same exposures. |
 | 140127–140129 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: Xenon | PASS |  | Run27 control for SM1 defocused, same exposures. |
 | 140130–140132 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: Neon | PASS |  | Run27 control for SM1 defocused, same exposures. |
@@ -181,6 +182,7 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 140005–140006 | 27 | scienceArc | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` | SM1 defocused (Run27). 15 s, az 90. |
 | 140032 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
 | 140035 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
+| 140139–140148 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 336. |
 | 140124–140126 | 27 | scienceArc | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` | SM1 defocused (Run27). 15 s, az 336. |
 | 140127–140129 | 27 | scienceArc | b, r, n | 1 | Arc: Xenon | FAIL | `medFwhm` | SM1 defocused (Run27). 45 s, az 336. |
 | 140130–140132 | 27 | scienceArc | b, r, n | 1 | Arc: Neon | FAIL | `medFwhm` | SM1 defocused (Run27). 5 s, az 336. |
