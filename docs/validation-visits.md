@@ -94,7 +94,8 @@ identified by visit number, with no observer, target or design names.
   line count is not; `nLines`, `WARN`.
 - **Off-zenith Helium detectorMap tests (Run30, alt 45–49):** a real flexure offset against
   a zenith-derived `detectorMap_calib`; `medDxCenter`, `WARN` (provisional). They are the
-  reference case for drift monitoring (PIPE2D-1921).
+  reference case for drift monitoring (PIPE2D-1921). On the n arm `reduceExposure` fails on
+  these Helium arcs, so n has no metrics.
 
 ### Gaps
 
@@ -143,7 +144,8 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 148908–148911 | 30 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run30 twilight sky, 2026-09-04, alt 80, az 270. 180 s. |
 | 150840–150844 | 30 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run30 twilight sky, 2026-09-16, alt 80, az 267. 180 s. |
 | 140005–140006 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: Argon | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140032–140035 | 27 | scienceTrace | b, r, n | 2, 3, 4 | Trace | PASS |  | Run27 control for SM1 defocused, same exposures. |
+| 140032 | 27 | scienceTrace | b, r, n | 2, 3, 4 | Trace | PASS |  | Run27 control for SM1 defocused, same exposures. |
+| 140035 | 27 | scienceTrace | b, r, n | 2, 3, 4 | Trace | PASS |  | Run27 control for SM1 defocused, same exposures. |
 | 140124–140126 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: Argon | PASS |  | Run27 control for SM1 defocused, same exposures. |
 | 140127–140129 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: Xenon | PASS |  | Run27 control for SM1 defocused, same exposures. |
 | 140130–140132 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: Neon | PASS |  | Run27 control for SM1 defocused, same exposures. |
@@ -177,7 +179,8 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 135847–135848 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Krypton | WARN | `pctFlagged` | b-arm Krypton (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. |
 | 134334–134337 | 25 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | FAIL | `medFwhm` | Cloudy; 180 s twilight sky taken through cloud. |
 | 140005–140006 | 27 | scienceArc | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` | SM1 defocused (Run27). 15 s, az 90. |
-| 140032–140035 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
+| 140032 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
+| 140035 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
 | 140124–140126 | 27 | scienceArc | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` | SM1 defocused (Run27). 15 s, az 336. |
 | 140127–140129 | 27 | scienceArc | b, r, n | 1 | Arc: Xenon | FAIL | `medFwhm` | SM1 defocused (Run27). 45 s, az 336. |
 | 140130–140132 | 27 | scienceArc | b, r, n | 1 | Arc: Neon | FAIL | `medFwhm` | SM1 defocused (Run27). 5 s, az 336. |

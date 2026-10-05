@@ -54,8 +54,10 @@ class TestCheckedInSet:
         """The Run27 SM1-defocused sequences: spectrograph 1 only, caught by medFwhm."""
         visitSet = loadValidationVisits()
         sm1 = [entry for entry in visitSet.knownBad if entry.reason and "SM1 defocused" in entry.reason]
-        assert len(sm1) == 7
-        assert {visit for entry in sm1 for visit in entry.visits} >= {140005, 140032, 140138}
+        assert len(sm1) == 8
+        visits = {visit for entry in sm1 for visit in entry.visits}
+        assert visits >= {140005, 140032, 140035, 140138}
+        assert not visits & {140033, 140034}, "no raw data"
         assert all(entry.spectrographs == (1,) and entry.metric == "medFwhm" for entry in sm1)
         assert visitSet.expectationFor(140130, arm="b", spectrograph=1, seqType="Arc: Neon") == "FAIL"
         assert visitSet.expectationFor(140130, arm="b", spectrograph=2, seqType="Arc: Neon") == "PASS"
@@ -75,7 +77,7 @@ class TestCheckedInSet:
             if entry.reason
             and any(text in entry.reason for text in ("SM1 defocused", "No light", "didn't turn on"))
         ]
-        assert len(faults) == 12
+        assert len(faults) == 13
         for fault in faults:
             controls = [good for good in visitSet.knownGood if good.visits == fault.visits]
             assert len(controls) == 1, fault

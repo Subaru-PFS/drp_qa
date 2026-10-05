@@ -306,7 +306,14 @@ known_good:
     spectrographs: [2, 3, 4]
     seqType: "Arc: Argon"
     note: "Run27 control for SM1 defocused, same exposures."
-  - visitRange: [140032, 140035]
+  # 140033 and 140034 of this sequence have no raw data in the Butler.
+  - visit: 140032
+    sequenceType: scienceTrace
+    arms: [b, r, n]
+    spectrographs: [2, 3, 4]
+    seqType: "Trace"
+    note: "Run27 control for SM1 defocused, same exposures."
+  - visit: 140035
     sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [2, 3, 4]
@@ -535,7 +542,16 @@ known_bad:
     expect: FAIL
     metric: medFwhm
     reason: "SM1 defocused (Run27). 15 s, az 90."
-  - visitRange: [140032, 140035]
+  # 140033 and 140034 of this sequence have no raw data in the Butler.
+  - visit: 140032
+    sequenceType: scienceTrace
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "Trace"
+    expect: FAIL
+    metric: medFwhm
+    reason: "SM1 defocused (Run27). 30 s, az 226."
+  - visit: 140035
     sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1]
@@ -754,7 +770,9 @@ known_bad:
   # altitude 45-49 and insrot 5-9 rather than at the zenith the calibration
   # was taken at. This is the flexure reference case: a real offset against
   # detectorMap_calib, which is what the PIPE2D-1921 drift metrics must detect and
-  # attribute correctly. WARN rather than FAIL is provisional.
+  # attribute correctly. WARN rather than FAIL is provisional. On the n arm,
+  # reduceExposure fails on these Helium arcs ("need at least one array to
+  # concatenate"), so n has no metrics; the arm stays listed so the gap shows.
   - visit: 150779
     sequenceType: scienceArc
     arms: [b, m, n]
