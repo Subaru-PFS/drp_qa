@@ -223,3 +223,38 @@ def testSummarizeRunsDescribesEachRun():
     b = summary[summary["group"] == "b/arc"].set_index("run")
     assert b.loc[25, "reference"] and b.loc[25, "median"] < 0.1
     assert b.loc[27, "median"] == pytest.approx(0.5), "absolute values, as the gate sees them"
+
+
+def testThresholdsFileRoundTrip(tmp_path):
+    """What the judgement step reads is what was derived, with its provenance."""
+    from pfs.drp.qa.metrics.calibration import readThresholds, writeThresholds
+
+    table = calibrate(makeMetrics(), makeVisitSet(), ["medFwhm", "nLines"], derivedOn=date(2026, 10, 5))
+    path = writeThresholds(
+        table, tmp_path / "t.yaml", "u/someone/qa-thresholds/003", [25], "w.2026.40", date(2026, 10, 5)
+    )
+    metadata, thresholds = readThresholds(path)
+    assert metadata == {
+        "derivedOn": "2026-10-05",
+        "collection": "u/someone/qa-thresholds/003",
+        "referenceRuns": [25],
+        "drpQaVersion": "w.2026.40",
+    }
+    derived = table[table["nGood"] > 0]
+    assert len(thresholds) == len(derived), "populations with no good data are not thresholds"
+    b = thresholds[
+        (thresholds["metric"] == "medFwhm") & (thresholds["arm"] == "b") & (thresholds["obsType"] == "arc")
+    ]
+    expected = row(table, "medFwhm", "b/arc")
+    assert b["warn"].item() == expected["warn"] and b["fail"].item() == expected["fail"]
+    assert b["provenance"].item() == expected["provenance"]
+    assert not thresholds.loc[thresholds["metric"] == "nLines", "higherIsWorse"].any()
+
+
+def testThresholdsFileVersionIsChecked(tmp_path):
+    from pfs.drp.qa.metrics.calibration import readThresholds
+
+    path = tmp_path / "t.yaml"
+    path.write_text("version: 99\nthresholds: []\n")
+    with pytest.raises(ValueError, match="thresholds version"):
+        readThresholds(path)

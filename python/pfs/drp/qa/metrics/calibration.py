@@ -15,9 +15,11 @@ a property of the blend.
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import yaml
 
 from pfs.drp.qa.metrics.thresholds import deriveThresholds, verifyKnownBad
 from pfs.drp.qa.metrics.validationVisits import ValidationVisitSet, matchRows
@@ -30,9 +32,27 @@ __all__ = [
     "calibrate",
     "compareRuns",
     "labelRows",
+    "readThresholds",
     "selectGroup",
     "summarizeRuns",
+    "writeThresholds",
 ]
+
+#: Schema version of the thresholds file written by `writeThresholds`.
+THRESHOLDS_VERSION = 1
+
+#: Columns of a `calibrate` row kept in the thresholds file, besides the population.
+_THRESHOLD_FIELDS = (
+    "warn",
+    "fail",
+    "nGood",
+    "nGoodVisits",
+    "visitRange",
+    "reliable",
+    "failBounded",
+    "degenerate",
+    "provenance",
+)
 
 
 @dataclass(frozen=True)
@@ -495,3 +515,106 @@ def summarizeRuns(
                 }
             )
     return pd.DataFrame(rows)
+
+
+def writeThresholds(
+    table: pd.DataFrame,
+    path: Path | str,
+    collection: str,
+    referenceRuns: Sequence[int],
+    drpQaVersion: str,
+    derivedOn: date | None = None,
+) -> Path:
+    """Write the derived thresholds to a versioned YAML file.
+
+    The file is what the judgement step reads, in real time and in comparison:
+    one entry per metric and population with a known-good sample, keyed by the
+    population's columns, with the provenance that says how far to trust it.
+
+    Parameters
+    ----------
+    table : `pandas.DataFrame`
+        The `calibrate` table.
+    path : `pathlib.Path` or `str`
+        Where to write.
+    collection : `str`
+        The collection the metrics came from.
+    referenceRuns : sequence of `int`
+        The runs the thresholds were derived from.
+    drpQaVersion : `str`
+        The drp_qa version that measured them, e.g. ``git describe``.
+    derivedOn : `datetime.date`, optional
+        Derivation date. Defaults to today.
+
+    Returns
+    -------
+    `pathlib.Path`
+        The file written.
+    """
+    entries = []
+    for _, row in table[table["nGood"] > 0].iterrows():
+        columns = [column for column in str(row["groupBy"]).split("/") if column]
+        spec = METRIC_SPECS.get(row["metric"], MetricSpec(row["metric"]))
+        entry = {
+            "metric": row["metric"],
+            "population": {column: _plain(row[column]) for column in columns},
+            "higherIsWorse": spec.higherIsWorse,
+            "absolute": spec.absolute,
+        }
+        entry |= {name: _plain(row[name]) for name in _THRESHOLD_FIELDS}
+        entries.append(entry)
+    document = {
+        "version": THRESHOLDS_VERSION,
+        "derivedOn": (derivedOn or date.today()).isoformat(),
+        "collection": collection,
+        "referenceRuns": [int(run) for run in referenceRuns],
+        "drpQaVersion": drpQaVersion,
+        "thresholds": entries,
+    }
+    path = Path(path)
+    path.write_text(yaml.safe_dump(document, sort_keys=False, allow_unicode=True, width=110))
+    return path
+
+
+def readThresholds(path: Path | str) -> tuple[dict, pd.DataFrame]:
+    """Read a file written by `writeThresholds`.
+
+    Parameters
+    ----------
+    path : `pathlib.Path` or `str`
+        The file.
+
+    Returns
+    -------
+    metadata : `dict`
+        ``derivedOn``, ``collection``, ``referenceRuns`` and ``drpQaVersion``.
+    thresholds : `pandas.DataFrame`
+        One row per metric and population: ``metric``, the population's
+        columns, ``higherIsWorse``, ``absolute`` and the threshold fields.
+
+    Raises
+    ------
+    ValueError
+        If the file's version is not `THRESHOLDS_VERSION`.
+    """
+    document = yaml.safe_load(Path(path).read_text())
+    if document.get("version") != THRESHOLDS_VERSION:
+        raise ValueError(
+            f"{path}: thresholds version {document.get('version')!r}, expected {THRESHOLDS_VERSION}"
+        )
+    rows = [
+        {"metric": entry["metric"], **entry["population"]}
+        | {key: value for key, value in entry.items() if key not in ("metric", "population")}
+        for entry in document["thresholds"]
+    ]
+    metadata = {key: document[key] for key in ("derivedOn", "collection", "referenceRuns", "drpQaVersion")}
+    return metadata, pd.DataFrame(rows)
+
+
+def _plain(value):
+    """Return ``value`` as a YAML-safe Python scalar (numpy types and NaN included)."""
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, float) and not np.isfinite(value):
+        return None if np.isnan(value) else ("inf" if value > 0 else "-inf")
+    return value

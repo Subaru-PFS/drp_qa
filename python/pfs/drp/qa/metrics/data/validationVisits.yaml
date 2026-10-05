@@ -70,13 +70,18 @@
 
 version: 1
 
-# Run25 is the reference: its calibrations were made for it, and it is the most
-# complete stable set. Run27 had no science and no calibrations of its own, so it
-# was reduced against older ones and is suspect; Run30 is compared as well.
+# Run25 is the reference: SpS was last refocused for it, its calibrations were
+# made for it, and it is the most complete stable set. Every other run is compared
+# against it. Run27 had no science and no calibrations of its own, so it was reduced
+# against older ones and is suspect. Ranges are each run's calibration summary;
+# Run30's starts at 148039, its summary also repeating Run28 and Run29 sequences.
 runs:
   25: [132657, 135850]
+  26: [136166, 139742]
   27: [139870, 140871]
-  30: [143087, 150896]
+  28: [141254, 144311]
+  29: [144587, 147830]
+  30: [148039, 150896]
 referenceRuns: [25]
 
 known_good:
