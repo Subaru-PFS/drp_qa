@@ -176,12 +176,29 @@ def testEarlierTableWins():
 
 def testEntryWithoutThresholdsStopsTheSearch():
     """A matching entry with no thresholds means "not judged here", not "look further"."""
+    skip = table({"metric": "medFwhm", "obsType": "trace", "warn": None, "fail": None})
     config = configThresholds(configDefaults())
-    judged = judge(image(medFwhm=9.0, traceOnly=True, pctFlagged=0.0, medDxCenter=0.0), config)
+    judged = judge(image(medFwhm=9.0, obsType="trace", pctFlagged=0.0, medDxCenter=0.0), [skip, config])
     fwhm = judged[judged["metric"] == "medFwhm"].iloc[0]
-    assert fwhm["status"] == "" and fwhm["population"] == "traceOnly=True"
-    judged = judge(image(medFwhm=9.0, traceOnly=False, pctFlagged=0.0, medDxCenter=0.0), config)
+    assert fwhm["status"] == "" and fwhm["population"] == "obsType=trace" and fwhm["layer"] == 0
+    judged = judge(image(medFwhm=9.0, obsType="arc", pctFlagged=0.0, medDxCenter=0.0), [skip, config])
     assert judged.loc[judged["metric"] == "medFwhm", "status"].iloc[0] == "FAIL"
+
+
+def testCalibrationValuesAreNotJudged():
+    """A FWHM read from fiberProfiles gets no verdict from any table; a measured one does."""
+    entry = table({"metric": "medFwhm", "obsType": "trace", "arm": "b", "warn": 3.0, "fail": 3.5})
+    config = configThresholds(configDefaults())
+    others = {"pctFlagged": 0.0, "medDxCenter": 0.0}
+    for thresholds in (entry, config, [entry, config]):
+        judged = judge(image(medFwhm=9.0, obsType="trace", traceOnly=True, **others), thresholds)
+        assert judged.loc[judged["metric"] == "medFwhm", "status"].iloc[0] == ""
+        # Negative control: the same value, measured, fails.
+        judged = judge(image(medFwhm=9.0, obsType="trace", traceOnly=False, **others), thresholds)
+        assert judged.loc[judged["metric"] == "medFwhm", "status"].iloc[0] == "FAIL"
+    # Other metrics of the same image are still judged.
+    judged = judge(image(medFwhm=9.0, traceOnly=True, pctFlagged=99.0, medDxCenter=0.0), config)
+    assert judged.loc[judged["metric"] == "pctFlagged", "status"].iloc[0] == "FAIL"
 
 
 def testTiesAndMissingColumns():

@@ -20,8 +20,8 @@ from pfs.drp.qa.plotting.palettes import detector_palette, spectrograph_plot_mar
 
 __all__ = ["plotIqTimeSeries"]
 
-_STATUS_COLORS = {"PASS": "#4CAF50", "WARN": "#FFC107", "FAIL": "#F44336"}
-_STATUS_INT = {"PASS": 0, "WARN": 1, "FAIL": 2}
+_STATUS_COLORS = {"PASS": "#4CAF50", "WARN": "#FFC107", "FAIL": "#F44336", "UNKNOWN": "#78909C"}
+_STATUS_INT = {status: index for index, status in enumerate(_STATUS_COLORS)}
 
 _ARM_ORDER = ["b", "r", "n", "m"]
 _SPEC_ORDER = [1, 2, 3, 4]
@@ -425,7 +425,7 @@ def _plotFlagBreakdown(ax, df, visits, visitIdx):
 
 
 def _plotStatusHeatmap(ax, df, visits):
-    """Heatmap of qaStatus (PASS/WARN/FAIL) by visit and detector."""
+    """Heatmap of qaStatus (PASS/WARN/FAIL/UNKNOWN) by visit and detector; no quantum is light grey."""
     detOrder = _detectorOrder()
     presentDets = [d for d in detOrder if d in df["detector"].values]
 
@@ -443,15 +443,14 @@ def _plotStatusHeatmap(ax, df, visits):
             if pd.notna(val):
                 grid[i, j] = _STATUS_INT.get(str(val), np.nan)
 
-    cmap = ListedColormap([_STATUS_COLORS["PASS"], _STATUS_COLORS["WARN"], _STATUS_COLORS["FAIL"]])
-    cmap.set_bad("0.85")
+    cmap = ListedColormap(list(_STATUS_COLORS.values())).with_extremes(bad="0.9")
 
     ax.imshow(
         grid,
         aspect="auto",
         cmap=cmap,
         vmin=-0.5,
-        vmax=2.5,
+        vmax=len(_STATUS_COLORS) - 0.5,
         interpolation="nearest",
     )
 

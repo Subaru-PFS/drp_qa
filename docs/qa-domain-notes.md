@@ -47,7 +47,8 @@ The task classifies each visit by reading FITS headers from either `calexp` meta
 
 Returns `(obs_type, is_iis, seq_nam)`:
 
-- `obs_type`: one of `"arc"`, `"trace"`, `"science"`, `"allsky"`, `"unknown"`
+- `obs_type`: one of `"arc"`, `"trace"`, `"science"`, `"allsky"` (`W_SEQNAM` starting
+  "sky"), `"twilight"` (starting "twilight"), `"dark"` (`scienceDark`), `"unknown"`
 - `is_iis`: `True` when illuminated by the 16 IIS engineering fibers (lamp header names
   from `getLamps()` end with `"_eng"`, e.g. `"Ar_eng"`)
 - `seq_nam`: raw `W_SEQNAM` string
@@ -98,8 +99,8 @@ dict as a Python literal:
 - `medDxCenter` / `dxCenterRms`: median and scatter of the spatial offset from
   `detectorMap_calib`, a flexure diagnostic
 - `pctFlagged`: percentage of arc lines flagged by `fitDetectorMap`
-- `nLines`: number of measurements used
-- `traceOnly`: True when falling back to fiber-profile widths
+- `nLines`: rows of the `lines` dataset, whichever path measures the FWHM
+- `traceOnly`: True when falling back to fiber-profile widths; `medFwhm` is then not judged
 - `obsType` / `seqName`: visit classification and raw `W_SEQNAM`
 - `qaStatus`: `"PASS"`, `"WARN"`, or `"FAIL"` — the worst of the FWHM, flag-rate, and
   `|medDxCenter|` checks

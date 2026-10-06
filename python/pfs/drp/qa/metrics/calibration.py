@@ -118,7 +118,8 @@ def labelRows(metrics: pd.DataFrame, visitSet: ValidationVisitSet, metric: str) 
         The covered rows with a ``validation`` column (``good``, ``heldOut``,
         ``bad:WARN``, ``bad:FAIL`` or ``unconfirmed``), ``run`` (`None` when
         the set has no runs table) and ``species`` (see `addSpecies`). Rows
-        with no verdict for ``metric`` are dropped.
+        with no verdict for ``metric``, and rows whose value its `MetricSpec`
+        marks as not measured, are dropped.
     """
     metrics = addSpecies(metrics)
 
@@ -133,6 +134,7 @@ def labelRows(metrics: pd.DataFrame, visitSet: ValidationVisitSet, metric: str) 
     for expect, value in (("WARN", BAD_WARN), ("FAIL", BAD_FAIL)):
         entries = [entry for entry in forMetric(visitSet.confirmedBad) if entry.expect == expect]
         label[matchRows(metrics, entries)] = value
+    label[specFor(metric).notMeasured(metrics)] = None
     labelled = metrics.assign(validation=label)
     labelled = labelled[labelled["validation"].notna()]
     return labelled.assign(run=[visitSet.runOf(int(visit)) for visit in labelled["visit"]])

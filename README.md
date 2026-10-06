@@ -160,13 +160,17 @@ is applied to the cross-dispersion intensity profile measured at regular row int
   `pctLowSN` (flagged with no flux measured — the fit never got that far) and `pctMeasFail`
   (flagged despite a finite flux — a centroid or photometry failure). The split matters:
   `pctLowSN` is usually lamp physics, `pctMeasFail` usually is not.
-- **`nLines`** — Number of measurements used (arc lines, calexp samples, or profile swaths).
+- **`nLines`** — Rows of the `lines` dataset: the lines, and on a quartz the trace centroids, that
+  `fitDetectorMap` found, whichever path measures the FWHM. It tracks what was illuminated.
 - **`traceOnly`** — `True` when FWHM comes from fiber profile calibration widths rather than live measurements; these
-  values reflect the calibration epoch, not the current visit.
-- **`obsType`** / **`seqName`** — Visit classification (`arc`, `trace`, `science`, `allsky`,
-  `unknown`) and the raw `W_SEQNAM` string (e.g. `"Arc: HgCd"`) it was derived from.
+  values reflect the calibration epoch, not the current visit, so `medFwhm` is then neither judged nor used to
+  derive thresholds, and `pctFlagged` is `NaN`. A quartz falls back to them whenever its calexp gives no usable
+  measurement.
+- **`obsType`** / **`seqName`** — Visit classification (`arc`, `trace`, `science`, `allsky`, `twilight`, `dark`,
+  `unknown`) and the raw `W_SEQNAM` string (e.g. `"Arc: HgCd"`) it was derived from. Twilight and dark frames are
+  not measured.
 - **`qaStatus`** — `PASS`, `WARN`, or `FAIL`: the worst verdict of the metrics judged (see thresholds below), from
-  `pfs.drp.qa.metrics.gate.gate`. **`qaDecidedBy`** names the first metric with that verdict (empty for `PASS`), and
+  `pfs.drp.qa.metrics.gate.gate`; `UNKNOWN` when no metric was judged. **`qaDecidedBy`** names the first metric with that verdict (empty for `PASS`), and
   **`qaReason`** gives every `WARN` and `FAIL` reason; it is also on the task log's `IQ QA` line.
 
 ##### Pass/Warn/Fail Thresholds

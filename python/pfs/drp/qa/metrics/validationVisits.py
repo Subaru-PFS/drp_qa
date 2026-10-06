@@ -46,7 +46,8 @@ SCHEMA_VERSION = 1
 SEQUENCE_TYPES = {
     "scienceArc": ("arc",),
     "scienceTrace": ("trace",),
-    "scienceObject": ("science", "allsky"),
+    "scienceObject": ("science", "allsky", "twilight"),
+    "scienceDark": ("dark",),
 }
 
 

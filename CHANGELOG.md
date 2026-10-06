@@ -45,6 +45,14 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   empty: verdicts unchanged). `pfs.drp.qa.metrics.registry` declares each metric's direction, units,
   reference and populations once, for derivation and gating; `MetricSpec` and `METRIC_SPECS` moved there from
   `calibration`, which re-exports them.
+- **`imageQualityQa` can fail a quartz, and says when it judged nothing** (PIPE2D-1917) — `qaStatus` is
+  `UNKNOWN`, not `PASS`, when no metric was judged. A quartz whose calexp measurement is unusable falls back to
+  the `fiberProfiles` widths, as one without a calexp did; such a FWHM (`traceOnly`) is not a measurement, so
+  `MetricSpec.notMeasuredWhen` keeps it out of gating and derivation, and its `pctFlagged` (zero by construction)
+  is `NaN`. `medFwhm` on a quartz measured from its calexp is judged per arm by a thresholds file's
+  `obsType=trace` entries. `nLines` now counts the rows of `lines` on every path. New `obsType` values
+  `twilight` and `dark` (were `science`), neither measured. `imageQualityLogQa.py` tells `UNKNOWN` from a
+  missing result (`NOT_RUN`).
 - **`iqQaSpeciesMetrics`** (PIPE2D-1915) — the per-species `fitDetectorMap` statistics, in long format
   (`pfs.drp.qa.metrics.longFormat`), replacing the `fitSpeciesXRms_<species>`/`fitSpeciesYRms_<species>`
   columns of `iqQaMetrics`, which are gone. `imageQualityLogQa.py` reads it.
