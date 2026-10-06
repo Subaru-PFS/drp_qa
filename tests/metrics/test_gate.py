@@ -1,6 +1,7 @@
 """Tests for the gate: judging metrics against layered threshold tables."""
 
 import ast
+import importlib.util
 import math
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,9 +9,10 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
+import yaml
 
 from pfs.drp.qa.metrics.calibration import readThresholds
-from pfs.drp.qa.metrics.gate import configThresholds, gate, judge, loadThresholds
+from pfs.drp.qa.metrics.gate import configThresholds, gate, judge, loadThresholds, thresholdsPath
 
 ROOT = Path(__file__).parents[2]
 DATA = Path(__file__).parent / "data"
@@ -176,12 +178,29 @@ def testEarlierTableWins():
 
 def testEntryWithoutThresholdsStopsTheSearch():
     """A matching entry with no thresholds means "not judged here", not "look further"."""
+    skip = table({"metric": "medFwhm", "obsType": "trace", "warn": None, "fail": None})
     config = configThresholds(configDefaults())
-    judged = judge(image(medFwhm=9.0, traceOnly=True, pctFlagged=0.0, medDxCenter=0.0), config)
+    judged = judge(image(medFwhm=9.0, obsType="trace", pctFlagged=0.0, medDxCenter=0.0), [skip, config])
     fwhm = judged[judged["metric"] == "medFwhm"].iloc[0]
-    assert fwhm["status"] == "" and fwhm["population"] == "traceOnly=True"
-    judged = judge(image(medFwhm=9.0, traceOnly=False, pctFlagged=0.0, medDxCenter=0.0), config)
+    assert fwhm["status"] == "" and fwhm["population"] == "obsType=trace" and fwhm["layer"] == 0
+    judged = judge(image(medFwhm=9.0, obsType="arc", pctFlagged=0.0, medDxCenter=0.0), [skip, config])
     assert judged.loc[judged["metric"] == "medFwhm", "status"].iloc[0] == "FAIL"
+
+
+def testCalibrationValuesAreNotJudged():
+    """A FWHM read from fiberProfiles gets no verdict from any table; a measured one does."""
+    entry = table({"metric": "medFwhm", "obsType": "trace", "arm": "b", "warn": 3.0, "fail": 3.5})
+    config = configThresholds(configDefaults())
+    others = {"pctFlagged": 0.0, "medDxCenter": 0.0}
+    for thresholds in (entry, config, [entry, config]):
+        judged = judge(image(medFwhm=9.0, obsType="trace", traceOnly=True, **others), thresholds)
+        assert judged.loc[judged["metric"] == "medFwhm", "status"].iloc[0] == ""
+        # Negative control: the same value, measured, fails.
+        judged = judge(image(medFwhm=9.0, obsType="trace", traceOnly=False, **others), thresholds)
+        assert judged.loc[judged["metric"] == "medFwhm", "status"].iloc[0] == "FAIL"
+    # Other metrics of the same image are still judged.
+    judged = judge(image(medFwhm=9.0, traceOnly=True, pctFlagged=99.0, medDxCenter=0.0), config)
+    assert judged.loc[judged["metric"] == "pctFlagged", "status"].iloc[0] == "FAIL"
 
 
 def testTiesAndMissingColumns():
@@ -243,3 +262,47 @@ def testConfigKeysResolvePerSide():
         )["qaStatus"].iloc[0]
         == "FAIL"
     )
+
+
+def testThresholdsPath(tmp_path):
+    """A relative name is a shipped file; an absolute path is taken as given."""
+    shipped = thresholdsPath(configDefaults().thresholdsFile)
+    assert shipped.parent == ROOT / "python" / "pfs" / "drp" / "qa" / "metrics" / "data"
+    assert shipped.exists()
+    assert thresholdsPath(str(tmp_path / "x.yaml")) == tmp_path / "x.yaml"
+
+
+def testShippedFileIsTheAdoptedRun25(stored):
+    """The shipped file is what its script makes from the Run25 derivation."""
+    script = thresholdsPath("makeRun25Thresholds.py")
+    spec = importlib.util.spec_from_file_location("makeRun25Thresholds", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    remade = module.adopt(
+        yaml.safe_load(RUN25.read_text()), pd.read_parquet(DATA / "iqQaMetrics-validation.parquet")
+    )
+    assert remade == yaml.safe_load(thresholdsPath("iqQaThresholds-run25.yaml").read_text())
+
+
+def testShippedFileVerdicts(stored):
+    """Adopted Run25: obstructed frames fail, good Run25 quartz passes, twilight nLines is not judged."""
+    thresholds = [thresholdsPath(configDefaults().thresholdsFile), configThresholds(configDefaults())]
+    judged = judge(stored, thresholds)
+    verdicts = gate(stored, thresholds, default="UNKNOWN")
+
+    obstructed = stored["visit"].isin([150115, 150116, 150641, 150642])
+    assert (verdicts.loc[obstructed, "qaStatus"] == "FAIL").all()
+    # Run25 quartz of the validation set: the hand-set nLines passes every one.
+    run25Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(133040, 135850)
+    assert (verdicts.loc[run25Quartz, "qaStatus"] == "PASS").all()
+    # Negative control: the derived (degenerate) quartz entries fail some of them.
+    derived = gate(stored, [RUN25, configThresholds(configDefaults())])
+    assert (derived.loc[run25Quartz, "qaStatus"] == "FAIL").any()
+
+    twilight = judged[
+        (judged["metric"] == "nLines")
+        & judged["row"].isin(np.flatnonzero(stored["seqName"] == "Twilight sky"))
+    ]
+    assert len(twilight) and (twilight["status"] == "").all() and (twilight["layer"] == 0).all()
+    flags = judged[judged["metric"] == "pctFlagged"]
+    assert (flags["layer"] == 1).all()

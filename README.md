@@ -8,6 +8,29 @@ Spectrograph (PFS) Data Release Production (DRP)
 pipeline. The QA tasks are implementations of the `PipelineTask` class in the LSST Science Pipelines. The tasks are run
 on the output of the DRP pipeline to assess the quality of the data products.
 
+## The image-quality gate
+
+`imageQualityQa` is a **gate**: for each image (visit × detector) it decides whether the image should be
+discarded and not counted in its group, and it shows problems that span an instrument, spectrograph, arm or
+detector. Its verdict is persisted, so that calibration building and the science pipeline can gate on it.
+
+- **It judges quick reductions.** `drpActor` reduces each image during observing (`reduceExposure`, its
+  `hilo` pipeline). That is not the reduction the science release uses. `qaActor` listens to `drpActor` and
+  reads `drpActor/reductions`, so QA never reduces anything a second time; production QA must not re-reduce.
+  Thresholds are therefore derived in `drpActor`'s reduction context.
+- **Two modes, one judgement.** *Real time*: `qaActor` judges each sequence group as `drpActor` finishes it
+  (INSTRM-3040). *Comparison*: a batch over a run, driven by the run's calibration summary (PIPE2D-1929). Both
+  call `pfs.drp.qa.metrics.gate.gate`.
+- **Comparison works on a partial run.** Run on day 10 of a 20-day run, it gives valid verdicts, and a later
+  re-run with the fuller summary updates them: a verdict depends only on its own image, and results are
+  upserted by visit × detector.
+- **Verdicts live in qadb** (`spt_qa_database`), with the long-term QA results (PIPE2D-1385).
+- **Gate, not product assessment.** Judging the quality of science products is a separate job, not yet
+  designed; tasks here should stay on one side of that line.
+- **Not covered yet:** cosmic-ray processing (PIPE2D-1609).
+
+The work is tracked in epic PIPE2D-1928.
+
 ## Installation
 
 `drp_qa` is a `pyproject.toml`-based package with no compiled components, so there is nothing to build:
@@ -160,24 +183,40 @@ is applied to the cross-dispersion intensity profile measured at regular row int
   `pctLowSN` (flagged with no flux measured — the fit never got that far) and `pctMeasFail`
   (flagged despite a finite flux — a centroid or photometry failure). The split matters:
   `pctLowSN` is usually lamp physics, `pctMeasFail` usually is not.
-- **`nLines`** — Number of measurements used (arc lines, calexp samples, or profile swaths).
+- **`nLines`** — Rows of the `lines` dataset: the lines, and on a quartz the trace centroids, that
+  `fitDetectorMap` found, whichever path measures the FWHM. It tracks what was illuminated.
 - **`traceOnly`** — `True` when FWHM comes from fiber profile calibration widths rather than live measurements; these
-  values reflect the calibration epoch, not the current visit.
-- **`obsType`** / **`seqName`** — Visit classification (`arc`, `trace`, `science`, `allsky`,
-  `unknown`) and the raw `W_SEQNAM` string (e.g. `"Arc: HgCd"`) it was derived from.
+  values reflect the calibration epoch, not the current visit, so `medFwhm` is then neither judged nor used to
+  derive thresholds, and `pctFlagged` is `NaN`. A quartz falls back to them whenever its calexp gives no usable
+  measurement.
+- **`obsType`** / **`seqName`** — Visit classification (`arc`, `trace`, `science`, `allsky`, `twilight`, `dark`,
+  `unknown`) and the raw `W_SEQNAM` string (e.g. `"Arc: HgCd"`) it was derived from. Twilight and dark frames are
+  not measured.
 - **`qaStatus`** — `PASS`, `WARN`, or `FAIL`: the worst verdict of the metrics judged (see thresholds below), from
-  `pfs.drp.qa.metrics.gate.gate`. **`qaDecidedBy`** names the first metric with that verdict (empty for `PASS`), and
+  `pfs.drp.qa.metrics.gate.gate`; `UNKNOWN` when no metric was judged. **`qaDecidedBy`** names the first metric with that verdict (empty for `PASS`), and
   **`qaReason`** gives every `WARN` and `FAIL` reason; it is also on the task log's `IQ QA` line.
 
 ##### Pass/Warn/Fail Thresholds
 
-New thresholds are derived from the validation visits, never chosen by hand: see
+New thresholds are derived from the validation visits: see
 [QA thresholds and the validation visit set](#qa-thresholds-and-the-validation-visit-set).
 
 Verdicts come from `pfs.drp.qa.metrics.gate.gate`, the one gating path, which also re-judges stored `iqQaMetrics`.
-With `thresholdsFile` set to a file written by `writeThresholds`, each metric is judged by that file's entry for its
-population, and by the config fields below where the file has none. With it empty (the default), the config fields
-alone:
+Each metric is judged by the `thresholdsFile` entry for its population, and by the config fields below where the file
+has none. `thresholdsFile` is an absolute path, or one relative to `pfs/drp/qa/metrics/data`; empty, the config fields
+judge alone.
+
+The default, `iqQaThresholds-run25.yaml`, holds the thresholds derived from the Run25 validation visits, as adopted
+(PIPE2D-1917) by `makeRun25Thresholds.py` beside it; each entry records its provenance:
+
+- `medFwhm` on arcs, per arm (b 2.872/2.89, r 2.987/2.993, n 3.05/3.1, m 3.18/3.21 px).
+- `nLines` per arm and sequence (`seqName`), lower is worse. On quartz it is set by hand, 0.5 %/1 % below the
+  smallest known-good Run25 count, as the derivation was degenerate; on twilight it is not judged.
+- No `pctFlagged`: the config fields judge it, since Run27's n-arm flag rates sit above Run25's. Run27 was
+  reduced without calibrations of its own; flag rates are revisited against Run30 in comparison mode.
+- `medFwhm` on quartz has no entry yet; the config fields judge a calexp-measured width.
+
+The config fields:
 
 | Metric            | WARN                               | FAIL                               |
 |-------------------|------------------------------------|------------------------------------|
@@ -229,7 +268,7 @@ does not exist in `drp_stella`, so the permissive thresholds above are the curre
   the threshold table above for defaults.
 - `imageQualityQa:flagRateFailThreshold`: `pctFlagged` (%) threshold for `FAIL`, keyed by `arm` or `arm:species`. See
   the threshold table above for defaults.
-- `imageQualityQa:thresholdsFile`: Thresholds file judged before the fields above. Default empty.
+- `imageQualityQa:thresholdsFile`: Thresholds file judged before the fields above. Default `iqQaThresholds-run25.yaml`; empty for the fields alone.
 
 `DictField` values cannot be set with dot notation on the command line; assign the whole dict as a Python literal:
 
@@ -369,7 +408,24 @@ If config options are not passed, the default values come from `mergeArms_config
 ## QA thresholds and the validation visit set
 
 Thresholds are derived from data, by a fixed procedure, and checked against visits whose
-verdict is known:
+verdict is known. The decisions behind the current set:
+
+- **Run25 is the reference run.** Its calibrations were made for it, and it is the most complete stable set. Every
+  threshold is derived from Run25's known-good visits.
+- **The validation set holds Run25's known-good visits only.** From other runs it holds only known-bad visits, as
+  fault examples: each is checked against the thresholds, and none derives one. (Run27 and Run30 known-good entries
+  still in the YAML are removed by PIPE2D-1933.)
+- **Other runs are compared, not used for derivation.** Comparison mode (PIPE2D-1929) judges a run from its
+  calibration summary against Run25's thresholds; Run30 is the first. Run27 is not a fair comparison: no
+  calibrations were made from it, and its n-arm flag rates sit 2–5 points above Run25's.
+- **`imageQualityQa` judges by the adopted Run25 file** (`iqQaThresholds-run25.yaml`): `medFwhm` on arcs and
+  `nLines`. Flag rates (`pctFlagged`) stay on the config fields until compared with Run30; quartz `medFwhm` has no
+  derived threshold until the calexp width is fixed (PIPE2D-1918); twilight is not measured. Details under
+  [Pass/Warn/Fail Thresholds](#passwarnfail-thresholds).
+- **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
+  measurement and is never judged.
+
+The detail:
 
 - [`docs/qa-thresholds.ipynb`](docs/qa-thresholds.ipynb) — **the procedure, step by step**, as a notebook run top
   to bottom: run `imageQualityQa` over the validation visits, derive the thresholds, review them and adopt them.

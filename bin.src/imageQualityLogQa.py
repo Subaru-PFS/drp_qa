@@ -17,6 +17,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+#: ``qa_status`` when no imageQualityQa result was found. Distinct from the
+#: task's own ``UNKNOWN``, which means it ran and judged no metric.
+NOT_RUN = "NOT_RUN"
+
 # ---------------------------------------------------------------------------
 # Data structures
 # ---------------------------------------------------------------------------
@@ -90,7 +94,8 @@ class VisitQA:
     merge_arms_time_s: float = 0.0
 
     # Image Quality QA results
-    qa_status: str = "UNKNOWN"  # PASS, WARN, FAIL
+    # PASS, WARN, FAIL, UNKNOWN (no metric judged), or NOT_RUN (no imageQualityQa result).
+    qa_status: str = NOT_RUN
     qa_target: str = ""
     qa_fwhm: float = float("nan")
     qa_dx: float = float("nan")
@@ -280,7 +285,7 @@ class VisitQA:
             reduce_exposure_time_s=data.get("reduce_exposure_time_s", 0.0),
             iq_qa_time_s=data.get("iq_qa_time_s", 0.0),
             merge_arms_time_s=data.get("merge_arms_time_s", 0.0),
-            qa_status=data.get("qa_status", "UNKNOWN"),
+            qa_status=data.get("qa_status", NOT_RUN),
             qa_target=data.get("qa_target", ""),
             qa_fwhm=restore_float(data.get("qa_fwhm")),
             qa_dx=restore_float(data.get("qa_dx")),
@@ -365,7 +370,7 @@ class VisitQA:
             fit_reserved_n_lines=data.get("fitReservedNLines", 0),
             fit_trace_x_rms=restore_float(data.get("fitTraceXRms")),
             fit_trace_y_rms=restore_float(data.get("fitTraceYRms")),
-            qa_status=data.get("qaStatus", "UNKNOWN"),
+            qa_status=data.get("qaStatus", NOT_RUN),
             qa_target=data.get("seqName", ""),
             qa_fwhm=restore_float(data.get("medFwhm")),
             qa_dx=restore_float(data.get("medDxCenter")),
@@ -509,7 +514,7 @@ def parse_log_text_lines(lines: list[str], vqa: VisitQA):
     )
     re_task_time = re.compile(r"Execution of task '(\w+)' on quantum .* took ([\d\.]+) seconds")
     re_qa = re.compile(
-        r"IQ QA (PASS|WARN|FAIL)\s+(\d+)\s+([a-z0-9]+)\s+(.+?)\s+medFWHM=([\d\.]+)px\s+dxCenter=([+-]?[\d\.]+px|NaN)\s+pctFlagged=([\d\.]+%|NaN)\s*(?:\[(.*?)\])?"
+        r"IQ QA (PASS|WARN|FAIL|UNKNOWN)\s+(\d+)\s+([a-z0-9]+)\s+(.+?)\s+medFWHM=([\d\.]+|nan)px\s+dxCenter=([+-]?[\d\.]+px|NaN)\s+pctFlagged=([\d\.]+%|NaN)\s*(?:\[(.*?)\])?"
     )
     re_quantum = re.compile(
         r"dataId=\{instrument:\s*'PFS',\s*arm:\s*'(\w+)',\s*spectrograph:\s*(\d+),\s*visit:\s*(\d+),\s*dither:\s*(-?\d+)"
@@ -924,7 +929,7 @@ def generate_plots(vqa: VisitQA, output_dir: Path, collection: str | None = None
     os.makedirs(output_dir, exist_ok=True)
 
     # Check if imageQualityQa task was run (status parsed from logs)
-    iq_qa_run = vqa.qa_status != "UNKNOWN"
+    iq_qa_run = vqa.qa_status != NOT_RUN
 
     is_fwhm_fallback = False
     if not iq_qa_run:
@@ -939,7 +944,7 @@ def generate_plots(vqa: VisitQA, output_dir: Path, collection: str | None = None
                 vqa.qa_flagged = (1.0 - vqa.fit_n_lines / vqa.fit_total_lines) * 100
             else:
                 vqa.qa_flagged = 0.0
-        if vqa.qa_status == "UNKNOWN":
+        if vqa.qa_status == NOT_RUN:
             if vqa.qa_fwhm < 3.2 and abs(vqa.qa_dx) < 0.2 and vqa.qa_flagged < 15.0:
                 vqa.qa_status = "PASS"
             elif vqa.qa_fwhm >= 3.5 or abs(vqa.qa_dx) >= 0.5 or vqa.qa_flagged >= 40.0:
@@ -1661,6 +1666,9 @@ def generate_markdown_report(
     # Diagnosis Summary
     if vqa.qa_status == "PASS":
         diagnosis_summary = "**Yes.** This run represents an excellent, high-quality exposure."
+    elif vqa.qa_status == "UNKNOWN":
+        detail = f" ({vqa.qa_detail})" if vqa.qa_detail else ""
+        diagnosis_summary = f"**Unassessed.** imageQualityQa ran but judged no metric{detail}."
     else:
         reasons = []
         if not math.isnan(vqa.qa_fwhm) and vqa.qa_fwhm >= 3.2:

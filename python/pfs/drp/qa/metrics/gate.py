@@ -19,13 +19,15 @@ one means "any value". For each image and metric, the entry used is
 An entry with neither ``warn`` nor ``fail`` stops the search: the metric is
 deliberately not judged in that population.
 
-A missing (NaN) value, or one with no thresholds, gets no verdict; an infinite
-one is judged, and fails a higher-is-worse metric. A value at a threshold has
-crossed it.
+A missing (NaN) value, one with no thresholds, or one its `MetricSpec` marks
+as not measured (a FWHM read from ``fiberProfiles``) gets no verdict; an
+infinite one is judged, and fails a higher-is-worse metric. A value at a
+threshold has crossed it.
 """
 
 from collections.abc import Sequence
 from dataclasses import replace
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +44,7 @@ __all__ = [
     "gate",
     "judge",
     "loadThresholds",
+    "thresholdsPath",
 ]
 
 #: Verdicts from best to worst.
@@ -95,6 +98,25 @@ def loadThresholds(thresholds: ThresholdsLike | Sequence[ThresholdsLike]) -> lis
     return [table if isinstance(table, pd.DataFrame) else readThresholds(table)[1] for table in thresholds]
 
 
+def thresholdsPath(name: str) -> Path:
+    """Return the path of a thresholds file named in a task config.
+
+    Parameters
+    ----------
+    name : `str`
+        An absolute path, or a path relative to the thresholds files shipped
+        with the package (``pfs/drp/qa/metrics/data``), e.g.
+        ``"iqQaThresholds-run25.yaml"``.
+
+    Returns
+    -------
+    `pathlib.Path`
+        The file. Not checked for existence.
+    """
+    path = Path(name)
+    return path if path.is_absolute() else Path(str(files("pfs.drp.qa.metrics") / "data")) / path
+
+
 def configThresholds(config: Any) -> pd.DataFrame:
     """Return the thresholds of an ``imageQualityQa`` config as a table.
 
@@ -107,18 +129,13 @@ def configThresholds(config: Any) -> pd.DataFrame:
     Returns
     -------
     `pandas.DataFrame`
-        Entries for ``medFwhm`` (not judged on a trace-only quantum),
-        ``pctFlagged`` (per ``arm`` and ``arm:species`` key, and the 15/20 %
-        fallback for any other arm) and ``medDxCenter`` (absolute), in that
-        order, with ``traceOnly``, ``arm`` and ``species`` population columns.
+        Entries for ``medFwhm``, ``pctFlagged`` (per ``arm`` and
+        ``arm:species`` key, and the 15/20 % fallback for any other arm) and
+        ``medDxCenter`` (absolute), in that order, with ``arm`` and
+        ``species`` population columns.
     """
     rows = [
         _entry("medFwhm", config.fwhmWarnThreshold, config.fwhmFailThreshold, "fwhmWarn/FailThreshold"),
-        {
-            "metric": "medFwhm",
-            "traceOnly": True,
-            "provenance": "imageQualityQa does not judge medFwhm on a trace-only quantum.",
-        },
         _entry("pctFlagged", *_FLAG_RATE_FALLBACK, "fallback for an arm with no flagRate*Threshold entry"),
     ]
     warn, fail = dict(config.flagRateWarnThreshold), dict(config.flagRateFailThreshold)
@@ -147,12 +164,12 @@ def configThresholds(config: Any) -> pd.DataFrame:
     )
 
     table = pd.DataFrame(rows)
-    for column in ("traceOnly", "arm", "species"):
+    for column in ("arm", "species"):
         if column not in table:
             table[column] = None
     table["higherIsWorse"] = [specFor(name).higherIsWorse for name in table["metric"]]
     table["absolute"] = [specFor(name).absolute for name in table["metric"]]
-    return table.astype({"traceOnly": object, "arm": object, "species": object})
+    return table.astype({"arm": object, "species": object})
 
 
 def _entry(metric: str, warn: float, fail: float, source: str) -> dict:
@@ -187,7 +204,8 @@ def judge(metrics: pd.DataFrame, thresholds: ThresholdsLike | Sequence[Threshold
         ``metric``, ``value``
             The value judged: absolute, for an ``absolute`` entry.
         ``status``
-            ``PASS``, ``WARN`` or ``FAIL``; empty when there is no verdict.
+            ``PASS``, ``WARN`` or ``FAIL``; empty when there is no verdict,
+            including for a value its `MetricSpec` marks as not measured.
         ``reason``
             Why, for ``WARN`` and ``FAIL``.
         ``layer``, ``population``, ``warn``, ``fail``, ``provenance``
@@ -215,6 +233,7 @@ def judge(metrics: pd.DataFrame, thresholds: ThresholdsLike | Sequence[Threshold
     for name in names:
         chosen = _choose(metrics, tables, name)
         values = metrics[name].astype(float).to_numpy()
+        notMeasured = specFor(name).notMeasured(metrics)
         columns: dict[str, list] = {key: [] for key in ("value", "status", "reason", "layer", "population")}
         columns |= {"warn": [], "fail": [], "provenance": []}
         for row in range(numRows):
@@ -234,7 +253,7 @@ def judge(metrics: pd.DataFrame, thresholds: ThresholdsLike | Sequence[Threshold
                 if bool(entry.get("absolute", spec.absolute)):
                     value = abs(value)
                 warn, fail = _limit(entry.get("warn")), _limit(entry.get("fail"))
-                if not np.isnan(value) and (warn is not None or fail is not None):
+                if not (np.isnan(value) or notMeasured[row]) and (warn is not None or fail is not None):
                     status = "PASS"
                     for level, limit in (("FAIL", fail), ("WARN", warn)):
                         if limit is not None and spec.crossed(value, limit):

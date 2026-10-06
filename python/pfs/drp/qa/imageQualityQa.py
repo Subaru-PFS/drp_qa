@@ -32,7 +32,7 @@ from lsst.pipe.base.connectionTypes import (
 )
 
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
-from pfs.drp.qa.metrics.gate import configThresholds, gate, loadThresholds
+from pfs.drp.qa.metrics.gate import configThresholds, gate, loadThresholds, thresholdsPath
 from pfs.drp.qa.metrics.longFormat import speciesFrame
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
@@ -80,8 +80,9 @@ class ImageQualityQaConnections(
             " Columns: ``visit``, ``arm``, ``spectrograph``, ``medFwhm``,"
             " ``medDxCenter``, ``dxCenterRms``, ``pctFlagged``,"
             " ``pctLowSN``, ``pctMeasFail``,"
-            " ``nLines``, ``traceOnly``, ``qaStatus``, ``qaDecidedBy``,"
-            " ``qaReason``."
+            " ``nLines`` (rows of ``lines``), ``traceOnly``, ``qaStatus``"
+            " (``PASS``, ``WARN``, ``FAIL``, or ``UNKNOWN`` when no metric was"
+            " judged), ``qaDecidedBy``, ``qaReason``."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -101,8 +102,9 @@ class ImageQualityQaConnections(
     fiberProfiles = PrerequisiteConnection(
         name="fiberProfiles",
         doc=(
-            "Fiber profile shapes; used to derive trace-width FWHM when arc-line"
-            " shape measurements are unavailable and no calexp is provided."
+            "Fiber profile shapes; their widths stand in for the trace FWHM when"
+            " neither arc lines nor the calexp give a usable measurement. A"
+            " calibration, not a measurement: such a FWHM is not judged."
         ),
         storageClass="FiberProfileSet",
         dimensions=("instrument", "arm", "spectrograph"),
@@ -328,11 +330,17 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
     )
     thresholdsFile = Field(
         dtype=str,
-        default="",
+        default="iqQaThresholds-run25.yaml",
         doc=(
             "Thresholds file written by ``pfs.drp.qa.metrics.calibration.writeThresholds``,"
             " judged before the threshold fields of this config: a population with no"
-            " entry in the file is judged by the fields. Empty for the fields alone."
+            " entry in the file is judged by the fields. An absolute path, or one relative"
+            " to the files shipped in ``pfs/drp/qa/metrics/data``; empty for the fields alone."
+            " The default holds the thresholds derived 2026-10-05 from the Run25 validation"
+            " visits (collection u/wtg/qa-thresholds/003, PIPE2D-1914), as adopted in"
+            " PIPE2D-1917 by ``makeRun25Thresholds.py`` beside it: medFwhm and nLines per"
+            " population, no pctFlagged, and quartz nLines set by hand; each entry carries"
+            " its provenance."
         ),
     )
     dxCenterWarnThreshold = Field(
@@ -370,7 +378,7 @@ class ImageQualityQaTask(PipelineTask):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Highest priority first; see pfs.drp.qa.metrics.gate.
-        files = [self.config.thresholdsFile] if self.config.thresholdsFile else []
+        files = [thresholdsPath(self.config.thresholdsFile)] if self.config.thresholdsFile else []
         self.thresholds = [*loadThresholds(files), configThresholds(self.config)]
 
     def runQuantum(
@@ -421,8 +429,9 @@ class ImageQualityQaTask(PipelineTask):
           catalog does not match the 16 IIS positions; FWHM is reported as
           sparse (no value, no pass/fail).
         * **Regular trace/quartz** (``scienceTrace``, all fibers): calexp
-          cross-dispersion moments are the primary path; fiber profile
-          calibration is the secondary fallback.
+          cross-dispersion moments are the primary path. When they are absent
+          or unusable, the fiber profile calibration widths are reported with
+          ``traceOnly``, and neither ``medFwhm`` nor ``pctFlagged`` is judged.
         * **IIS trace/quartz** (``scienceTrace``, engineering fibers): too few
           fibers for a reliable measurement; reported as sparse.
         * **Science / all-sky** (``scienceObject*``, no lamps): when
@@ -431,8 +440,13 @@ class ImageQualityQaTask(PipelineTask):
           are not continuously illuminated so the flag rate reflects exposure
           depth, not optical quality).  If the FLUXSTD good fraction is below
           ``config.minFluxstdGoodFrac``, FWHM is treated as sparse.
+        * **Twilight** (``scienceObject``, ``W_SEQNAM`` "Twilight ..."): not
+          measured; its FWHM would come from the sky lines.
+        * **Dark** (``scienceDark``): nothing to measure.
         * **Unknown** (``W_SEQTYP`` absent): falls back to the original
           heuristic based on ``n_good_arc`` and ``maxCalexpFlagRate``.
+
+        A quantum with no metric judged gets ``qaStatus`` ``UNKNOWN``.
 
         Parameters
         ----------
@@ -442,7 +456,7 @@ class ImageQualityQaTask(PipelineTask):
             Adjusted detector mapping from fiberId,wavelength to x,y.
         fiberProfiles : `FiberProfileSet` or `None`
             Fiber profile shapes.  Used as fallback for regular trace/quartz
-            visits when ``calexp`` is absent.
+            visits when ``calexp`` is absent or its measurement unusable.
         detectorMapCalib : `DetectorMap` or `None`
             Static calibration detectorMap (pre-adjustment).  Used to
             compute the spatial offset ``dxCenter`` as a flexure diagnostic.
@@ -465,7 +479,8 @@ class ImageQualityQaTask(PipelineTask):
             ``dxCenterRms``, ``pctFlagged``, ``nLines``, ``traceOnly``,
             ``obsType``, ``seqName``, ``qaStatus``, ``qaDecidedBy``,
             ``qaReason``, ``visit``, ``arm``, ``spectrograph``.  The verdict
-            is `pfs.drp.qa.metrics.gate.gate` with ``self.thresholds``.
+            is `pfs.drp.qa.metrics.gate.gate` with ``self.thresholds``;
+            ``UNKNOWN`` when no metric was judged.
         iqQaSpeciesMetrics : `pandas.DataFrame`
             Per-species fit statistics in long format
             (`pfs.drp.qa.metrics.longFormat.speciesFrame`).
@@ -501,9 +516,16 @@ class ImageQualityQaTask(PipelineTask):
         if "status" in data.columns:
             good_arc &= data["status"] == 0
         n_good_arc = int(good_arc.sum())
+        # nLines counts the rows of ``lines`` (lines and, on a quartz frame,
+        # trace centroids found by fitDetectorMap), whichever path measures the
+        # FWHM: it is a measure of what was illuminated, and the only metric
+        # that sees an obstructed quartz.
+        n_lines = len(data)
 
         dense_data = False
         using_fluxstd_filter = False
+        # The FWHM is read from the fiberProfiles calibration (``traceOnly``).
+        using_profile_widths = False
         # force_sparse bypasses the n_good_arc check for visit types where we
         # know the arc catalog will not match (IIS arcs/traces).
         force_sparse = False
@@ -575,6 +597,7 @@ class ImageQualityQaTask(PipelineTask):
             # does not apply to a quartz frame, so the visit stays sparse
             # unless one of the two measurement paths succeeds.
             force_sparse = True
+            calexp_failed = False
             if calexp is not None:
                 self.log.info(
                     "Regular trace/quartz %s: measuring FWHM from calexp.",
@@ -594,23 +617,41 @@ class ImageQualityQaTask(PipelineTask):
                     dense_data = True
                     force_sparse = False
                 else:
+                    # The denominator is the number of cross-dispersion samples
+                    # (tens of thousands), so a count and a rounded percentage
+                    # alone read as a contradiction ("10 good, 100.0% flagged").
+                    calexp_failed = True
                     self.log.warning(
-                        "Quartz calexp too sparse for %s (%d good, %.1f%% flagged); FWHM will be sparse.",
+                        "Quartz calexp unusable for %s: %d of %d cross-dispersion samples measured"
+                        " cleanly (%.3f%%, need > %.0f%%).",
                         dataId,
                         n_good_calexp,
-                        100.0 * (1.0 - calexp_good_frac),
+                        len(calexp_data),
+                        100.0 * calexp_good_frac,
+                        100.0 * (1.0 - self.config.maxCalexpFlagRate),
                     )
-            elif fiberProfiles is not None:
-                self.log.info(
-                    "Regular trace/quartz %s: no calexp; falling back to fiber profile calibration widths.",
+
+            # The fiber profile widths are the fallback whenever the calexp gave
+            # no usable measurement, whether or not a calexp exists. They are a
+            # calibration, not a measurement of this exposure: ``traceOnly``
+            # marks them, and medFwhm is then neither judged nor used to derive
+            # thresholds (`pfs.drp.qa.metrics.registry`).
+            if not dense_data and fiberProfiles is not None:
+                # At the level of the problem it resolves, so that an operator
+                # filtering at WARNING who saw the failure also sees the outcome.
+                report = self.log.warning if calexp_failed else self.log.info
+                report(
+                    "Regular trace/quartz %s: using fiber profile calibration widths;"
+                    " FWHM is not measured from this exposure.",
                     dataId,
                 )
                 data = self._buildProfileData(fiberProfiles, detectorMap)
                 dense_data = True
+                using_profile_widths = True
                 force_sparse = False
-            else:
+            elif not dense_data:
                 self.log.warning(
-                    "Regular trace/quartz %s: no calexp and no fiberProfiles; FWHM will be sparse.",
+                    "Regular trace/quartz %s: neither a usable calexp nor fiberProfiles; FWHM will be sparse.",
                     dataId,
                 )
 
@@ -619,6 +660,18 @@ class ImageQualityQaTask(PipelineTask):
             # reliable full-detector calexp measurement.
             force_sparse = True
             self.log.info("IIS trace/quartz %s: too few fibers; reporting sparse.", dataId)
+
+        elif obs_type == "twilight":
+            # Twilight sky: every fiber sees the same sky. Its FWHM belongs to
+            # the sky lines, which are not measured yet; FLUXSTD fibers carry no
+            # star here, so the science path below does not apply either.
+            force_sparse = True
+            self.log.info("Twilight %s: FWHM is not measured on twilight frames.", dataId)
+
+        elif obs_type == "dark":
+            # Nothing is illuminated: no metric of this task applies.
+            force_sparse = True
+            self.log.info("Dark %s: nothing to measure.", dataId)
 
         elif obs_type in ("science", "allsky"):
             # Science or all-sky plate: no arc lamp, fibers point at sky or
@@ -759,6 +812,7 @@ class ImageQualityQaTask(PipelineTask):
                     )
                     data = self._buildProfileData(fiberProfiles, detectorMap)
                     dense_data = True
+                    using_profile_widths = True
                 else:
                     self.log.warning(
                         "Unknown type %s: %d good arc lines (< %d) and no calexp or"
@@ -828,8 +882,11 @@ class ImageQualityQaTask(PipelineTask):
         # only reach S/N threshold at a small fraction of sampled rows, so the
         # flag rate reflects exposure depth rather than optical quality.  FWHM
         # is still reported when the good-fraction threshold is met.
+        #
+        # The fiber-profile path flags nothing (`_buildProfileData`), so its
+        # pctFlagged would be zero by construction rather than by measurement.
         sparse_fallback = force_sparse or ((n_good_arc < self.config.minGoodLines) and not dense_data)
-        if sparse_fallback or using_fluxstd_filter:
+        if sparse_fallback or using_fluxstd_filter or using_profile_widths:
             pct_flagged = np.nan
             flagBreakdown = {}
         else:
@@ -855,7 +912,7 @@ class ImageQualityQaTask(PipelineTask):
             "medDxCenter": [medDxCenter],
             "dxCenterRms": [dxCenterRms],
             "pctFlagged": [pct_flagged],
-            "nLines": [len(data)],
+            "nLines": [n_lines],
             "traceOnly": [trace_only],
             "obsType": [obs_type],
             "seqName": [seq_nam],
@@ -896,7 +953,15 @@ class ImageQualityQaTask(PipelineTask):
             if key in dataId:
                 metrics[key] = dataId[key]
 
-        verdict = gate(metrics, self.thresholds)
+        # UNKNOWN, not PASS, when no metric was judged: a quantum where nothing
+        # could be measured is unassessed, and PASS would vouch for it.
+        verdict = gate(metrics, self.thresholds, default="UNKNOWN")
+        if verdict["qaStatus"].iloc[0] == "UNKNOWN":
+            verdict.loc[:, "qaReason"] = (
+                "FWHM read from the fiberProfiles calibration; no metric measured"
+                if using_profile_widths
+                else "no metric measured"
+            )
         position = metrics.columns.get_loc("seqName") + 1
         for offset, column in enumerate(verdict.columns):
             metrics.insert(position + offset, column, verdict[column].to_numpy())
@@ -1109,8 +1174,10 @@ class ImageQualityQaTask(PipelineTask):
         Returns
         -------
         obs_type : `str`
-            One of ``"arc"``, ``"trace"``, ``"science"``, ``"allsky"``,
-            or ``"unknown"`` (when ``W_SEQTYP`` is absent or unrecognised).
+            One of ``"arc"``, ``"trace"``, ``"science"``, ``"allsky"``
+            (``W_SEQNAM`` starting "sky"), ``"twilight"`` (starting
+            "twilight"), ``"dark"``, or ``"unknown"`` (when ``W_SEQTYP`` is
+            absent or unrecognised).
         is_iis : `bool`
             True when the illumination comes from the 16 IIS engineering
             fibers (lamp names end with ``"_eng"``).
@@ -1135,8 +1202,16 @@ class ImageQualityQaTask(PipelineTask):
             obs_type = "arc"
         elif seq_typ == "scienceTrace":
             obs_type = "trace"
-        elif seq_typ in ("scienceObject", "scienceObject_windowed", "scienceDark"):
-            obs_type = "allsky" if seq_nam.lower().startswith("sky") else "science"
+        elif seq_typ == "scienceDark":
+            obs_type = "dark"
+        elif seq_typ in ("scienceObject", "scienceObject_windowed"):
+            name = seq_nam.lower()
+            if name.startswith("twilight"):
+                obs_type = "twilight"
+            elif name.startswith("sky"):
+                obs_type = "allsky"
+            else:
+                obs_type = "science"
         else:
             if seq_typ:
                 self.log.debug("Unrecognised W_SEQTYP=%r; using heuristic fallback.", seq_typ)

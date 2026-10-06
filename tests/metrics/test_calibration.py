@@ -210,6 +210,27 @@ def testBadEntryExcludesOnlyItsMetric():
     assert set(flags.loc[flags["visit"] == 1000, "validation"]) == {"bad:WARN"}
 
 
+def testCalibrationValuesAreNotDerivedFrom():
+    """A FWHM read from fiberProfiles is not a measurement: it leaves the medFwhm sample only."""
+    metrics = makeMetrics().assign(traceOnly=False)
+    traces = metrics["visit"].isin(TRACE_VISITS[:10])
+    # Wide enough to move p99 if counted.
+    metrics.loc[traces, ["medFwhm", "traceOnly"]] = (9.0, True)
+    fwhm = labelRows(metrics, makeVisitSet(), "medFwhm")
+    assert not fwhm["traceOnly"].any()
+    assert len(fwhm) == len(labelRows(makeMetrics(), makeVisitSet(), "medFwhm")) - traces.sum()
+    assert len(labelRows(metrics, makeVisitSet(), "nLines")) == len(
+        labelRows(makeMetrics(), makeVisitSet(), "nLines")
+    )
+    derived = calibrate(metrics, makeVisitSet(), ["medFwhm"], derivedOn=date(2026, 10, 4))
+    assert row(derived, "medFwhm", "b/trace")["fail"] < 3.5
+    # Negative control: the same values, measured, set FAIL.
+    derived = calibrate(
+        metrics.assign(traceOnly=False), makeVisitSet(), ["medFwhm"], derivedOn=date(2026, 10, 4)
+    )
+    assert row(derived, "medFwhm", "b/trace")["fail"] == 9.0
+
+
 def testDxIsNotDerivedByDefault():
     """An offset from the calibration is near zero in its own run: not a percentile threshold."""
     table = calibrate(makeMetrics(), makeVisitSet())

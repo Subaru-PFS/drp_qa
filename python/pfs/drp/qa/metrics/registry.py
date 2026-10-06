@@ -5,7 +5,8 @@ thresholds: its units, the external reference it is measured against (rule R1
 of ``docs/qa-principles.md``), its direction, the populations it is judged in
 (R7) and how to phrase it in a reason string. Threshold derivation
 (`pfs.drp.qa.metrics.calibration`) and gating (`pfs.drp.qa.metrics.gate`) both
-read it, so the two cannot disagree on direction or populations.
+read it, so the two cannot disagree on direction, populations, or which values
+were measured at all.
 
 The thresholds themselves are not here: they live in a thresholds file
 (`~pfs.drp.qa.metrics.calibration.writeThresholds`), with the provenance of
@@ -14,6 +15,8 @@ each (R2).
 
 import math
 from dataclasses import dataclass
+
+import numpy as np
 
 __all__ = ["METRIC_SPECS", "MetricSpec", "specFor"]
 
@@ -47,6 +50,11 @@ class MetricSpec:
         Format spec for the value in reason strings.
     unitSuffix : `str`
         Suffix for values in reason strings, e.g. ``"px"``.
+    notMeasuredWhen : `tuple` [`str`]
+        Boolean columns that, when true, mark the value as read back from a
+        calibration rather than measured from the exposure. Such a value is
+        identical for every exposure reduced against that calibration, so it
+        is neither judged nor used to derive thresholds.
     """
 
     name: str
@@ -59,6 +67,27 @@ class MetricSpec:
     label: str = ""
     valueFormat: str = ".4g"
     unitSuffix: str = ""
+    notMeasuredWhen: tuple[str, ...] = ()
+
+    def notMeasured(self, frame) -> np.ndarray:
+        """Return, per row of ``frame``, whether the value was not measured.
+
+        Parameters
+        ----------
+        frame : `pandas.DataFrame`
+            Metrics rows; a `notMeasuredWhen` column it lacks marks nothing.
+
+        Returns
+        -------
+        `numpy.ndarray` [`bool`]
+            True where any `notMeasuredWhen` column is true.
+        """
+        mask = np.zeros(len(frame), dtype=bool)
+        for column in self.notMeasuredWhen:
+            if column in frame.columns:
+                values = frame[column].to_numpy(dtype=object)
+                mask |= np.array([isinstance(v, (bool, np.bool_)) and bool(v) for v in values], dtype=bool)
+        return mask
 
     def crossed(self, value: float, limit: float) -> bool:
         """Return whether ``value`` is at or beyond ``limit`` in the bad direction."""
@@ -110,6 +139,7 @@ METRIC_SPECS = {
             label="medFWHM",
             valueFormat=".2f",
             unitSuffix="px",
+            notMeasuredWhen=("traceOnly",),
         ),
         MetricSpec(
             "medDxCenter",
