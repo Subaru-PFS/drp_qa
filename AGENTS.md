@@ -384,8 +384,8 @@ on Butler/LSST objects are documentation rather than something a tool will check
    migration notes in `README.md` and/or docstrings.
 7. Record QA decisions in the repository, where the next reader of the QA looks: which runs
    are the reference and why, what the validation set holds, why a threshold was or was not
-   adopted. Put them in `docs/` (`validation-visits.md`, `qa-principles.md`,
-   `qa-domain-notes.md`) or beside the file they govern, not only in Jira or an assistant's
+   adopted. State each in `README.md` (*QA thresholds and the validation visit set*), with
+   the detail in `docs/` or beside the file it governs; not only in Jira or an assistant's
    memory. A ticket can hold the discussion; the repository holds the outcome.
 8. Record user-visible changes — new tasks, new or removed config fields, new
    `iqQaMetrics` columns, changed defaults — under `## [Unreleased]` in `CHANGELOG.md`.

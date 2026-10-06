@@ -385,7 +385,24 @@ If config options are not passed, the default values come from `mergeArms_config
 ## QA thresholds and the validation visit set
 
 Thresholds are derived from data, by a fixed procedure, and checked against visits whose
-verdict is known:
+verdict is known. The decisions behind the current set:
+
+- **Run25 is the reference run.** Its calibrations were made for it, and it is the most complete stable set. Every
+  threshold is derived from Run25's known-good visits.
+- **The validation set holds Run25's known-good visits only.** From other runs it holds only known-bad visits, as
+  fault examples: each is checked against the thresholds, and none derives one. (Run27 and Run30 known-good entries
+  still in the YAML are removed by PIPE2D-1933.)
+- **Other runs are compared, not used for derivation.** Comparison mode (PIPE2D-1929) judges a run from its
+  calibration summary against Run25's thresholds; Run30 is the first. Run27 is not a fair comparison: no
+  calibrations were made from it, and its n-arm flag rates sit 2–5 points above Run25's.
+- **`imageQualityQa` judges by the adopted Run25 file** (`iqQaThresholds-run25.yaml`): `medFwhm` on arcs and
+  `nLines`. Flag rates (`pctFlagged`) stay on the config fields until compared with Run30; quartz `medFwhm` has no
+  derived threshold until the calexp width is fixed (PIPE2D-1918); twilight is not measured. Details under
+  [Pass/Warn/Fail Thresholds](#passwarnfail-thresholds).
+- **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
+  measurement and is never judged.
+
+The detail:
 
 - [`docs/qa-thresholds.ipynb`](docs/qa-thresholds.ipynb) — **the procedure, step by step**, as a notebook run top
   to bottom: run `imageQualityQa` over the validation visits, derive the thresholds, review them and adopt them.
