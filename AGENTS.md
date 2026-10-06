@@ -37,6 +37,9 @@ the pipeline/config glue to run them.
   currently registers **five** task labels, and only these run under `pipetask`:
   `dmResiduals`, `dmCombinedResiduals`, `extractionQa`, `extractionQaCombined`,
   `imageQualityQa`.
+- **Threshold pipeline (`pipelines/qaThresholds.yaml`)** — drp_stella's `reduceExposure`
+  (less `mergeArms`) plus `imageQualityQa`, so `docs/qa-thresholds.ipynb` reduces the
+  validation visits from raw data. The notebook applies `drpActor`'s per-sequence-type config.
 - **Tasks in the pipeline (`python/pfs/drp/qa/`)**:
   - `imageQualityQa.py` — image quality (FWHM, flag rates); plots in `plotting/iqQa.py`
   - `dmResiduals.py`, `dmCombinedResiduals.py` — detector map residuals (per-detector
@@ -63,12 +66,22 @@ the pipeline/config glue to run them.
   `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its replacement
   (needs the opdb; committed without outputs): keep it in step with renamed arguments.
 - **Plotting (`python/pfs/drp/qa/plotting/`)** — the QA plots: DataFrames in, figures
-  out (`dmResiduals`, `dmCombined`, `iqQa`, and `palettes` for the shared palettes and
-  `scatterplot_with_outliers`). It imports no Butler, stack or task module, so plots can
+  out (`dmResiduals`, `dmCombined`, `iqQa`, `thresholds`, and `palettes` for the shared
+  palettes and `scatterplot_with_outliers`). It imports no Butler, stack or task module, so plots can
   be drawn from stored data; `tests/plotting/test_imports.py` enforces this. The task
   modules, `iqQaPlots` and `utils.plotting` re-export the names they used to define.
 - **Metrics (`python/pfs/drp/qa/metrics/`)** — stack-free metric containers
-  (`fitStats`: `FitStat`/`FitStats`, the rows of `dmQaResidualStats`).
+  (`fitStats`: `FitStat`/`FitStats`, the rows of `dmQaResidualStats`), and the threshold
+  machinery: `validationVisits` loads `data/validationVisits.yaml` (package data; visits
+  with known verdicts), `thresholds` derives WARN/FAIL from a distribution, `calibration`
+  turns stored `iqQaMetrics` into a table of suggestions, and `readers` reads them from a
+  Butler it is given. Read [`docs/qa-principles.md`](docs/qa-principles.md) (rules R1–R7,
+  the metric checklist) before adding a metric or a threshold. The procedure is the
+  notebook [`docs/qa-thresholds.ipynb`](docs/qa-thresholds.ipynb), from `pipetask` to
+  review (committed with outputs); the set is described in
+  [`docs/validation-visits.md`](docs/validation-visits.md), whose tables are generated
+  from the YAML (`python -m pfs.drp.qa.metrics.validationVisits tables`) and checked by a
+  test.
 - **Support modules (`python/pfs/drp/qa/`)**:
   - `storageClasses.py`, `formatters.py` — custom Butler storage classes / formatters
   - `utils/` — shared helpers (`math.py`; `plotting.py` re-exports `plotting.palettes`)

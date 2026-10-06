@@ -27,6 +27,17 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   tests/documentation for the image-quality pipeline.
 - **`AGENTS.md`** — single source of instructions for AI coding assistants, with
   `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md` as symlinks to it.
+- **Validation visit set and threshold derivation** (PIPE2D-1914) — `pfs.drp.qa.metrics.validationVisits`
+  loads `data/validationVisits.yaml`, visits with known verdicts, each assigned to an observing run;
+  `metrics.calibration.calibrate` derives WARN/FAIL from the reference run (Run25) per population (arm and `obsType`; flag rates per species) from the known-good `iqQaMetrics`,
+  rounded outwards to a step set by the scatter, with a distribution-free interval on FAIL, and checks
+  each known-bad visit against its expected verdict; `compareRuns` judges the other runs' known-good data
+  against those thresholds; `writeThresholds`/`readThresholds` keep them as a versioned YAML file for the
+  judgement step; `metrics.readers.readMetrics` reads the metrics from
+  a Butler; `plotting.plotThresholds` draws the result. `docs/qa-thresholds.ipynb` is the step-by-step
+  procedure, from reducing the visits (`pipelines/qaThresholds.yaml`, with `drpActor`'s per-sequence-type
+  config) to review; `docs/validation-visits.md` describes the set, and `docs/qa-principles.md` holds rules
+  R1–R7 and the metric checklist. `pyyaml` is now a dependency.
 - **`pfs.drp.qa.guiders`** — empty `coordinates`, `queries`, `analysis` and `plotting` modules for the
   guider tools moving from `pfs.drp.stella.utils.guiders`, and a `guiders` CI job that runs
   `tests/guiders/` with pfs-utils (installed `--no-deps`).

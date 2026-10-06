@@ -31,6 +31,7 @@ from pfs.drp.qa.plotting.palettes import (
     scatterplot_with_outliers,
     spectrograph_plot_markers,
 )
+from pfs.drp.qa.plotting.thresholds import plotThresholds
 
 __all__ = [
     "DetectorGeometry",
@@ -39,6 +40,7 @@ __all__ = [
     "div_palette",
     "opaqueColorbar",
     "plotIqTimeSeries",
+    "plotThresholds",
     "plot_detector_summary",
     "plot_detector_summary_per_desc",
     "plot_detectormap_residuals",
