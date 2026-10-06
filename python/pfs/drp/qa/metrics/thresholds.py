@@ -76,7 +76,10 @@ class ThresholdSuggestion:
         False when fewer than `MIN_SAMPLES` finite values were available.
     failBounded : `bool`
         False when the sample cannot bound the FAIL percentile on its bad side:
-        FAIL then sits at the sample's extreme, and more data would move it.
+        The confidence interval on the FAIL percentile is then open on that
+        side: no order statistic of the sample bounds it, so FAIL is an
+        interpolated estimate near the sample's tail that more data may move
+        a long way.
         Always True for a physical limit.
     degenerate : `bool`
         True when WARN is not strictly less severe than FAIL. The gates test
@@ -448,7 +451,7 @@ def formatProvenance(
     if not failBounded:
         sentence += (
             f" FAIL UNBOUNDED: n={numSamples} cannot bound p{failPercentile:g} at"
-            f" {CONFIDENCE:.0%} confidence, so FAIL sits at the sample's extreme."
+            f" {CONFIDENCE:.0%} confidence: its interval is open, and FAIL may move a long way with more data."
         )
     if degenerate:
         sentence += " DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire."

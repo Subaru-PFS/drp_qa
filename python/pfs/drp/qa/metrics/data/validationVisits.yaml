@@ -9,7 +9,7 @@
 #
 # See docs/qa-principles.md. Load it with
 # ``pfs.drp.qa.metrics.validationVisits.loadValidationVisits``, and derive thresholds
-# from it with ``bin.src/calibrateQaThresholds.py``.
+# from it with ``docs/qa-thresholds.ipynb``.
 #
 # Runs
 # ----

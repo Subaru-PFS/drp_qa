@@ -600,7 +600,9 @@ def loadValidationVisits(
     if unknown:
         raise ValueError(f"{path}: unknown top-level keys: {', '.join(sorted(unknown))}")
 
-    runs = _parseRuns(doc.get("runs") or {}, f"{path}: runs")
+    # Only an absent or empty key defaults: `runs: []` or `runs: 0` must be rejected, not
+    # read as no table.
+    runs = _parseRuns(_orDefault(doc.get("runs"), {}), f"{path}: runs")
     referenceRuns = _parseSequence(doc.get("referenceRuns"), int, "referenceRuns", str(path))
     missing = set(referenceRuns) - set(runs)
     if missing:
@@ -608,7 +610,7 @@ def loadValidationVisits(
 
     sections = {}
     for section, defaultExpect in (("known_good", "PASS"), ("known_bad", None)):
-        raw = doc.get(section) or []
+        raw = _orDefault(doc.get(section), [])
         if not isinstance(raw, list):
             raise ValueError(f"{path}: '{section}' must be a list, got {type(raw).__name__}")
         entries = []
@@ -896,6 +898,15 @@ def _parseSequence(value: Any, itemType: type, name: str, where: str) -> tuple:
     if itemType is int:
         return tuple(_asInt(item, name, where) for item in value)
     return tuple(str(item) for item in value)
+
+
+def _orDefault(value: Any, default: Any) -> Any:
+    """Return ``default`` for an absent or empty YAML value (`None`), else ``value``.
+
+    Unlike ``value or default``, a present but falsey value such as ``[]`` or
+    ``0`` is returned, so that the caller's type check rejects it.
+    """
+    return default if value is None else value
 
 
 def _optionalStr(value: Any) -> str | None:
