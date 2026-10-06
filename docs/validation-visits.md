@@ -15,7 +15,9 @@ or passes a known-bad one, does not merge.
 
 Every entry was checked against the run's calibration summary (`calib_data.csv`, one row
 per sequence: `sequence_type`, sequence name, cameras read, notes) for Runs 25, 27 and
-30. Run27 took calibration data only. A `known_bad` reason quotes the summary's note
+30. Run27 took calibration data only, and no calibrations were made from it: it was
+reduced with another run's, so its metrics are not comparable with Run25's (its known-good
+n-arm flag rates sit 2–5 points higher). A `known_bad` reason quotes the summary's note
 where there is one. The summaries are written by hand, so a sequence name there can
 differ from the `W_SEQNAM` header that `seqType` is matched against. The threshold
 notebook lists any entry that matches no data, which is how such a mismatch shows up.
@@ -23,10 +25,14 @@ notebook lists any entry that matches no data, which is how such a mismatch show
 ## The reference run
 
 Thresholds are derived only from the known-good visits of **Run25** (`referenceRuns` in the
-YAML): its calibrations were made for it, and it is the most complete stable set. Every
-other run is compared against Run25's thresholds; its known-good visits are held out, and
-the notebook reports how often they are flagged. The YAML's `runs` table gives each run's
-visit range, so every entry belongs to one run.
+YAML): its calibrations were made for it, and it is the most complete stable set. The set
+holds known-good visits of Run25 only. From other runs it holds only known-bad visits, as
+fault examples: each is checked against the thresholds, and none derives one. The YAML's
+`runs` table gives each run's visit range, so every entry belongs to one run.
+
+Other runs are compared with Run25's thresholds by comparison mode (PIPE2D-1929), which
+reads a run's calibration summary, not by this set; Run30 is the first. The known-good
+entries of Run27 and Run30 still in the YAML are removed by PIPE2D-1933.
 
 ## What belongs in the set
 

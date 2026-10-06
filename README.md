@@ -189,7 +189,8 @@ The default, `iqQaThresholds-run25.yaml`, holds the thresholds derived from the 
 - `medFwhm` on arcs, per arm (b 2.872/2.89, r 2.987/2.993, n 3.05/3.1, m 3.18/3.21 px).
 - `nLines` per arm and sequence (`seqName`), lower is worse. On quartz it is set by hand, 0.5 %/1 % below the
   smallest known-good Run25 count, as the derivation was degenerate; on twilight it is not judged.
-- No `pctFlagged`: the config fields judge it, since Run27's n-arm flag rates sit above Run25's.
+- No `pctFlagged`: the config fields judge it, since Run27's n-arm flag rates sit above Run25's. Run27 was
+  reduced without calibrations of its own; flag rates are revisited against Run30 in comparison mode.
 - `medFwhm` on quartz has no entry yet; the config fields judge a calexp-measured width.
 
 The config fields:

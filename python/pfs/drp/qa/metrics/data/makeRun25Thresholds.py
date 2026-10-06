@@ -7,7 +7,8 @@ derived from. Adopting it (PIPE2D-1917) changed three things:
 
 - **No pctFlagged.** Its populations hold 5 visits each, so FAIL sits at the
   sample's maximum, and Run27's known-good n-arm flag rates are 2-5 points
-  higher. The task config judges flag rates until that difference is explained.
+  higher, likely because Run27 had no calibrations of its own. The task config
+  judges flag rates until they are compared with Run30 (comparison mode).
 - **Twilight nLines is not judged.** On a twilight frame the count follows the
   sky brightness, not the instrument.
 - **Quartz nLines is set by hand.** Its derivation was degenerate (WARN = FAIL

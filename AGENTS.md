@@ -382,11 +382,16 @@ on Butler/LSST objects are documentation rather than something a tool will check
    validate logic via unit-testable components and note the environment constraint.
 6. Keep public APIs stable. If you must change one, update dependent code and add
    migration notes in `README.md` and/or docstrings.
-7. Record user-visible changes — new tasks, new or removed config fields, new
+7. Record QA decisions in the repository, where the next reader of the QA looks: which runs
+   are the reference and why, what the validation set holds, why a threshold was or was not
+   adopted. Put them in `docs/` (`validation-visits.md`, `qa-principles.md`,
+   `qa-domain-notes.md`) or beside the file they govern, not only in Jira or an assistant's
+   memory. A ticket can hold the discussion; the repository holds the outcome.
+8. Record user-visible changes — new tasks, new or removed config fields, new
    `iqQaMetrics` columns, changed defaults — under `## [Unreleased]` in `CHANGELOG.md`.
-8. Include concise docstrings describing purpose, inputs, outputs, and any assumptions —
+9. Include concise docstrings describing purpose, inputs, outputs, and any assumptions —
    especially about LSST data structures.
-9. Prefer small, focused PRs with clear descriptions of the change and its QA impact.
+10. Prefer small, focused PRs with clear descriptions of the change and its QA impact.
 
 ---
 
