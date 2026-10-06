@@ -27,15 +27,16 @@ constant, or the same measurement from another epoch.
 ### R2 — Thresholds are measured, never invented
 
 No threshold enters the code before it has been derived from known-good data by the
-procedure in [`qa-thresholds.ipynb`](qa-thresholds.ipynb). The config field's `doc`
-records the visits and the date it was derived from. A threshold whose origin is unknown
+procedure in [`qa-thresholds.ipynb`](qa-thresholds.ipynb). Its provenance, in the
+thresholds file or the config field's `doc`, records the visits and the date it was derived
+from. A threshold whose origin is unknown
 says so ("origin unrecorded"), rather than guessing a history.
 
 ### R3 — Separate measurement from judgement
 
-Tasks emit numbers; a separate gating step maps them to `PASS`/`WARN`/`FAIL`. Thresholds
-can then be re-tuned and re-applied to stored metrics without re-running the pipeline over
-the pixels, which is what makes R2 practical.
+Tasks emit numbers; a separate gating step (`pfs.drp.qa.metrics.gate`) maps them to
+`PASS`/`WARN`/`FAIL`. Thresholds can then be re-tuned and re-applied to stored metrics
+without re-running the pipeline over the pixels, which is what makes R2 practical.
 
 ### R4 — Never duplicate an existing metric
 

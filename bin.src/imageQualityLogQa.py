@@ -311,8 +311,13 @@ class VisitQA:
         return vqa
 
     @classmethod
-    def from_metrics(cls, metrics: dict[str, Any] | Any) -> VisitQA:
-        """Create a VisitQA instance from a Butler iqQaMetrics row/dictionary."""
+    def from_metrics(
+        cls, metrics: dict[str, Any] | Any, species: dict[str, tuple[float, float]] | None = None
+    ) -> VisitQA:
+        """Create a VisitQA instance from a Butler iqQaMetrics row/dictionary.
+
+        ``species`` is ``{species: (xRms, yRms)}`` from ``iqQaSpeciesMetrics``.
+        """
         data = metrics.to_dict() if hasattr(metrics, "to_dict") else dict(metrics)
 
         def restore_float(v):
@@ -374,18 +379,12 @@ class VisitQA:
         if cr_count > 0 or cr_pixels > 0:
             vqa.cosmic_rays = [(int(cr_count), int(cr_pixels))]
 
-        # Reconstruct fit_species_stats from dynamic columns
-        for k, v in data.items():
-            if k.startswith("fitSpeciesXRms_"):
-                sp = k[len("fitSpeciesXRms_") :]
-                y_key = f"fitSpeciesYRms_{sp}"
-                x_rms = float(v)
-                y_rms = float(data.get(y_key, float("nan")))
-                vqa.fit_species_stats[sp] = (x_rms, y_rms)
-                # Assign the last matched species as the default fallback
-                vqa.fit_species_name = sp
-                vqa.fit_species_x_rms = x_rms
-                vqa.fit_species_y_rms = y_rms
+        for sp, (x_rms, y_rms) in (species or {}).items():
+            vqa.fit_species_stats[sp] = (x_rms, y_rms)
+            # Assign the last matched species as the default fallback
+            vqa.fit_species_name = sp
+            vqa.fit_species_x_rms = x_rms
+            vqa.fit_species_y_rms = y_rms
 
         # Reconstruct fibers
         fiber_ids = data.get("fiberIds")
@@ -830,7 +829,14 @@ def get_visit_metrics(
         row["arm"] = arm
         row["spectrograph"] = spectrograph
 
-        vqa = VisitQA.from_metrics(row)
+        try:
+            from pfs.drp.qa.metrics.longFormat import speciesStats
+
+            species = speciesStats(butler.get("iqQaSpeciesMetrics", dataId=dataId))
+        except LookupError:
+            species = None
+
+        vqa = VisitQA.from_metrics(row, species)
         vqa.collection = collection
         vqa_list.append(vqa)
 

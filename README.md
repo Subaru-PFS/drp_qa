@@ -165,14 +165,19 @@ is applied to the cross-dispersion intensity profile measured at regular row int
   values reflect the calibration epoch, not the current visit.
 - **`obsType`** / **`seqName`** — Visit classification (`arc`, `trace`, `science`, `allsky`,
   `unknown`) and the raw `W_SEQNAM` string (e.g. `"Arc: HgCd"`) it was derived from.
-- **`qaStatus`** — `PASS`, `WARN`, or `FAIL`; the worst of the `medFwhm`, `pctFlagged`, and
-  `|medDxCenter|` checks (see thresholds below). The reason for anything other than `PASS` is written to the task log on
-  the `IQ QA` line.
+- **`qaStatus`** — `PASS`, `WARN`, or `FAIL`: the worst verdict of the metrics judged (see thresholds below), from
+  `pfs.drp.qa.metrics.gate.gate`. **`qaDecidedBy`** names the first metric with that verdict (empty for `PASS`), and
+  **`qaReason`** gives every `WARN` and `FAIL` reason; it is also on the task log's `IQ QA` line.
 
 ##### Pass/Warn/Fail Thresholds
 
 New thresholds are derived from the validation visits, never chosen by hand: see
 [QA thresholds and the validation visit set](#qa-thresholds-and-the-validation-visit-set).
+
+Verdicts come from `pfs.drp.qa.metrics.gate.gate`, the one gating path, which also re-judges stored `iqQaMetrics`.
+With `thresholdsFile` set to a file written by `writeThresholds`, each metric is judged by that file's entry for its
+population, and by the config fields below where the file has none. With it empty (the default), the config fields
+alone:
 
 | Metric            | WARN                               | FAIL                               |
 |-------------------|------------------------------------|------------------------------------|
@@ -224,6 +229,7 @@ does not exist in `drp_stella`, so the permissive thresholds above are the curre
   the threshold table above for defaults.
 - `imageQualityQa:flagRateFailThreshold`: `pctFlagged` (%) threshold for `FAIL`, keyed by `arm` or `arm:species`. See
   the threshold table above for defaults.
+- `imageQualityQa:thresholdsFile`: Thresholds file judged before the fields above. Default empty.
 
 `DictField` values cannot be set with dot notation on the command line; assign the whole dict as a Python literal:
 
@@ -237,20 +243,20 @@ does not exist in `drp_stella`, so the permissive thresholds above are the curre
 |---------------|----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `iqQaData`    | `instrument, visit, arm, spectrograph` | Per-line measurements: `fiberId`, `x`, `y`, `lam`, `fwhm`, `theta`, `dxCenter`, `flux`, `fluxErr`, `flag`, `traceOnly`, `peakRatio`, `status`, plus `visit`/`arm`/`spectrograph`. |
 | `iqQaMetrics` | `instrument, visit, arm, spectrograph` | Single-row summary; see below.                                                                                                                                                    |
+| `iqQaSpeciesMetrics` | `instrument, visit, arm, spectrograph` | Per-species `fitDetectorMap` statistics from the `reduceExposure` log, one row per species and metric: `visit`, `arm`, `spectrograph`, `description` (line species, e.g. `NeI`), `metric` (`fitXRms`, `fitYRms`), `value`. |
 
 `iqQaMetrics` columns, by group:
 
 - **Identity** — `visit`, `arm`, `spectrograph`, `obsType`, `seqName`
 - **Image quality** — `medFwhm`, `medDxCenter`, `dxCenterRms`, `pctFlagged`, `nLines`,
-  `traceOnly`, `qaStatus`
+  `traceOnly`, `qaStatus`, `qaDecidedBy`, `qaReason`
 - **Flag breakdown** (only when `pctFlagged` is finite) — `pctNotVisible`, `pctBlend`,
   `pctSuspect`, `pctRejected`, `pctBroad`, and on the arc-line path `pctLowSN`, `pctMeasFail`
 - **Log-derived** (zero/`NaN` when the corresponding log is absent) — `isrBadPixels`,
   `isrTime`, `cosmicRayCount`, `cosmicRayPixels`, `cosmicRayTime`, `reduceExposureTime`
 - **`fitDetectorMap` statistics** — `fitChi2`, `fitDof`, `fitXRms`, `fitYRms`, `fitXSoften`,
   `fitYSoften`, `fitNLines`, `fitTotalLines`, the matching `fitReserved*` columns for the reserved-line sample,
-  `fitTraceXRms`, `fitTraceYRms`, and per-species
-  `fitSpeciesXRms_<species>` / `fitSpeciesYRms_<species>`
+  `fitTraceXRms`, `fitTraceYRms`; the per-species values are in `iqQaSpeciesMetrics`
 - **Per-fiber arrays** — `fiberIds`, `fiberXRms`, `fiberYRms`, `fiberNLines`
 
 There is no `iqQaPlot` output: the task writes data only, and plots are produced separately by

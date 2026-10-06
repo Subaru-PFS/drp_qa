@@ -108,8 +108,8 @@ Additional columns are added dynamically: a per-status-bit flag breakdown
 (`pctNotVisible`, `pctBlend`, `pctSuspect`, `pctRejected`, `pctBroad`, plus `pctLowSN` /
 `pctMeasFail` on the arc-line path), and — when the optional `isr_log`, `cosmicray_log`,
 and `reduceExposure_log` connections are present — ISR, cosmic-ray, and `fitDetectorMap`
-statistics (`fitChi2`, `fitXRms`, `fitYRms`, `fitReserved*`, `fitSpecies*Rms_<species>`,
-per-fiber arrays).
+statistics (`fitChi2`, `fitXRms`, `fitYRms`, `fitReserved*`, per-fiber arrays; the
+per-species values go to `iqQaSpeciesMetrics`).
 
 ### DM residual metrics
 

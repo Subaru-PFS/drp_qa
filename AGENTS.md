@@ -75,7 +75,9 @@ the pipeline/config glue to run them.
   machinery: `validationVisits` loads `data/validationVisits.yaml` (package data; visits
   with known verdicts), `thresholds` derives WARN/FAIL from a distribution, `calibration`
   turns stored `iqQaMetrics` into a table of suggestions, and `readers` reads them from a
-  Butler it is given. Read [`docs/qa-principles.md`](docs/qa-principles.md) (rules R1–R7,
+  Butler it is given. `registry` declares each metric once (direction, units, reference,
+  populations); `gate` is the only gating path, judging metrics rows against a thresholds
+  file layered over the task config; `longFormat` holds `iqQaSpeciesMetrics`. Read [`docs/qa-principles.md`](docs/qa-principles.md) (rules R1–R7,
   the metric checklist) before adding a metric or a threshold. The procedure is the
   notebook [`docs/qa-thresholds.ipynb`](docs/qa-thresholds.ipynb), from `pipetask` to
   review (committed with outputs); the set is described in
@@ -424,7 +426,7 @@ drpQA.yaml#imageQualityQa            dims: (instrument, visit, arm, spectrograph
              fiberProfiles, detectorMap_calib (calibrations),
              calexp, pfsConfig (optional),
              isr_log, cosmicray_log, reduceExposure_log (optional)
-    → writes: iqQaData, iqQaMetrics
+    → writes: iqQaData, iqQaMetrics, iqQaSpeciesMetrics
 
 drpQA.yaml#dmResiduals               dims: (instrument, visit, arm, spectrograph)
     ← reads: raw.visitInfo, detectorMap, lines, reduceExposure_config

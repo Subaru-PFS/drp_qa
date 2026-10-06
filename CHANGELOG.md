@@ -38,6 +38,16 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   procedure, from reducing the visits (`pipelines/qaThresholds.yaml`, with `drpActor`'s per-sequence-type
   config) to review; `docs/validation-visits.md` describes the set, and `docs/qa-principles.md` holds rules
   R1–R7 and the metric checklist. `pyyaml` is now a dependency.
+- **One gating path for `imageQualityQa`** (PIPE2D-1915) — `pfs.drp.qa.metrics.gate.gate` judges `iqQaMetrics`
+  rows against layered threshold tables: a `writeThresholds` file first, then the config. Each image gets
+  `qaStatus` with the metric that decided it (`qaDecidedBy`, new column) and the reasons (`qaReason`, new
+  column). A NaN value gets no verdict; an infinite one is judged. New config field `thresholdsFile` (default
+  empty: verdicts unchanged). `pfs.drp.qa.metrics.registry` declares each metric's direction, units,
+  reference and populations once, for derivation and gating; `MetricSpec` and `METRIC_SPECS` moved there from
+  `calibration`, which re-exports them.
+- **`iqQaSpeciesMetrics`** (PIPE2D-1915) — the per-species `fitDetectorMap` statistics, in long format
+  (`pfs.drp.qa.metrics.longFormat`), replacing the `fitSpeciesXRms_<species>`/`fitSpeciesYRms_<species>`
+  columns of `iqQaMetrics`, which are gone. `imageQualityLogQa.py` reads it.
 - **`pfs.drp.qa.guiders`** — empty `coordinates`, `queries`, `analysis` and `plotting` modules for the
   guider tools moving from `pfs.drp.stella.utils.guiders`, and a `guiders` CI job that runs
   `tests/guiders/` with pfs-utils (installed `--no-deps`).

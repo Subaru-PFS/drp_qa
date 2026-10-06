@@ -13,7 +13,6 @@ a property of the blend.
 """
 
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -21,6 +20,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from pfs.drp.qa.metrics.registry import METRIC_SPECS, MetricSpec, specFor
 from pfs.drp.qa.metrics.thresholds import deriveThresholds, verifyKnownBad
 from pfs.drp.qa.metrics.validationVisits import ValidationVisitSet, matchRows
 
@@ -54,46 +54,6 @@ _THRESHOLD_FIELDS = (
     "provenance",
 )
 
-
-@dataclass(frozen=True)
-class MetricSpec:
-    """How to derive thresholds for one metrics column.
-
-    Attributes
-    ----------
-    name : `str`
-        Column name in ``iqQaMetrics``.
-    higherIsWorse : `bool`
-        Direction of the metric.
-    absolute : `bool`
-        Calibrate on the absolute value, as the gate sees it.
-    groupBy : `tuple` [`str`]
-        Columns separating populations. Columns absent from the data are
-        dropped from the grouping.
-    physicalLimit : `float` or `None`
-        A physical limit to use for FAIL.
-    """
-
-    name: str
-    higherIsWorse: bool = True
-    absolute: bool = False
-    groupBy: tuple[str, ...] = ("arm", "obsType")
-    physicalLimit: float | None = None
-
-
-#: The ``iqQaMetrics`` columns with a known treatment. ``pctFlagged`` is split
-#: by species because ``flagRate*Threshold`` is keyed by ``arm:species``;
-#: ``nLines`` by lamp because the line count is a property of the lamp.
-METRIC_SPECS = {
-    spec.name: spec
-    for spec in (
-        MetricSpec("medFwhm"),
-        MetricSpec("medDxCenter", absolute=True),
-        MetricSpec("dxCenterRms"),
-        MetricSpec("pctFlagged", groupBy=("obsType", "arm", "species")),
-        MetricSpec("nLines", higherIsWorse=False, groupBy=("arm", "seqName")),
-    )
-}
 
 #: The metrics whose thresholds are derived from the reference run.
 #: ``medDxCenter`` is gated by ``imageQualityQa`` but not derived: an offset
@@ -275,7 +235,7 @@ def calibrate(
     for name in metricNames:
         if name not in metrics.columns:
             raise KeyError(f"{name!r} is not a column of the metrics table")
-        spec = METRIC_SPECS.get(name, MetricSpec(name))
+        spec = specFor(name)
         labelled = labelRows(metrics, visitSet, name)
         columns = [column for column in (spec.groupBy if groupBy is None else groupBy) if column in labelled]
         values = labelled[name].astype(float)
@@ -433,7 +393,7 @@ def compareRuns(
     """
     rows = []
     for name in metricNames:
-        spec = METRIC_SPECS.get(name, MetricSpec(name))
+        spec = specFor(name)
         labelled = labelRows(metrics, visitSet, name)
         labelled = labelled[labelled["validation"].isin((GOOD, HELD_OUT))]
         values = labelled[name].astype(float)
@@ -490,7 +450,7 @@ def summarizeRuns(
     """
     rows = []
     for name in metricNames:
-        spec = METRIC_SPECS.get(name, MetricSpec(name))
+        spec = specFor(name)
         labelled = labelRows(metrics, visitSet, name)
         labelled = labelled[labelled["validation"].isin((GOOD, HELD_OUT))]
         values = labelled[name].astype(float)
@@ -554,7 +514,7 @@ def writeThresholds(
     entries = []
     for _, row in table[table["nGood"] > 0].iterrows():
         columns = [column for column in str(row["groupBy"]).split("/") if column]
-        spec = METRIC_SPECS.get(row["metric"], MetricSpec(row["metric"]))
+        spec = specFor(row["metric"])
         entry = {
             "metric": row["metric"],
             "population": {column: _plain(row[column]) for column in columns},

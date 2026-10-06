@@ -32,6 +32,8 @@ from lsst.pipe.base.connectionTypes import (
 )
 
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
+from pfs.drp.qa.metrics.gate import configThresholds, gate, loadThresholds
+from pfs.drp.qa.metrics.longFormat import speciesFrame
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
 from pfs.drp.stella.utils.stability import addTraceLambdaToArclines
@@ -78,7 +80,19 @@ class ImageQualityQaConnections(
             " Columns: ``visit``, ``arm``, ``spectrograph``, ``medFwhm``,"
             " ``medDxCenter``, ``dxCenterRms``, ``pctFlagged``,"
             " ``pctLowSN``, ``pctMeasFail``,"
-            " ``nLines``, ``traceOnly``, ``qaStatus``."
+            " ``nLines``, ``traceOnly``, ``qaStatus``, ``qaDecidedBy``,"
+            " ``qaReason``."
+        ),
+        storageClass="DataFrame",
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
+    )
+
+    iqQaSpeciesMetrics = OutputConnection(
+        name="iqQaSpeciesMetrics",
+        doc=(
+            "Per-species detectorMap fit statistics from the reduceExposure log, in long"
+            " format: ``visit``, ``arm``, ``spectrograph``, ``description`` (line"
+            " species), ``metric`` (``fitXRms``, ``fitYRms``), ``value``."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -312,6 +326,15 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " Set to 100 to disable."
         ),
     )
+    thresholdsFile = Field(
+        dtype=str,
+        default="",
+        doc=(
+            "Thresholds file written by ``pfs.drp.qa.metrics.calibration.writeThresholds``,"
+            " judged before the threshold fields of this config: a population with no"
+            " entry in the file is judged by the fields. Empty for the fields alone."
+        ),
+    )
     dxCenterWarnThreshold = Field(
         dtype=float,
         default=1.0,
@@ -344,6 +367,12 @@ class ImageQualityQaTask(PipelineTask):
     ConfigClass = ImageQualityQaConfig
     _DefaultName = "imageQualityQa"
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Highest priority first; see pfs.drp.qa.metrics.gate.
+        files = [self.config.thresholdsFile] if self.config.thresholdsFile else []
+        self.thresholds = [*loadThresholds(files), configThresholds(self.config)]
+
     def runQuantum(
         self,
         butlerQC: QuantumContext,
@@ -364,6 +393,7 @@ class ImageQualityQaTask(PipelineTask):
         else:
             butlerQC.put(outputs.iqQaData, outputRefs.iqQaData)
             butlerQC.put(outputs.iqQaMetrics, outputRefs.iqQaMetrics)
+            butlerQC.put(outputs.iqQaSpeciesMetrics, outputRefs.iqQaSpeciesMetrics)
 
     def run(
         self,
@@ -433,8 +463,12 @@ class ImageQualityQaTask(PipelineTask):
         iqQaMetrics : `pandas.DataFrame`
             Single-row summary with ``medFwhm``, ``medDxCenter``,
             ``dxCenterRms``, ``pctFlagged``, ``nLines``, ``traceOnly``,
-            ``obsType``, ``seqName``, ``qaStatus``, ``visit``, ``arm``,
-            ``spectrograph``.
+            ``obsType``, ``seqName``, ``qaStatus``, ``qaDecidedBy``,
+            ``qaReason``, ``visit``, ``arm``, ``spectrograph``.  The verdict
+            is `pfs.drp.qa.metrics.gate.gate` with ``self.thresholds``.
+        iqQaSpeciesMetrics : `pandas.DataFrame`
+            Per-species fit statistics in long format
+            (`pfs.drp.qa.metrics.longFormat.speciesFrame`).
         """
         self.log.info("Computing image quality metrics for %s", dataId)
 
@@ -809,71 +843,6 @@ class ImageQualityQaTask(PipelineTask):
 
         title = "{visit} {arm}{spectrograph}".format(**dataId)
 
-        # Determine per-quantum pass/warn/fail status from absolute thresholds.
-        # Trace-only visits use the same flag-rate check; FWHM check is skipped
-        # when medFwhm is NaN (no valid lines).
-        reasons = []
-        fwhm_status = "PASS"
-        if not trace_only and not np.isnan(med_fwhm):
-            if med_fwhm >= self.config.fwhmFailThreshold:
-                fwhm_status = "FAIL"
-                reasons.append(
-                    f"medFWHM={med_fwhm:.2f}px >= fail threshold {self.config.fwhmFailThreshold}px"
-                )
-            elif med_fwhm >= self.config.fwhmWarnThreshold:
-                fwhm_status = "WARN"
-                reasons.append(
-                    f"medFWHM={med_fwhm:.2f}px >= warn threshold {self.config.fwhmWarnThreshold}px"
-                )
-
-        flag_status = "PASS"
-        if np.isfinite(pct_flagged):
-            arm = dataId.get("arm", "")
-            species = seq_nam.split(":", 1)[-1].strip() if ":" in seq_nam else ""
-            compoundKey = f"{arm}:{species}" if species else ""
-            warn_thresh = self.config.flagRateWarnThreshold.get(
-                compoundKey, self.config.flagRateWarnThreshold.get(arm, 15.0)
-            )
-            fail_thresh = self.config.flagRateFailThreshold.get(
-                compoundKey, self.config.flagRateFailThreshold.get(arm, 20.0)
-            )
-            if pct_flagged >= fail_thresh:
-                flag_status = "FAIL"
-                reasons.append(f"pctFlagged={pct_flagged:.1f}% >= fail threshold {fail_thresh}%")
-            elif pct_flagged >= warn_thresh:
-                flag_status = "WARN"
-                reasons.append(f"pctFlagged={pct_flagged:.1f}% >= warn threshold {warn_thresh}%")
-
-        dx_status = "PASS"
-        if np.isfinite(medDxCenter):
-            absDx = abs(medDxCenter)
-            if absDx >= self.config.dxCenterFailThreshold:
-                dx_status = "FAIL"
-                reasons.append(
-                    f"|dxCenter|={absDx:.3f}px >= fail threshold {self.config.dxCenterFailThreshold}px"
-                )
-            elif absDx >= self.config.dxCenterWarnThreshold:
-                dx_status = "WARN"
-                reasons.append(
-                    f"|dxCenter|={absDx:.3f}px >= warn threshold {self.config.dxCenterWarnThreshold}px"
-                )
-
-        _level = {"PASS": 0, "WARN": 1, "FAIL": 2}
-        qa_status = max((fwhm_status, flag_status, dx_status), key=lambda s: _level[s])
-
-        reason_str = "; ".join(reasons) if reasons else "all metrics nominal"
-        dxStr = f"{medDxCenter:+.3f}px" if np.isfinite(medDxCenter) else "NaN"
-        self.log.info(
-            "IQ QA %-4s  %s  %-22s  medFWHM=%.2fpx  dxCenter=%s  pctFlagged=%s  [%s]",
-            qa_status,
-            title,
-            seq_nam,
-            med_fwhm,
-            dxStr,
-            f"{pct_flagged:.1f}%" if np.isfinite(pct_flagged) else "NaN",
-            reason_str,
-        )
-
         # Parse log metrics if logs are provided
         logMetrics = self._parseLogs(
             self._logToString(isrLog),
@@ -890,7 +859,6 @@ class ImageQualityQaTask(PipelineTask):
             "traceOnly": [trace_only],
             "obsType": [obs_type],
             "seqName": [seq_nam],
-            "qaStatus": [qa_status],
             # Log-derived metrics
             "isrBadPixels": [logMetrics["isrBadPixels"]],
             "isrTime": [logMetrics["isrTime"]],
@@ -923,17 +891,34 @@ class ImageQualityQaTask(PipelineTask):
         for bitName, pct in flagBreakdown.items():
             metricsDict[f"pct{bitName}"] = [pct]
 
-        # Add species stats columns dynamically
-        for sp, (x_rms, y_rms) in logMetrics["speciesStats"].items():
-            metricsDict[f"fitSpeciesXRms_{sp}"] = [x_rms]
-            metricsDict[f"fitSpeciesYRms_{sp}"] = [y_rms]
-
         metrics = pd.DataFrame(metricsDict)
         for key in ("visit", "arm", "spectrograph"):
             if key in dataId:
                 metrics[key] = dataId[key]
 
-        return Struct(iqQaData=data, iqQaMetrics=metrics)
+        verdict = gate(metrics, self.thresholds)
+        position = metrics.columns.get_loc("seqName") + 1
+        for offset, column in enumerate(verdict.columns):
+            metrics.insert(position + offset, column, verdict[column].to_numpy())
+        qa_status, reason = verdict["qaStatus"].iloc[0], verdict["qaReason"].iloc[0]
+
+        dxStr = f"{medDxCenter:+.3f}px" if np.isfinite(medDxCenter) else "NaN"
+        self.log.info(
+            "IQ QA %-4s  %s  %-22s  medFWHM=%.2fpx  dxCenter=%s  pctFlagged=%s  [%s]",
+            qa_status,
+            title,
+            seq_nam,
+            med_fwhm,
+            dxStr,
+            f"{pct_flagged:.1f}%" if np.isfinite(pct_flagged) else "NaN",
+            reason or "all metrics nominal",
+        )
+
+        return Struct(
+            iqQaData=data,
+            iqQaMetrics=metrics,
+            iqQaSpeciesMetrics=speciesFrame(dataId, logMetrics["speciesStats"]),
+        )
 
     @staticmethod
     def _logToString(logData: Any) -> str:
