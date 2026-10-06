@@ -41,8 +41,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **One gating path for `imageQualityQa`** (PIPE2D-1915) — `pfs.drp.qa.metrics.gate.gate` judges `iqQaMetrics`
   rows against layered threshold tables: a `writeThresholds` file first, then the config. Each image gets
   `qaStatus` with the metric that decided it (`qaDecidedBy`, new column) and the reasons (`qaReason`, new
-  column). A NaN value gets no verdict; an infinite one is judged. New config field `thresholdsFile` (default
-  empty: verdicts unchanged). `pfs.drp.qa.metrics.registry` declares each metric's direction, units,
+  column). A NaN value gets no verdict; an infinite one is judged. New config field `thresholdsFile`. `pfs.drp.qa.metrics.registry` declares each metric's direction, units,
   reference and populations once, for derivation and gating; `MetricSpec` and `METRIC_SPECS` moved there from
   `calibration`, which re-exports them.
 - **`imageQualityQa` can fail a quartz, and says when it judged nothing** (PIPE2D-1917) — `qaStatus` is
@@ -53,6 +52,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `obsType=trace` entries. `nLines` now counts the rows of `lines` on every path. New `obsType` values
   `twilight` and `dark` (were `science`), neither measured. `imageQualityLogQa.py` tells `UNKNOWN` from a
   missing result (`NOT_RUN`).
+- **Run25 thresholds adopted** (PIPE2D-1917) — `thresholdsFile` defaults to `iqQaThresholds-run25.yaml`, shipped in
+  `pfs/drp/qa/metrics/data` with the script that makes it from the PIPE2D-1914 derivation: `medFwhm` (arcs) and
+  `nLines`, quartz `nLines` set by hand, twilight `nLines` not judged, no `pctFlagged`. A relative
+  `thresholdsFile` is looked up there (`gate.thresholdsPath`). Changes verdicts.
 - **`iqQaSpeciesMetrics`** (PIPE2D-1915) — the per-species `fitDetectorMap` statistics, in long format
   (`pfs.drp.qa.metrics.longFormat`), replacing the `fitSpeciesXRms_<species>`/`fitSpeciesYRms_<species>`
   columns of `iqQaMetrics`, which are gone. `imageQualityLogQa.py` reads it.

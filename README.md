@@ -175,13 +175,24 @@ is applied to the cross-dispersion intensity profile measured at regular row int
 
 ##### Pass/Warn/Fail Thresholds
 
-New thresholds are derived from the validation visits, never chosen by hand: see
+New thresholds are derived from the validation visits: see
 [QA thresholds and the validation visit set](#qa-thresholds-and-the-validation-visit-set).
 
 Verdicts come from `pfs.drp.qa.metrics.gate.gate`, the one gating path, which also re-judges stored `iqQaMetrics`.
-With `thresholdsFile` set to a file written by `writeThresholds`, each metric is judged by that file's entry for its
-population, and by the config fields below where the file has none. With it empty (the default), the config fields
-alone:
+Each metric is judged by the `thresholdsFile` entry for its population, and by the config fields below where the file
+has none. `thresholdsFile` is an absolute path, or one relative to `pfs/drp/qa/metrics/data`; empty, the config fields
+judge alone.
+
+The default, `iqQaThresholds-run25.yaml`, holds the thresholds derived from the Run25 validation visits, as adopted
+(PIPE2D-1917) by `makeRun25Thresholds.py` beside it; each entry records its provenance:
+
+- `medFwhm` on arcs, per arm (b 2.872/2.89, r 2.987/2.993, n 3.05/3.1, m 3.18/3.21 px).
+- `nLines` per arm and sequence (`seqName`), lower is worse. On quartz it is set by hand, 0.5 %/1 % below the
+  smallest known-good Run25 count, as the derivation was degenerate; on twilight it is not judged.
+- No `pctFlagged`: the config fields judge it, since Run27's n-arm flag rates sit above Run25's.
+- `medFwhm` on quartz has no entry yet; the config fields judge a calexp-measured width.
+
+The config fields:
 
 | Metric            | WARN                               | FAIL                               |
 |-------------------|------------------------------------|------------------------------------|
@@ -233,7 +244,7 @@ does not exist in `drp_stella`, so the permissive thresholds above are the curre
   the threshold table above for defaults.
 - `imageQualityQa:flagRateFailThreshold`: `pctFlagged` (%) threshold for `FAIL`, keyed by `arm` or `arm:species`. See
   the threshold table above for defaults.
-- `imageQualityQa:thresholdsFile`: Thresholds file judged before the fields above. Default empty.
+- `imageQualityQa:thresholdsFile`: Thresholds file judged before the fields above. Default `iqQaThresholds-run25.yaml`; empty for the fields alone.
 
 `DictField` values cannot be set with dot notation on the command line; assign the whole dict as a Python literal:
 

@@ -1,0 +1,497 @@
+# Made by makeRun25Thresholds.py from tests/metrics/data/iqQaThresholds-run25.yaml; see its docstring.
+version: 1
+derivedOn: '2026-10-05'
+collection: u/wtg/qa-thresholds/003
+referenceRuns:
+- 25
+drpQaVersion: w.2026.35-75-ge792efc-dirty
+thresholds:
+- metric: medFwhm
+  population:
+    arm: b
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  warn: 2.872
+  fail: 2.89
+  nGood: 184
+  nGoodVisits: 46
+  visitRange: 133025-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133025-135848 (n=184): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=184 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: medFwhm
+  population:
+    arm: m
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  warn: 3.18
+  fail: 3.21
+  nGood: 80
+  nGoodVisits: 20
+  visitRange: 133042-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133042-135848 (n=80): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=80 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: medFwhm
+  population:
+    arm: n
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  warn: 3.05
+  fail: 3.1
+  nGood: 104
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=104 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: medFwhm
+  population:
+    arm: r
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  warn: 2.987
+  fail: 2.993
+  nGood: 104
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=104 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: b
+    seqName: 'Arc: Argon'
+  higherIsWorse: false
+  absolute: false
+  warn: 39510.0
+  fail: 39460.0
+  nGood: 40
+  nGoodVisits: 10
+  visitRange: 133025-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133025-135842 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=40 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: b
+    seqName: 'Arc: HgCd'
+  higherIsWorse: false
+  absolute: false
+  warn: 550000.0
+  fail: 550000.0
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-05 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=24 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
+    severe than FAIL, so WARN can never fire.'
+- metric: nLines
+  population:
+    arm: b
+    seqName: 'Arc: Krypton'
+  higherIsWorse: false
+  absolute: false
+  warn: 212000.0
+  fail: 212000.0
+  nGood: 40
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-05 from validation visits 133034-135848 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=40 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
+    severe than FAIL, so WARN can never fire.'
+- metric: nLines
+  population:
+    arm: b
+    seqName: 'Arc: Neon'
+  higherIsWorse: false
+  absolute: false
+  warn: 684000.0
+  fail: 683000.0
+  nGood: 40
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133031-135846 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=40 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: b
+    seqName: 'Arc: Xenon'
+  higherIsWorse: false
+  absolute: false
+  warn: 190500.0
+  fail: 190000.0
+  nGood: 40
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133028-135844 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=40 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: b
+    seqName: Trace
+  higherIsWorse: false
+  absolute: false
+  warn: 2414000.0
+  fail: 2402000.0
+  nGood: 56
+  nGoodVisits: 14
+  visitRange: 133040-135850
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Set by hand 2026-10-06 (PIPE2D-1917): the derivation from visits 133040-135850 (n=56) was degenerate,
+    WARN = FAIL at the sample minimum. WARN 0.5 % and FAIL 1 % below the smallest known-good value, 2426811.'
+- metric: nLines
+  population:
+    arm: b
+    seqName: Twilight sky
+  higherIsWorse: false
+  absolute: false
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (adopted 2026-10-06, PIPE2D-1917): on a twilight frame nLines follows the sky brightness,
+    not the instrument. Derived values were: Derived 2026-10-05 from validation visits 134880-135279 (n=48): WARN
+    at p5, FAIL at p1. FAIL UNBOUNDED: n=48 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: m
+    seqName: 'Arc: Argon'
+  higherIsWorse: false
+  absolute: false
+  warn: 478000.0
+  fail: 478000.0
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-05 from validation visits 133042-135842 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
+    severe than FAIL, so WARN can never fire.'
+- metric: nLines
+  population:
+    arm: m
+    seqName: 'Arc: Krypton'
+  higherIsWorse: false
+  absolute: false
+  warn: 1090000.0
+  fail: 1090000.0
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-05 from validation visits 133051-135848 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
+    severe than FAIL, so WARN can never fire.'
+- metric: nLines
+  population:
+    arm: m
+    seqName: 'Arc: Neon'
+  higherIsWorse: false
+  absolute: false
+  warn: 406000.0
+  fail: 403000.0
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133048-135846 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: m
+    seqName: 'Arc: Xenon'
+  higherIsWorse: false
+  absolute: false
+  warn: 540000.0
+  fail: 530000.0
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133045-135844 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: m
+    seqName: Trace
+  higherIsWorse: false
+  absolute: false
+  warn: 2421000.0
+  fail: 2408000.0
+  nGood: 16
+  nGoodVisits: 4
+  visitRange: 133054-135850
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Set by hand 2026-10-06 (PIPE2D-1917): the derivation from visits 133054-135850 (n=16) was degenerate,
+    WARN = FAIL at the sample minimum. WARN 0.5 % and FAIL 1 % below the smallest known-good value, 2433291.'
+- metric: nLines
+  population:
+    arm: n
+    seqName: 'Arc: Argon'
+  higherIsWorse: false
+  absolute: false
+  warn: 115000.0
+  fail: 111000.0
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133025-135831 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: n
+    seqName: 'Arc: HgCd'
+  higherIsWorse: false
+  absolute: false
+  warn: 2128000.0
+  fail: 2102000.0
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=24 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: n
+    seqName: 'Arc: Krypton'
+  higherIsWorse: false
+  absolute: false
+  warn: 140000.0
+  fail: 130000.0
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133034-135837 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: n
+    seqName: 'Arc: Neon'
+  higherIsWorse: false
+  absolute: false
+  warn: 162000.0
+  fail: 162000.0
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-05 from validation visits 133031-135835 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
+    severe than FAIL, so WARN can never fire.'
+- metric: nLines
+  population:
+    arm: n
+    seqName: 'Arc: Xenon'
+  higherIsWorse: false
+  absolute: false
+  warn: 180000.0
+  fail: 170000.0
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133028-135833 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: n
+    seqName: Trace
+  higherIsWorse: false
+  absolute: false
+  warn: 2371000.0
+  fail: 2359000.0
+  nGood: 32
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Set by hand 2026-10-06 (PIPE2D-1917): the derivation from visits 133040-135829 (n=32) was degenerate,
+    WARN = FAIL at the sample minimum. WARN 0.5 % and FAIL 1 % below the smallest known-good value, 2383210.'
+- metric: nLines
+  population:
+    arm: n
+    seqName: Twilight sky
+  higherIsWorse: false
+  absolute: false
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (adopted 2026-10-06, PIPE2D-1917): on a twilight frame nLines follows the sky brightness,
+    not the instrument. Derived values were: Derived 2026-10-05 from validation visits 134880-135279 (n=48): WARN
+    at p5, FAIL at p1. FAIL UNBOUNDED: n=48 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: r
+    seqName: 'Arc: Argon'
+  higherIsWorse: false
+  absolute: false
+  warn: 490000.0
+  fail: 490000.0
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-05 from validation visits 133025-135831 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
+    severe than FAIL, so WARN can never fire.'
+- metric: nLines
+  population:
+    arm: r
+    seqName: 'Arc: HgCd'
+  higherIsWorse: false
+  absolute: false
+  warn: 1885000.0
+  fail: 1875000.0
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=24 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: r
+    seqName: 'Arc: Krypton'
+  higherIsWorse: false
+  absolute: false
+  warn: 1580000.0
+  fail: 1560000.0
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133034-135837 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: r
+    seqName: 'Arc: Neon'
+  higherIsWorse: false
+  absolute: false
+  warn: 764000.0
+  fail: 762000.0
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133031-135835 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: r
+    seqName: 'Arc: Xenon'
+  higherIsWorse: false
+  absolute: false
+  warn: 830000.0
+  fail: 800000.0
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-05 from validation visits 133028-135833 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: nLines
+  population:
+    arm: r
+    seqName: Trace
+  higherIsWorse: false
+  absolute: false
+  warn: 2420000.0
+  fail: 2408000.0
+  nGood: 40
+  nGoodVisits: 10
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Set by hand 2026-10-06 (PIPE2D-1917): the derivation from visits 133040-135829 (n=40) was degenerate,
+    WARN = FAIL at the sample minimum. WARN 0.5 % and FAIL 1 % below the smallest known-good value, 2433139.'
+- metric: nLines
+  population:
+    arm: r
+    seqName: Twilight sky
+  higherIsWorse: false
+  absolute: false
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (adopted 2026-10-06, PIPE2D-1917): on a twilight frame nLines follows the sky brightness,
+    not the instrument. Derived values were: Derived 2026-10-05 from validation visits 134880-135279 (n=48): WARN
+    at p5, FAIL at p1. FAIL UNBOUNDED: n=48 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'

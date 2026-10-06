@@ -32,7 +32,7 @@ from lsst.pipe.base.connectionTypes import (
 )
 
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
-from pfs.drp.qa.metrics.gate import configThresholds, gate, loadThresholds
+from pfs.drp.qa.metrics.gate import configThresholds, gate, loadThresholds, thresholdsPath
 from pfs.drp.qa.metrics.longFormat import speciesFrame
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
@@ -330,11 +330,17 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
     )
     thresholdsFile = Field(
         dtype=str,
-        default="",
+        default="iqQaThresholds-run25.yaml",
         doc=(
             "Thresholds file written by ``pfs.drp.qa.metrics.calibration.writeThresholds``,"
             " judged before the threshold fields of this config: a population with no"
-            " entry in the file is judged by the fields. Empty for the fields alone."
+            " entry in the file is judged by the fields. An absolute path, or one relative"
+            " to the files shipped in ``pfs/drp/qa/metrics/data``; empty for the fields alone."
+            " The default holds the thresholds derived 2026-10-05 from the Run25 validation"
+            " visits (collection u/wtg/qa-thresholds/003, PIPE2D-1914), as adopted in"
+            " PIPE2D-1917 by ``makeRun25Thresholds.py`` beside it: medFwhm and nLines per"
+            " population, no pctFlagged, and quartz nLines set by hand; each entry carries"
+            " its provenance."
         ),
     )
     dxCenterWarnThreshold = Field(
@@ -372,7 +378,7 @@ class ImageQualityQaTask(PipelineTask):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Highest priority first; see pfs.drp.qa.metrics.gate.
-        files = [self.config.thresholdsFile] if self.config.thresholdsFile else []
+        files = [thresholdsPath(self.config.thresholdsFile)] if self.config.thresholdsFile else []
         self.thresholds = [*loadThresholds(files), configThresholds(self.config)]
 
     def runQuantum(

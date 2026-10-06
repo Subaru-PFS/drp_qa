@@ -27,6 +27,7 @@ threshold has crossed it.
 
 from collections.abc import Sequence
 from dataclasses import replace
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,7 @@ __all__ = [
     "gate",
     "judge",
     "loadThresholds",
+    "thresholdsPath",
 ]
 
 #: Verdicts from best to worst.
@@ -94,6 +96,25 @@ def loadThresholds(thresholds: ThresholdsLike | Sequence[ThresholdsLike]) -> lis
     if isinstance(thresholds, (pd.DataFrame, Path, str)):
         thresholds = [thresholds]
     return [table if isinstance(table, pd.DataFrame) else readThresholds(table)[1] for table in thresholds]
+
+
+def thresholdsPath(name: str) -> Path:
+    """Return the path of a thresholds file named in a task config.
+
+    Parameters
+    ----------
+    name : `str`
+        An absolute path, or a path relative to the thresholds files shipped
+        with the package (``pfs/drp/qa/metrics/data``), e.g.
+        ``"iqQaThresholds-run25.yaml"``.
+
+    Returns
+    -------
+    `pathlib.Path`
+        The file. Not checked for existence.
+    """
+    path = Path(name)
+    return path if path.is_absolute() else Path(str(files("pfs.drp.qa.metrics") / "data")) / path
 
 
 def configThresholds(config: Any) -> pd.DataFrame:

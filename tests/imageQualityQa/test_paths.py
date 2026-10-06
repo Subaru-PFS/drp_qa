@@ -164,3 +164,12 @@ def testClassifyVisit(iqqa, fakes, seqType, seqName, obsType):
     task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
     calexp = fakes.Exposure(np.zeros((2, 2)), fakes.header(seqType, seqName))
     assert task._classifyVisit(calexp, None)[0] == obsType
+
+
+def testDefaultConfigJudgesByTheShippedFile(iqqa):
+    """The default config puts the Run25 file ahead of its own fields."""
+    task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
+    assert len(task.thresholds) == 2
+    shipped = task.thresholds[0]
+    assert set(shipped["metric"]) == {"medFwhm", "nLines"}
+    assert (shipped.loc[shipped["metric"] == "medFwhm", "obsType"] == "arc").all()
