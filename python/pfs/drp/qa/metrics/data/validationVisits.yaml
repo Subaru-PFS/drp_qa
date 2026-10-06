@@ -15,8 +15,9 @@
 # ----
 #   runs:           run number -> [first, last] visit, from each run's
 #                   calibration summary. Every entry lies within one run.
-#   referenceRuns:  the runs thresholds are derived from. Known-good visits of
-#                   other runs are held out and compared against them.
+#   referenceRuns:  the runs thresholds are derived from. Every known_good
+#                   entry lies in one (the loader checks); other runs give
+#                   known_bad entries only, as fault examples.
 #
 # Entry schema
 # ------------
@@ -71,8 +72,8 @@
 version: 1
 
 # Run25 is the reference: SpS was last refocused for it, its calibrations were
-# made for it, and it is the most complete stable set. Every other run is compared
-# against it. Run27 had no science and no calibrations of its own, so it was reduced
+# made for it, and it is the most complete stable set. Other runs are compared
+# against it in comparison mode (PIPE2D-1929), not here. Run27 had no science and no calibrations of its own, so it was reduced
 # against older ones and is suspect. Ranges are each run's calibration summary;
 # Run30's starts at 148039, its summary also repeating Run28 and Run29 sequences.
 runs:
@@ -285,111 +286,6 @@ known_good:
     note: >-
       Run25 uniformity set, 2025-11-28, az 290, insrot 90. 180 s. Reference case
       for the O2/OH sky-line check, as for the other twilight entries.
-
-  # Run30 twilight sky, a second epoch for the same check. The 2026-09-02 set
-  # (148624-148628) is left out: taken at 70 deg elevation, ~30 deg from the Moon.
-  - visitRange: [148908, 148911]
-    sequenceType: scienceObject
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Twilight sky"
-    note: "Run30 twilight sky, 2026-09-04, alt 80, az 270. 180 s."
-  - visitRange: [150840, 150844]
-    sequenceType: scienceObject
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Twilight sky"
-    note: "Run30 twilight sky, 2026-09-16, alt 80, az 267. 180 s."
-
-  # Same-exposure controls: the spectrographs not named in a Run27 fault note.
-  # Paired with the known_bad entries for SM1 defocus and for an unlit
-  # spectrograph, so a metric must fail the faulty spectrograph and pass the
-  # others in the same frames -- it has found the cause, not the exposure.
-  - visitRange: [140005, 140006]
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [2, 3, 4]
-    seqType: "Arc: Argon"
-    note: "Run27 control for SM1 defocused, same exposures."
-  # 140033 and 140034 of this sequence have no raw data in the Butler.
-  - visit: 140032
-    sequenceType: scienceTrace
-    arms: [b, r, n]
-    spectrographs: [2, 3, 4]
-    seqType: "Trace"
-    note: "Run27 control for SM1 defocused, same exposures."
-  - visit: 140035
-    sequenceType: scienceTrace
-    arms: [b, r, n]
-    spectrographs: [2, 3, 4]
-    seqType: "Trace"
-    note: "Run27 control for SM1 defocused, same exposures."
-  - visitRange: [140139, 140148]
-    sequenceType: scienceTrace
-    arms: [b, r, n]
-    spectrographs: [2, 3, 4]
-    seqType: "Trace"
-    note: "Run27 control for SM1 defocused, same exposures."
-  - visitRange: [140124, 140126]
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [2, 3, 4]
-    seqType: "Arc: Argon"
-    note: "Run27 control for SM1 defocused, same exposures."
-  - visitRange: [140127, 140129]
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [2, 3, 4]
-    seqType: "Arc: Xenon"
-    note: "Run27 control for SM1 defocused, same exposures."
-  - visitRange: [140130, 140132]
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [2, 3, 4]
-    seqType: "Arc: Neon"
-    note: "Run27 control for SM1 defocused, same exposures."
-  - visitRange: [140133, 140135]
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [2, 3, 4]
-    seqType: "Arc: Krypton"
-    note: "Run27 control for SM1 defocused, same exposures."
-  - visitRange: [140136, 140138]
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [2, 3, 4]
-    seqType: "Arc: HgCd"
-    note: "Run27 control for SM1 defocused, same exposures."
-  - visit: 139971
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [2, 3, 4]
-    seqType: "ImageQuality"
-    note: "Run27 control for SM1 unlit, same exposure."
-  - visit: 140477
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [2, 3, 4]
-    seqType: "ImageQuality"
-    note: "Run27 control for SM1 unlit, same exposure."
-  - visit: 140640
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [1, 3, 4]
-    seqType: "ImageQuality"
-    note: "Run27 control for SM2 unlit; SM1 after its 03-11 slit home update, same exposure."
-  - visit: 140649
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [3, 4]
-    seqType: "ImageQuality"
-    note: "Run27 control for SM1 and SM2 unlit, same exposure."
-  - visit: 140651
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [1, 3, 4]
-    seqType: "ImageQuality"
-    note: "Run27 control for SM2 unlit; SM1 after its 03-11 slit home update, same exposure."
 
 known_bad:
   # Run25 b-arm arcs of the faint and crowded lamps: most of their lines are
@@ -639,7 +535,7 @@ known_bad:
 
   # Run27 nightly ImageQuality arcs where one spectrograph's lamp gave no light,
   # as noted in the run's calibration summary. That spectrograph's detectors have no lines; QA must not pass
-  # them. The other spectrographs are known_good controls in the same exposures.
+  # them.
   - visit: 139971
     sequenceType: scienceArc
     arms: [b, r, n]

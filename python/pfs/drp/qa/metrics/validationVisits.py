@@ -159,9 +159,9 @@ class ValidationVisitSet:
     runs : `dict` [`int`, `tuple` [`int`, `int`]]
         Each observing run's inclusive visit range.
     referenceRuns : `tuple` [`int`]
-        The runs whose ``known_good`` visits thresholds are derived from.
-        Known-good visits of other runs are held out and compared against
-        those thresholds. Empty means every run is a reference.
+        The runs thresholds are derived from. Every ``known_good`` entry lies
+        in one; other runs contribute only ``known_bad`` entries, as fault
+        examples. Empty means any run.
     path : `pathlib.Path` or `None`
         Where the set was loaded from, for error messages and provenance.
     """
@@ -171,20 +171,6 @@ class ValidationVisitSet:
     runs: dict[int, tuple[int, int]] = field(default_factory=dict)
     referenceRuns: tuple[int, ...] = ()
     path: Path | None = field(default=None, compare=False)
-
-    def isReference(self, entry: ValidationVisit) -> bool:
-        """Return True when thresholds are derived from ``entry``'s run."""
-        return not self.referenceRuns or entry.run in self.referenceRuns
-
-    @property
-    def referenceGood(self) -> tuple[ValidationVisit, ...]:
-        """The ``known_good`` entries of the reference runs: what thresholds come from."""
-        return tuple(entry for entry in self.knownGood if self.isReference(entry))
-
-    @property
-    def heldOutGood(self) -> tuple[ValidationVisit, ...]:
-        """The ``known_good`` entries of other runs, compared against the thresholds."""
-        return tuple(entry for entry in self.knownGood if not self.isReference(entry))
 
     def runOf(self, visit: int) -> int | None:
         """Return the run whose visit range holds ``visit``, or `None`."""
@@ -621,7 +607,12 @@ def loadValidationVisits(
             if runs and entry.visits:
                 entry = replace(entry, run=_runOf(entry.visits, runs, where))
             if section == "known_good" and entry.expect != "PASS":
-                raise ValueError(f"{path}: {section}[{index}]: a known_good entry must expect PASS")
+                raise ValueError(f"{where}: a known_good entry must expect PASS")
+            if section == "known_good" and referenceRuns and entry.visits and entry.run not in referenceRuns:
+                raise ValueError(
+                    f"{where}: known_good entries must lie in referenceRuns {list(referenceRuns)}, "
+                    f"not run {entry.run}; other runs give only known_bad entries"
+                )
             if entry.placeholder and not includePlaceholders:
                 continue
             entries.append(entry)

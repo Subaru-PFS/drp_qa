@@ -61,16 +61,16 @@ class TestCheckedInSet:
         assert not visits & {140033, 140034}, "no raw data"
         assert all(entry.spectrographs == (1,) and entry.metric == "medFwhm" for entry in sm1)
         assert visitSet.expectationFor(140130, arm="b", spectrograph=1, seqType="Arc: Neon") == "FAIL"
-        assert visitSet.expectationFor(140130, arm="b", spectrograph=2, seqType="Arc: Neon") == "PASS"
+        assert visitSet.expectationFor(140130, arm="b", spectrograph=2, seqType="Arc: Neon") is None
         assert visitSet.expectationFor(140075) is None, "unlogged visits in the range carry no verdict"
 
     def testUnlitSpectrographsAreKnownBad(self):
         visitSet = loadValidationVisits()
         assert visitSet.expectationFor(140640, arm="b", spectrograph=2) == "FAIL"
-        assert visitSet.expectationFor(140640, arm="b", spectrograph=1) == "PASS"
+        assert visitSet.expectationFor(140640, arm="b", spectrograph=1) is None
 
-    def testFaultsHaveSameExposureControls(self):
-        """Every Run27 fault entry has a known_good twin on the other spectrographs."""
+    def testOtherRunsGiveFaultsOnly(self):
+        """Run27 and Run30 are fault examples: known-bad entries, no known-good ones."""
         visitSet = loadValidationVisits()
         faults = [
             entry
@@ -78,13 +78,9 @@ class TestCheckedInSet:
             if entry.reason
             and any(text in entry.reason for text in ("SM1 defocused", "No light", "didn't turn on"))
         ]
-        assert len(faults) == 14
-        for fault in faults:
-            controls = [good for good in visitSet.knownGood if good.visits == fault.visits]
-            assert len(controls) == 1, fault
-            (control,) = controls
-            assert not set(control.spectrographs) & set(fault.spectrographs)
-            assert set(control.spectrographs) | set(fault.spectrographs) == {1, 2, 3, 4}
+        assert len(faults) == 14 and {entry.run for entry in faults} == {27}
+        assert {entry.run for entry in visitSet.confirmedBad} == {25, 27, 30}
+        assert {entry.run for entry in visitSet.knownGood} == {25}
 
     def testSingleVisitHeliumTestsNeedNoSeqType(self):
         """The hand-written summary misspells 150779's sequence; no selector depends on it."""
@@ -99,7 +95,7 @@ class TestCheckedInSet:
         visitSet = loadValidationVisits()
         assert visitSet.knownGood, "no usable known_good entries"
         assert visitSet.goodVisits[0] == 133025
-        assert visitSet.goodVisits[-1] == 150844
+        assert visitSet.goodVisits[-1] == 135850
 
     def testKnownGoodEntriesAreScopedToTheArmsThatWereRead(self):
         """Run25 block A read b/r/n and block B read b/m; neither covers the other."""
@@ -457,24 +453,32 @@ class TestRuns:
         referenceRuns: [25]
         known_good:
           - {visit: 100, sequenceType: scienceArc}
-          - {visit: 300, sequenceType: scienceArc}
+        known_bad:
+          - {visit: 300, sequenceType: scienceArc, expect: FAIL}
         """
 
     def testEntriesGetTheirRun(self, writeYaml):
         visitSet = loadValidationVisits(writeYaml(self.BODY))
-        assert [entry.run for entry in visitSet.knownGood] == [25, 27]
+        assert [entry.run for entry in visitSet] == [25, 27]
         assert visitSet.runOf(150) == 25 and visitSet.runOf(250) is None
 
-    def testReferenceAndHeldOut(self, writeYaml):
-        visitSet = loadValidationVisits(writeYaml(self.BODY))
-        assert [entry.visits for entry in visitSet.referenceGood] == [(100,)]
-        assert [entry.visits for entry in visitSet.heldOutGood] == [(300,)]
+    def testKnownGoodOutsideTheReferenceRunsRaises(self, writeYaml):
+        """Thresholds come from the reference runs; another run's good visit has no use."""
+        body = self.BODY.replace(
+            "{visit: 100, sequenceType: scienceArc}", "{visit: 301, sequenceType: scienceArc}"
+        )
+        with pytest.raises(
+            ValueError, match=r"known_good\[0\]: known_good entries must lie in referenceRuns"
+        ):
+            loadValidationVisits(writeYaml(body))
+        # Negative control: without referenceRuns, any run may hold known-good visits.
+        assert loadValidationVisits(writeYaml(body.replace("        referenceRuns: [25]\n", ""))).knownGood
 
-    def testNoRunsTableMeansEveryEntryIsReference(self, writeYaml):
+    def testNoRunsTableMeansNoConstraint(self, writeYaml):
         visitSet = loadValidationVisits(
             writeYaml("version: 1\nknown_good:\n  - {visit: 1, sequenceType: scienceArc}\n")
         )
-        assert visitSet.referenceGood == visitSet.knownGood and not visitSet.heldOutGood
+        assert visitSet.knownGood[0].run is None and not visitSet.referenceRuns
 
     @pytest.mark.parametrize(
         ("runs", "entry", "message"),
@@ -499,8 +503,7 @@ class TestRuns:
     def testCheckedInSetDerivesFromRun25Only(self):
         visitSet = loadValidationVisits()
         assert visitSet.referenceRuns == (25,)
-        assert {entry.run for entry in visitSet.referenceGood} == {25}
-        assert {entry.run for entry in visitSet.heldOutGood} == {27, 30}
+        assert {entry.run for entry in visitSet.knownGood} == {25}
 
     def testBArmFlagRatesAreRecordedAsBad(self):
         """The baseline for drp_stella's adjustDetectorMap work: bad for pctFlagged only."""
