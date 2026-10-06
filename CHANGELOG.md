@@ -47,7 +47,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `calibration`, which re-exports them.
 - **`iqQaSpeciesMetrics`** (PIPE2D-1915) — the per-species `fitDetectorMap` statistics, in long format
   (`pfs.drp.qa.metrics.longFormat`), replacing the `fitSpeciesXRms_<species>`/`fitSpeciesYRms_<species>`
-  columns of `iqQaMetrics`. `imageQualityLogQa.py` reads it, and the old columns of older collections.
+  columns of `iqQaMetrics`, which are gone. `imageQualityLogQa.py` reads it.
 - **`pfs.drp.qa.guiders`** — empty `coordinates`, `queries`, `analysis` and `plotting` modules for the
   guider tools moving from `pfs.drp.stella.utils.guiders`, and a `guiders` CI job that runs
   `tests/guiders/` with pfs-utils (installed `--no-deps`).

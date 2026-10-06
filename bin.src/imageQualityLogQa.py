@@ -317,8 +317,6 @@ class VisitQA:
         """Create a VisitQA instance from a Butler iqQaMetrics row/dictionary.
 
         ``species`` is ``{species: (xRms, yRms)}`` from ``iqQaSpeciesMetrics``.
-        Without it, the ``fitSpecies[XY]Rms_<species>`` columns that
-        collections written before that dataset carry are read instead.
         """
         data = metrics.to_dict() if hasattr(metrics, "to_dict") else dict(metrics)
 
@@ -381,16 +379,7 @@ class VisitQA:
         if cr_count > 0 or cr_pixels > 0:
             vqa.cosmic_rays = [(int(cr_count), int(cr_pixels))]
 
-        if species is None:
-            species = {
-                k[len("fitSpeciesXRms_") :]: (
-                    float(v),
-                    float(data.get(f"fitSpeciesYRms_{k[len('fitSpeciesXRms_') :]}", float("nan"))),
-                )
-                for k, v in data.items()
-                if k.startswith("fitSpeciesXRms_")
-            }
-        for sp, (x_rms, y_rms) in species.items():
+        for sp, (x_rms, y_rms) in (species or {}).items():
             vqa.fit_species_stats[sp] = (x_rms, y_rms)
             # Assign the last matched species as the default fallback
             vqa.fit_species_name = sp
@@ -845,7 +834,7 @@ def get_visit_metrics(
 
             species = speciesStats(butler.get("iqQaSpeciesMetrics", dataId=dataId))
         except LookupError:
-            species = None  # written before iqQaSpeciesMetrics existed
+            species = None
 
         vqa = VisitQA.from_metrics(row, species)
         vqa.collection = collection
