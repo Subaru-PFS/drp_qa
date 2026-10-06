@@ -1666,6 +1666,9 @@ def generate_markdown_report(
     # Diagnosis Summary
     if vqa.qa_status == "PASS":
         diagnosis_summary = "**Yes.** This run represents an excellent, high-quality exposure."
+    elif vqa.qa_status == "UNKNOWN":
+        detail = f" ({vqa.qa_detail})" if vqa.qa_detail else ""
+        diagnosis_summary = f"**Unassessed.** imageQualityQa ran but judged no metric{detail}."
     else:
         reasons = []
         if not math.isnan(vqa.qa_fwhm) and vqa.qa_fwhm >= 3.2:
