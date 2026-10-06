@@ -8,6 +8,29 @@ Spectrograph (PFS) Data Release Production (DRP)
 pipeline. The QA tasks are implementations of the `PipelineTask` class in the LSST Science Pipelines. The tasks are run
 on the output of the DRP pipeline to assess the quality of the data products.
 
+## The image-quality gate
+
+`imageQualityQa` is a **gate**: for each image (visit × detector) it decides whether the image should be
+discarded and not counted in its group, and it shows problems that span an instrument, spectrograph, arm or
+detector. Its verdict is persisted, so that calibration building and the science pipeline can gate on it.
+
+- **It judges quick reductions.** `drpActor` reduces each image during observing (`reduceExposure`, its
+  `hilo` pipeline). That is not the reduction the science release uses. `qaActor` listens to `drpActor` and
+  reads `drpActor/reductions`, so QA never reduces anything a second time; production QA must not re-reduce.
+  Thresholds are therefore derived in `drpActor`'s reduction context.
+- **Two modes, one judgement.** *Real time*: `qaActor` judges each sequence group as `drpActor` finishes it
+  (INSTRM-3040). *Comparison*: a batch over a run, driven by the run's calibration summary (PIPE2D-1929). Both
+  call `pfs.drp.qa.metrics.gate.gate`.
+- **Comparison works on a partial run.** Run on day 10 of a 20-day run, it gives valid verdicts, and a later
+  re-run with the fuller summary updates them: a verdict depends only on its own image, and results are
+  upserted by visit × detector.
+- **Verdicts live in qadb** (`spt_qa_database`), with the long-term QA results (PIPE2D-1385).
+- **Gate, not product assessment.** Judging the quality of science products is a separate job, not yet
+  designed; tasks here should stay on one side of that line.
+- **Not covered yet:** cosmic-ray processing (PIPE2D-1609).
+
+The work is tracked in epic PIPE2D-1928.
+
 ## Installation
 
 `drp_qa` is a `pyproject.toml`-based package with no compiled components, so there is nothing to build:
