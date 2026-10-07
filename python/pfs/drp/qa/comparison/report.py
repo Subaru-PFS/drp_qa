@@ -261,7 +261,7 @@ def buildReport(inputs: ReportInputs) -> str:
         parts += [
             "<p>Each image that warns or fails: the metrics that crossed, how far the problem spreads within its "
             "visit (and whether the whole sequence shares it), the setup, and the opdb's notes. Telescope focus "
-            "sweeps are not judged on flux-dependent metrics, nor daily arcs and traces on <code>nLines</code> "
+            "sweeps are not judged on flux-dependent metrics, nor daily arcs and traces on <code>nLines</code> and <code>pctFlagged</code> "
             "(PIPE2D-1935), so a verdict here can be milder than the stored one.</p>",
             _table(_ordered(inputs.findings)),
         ]
@@ -271,8 +271,8 @@ def buildReport(inputs: ReportInputs) -> str:
         parts.append(f"<p>No {_e(inputs.referenceName)} metrics were given: run its comparison first.</p>")
     parts.append(
         "<p>Daily arcs and traces are compared with the reference run's sets: the sets are what the thresholds "
-        "were derived from. <code>nLines</code> isn't judged on daily ones until it allows for the fibers a design "
-        "lights (PIPE2D-1935).</p>"
+        "were derived from. <code>nLines</code> and <code>pctFlagged</code> aren't judged on daily ones until they "
+        "allow for the fibers a design lights (PIPE2D-1935).</p>"
     )
     for sequenceType, category, cadence in (
         ("scienceArc", "calibration", "set"),

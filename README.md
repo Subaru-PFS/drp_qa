@@ -505,8 +505,8 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
   sequence type shows up. Checks for the other types belong to PIPE2D-1925.
 - **Daily arcs and traces are reported apart from sets.** A sequence of one visit is *daily* (from Run28, one
   neon arc and one trace a day, for drift); a calibration *set* is 3 exposures per arc lamp and 10 traces. Both are
-  judged against the thresholds derived from Run25's sets, but `nLines` isn't judged on daily ones: they are often
-  taken with one fiber group lit, which `nLines` doesn't yet allow for (PIPE2D-1935).
+  judged against the thresholds derived from Run25's sets, but `nLines` and `pctFlagged` aren't judged on daily ones:
+  they are often taken with one fiber group lit, which neither allows for yet (PIPE2D-1935).
 - **Sky visits are labelled** from the telescope status: a *focus sweep* (10 or more focus offsets spanning at least
   0.5 mm on one field in one night) changes how much light enters the fibers but not the line widths, so its
   `nLines` and `pctFlagged` aren't judged; *dithered* visits are marked.

@@ -9,9 +9,9 @@ opdb's notes are shown beside it, never used to decide it.
 Judging is `pfs.drp.qa.metrics.gate.judge`, the gate's own path, with the thresholds the task
 ran with, less two cases it can't judge yet. Telescope focus sweeps change how much light enters
 the fibers, not the spectrograph's line widths, so the flux-dependent metrics (`FLUX_METRICS`)
-are not judged on them. Daily arcs and traces are often taken with one fiber group lit, and
-``nLines`` doesn't yet allow for the fibers a design lights (PIPE2D-1935), so it isn't judged on
-them (`DAILY_UNJUDGED`).
+are not judged on them. Daily arcs and traces are often taken with one fiber group lit, which
+cuts ``nLines`` to about a quarter and raises ``pctFlagged`` on the b and n arms; neither allows for
+the fibers a design lights yet (PIPE2D-1935), so they aren't judged on them (`DAILY_UNJUDGED`).
 """
 
 import re
@@ -36,7 +36,7 @@ __all__ = [
 FLUX_METRICS = ("nLines", "pctFlagged")
 
 #: Metrics not judged on daily arcs and traces until they allow for the fibers lit (PIPE2D-1935).
-DAILY_UNJUDGED = ("nLines",)
+DAILY_UNJUDGED = ("nLines", "pctFlagged")
 
 # The ways an IIC command names a lamp: head='sps iis on=neon ...', iisNeon=30, argon=10.
 _LAMP_RE = re.compile(

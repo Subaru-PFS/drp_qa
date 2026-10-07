@@ -152,7 +152,7 @@ def testNoFindings(defocus):
     assert "extent" in result.columns
 
 
-def testDailyNLinesNotJudged(periods, visit, listing):
+def testDailyLitFiberMetricsNotJudged(periods, visit, listing):
     visits = classifyVisits(
         listing(
             visit(1, "2026-01-03 17:00", "scienceArc", sequence=50, name="Arc: Neon"),  # daily, one group lit
@@ -161,12 +161,16 @@ def testDailyNLinesNotJudged(periods, visit, listing):
         periods.values(),
     )
     metrics = pd.DataFrame(
-        [(v, "b", 1, 2.3, 50) for v in (1, 10, 11, 12)],
-        columns=["visit", "arm", "spectrograph", "medFwhm", "nLines"],
+        [(v, "b", 1, 2.3, 50, 70.0) for v in (1, 10, 11, 12)],
+        columns=["visit", "arm", "spectrograph", "medFwhm", "nLines", "pctFlagged"],
     )
-    judged = judgeImages(metrics, visits, THRESHOLDS).set_index(["visit", "metric"])["status"]
-    assert judged[(1, "nLines")] == ""
+    thresholds = pd.concat(
+        [THRESHOLDS, THRESHOLDS.iloc[[0]].assign(metric="pctFlagged", warn=50.0, fail=60.0)],
+        ignore_index=True,
+    )
+    judged = judgeImages(metrics, visits, thresholds).set_index(["visit", "metric"])["status"]
+    assert judged[(1, "nLines")] == "" and judged[(1, "pctFlagged")] == ""
     assert judged[(1, "medFwhm")] == "PASS"  # still judged against the set thresholds
-    # Negative control: the same line count in a set fails.
-    assert judged[(10, "nLines")] == "FAIL"
+    # Negative control: the same values in a set fail.
+    assert judged[(10, "nLines")] == "FAIL" and judged[(10, "pctFlagged")] == "FAIL"
     assert describeSetup(visits.set_index("pfs_visit_id").loc[1]).startswith("scienceArc 'Arc: Neon' (daily)")
