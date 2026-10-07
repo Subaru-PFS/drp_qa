@@ -32,7 +32,7 @@ __all__ = [
 ]
 
 #: Coverage of a judged visit's detector, from done to blocked.
-STATUS_ORDER = ("judged", "to judge", "to reduce", "no raw", "raw not in opdb")
+STATUS_ORDER = ("judged", "to judge", "to reduce", "no pfsConfig", "no raw", "raw not in opdb")
 
 _CAMERA_RE = re.compile(r"^([brnm])([1-4])$")
 
@@ -116,9 +116,15 @@ def coverage(visits: pd.DataFrame, holdings: pd.DataFrame) -> pd.DataFrame:
     detectors = detectors.drop(columns=["opdbArm", "camera"])
     for column in ("expected", "raw", "reduced", "judged"):
         detectors[column] = detectors[column].astype("boolean").fillna(False).astype(bool)
+    if "pfsConfig" not in detectors:
+        detectors["pfsConfig"] = True
+    detectors["pfsConfig"] = detectors["pfsConfig"].astype("boolean").fillna(False).astype(bool)
 
     status = pd.Series("to reduce", index=detectors.index, dtype=object)
     status[detectors["reduced"]] = "to judge"
+    # Without a pfsConfig the visit can't be reduced, and one such quantum stops the whole graph,
+    # so none of the visit's pending detectors is scheduled.
+    status[~detectors["pfsConfig"]] = "no pfsConfig"
     status[detectors["judged"]] = "judged"
     status[~detectors["raw"] & ~detectors["judged"]] = "no raw"
     status[~detectors["expected"]] = "raw not in opdb"

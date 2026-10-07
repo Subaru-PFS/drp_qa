@@ -253,7 +253,9 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
 
     butler = Butler(args.butler, writeable=False)
     judgedVisits = visits.loc[visits["judged"], "pfs_visit_id"]
-    holdings = detectorHoldings(butler, judgedVisits, raw=args.raw, reductions=args.reductions, output=output)
+    holdings = detectorHoldings(
+        butler, judgedVisits, raw=args.raw, reductions=args.reductions, output=output, inputs=args.inputs
+    )
     detectors = coverage(visits, holdings)
     done = detectors.loc[detectors["status"] == "judged", "visit"].unique()
     if not len(done):
@@ -311,7 +313,9 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
 
     butler = Butler(args.butler, writeable=False)
     judged = visits.loc[visits["judged"], "pfs_visit_id"]
-    holdings = detectorHoldings(butler, judged, raw=args.raw, reductions=args.reductions, output=output)
+    holdings = detectorHoldings(
+        butler, judged, raw=args.raw, reductions=args.reductions, output=output, inputs=args.inputs
+    )
     detectors = coverage(visits, holdings)
     detectors.to_parquet(workDir / f"coverage-{period.name}.parquet")
     summary = summarize(visits, detectors)

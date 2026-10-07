@@ -177,3 +177,12 @@ def testMediumResolutionIsTheRedCamera(periods, visit, listing):
     holdings.loc[holdings["arm"] == "m", "spectrograph"] = 2
     statuses = set(coverage(visits, holdings)["status"])
     assert {"no raw", "raw not in opdb"} <= statuses
+
+
+def testNoPfsConfigIsNotScheduled(classified):
+    holdings = _holdings([(visit, arm, 1, True, visit == 3, False) for visit in (1, 2, 3, 4) for arm in "br"])
+    holdings["pfsConfig"] = holdings["visit"] != 3  # the trace has none
+    detectors = coverage(classified, holdings)
+    assert set(detectors.loc[detectors["visit"] == 3, "status"]) == {"no pfsConfig"}
+    assert set(detectors.loc[detectors["visit"] != 3, "status"]) == {"to reduce"}
+    assert [item.visits for item in passes(classified, detectors)] == [(1, 2), (4,)]
