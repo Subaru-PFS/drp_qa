@@ -53,6 +53,14 @@ the pipeline/config glue to run them.
   - `fluxCalQa.py`, `fluxCal/fluxCalQA.py` — flux calibration validation
   - `fiberNormsQa.py` — **not** a `PipelineTask`; a standalone Butler-driven CLI module
     whose `main()` is invoked from `bin.src/fiberNormsQa.py`
+- **Comparison mode (`python/pfs/drp/qa/comparison/`)** — gates every image of an observing run
+  against the reference thresholds; driven by `bin.src/qaComparison.py` (`fetch`, `plan`, `run`,
+  `report`). `queries` is the only code touching the opdb and `butlerQueries` the only code touching
+  a Butler (both take it as an argument); `runs`, `classify`, `plan`, `findings` and `report` are
+  stack-free and tested in `tests/comparison/`, with plots in `plotting/comparison.py`. The observing
+  runs are package data (`comparison/data/observingRuns.yaml`). Calibration vs science is decided by
+  what an exposure is (sequence type, and the design's proposals for sky), never by when it was taken.
+  Reports show science visits: they stay local, and never print a science sequence name.
 - **Guider analysis (`python/pfs/drp/qa/guiders/`)** — notebook tools for the AG
   cameras, being moved from `pfs.drp.stella.utils.guiders` (epic PIPE2D-1891). Four
   layers: `coordinates`, `queries` (the only code touching the opdb or a butler),
@@ -95,6 +103,7 @@ the pipeline/config glue to run them.
     logs or a direct Butler query; dashboard plot, markdown report, JSON dump
   - `plotIqQaTimeSeries.py` — cross-visit `iqQaMetrics` time series via `plotting/iqQa.py`
   - `fiberNormsQa.py` — entry point for `fiberNormsQa.main`
+  - `qaComparison.py` — entry point for `pfs.drp.qa.comparison.cli.main` (comparison mode)
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),
   which contains the core reduction logic and C++ primitives, and on `pfs_utils`. Both
   are `setupRequired` in `ups/drp_qa.table`; `pfs-utils` is also a hard `pyproject.toml`

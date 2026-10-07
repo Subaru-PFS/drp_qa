@@ -10,6 +10,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Comparison mode** (PIPE2D-1929) — `bin.src/qaComparison.py` (`fetch`, `plan`, `run`, `report`) gates every
+  image of an observing run against the Run25 thresholds. `pfs.drp.qa.comparison` lists a period's visits from
+  the opdb (`queries`), says whether each is a calibration or science and whether the gate judges it
+  (`classify`), plans the `pipetask` runs with `drpActor`'s per-sequence-type config (`plan`), writes a finding
+  for each `WARN`/`FAIL` image (`findings`) and builds a self-contained HTML report (`report`). The observing
+  runs and their pre-run periods are in `comparison/data/observingRuns.yaml`. New plots in
+  `pfs.drp.qa.plotting.comparison`: `plotMetricComparison`, `plotNightlySeries`, `plotVerdictGrid`.
 - **GitHub Actions CI** — `.github/workflows/tests.yml` runs the stack-free test suite on Python 3.12 and
   3.13; `.github/workflows/lint.yml` runs `ruff check .` and `ruff format --check .` over the whole tree.
   Both are blocking.

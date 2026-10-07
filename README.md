@@ -17,14 +17,17 @@ detector. Its verdict is persisted, so that calibration building and the science
 - **It judges quick reductions.** `drpActor` reduces each image during observing (`reduceExposure`, its
   `hilo` pipeline). That is not the reduction the science release uses. `qaActor` listens to `drpActor` and
   reads `drpActor/reductions`, so QA never reduces anything a second time; production QA must not re-reduce.
-  Thresholds are therefore derived in `drpActor`'s reduction context.
+  Thresholds are therefore derived in `drpActor`'s reduction context. Comparison mode is the one exception: it
+  reduces only what `drpActor/reductions` lacks, with `drpActor`'s per-sequence-type config, into its own
+  collection.
 - **Two modes, one judgement.** *Real time*: `qaActor` judges each sequence group as `drpActor` finishes it
-  (INSTRM-3040). *Comparison*: a batch over a run, driven by the run's calibration summary (PIPE2D-1929). Both
-  call `pfs.drp.qa.metrics.gate.gate`.
+  (INSTRM-3040). *Comparison*: a batch over every visit of a run, listed from the opdb (PIPE2D-1929; see
+  [Comparison mode](#comparison-mode)). Both judge with `pfs.drp.qa.metrics.gate`.
 - **Comparison works on a partial run.** Run on day 10 of a 20-day run, it gives valid verdicts, and a later
-  re-run with the fuller summary updates them: a verdict depends only on its own image, and results are
-  upserted by visit × detector.
-- **Verdicts live in qadb** (`spt_qa_database`), with the long-term QA results (PIPE2D-1385).
+  re-run adds the new nights' images without changing earlier verdicts: a verdict depends only on its own
+  image, each period and drp_qa version has its own collection, and what is already judged is skipped.
+- **Verdicts are stored in the Butler**, in `iqQaMetrics` (`qaStatus`, `qaReason`). qadb (`spt_qa_database`)
+  loads them later, with the long-term QA results (PIPE2D-1385).
 - **Gate, not product assessment.** Judging the quality of science products is a separate job, not yet
   designed; tasks here should stay on one side of that line.
 - **Not covered yet:** cosmic-ray processing (PIPE2D-1609).
@@ -415,8 +418,8 @@ verdict is known. The decisions behind the current set:
 - **The validation set holds Run25's known-good visits only.** From other runs it holds only known-bad visits, as
   fault examples: each is checked against the thresholds, and none derives one. (Run27 and Run30 known-good entries
   still in the YAML are removed by PIPE2D-1933.)
-- **Other runs are compared, not used for derivation.** Comparison mode (PIPE2D-1929) judges a run from its
-  calibration summary against Run25's thresholds; Run30 is the first. Run27 is not a fair comparison: no
+- **Other runs are compared, not used for derivation.** Comparison mode (PIPE2D-1929) judges every visit of a run
+  against Run25's thresholds; Run30 is the first. Run27 is not a fair comparison: no
   calibrations were made from it, and its n-arm flag rates sit 2–5 points above Run25's.
 - **`imageQualityQa` judges by the adopted Run25 file** (`iqQaThresholds-run25.yaml`): `medFwhm` on arcs and
   `nLines`. Flag rates (`pctFlagged`) stay on the config fields until compared with Run30; quartz `medFwhm` has no
@@ -483,6 +486,44 @@ A raster scan visit holds two pointings: once its shutters close, the telescope 
 `boresight` reference, and the plots using it, are only right for its shutter-open rows (`shutter_open == 1`)
 (PIPE2D-1910).
 
+## Comparison mode
+
+`bin.src/qaComparison.py` gates every image of an observing run, or of the calibrations taken before it, against
+the reference thresholds, and writes a report comparing the run with Run25 (`pfs.drp.qa.comparison`).
+
+- **The visits come from the opdb**, not from the hand-written run summaries: every SpS visit between the
+  period's dates, with its sequence, `cmd_str`, cameras, design, obslog notes and telescope status. The periods
+  (each run's nights and its pre-run calibration nights, HST, a night running noon to noon) are in
+  [`comparison/data/observingRuns.yaml`](python/pfs/drp/qa/comparison/data/observingRuns.yaml), derived from
+  gaps in SpS activity.
+- **Calibration or science is what the exposure is**, not when it was taken: every sequence type but
+  `scienceObject` and `scienceObject_windowed` is a calibration, and those are science when their design has a
+  science proposal. Twilight frames, dithers and telescope focus sweeps are on engineering designs, so they are
+  calibrations.
+- **The gate judges `scienceArc`, `scienceTrace` and `scienceObject`.** Every other visit is listed with the reason
+  it isn't judged (`no method for fiberProfiles`, `test exposure`, ...), so a run's coverage is complete and a new
+  sequence type shows up. Checks for the other types belong to PIPE2D-1925.
+- **Sky visits are labelled** from the telescope status: a *focus sweep* (10 or more focus offsets spanning at least
+  0.5 mm on one field in one night) changes how much light enters the fibers but not the line widths, so its
+  `nLines` and `pctFlagged` aren't judged; *dithered* visits are marked.
+- **Findings are written from the data.** Each `WARN` or `FAIL` image gets the metrics that crossed, how far the
+  problem spreads (detector, arm, spectrograph, most of the visit, the whole sequence), the setup and the opdb's
+  notes beside it. Notes never decide a verdict.
+
+Four steps, each safe to repeat. Files go under `--data-dir`: opdb reads in `opdb/`, everything else in
+`<run>/qa/<drp_qa version>/`; the report shows science visits, so keep it local.
+
+```bash
+python bin.src/qaComparison.py fetch  --period run30 --data-dir ~/Projects/Subaru/PFS/data   # opdb, read-only
+python bin.src/qaComparison.py plan   --period run30 --data-dir ~/Projects/Subaru/PFS/data   # coverage, pipetask commands
+python bin.src/qaComparison.py run    --period run30 --data-dir ~/Projects/Subaru/PFS/data   # reduce what's missing, judge
+python bin.src/qaComparison.py report --period run30 --data-dir ~/Projects/Subaru/PFS/data   # report-run30.html
+```
+
+`plan` prints the `pipetask` commands as Python lists, for running from a notebook instead. The output collection is
+`u/$USER/comparison/<period>/<git describe>`; a checkout with uncommitted changes is refused. Report the reference
+(`--period run25`) first: its stored metrics are what each other run is compared with.
+
 ## Command-line tools
 
 Scripts live in `bin.src/` and are run directly — there is no SCons step to copy them into a `bin/` directory on `PATH`:
@@ -490,6 +531,10 @@ Scripts live in `bin.src/` and are run directly — there is no SCons step to co
 ```bash
 python bin.src/<script>.py --help
 ```
+
+### `qaComparison.py`
+
+Comparison mode; see [Comparison mode](#comparison-mode).
 
 ### `fiberNormsQa.py`
 
