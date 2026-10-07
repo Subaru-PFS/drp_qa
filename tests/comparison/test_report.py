@@ -72,9 +72,44 @@ def testBuildReport(periods, visit, listing):
         )
     )
     assert page.startswith("<!doctype html>")
-    assert "32 images judged" in page
+    assert "32 gated images" in page
+    assert "Also 0 unvalidated images" in page
     assert "2 findings, 2 spreading beyond one detector" in page  # SM1 of visit 21: b1 and r1
     assert "Arc: Neon" in page  # a calibration's name
     assert "field" not in page  # a science sequence's name never is
     assert "run 'run' first" not in page
     assert page.count("<svg") >= 3
+
+
+def testUnvalidatedAreLabelledApart(periods, visit, listing):
+    visits = classifyVisits(
+        listing(
+            visit(1, "2026-01-03 17:00", "scienceArc", sequence=100, name="Arc: Neon"),
+            visit(2, "2026-01-03 17:10", "slitThroughFocus", sequence=101, expType="arc"),
+        ),
+        periods.values(),
+    )
+    metrics = pd.DataFrame(
+        [(v, "b", sm, 2.3 if v == 1 else 3.5) for v in (1, 2) for sm in (1, 2)],
+        columns=["visit", "arm", "spectrograph", "medFwhm"],
+    )
+    holdings = metrics[["visit", "arm", "spectrograph"]].assign(raw=True, reduced=True, judged=True)
+    judged = judgeImages(metrics, visits, THRESHOLDS)
+    found = findings(metrics, judged, visits)
+    assert found["validated"].tolist() == [False, False]  # only the through-focus arc fails
+    page = buildReport(
+        ReportInputs(
+            period="run1",
+            version="v1",
+            collection="u/me/comparison/run1/v1",
+            readUntil="now",
+            visits=visits,
+            summary=summarize(visits, coverage(visits, holdings)),
+            metrics=metrics,
+            judged=judged,
+            findings=found,
+        )
+    )
+    assert "2 gated images" in page and "0 findings" in page  # the gate's headline is clean...
+    assert "Also 2 unvalidated images (2 FAIL)" in page  # ...the unvalidated FAILs are counted apart
+    assert "Unvalidated findings" in page

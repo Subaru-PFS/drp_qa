@@ -9,7 +9,7 @@ Four steps, each safe to repeat:
     ``pipetask`` commands that would complete it. Writes nothing to the Butler.
 ``run``
     Plan, then run those commands; ``--dry-run`` only builds their graphs, and ``--pass`` picks
-    passes (``scienceArc+scienceTrace``, ``scienceObject``).
+    passes (``calibration``, ``sky``, ``unvalidated-calibration``).
 ``report``
     Read the verdicts and write the period's report.
 
@@ -118,11 +118,14 @@ def fetchSummary(
         f"  {len(visits):,} visits in {visits['iic_sequence_id'].nunique():,} sequences,"
         f" on {visits['night'].nunique()} nights",
     ]
-    judged = visits[visits["judged"]]
-    lines.append(f"  {len(judged):,} to judge")
-    kinds = judged.groupby(["category", "sequence_type", "cadence"]).size()
-    for (category, sequenceType, cadence), count in kinds.items():
-        lines.append(f"    {count:6,}  {category:<12} {sequenceType} {cadence}".rstrip())
+    for label, subset in (
+        ("gated", visits[visits["validated"]]),
+        ("unvalidated (judged, no validated thresholds)", visits[visits["judged"] & ~visits["validated"]]),
+    ):
+        lines.append(f"  {len(subset):,} {label}")
+        kinds = subset.groupby(["category", "sequence_type", "cadence"]).size()
+        for (category, sequenceType, cadence), count in kinds.items():
+            lines.append(f"    {count:6,}  {category:<12} {sequenceType} {cadence}".rstrip())
     others = visits.loc[~visits["judged"], "reason"].value_counts()
     if len(others):
         lines.append(f"  {int(others.sum()):,} not judged")
@@ -178,8 +181,26 @@ def loadFetched(period: Period, dataDir: Path) -> tuple[dict[str, pd.DataFrame],
     return frames, json.loads(stampPath.read_text())
 
 
+#: Paths that can't change what the pipeline writes: they don't name the output collection.
+RESULT_NEUTRAL_PATHS = (
+    "python/pfs/drp/qa/comparison",
+    "python/pfs/drp/qa/plotting/comparison.py",
+    "bin.src/qaComparison.py",
+    "tests",
+    "docs",
+    "examples",
+    ".github",
+    "*.md",
+)
+
+
 def drpQaVersion(directory: Path | str | None = None) -> str:
-    """Return ``git describe`` of the drp_qa checkout.
+    """Return the drp_qa version that names a comparison's output collection.
+
+    It is ``git describe`` of the last commit that could change what the
+    pipeline writes: every path but `RESULT_NEUTRAL_PATHS`. Changing the
+    comparison driver or its report therefore keeps the collection, and its
+    finished quanta, while a change to a task or a threshold starts a new one.
 
     Parameters
     ----------
@@ -190,16 +211,21 @@ def drpQaVersion(directory: Path | str | None = None) -> str:
     Returns
     -------
     `str`
-        E.g. ``w.2026.41-3-gabc1234``, with ``-dirty`` for uncommitted changes.
+        E.g. ``w.2026.41-3-gabc1234``, with ``-dirty`` when those paths have
+        uncommitted changes.
     """
-    directory = directory or os.environ.get("DRP_QA_DIR") or Path(__file__).resolve().parents[5]
-    result = subprocess.run(
-        ["git", "-C", str(directory), "describe", "--tags", "--always", "--dirty"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip()
+    directory = str(directory or os.environ.get("DRP_QA_DIR") or Path(__file__).resolve().parents[5])
+    pathspec = [".", *(f":(exclude){path}" for path in RESULT_NEUTRAL_PATHS)]
+
+    def git(*args: str) -> str:
+        result = subprocess.run(["git", "-C", directory, *args], capture_output=True, text=True, check=True)
+        return result.stdout.strip()
+
+    commit = git("log", "-1", "--format=%H", "--", *pathspec)
+    version = git("describe", "--tags", "--always", commit)
+    if git("status", "--porcelain", "--untracked-files=no", "--", *pathspec):
+        version += "-dirty"
+    return version
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -328,7 +354,7 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
     commands = []
     for item in passes(visits, detectors):
         if args.passes and item.name not in args.passes:
-            print(f"\n# {item.name}: {len(item.visits)} visits, skipped (--pass)")
+            print(f"\n# {item.name} ({', '.join(item.types)}): {len(item.visits)} visits, skipped (--pass)")
             continue
         configFile = workDir / f"cosmicray-{period.name}-{item.name}.py"
         configFile.write_text(item.cosmicrayConfig())
@@ -345,7 +371,7 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
         if args.dry_run:
             command = _qgraph(command)
         commands.append((item.name, command))
-        print(f"\n# {item.name}: {len(item.visits)} visits")
+        print(f"\n# {item.name} ({', '.join(item.types)}): {len(item.visits)} visits")
         print(f"cmd = {command!r}")
     if not commands:
         print("Nothing to do: every detector image is judged or has no raw data.")
@@ -420,7 +446,7 @@ def _parser() -> argparse.ArgumentParser:
         dest="passes",
         action="append",
         default=[],
-        help="only this pass, as plan names it (e.g. scienceArc+scienceTrace); repeatable",
+        help="only this pass, as plan names it: calibration, sky, unvalidated-calibration, ...; repeatable",
     )
     parser.add_argument(
         "--dry-run",

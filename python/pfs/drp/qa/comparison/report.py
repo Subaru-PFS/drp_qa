@@ -108,6 +108,7 @@ def populations(metrics: pd.DataFrame, visits: pd.DataFrame) -> pd.DataFrame:
         "sequence_name",
         "group_name",
         "category",
+        "validated",
         "focusSweep",
         "dithered",
     ]
@@ -232,7 +233,11 @@ def buildReport(inputs: ReportInputs) -> str:
         The page.
     """
     metrics = populations(inputs.metrics.reset_index(drop=True), inputs.visits)
-    verdicts = imageVerdicts(metrics, inputs.judged)
+    allVerdicts = imageVerdicts(metrics, inputs.judged)
+    verdicts = allVerdicts[allVerdicts["validated"].astype(bool)]
+    unvalidated = allVerdicts[~allVerdicts["validated"].astype(bool)]
+    isGated = inputs.findings["validated"].astype(bool)
+    gatedFindings, otherFindings = inputs.findings[isGated], inputs.findings[~isGated]
     reference = inputs.reference
     nights = inputs.visits["night"].dropna()
     parts = [
@@ -241,10 +246,11 @@ def buildReport(inputs: ReportInputs) -> str:
         f"drp_qa {_e(inputs.version)} · collection <code>{_e(inputs.collection)}</code> · "
         f"nights {_e(_date(nights.min()))} to {_e(_date(nights.max()))} · opdb read until {_e(inputs.readUntil)} · "
         f"built {datetime.datetime.now():%Y-%m-%d %H:%M}</p>",
-        _headline(verdicts, inputs.findings),
+        _headline(verdicts, gatedFindings, unvalidated),
         "<h2>Coverage</h2>",
-        "<p>Every visit of the period, by what it is and what happened to it. Detector images are counted for "
-        "the judged sequence types only.</p>",
+        "<p>Every visit of the period, by what it is and what happened to it: <code>gated</code> visits are "
+        "judged against validated thresholds, <code>unvalidated</code> ones are judged the same way but have none, "
+        "the rest aren't measured. Detector images are counted for judged visits only.</p>",
         _table(inputs.summary),
         "<h2>Verdicts</h2>",
     ]
@@ -254,17 +260,37 @@ def buildReport(inputs: ReportInputs) -> str:
             parts.append(
                 _figure(plotVerdictGrid(subset, title=f"{category.capitalize()}: worst verdict per night"))
             )
-    parts += [_table(verdictCounts(verdicts)), "<h2>Findings</h2>"]
-    if inputs.findings.empty:
-        parts.append("<p>No image warns or fails.</p>")
+    if not verdicts.empty:
+        parts.append(_table(verdictCounts(verdicts)))
+    parts.append("<h2>Findings</h2>")
+    if gatedFindings.empty:
+        parts.append("<p>No gated image warns or fails.</p>")
     else:
         parts += [
             "<p>Each image that warns or fails: the metrics that crossed, how far the problem spreads within its "
             "visit (and whether the whole sequence shares it), the setup, and the opdb's notes. Telescope focus "
             "sweeps are not judged on flux-dependent metrics, nor daily arcs and traces on <code>nLines</code> and <code>pctFlagged</code> "
             "(PIPE2D-1935), so a verdict here can be milder than the stored one.</p>",
-            _table(_ordered(inputs.findings)),
+            _table(_ordered(gatedFindings).drop(columns="validated")),
         ]
+
+    parts.append("<h2 id='unvalidated'>Unvalidated exposures</h2>")
+    if unvalidated.empty:
+        parts.append("<p>No unvalidated exposure was judged.</p>")
+    else:
+        parts += [
+            "<p class='unvalidated'><strong>Unvalidated:</strong> engineering and test exposures (engineering arcs, "
+            "flats, fiber profiles, focus sweeps, windowed readouts, new sequence types) judged with the same "
+            "thresholds, which weren't derived or checked for them. Many are off-nominal on purpose, so a "
+            "<code>FAIL</code> here may be what the test expected: read it as a measurement, not a verdict.</p>",
+            _figure(plotVerdictGrid(unvalidated, title="Unvalidated: worst verdict per night")),
+            _table(verdictCounts(unvalidated)),
+        ]
+        if not otherFindings.empty:
+            parts += [
+                "<h3>Unvalidated findings</h3>",
+                _table(_ordered(otherFindings).drop(columns="validated")),
+            ]
 
     parts.append(f"<h2>Against {_e(inputs.referenceName)}</h2>")
     if reference is None or reference.empty:
@@ -344,8 +370,8 @@ def _select(metrics: pd.DataFrame, sequenceType: str, category: str, cadence: st
     return subset
 
 
-def _headline(verdicts: pd.DataFrame, findings: pd.DataFrame) -> str:
-    """Return the counts at the top of the page."""
+def _headline(verdicts: pd.DataFrame, findings: pd.DataFrame, unvalidated: pd.DataFrame) -> str:
+    """Return the counts at the top of the page: the gate's, then the unvalidated ones apart."""
     counts = verdicts["status"].value_counts()
     items = [
         f"<span class='pill {s.lower()}'>{s[0]}</span> {counts.get(s, 0)} {s}"
@@ -355,9 +381,14 @@ def _headline(verdicts: pd.DataFrame, findings: pd.DataFrame) -> str:
         findings["extent"].str.replace(", whole sequence", "", regex=False) if not findings.empty else []
     )
     wide = int(sum(1 for extent in extents if extent and extent != "detector"))
+    other = unvalidated["status"].value_counts()
+    otherItems = ", ".join(f"{other.get(s, 0)} {s}" for s in (*STATUS_ORDER, "UNKNOWN") if other.get(s, 0))
     return (
-        f"<p class='headline'>{len(verdicts)} images judged: {' · '.join(items)}.<br>"
+        f"<p class='headline'>{len(verdicts)} gated images: {' · '.join(items)}.<br>"
         f"{len(findings)} findings, {wide} spreading beyond one detector.</p>"
+        f"<p class='unvalidated'>Also {len(unvalidated)} unvalidated images"
+        + (f" ({otherItems})" if otherItems else "")
+        + ": judged without validated thresholds; see <a href='#unvalidated'>Unvalidated exposures</a>.</p>"
     )
 
 
@@ -413,6 +444,7 @@ table.data th, table.data td {{ padding:3px 8px; border-bottom:1px solid var(--r
 figure {{ margin:12px 0; background:var(--card); border-radius:6px; padding:6px; overflow-x:auto; }}
 figure svg {{ max-width:100%; height:auto; }}
 code {{ font-size:12px; }}
+.unvalidated {{ border-left:4px solid #8c8c8c; padding-left:8px; color:var(--muted); }}
 </style></head><body>
 {body}
 </body></html>

@@ -106,7 +106,8 @@ def testPassesGroupByConfigAndSequence(classified):
     detectors = coverage(classified, holdings)
     result = passes(classified, detectors)
 
-    assert [item.name for item in result] == ["scienceArc+scienceTrace", "scienceObject"]
+    assert [item.name for item in result] == ["calibration", "sky"]
+    assert result[0].types == ("scienceArc", "scienceTrace")
     arcsAndTraces, sky = result
     assert arcsAndTraces.visits == (1, 2, 3)
     assert arcsAndTraces.groups == {1: 1, 2: 1, 3: 3}  # cosmicray combines a sequence, never two
@@ -121,7 +122,13 @@ def testNothingPendingNoPasses(classified):
 
 
 def testPipetaskCommand():
-    item = Pass(name="scienceArc", visits=(10, 11, 12, 20), config=drpActorConfig("scienceArc"), groups={})
+    item = Pass(
+        name="calibration",
+        types=("scienceArc",),
+        visits=(10, 11, 12, 20),
+        config=drpActorConfig("scienceArc"),
+        groups={},
+    )
     command = pipetaskCommand(
         item,
         butler="/work/datastore",
@@ -186,3 +193,21 @@ def testNoPfsConfigIsNotScheduled(classified):
     assert set(detectors.loc[detectors["visit"] == 3, "status"]) == {"no pfsConfig"}
     assert set(detectors.loc[detectors["visit"] != 3, "status"]) == {"to reduce"}
     assert [item.visits for item in passes(classified, detectors)] == [(1, 2), (4,)]
+
+
+def testUnvalidatedPassComesLast(periods, visit, listing):
+    visits = classifyVisits(
+        listing(
+            visit(1, "2026-01-03 18:00", "scienceArc", sequence=50, cameras="b1"),
+            visit(2, "2026-01-03 18:10", "slitThroughFocus", sequence=51, cameras="b1", expType="arc"),
+            visit(3, "2026-01-03 18:20", "dotRoach", sequence=52, cameras="b1", expType="flat"),
+            visit(4, "2026-01-03 18:30", "darks", sequence=53, cameras="b1"),
+        ),
+        periods.values(),
+    )
+    holdings = _holdings([(v, "b", 1, True, False, False) for v in (1, 2, 3, 4)])
+    result = passes(visits, coverage(visits, holdings))
+    assert [(item.name, item.types, item.visits) for item in result] == [
+        ("calibration", ("scienceArc",), (1,)),
+        ("unvalidated-calibration", ("dotRoach", "slitThroughFocus"), (2, 3)),
+    ]  # the darks aren't measured

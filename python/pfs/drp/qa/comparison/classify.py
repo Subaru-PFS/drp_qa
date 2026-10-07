@@ -1,4 +1,4 @@
-"""What each visit is, and whether the gate judges it.
+"""What each visit is, and how the gate treats it.
 
 Every visit is a calibration or science, by what the exposure is rather than when it was taken:
 every sequence type but ``scienceObject`` and ``scienceObject_windowed`` is a calibration, and
@@ -6,9 +6,13 @@ those two are science when their design was made for a science proposal. Twiligh
 dithers and the fields of telescope focus sweeps are on engineering designs, so they are
 calibrations.
 
-The gate (``imageQualityQa``) judges the sequence types in `JUDGED_TYPES`. Every other visit is
-listed with the reason it isn't judged, so a run's coverage is complete and a new sequence type
-shows up rather than disappearing.
+``imageQualityQa`` measures and judges every exposure it can, but only the sequence types in
+`VALIDATED_TYPES` are *gated*: their thresholds were derived from, and checked against, visits of
+those types. The others (engineering arcs, flats, fiber profiles, focus sweeps, windowed readouts,
+any new type) are *unvalidated*: judged the same way so their results can be seen, but often
+off-nominal on purpose, so a FAIL there may be what the test expected. `NOT_MEASURED_TYPES` have
+nothing to measure. Every visit is listed, so a run's coverage is complete and a new sequence
+type shows up rather than disappearing.
 
 Arcs and traces are taken two ways: as *sets* (several exposures of a lamp: 3 per arc lamp and 10
 traces for the calibrations) and, from Run28, as *daily* single exposures of one arc and one trace,
@@ -31,15 +35,19 @@ __all__ = [
     "ENGINEERING_CATEGORIES",
     "FOCUS_SWEEP_MIN_RANGE",
     "FOCUS_SWEEP_MIN_STEPS",
-    "JUDGED_TYPES",
+    "NOT_MEASURED_TYPES",
     "SKY_TYPES",
+    "VALIDATED_TYPES",
     "classifyVisits",
     "designKinds",
     "focusSweeps",
 ]
 
-#: Sequence types the gate judges.
-JUDGED_TYPES = ("scienceArc", "scienceTrace", "scienceObject")
+#: Sequence types the thresholds are validated for: the gate.
+VALIDATED_TYPES = ("scienceArc", "scienceTrace", "scienceObject")
+
+#: Sequence types with no arc lines or traces to measure.
+NOT_MEASURED_TYPES = ("biases", "darks", "masterBiases", "masterDarks")
 
 #: Sequence types taken on sky, whose design says whether they are science.
 SKY_TYPES = ("scienceObject", "scienceObject_windowed")
@@ -147,10 +155,14 @@ def classifyVisits(
         ``focusSweep``, ``dithered``
             Sky sub-labels (`bool`).
         ``judged``
-            Whether the gate judges the visit (`bool`).
+            Whether ``imageQualityQa`` measures and judges the visit (`bool`).
+        ``validated``
+            Whether its verdict is the gate's: a judged visit of a
+            `VALIDATED_TYPES` type (`bool`).
         ``reason``
-            Why not, or ``judged``: ``test exposure``, ``outside every
-            period``, ``no sequence`` or ``no method for <type>``.
+            ``gated``, ``unvalidated``, or why it isn't judged: ``test
+            exposure``, ``outside every period``, ``no sequence`` or ``no
+            method for <type>``.
     """
     visits = listing.copy()
     visits["night"] = nightOf(visits["time_exp_start"]).to_numpy()
@@ -179,9 +191,10 @@ def classifyVisits(
     dithered = (status["dither_ra_max"].fillna(0) > 0) | (status["dither_dec_max"].fillna(0) > 0)
     visits["dithered"] = isSky & dithered.to_numpy()
 
-    reason = pd.Series("judged", index=visits.index, dtype=object)
-    notJudged = ~sequenceType.isin(JUDGED_TYPES)
-    reason[notJudged] = "no method for " + sequenceType[notJudged].fillna("").astype(str)
+    reason = pd.Series("gated", index=visits.index, dtype=object)
+    reason[~sequenceType.isin(VALIDATED_TYPES)] = "unvalidated"
+    notMeasured = sequenceType.isin(NOT_MEASURED_TYPES)
+    reason[notMeasured] = "no method for " + sequenceType[notMeasured].astype(str)
     reason[sequenceType.isna()] = "no sequence"
     reason[visits["exp_type"] == "test"] = "test exposure"
     reason[visits["period"].isna()] = "outside every period"
@@ -189,5 +202,6 @@ def classifyVisits(
     cadence = np.where(sequenceSize.to_numpy() == 1, "daily", "set")
     visits["cadence"] = np.where(sequenceType.isin(CADENCE_TYPES).to_numpy(), cadence, "")
     visits["reason"] = reason
-    visits["judged"] = reason == "judged"
+    visits["judged"] = reason.isin(["gated", "unvalidated"])
+    visits["validated"] = reason == "gated"
     return visits

@@ -152,8 +152,9 @@ def summarize(visits: pd.DataFrame, detectors: pd.DataFrame) -> pd.DataFrame:
     -------
     `pandas.DataFrame`
         One row per ``sequence_type``, ``cadence`` and ``category``: the number of
-        ``visits``, the ``reason`` they aren't judged (or ``judged``), and one
-        column per `STATUS_ORDER` counting the detector images.
+        ``visits``, the ``reason`` (``gated``, ``unvalidated`` or why they
+        aren't judged), and one column per `STATUS_ORDER` counting the detector
+        images of judged visits.
     """
     counts = (
         visits.assign(sequence_type=visits["sequence_type"].fillna("(none)"))
@@ -180,18 +181,21 @@ def summarize(visits: pd.DataFrame, detectors: pd.DataFrame) -> pd.DataFrame:
     summary = counts.merge(images, on=["sequence_type", "cadence", "category"], how="left")
     for status in STATUS_ORDER:
         summary[status] = summary[status].fillna(0).astype(int)
-    summary.loc[summary["reason"] != "judged", list(STATUS_ORDER)] = 0
+    summary.loc[~summary["reason"].isin(["gated", "unvalidated"]), list(STATUS_ORDER)] = 0
     return summary.sort_values(["reason", "sequence_type", "cadence", "category"], ignore_index=True)
 
 
 @dataclass(frozen=True)
 class Pass:
-    """One ``pipetask run``: visits sharing ``drpActor``'s configuration.
+    """One ``pipetask run``: visits sharing ``drpActor``'s configuration and whether they're gated.
 
     Parameters
     ----------
     name : `str`
-        A label, e.g. ``scienceArc+scienceTrace``.
+        ``calibration`` or ``sky`` (by the configuration), prefixed
+        ``unvalidated-`` for the types that aren't gated.
+    types : `tuple` [`str`, ...]
+        The sequence types in it.
     visits : `tuple` [`int`, ...]
         The visits.
     config : `dict` [`str`, `bool`]
@@ -202,6 +206,7 @@ class Pass:
     """
 
     name: str
+    types: tuple[str, ...]
     visits: tuple[int, ...]
     config: dict[str, bool] = field(hash=False)
     groups: dict[int, int] = field(hash=False)
@@ -212,7 +217,10 @@ class Pass:
 
 
 def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
-    """Group the visits with work left into one `Pass` per configuration.
+    """Group the visits with work left into passes, by configuration and whether they're gated.
+
+    The gated passes come first in the list, so the gate's visits are done before the
+    unvalidated ones, which can be many.
 
     Parameters
     ----------
@@ -225,7 +233,7 @@ def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
     Returns
     -------
     `list` [`Pass`]
-        Ordered by name.
+        Gated first, then by name.
     """
     pending = set(detectors.loc[detectors["status"].isin(["to reduce", "to judge"]), "visit"])
     todo = visits[visits["pfs_visit_id"].isin(pending)]
@@ -235,20 +243,23 @@ def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
     sequenceFirst = todo.groupby("iic_sequence_id")["pfs_visit_id"].transform("min")
     todo = todo.assign(group=sequenceFirst.astype(int), configKey=todo["sequence_type"].map(_configKey))
     result = []
-    for _, group in todo.groupby("configKey"):
+    for (_, validated), group in todo.groupby(["configKey", "validated"]):
         types = sorted(group["sequence_type"].unique())
+        config = drpActorConfig(types[0])
+        name = "sky" if config["reduceExposure:requireAdjustDetectorMap"] else "calibration"
         result.append(
             Pass(
-                name="+".join(types),
+                name=name if validated else f"unvalidated-{name}",
+                types=tuple(types),
                 visits=tuple(sorted(int(visit) for visit in group["pfs_visit_id"])),
-                config=drpActorConfig(types[0]),
+                config=config,
                 groups={
                     int(visit): int(first)
                     for visit, first in sorted(zip(group["pfs_visit_id"], group["group"], strict=True))
                 },
             )
         )
-    return sorted(result, key=lambda item: item.name)
+    return sorted(result, key=lambda item: (item.name.startswith("unvalidated"), item.name))
 
 
 def outputCollection(prefix: str, period: str, version: str) -> str:

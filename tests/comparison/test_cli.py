@@ -74,7 +74,8 @@ def testFetchSummary(tmp_path, periods, visit, listing, FakeOpDB):
     text = fetchSummary(frames, stamp, periods["run1"], periods)
     assert "3 visits in 3 sequences, on 2 nights" in text
     assert (
-        "2 to judge" in text
+        "2 gated" in text
+        and "0 unvalidated" in text
         and "1  calibration  scienceArc daily" in text
         and "1  science      scienceObject" in text
     )

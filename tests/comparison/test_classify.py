@@ -79,20 +79,21 @@ def testClassifyVisits(periods, visit, listing):
     for calibration in (1, 2, 4, 5, 6, 7):
         assert result.loc[calibration, "category"] == "calibration", calibration
     assert result["reason"].to_dict() == {
-        1: "judged",
-        2: "judged",
-        3: "judged",
-        4: "judged",
-        5: "no method for scienceObject_windowed",
-        6: "judged",
+        1: "gated",
+        2: "gated",
+        3: "gated",
+        4: "gated",
+        5: "unvalidated",
+        6: "gated",
         7: "no method for darks",
         8: "test exposure",
         9: "test exposure",
         10: "no sequence",
         11: "outside every period",
-        12: "judged",
+        12: "gated",
     }
-    assert result["judged"].sum() == 6
+    assert result["judged"].sum() == 7  # the windowed sky frame is measured too...
+    assert result["validated"].sum() == 6  # ...but isn't gated
     assert result.loc[12, "period"] == "run2-pre"
     assert pd.isna(result.loc[11, "period"])
 

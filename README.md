@@ -500,9 +500,12 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
   `scienceObject` and `scienceObject_windowed` is a calibration, and those are science when their design has a
   science proposal. Twilight frames, dithers and telescope focus sweeps are on engineering designs, so they are
   calibrations.
-- **The gate judges `scienceArc`, `scienceTrace` and `scienceObject`.** Every other visit is listed with the reason
-  it isn't judged (`no method for fiberProfiles`, `test exposure`, ...), so a run's coverage is complete and a new
-  sequence type shows up. Checks for the other types belong to PIPE2D-1925.
+- **Everything measurable is judged; only validated types are gated.** `scienceArc`, `scienceTrace` and
+  `scienceObject` are *gated*: their thresholds were derived from and checked against such visits. Every other type
+  `imageQualityQa` can measure (engineering arcs, flats, fiber profiles, focus sweeps, windowed readouts, new
+  types) is judged the same way but labelled *unvalidated*, in its own pass and its own report section: a `FAIL`
+  there may be what an engineering test expected. Biases and darks have no method yet; test exposures are listed
+  only.
 - **Daily arcs and traces are reported apart from sets.** A sequence of one visit is *daily* (from Run28, one
   neon arc and one trace a day, for drift); a calibration *set* is 3 exposures per arc lamp and 10 traces. Both are
   judged against the thresholds derived from Run25's sets, but `nLines` and `pctFlagged` aren't judged on daily ones:
@@ -524,11 +527,14 @@ python bin.src/qaComparison.py run    --period run30 --data-dir ~/Projects/Subar
 python bin.src/qaComparison.py report --period run30 --data-dir ~/Projects/Subaru/PFS/data   # report-run30.html
 ```
 
-`plan` prints the `pipetask` commands as Python lists, for running from a notebook instead. `run --dry-run` builds
-each pass's graph (`pipetask qgraph`) and prints its quanta without writing anything; `--pass scienceArc+scienceTrace`
-or `--pass scienceObject` limits `run` to one pass. Visits with no `pfsConfig` in the inputs can't be reduced and are
+`plan` prints the `pipetask` commands as Python lists, for running from a notebook instead. Passes are `calibration`,
+`sky` and `unvalidated-calibration`, gated first. `run --dry-run` builds
+each pass's graph (`pipetask qgraph`) and prints its quanta without writing anything; `--pass calibration`
+or `--pass sky` limits `run` to one pass. Visits with no `pfsConfig` in the inputs can't be reduced and are
 reported, not scheduled. The output collection is
-`u/$USER/comparison/<period>/<git describe>`; a checkout with uncommitted changes is refused. Report the reference
+`u/$USER/comparison/<period>/<version>`, the version being `git describe` of the last commit that could change what
+the pipeline writes (not the comparison driver, its report, tests or docs), so a change to the driver keeps the
+collection; uncommitted changes to the rest are refused. Report the reference
 (`--period run25`) first: its stored metrics are what each other run is compared with.
 
 ## Command-line tools

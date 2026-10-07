@@ -221,7 +221,7 @@ def findings(
     `pandas.DataFrame`
         One row per ``WARN`` or ``FAIL`` image: ``visit``, ``arm``,
         ``spectrograph``, ``night``, ``sequence_type``, ``category``,
-        ``iic_sequence_id``, ``status``, ``metrics`` (each crossing, e.g.
+        ``validated`` (a gated type), ``iic_sequence_id``, ``status``, ``metrics`` (each crossing, e.g.
         ``medFWHM=3.20px >= fail threshold 2.8px``), ``extent`` (`extentOf`, with
         ``, whole sequence`` when every visit of the sequence shares it),
         ``fibers`` (fibers measured), ``setup`` (`describeSetup`) and
@@ -243,16 +243,16 @@ def findings(
     info = visits.rename(columns={"pfs_visit_id": "visit"}).set_index("visit")
     result = images[images["status"].isin(["WARN", "FAIL"])].copy()
     if result.empty:
-        columns = [*keys, "night", "sequence_type", "category", "iic_sequence_id", "status"]
+        columns = [*keys, "night", "sequence_type", "category", "validated", "iic_sequence_id", "status"]
         return pd.DataFrame(columns=[*columns, "metrics", "extent", "fibers", "setup", "notes"])
-    for column in ("night", "sequence_type", "category", "iic_sequence_id"):
+    for column in ("night", "sequence_type", "category", "validated", "iic_sequence_id"):
         result[column] = result["visit"].map(info[column])
     result["setup"] = [
         describeSetup(info.loc[visit]) if visit in info.index else "" for visit in result["visit"]
     ]
     result["extent"] = _wholeSequence(result, images, info)
     result["notes"] = _notesFor(result, info, notes)
-    columns = [*keys, "night", "sequence_type", "category", "iic_sequence_id", "status"]
+    columns = [*keys, "night", "sequence_type", "category", "validated", "iic_sequence_id", "status"]
     columns += ["metrics", "extent", "fibers", "setup", "notes"]
     return result[columns].sort_values(keys, ignore_index=True)
 
