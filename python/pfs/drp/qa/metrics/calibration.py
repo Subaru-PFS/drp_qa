@@ -384,6 +384,8 @@ def summarizeGood(
         values = labelled[name].astype(float)
         labelled = labelled.assign(_value=values.abs() if spec.absolute else values)
         labelled = labelled[np.isfinite(labelled["_value"])]
+        if labelled.empty:
+            continue
         columns = [column for column in (spec.groupBy if groupBy is None else groupBy) if column in labelled]
         groups = labelled.groupby(columns, dropna=False, sort=True) if columns else [((), labelled)]
         for key, data in groups:

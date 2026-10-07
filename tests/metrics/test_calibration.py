@@ -194,6 +194,16 @@ def testSummarizeGoodDescribesEachPopulation():
     assert summary.loc["b/arc", "max"] < 9.0, "known-bad values are not described"
 
 
+def testSummarizeGoodSkipsAMetricWithNoUsableValues():
+    """A pooled population with no finite known-good value gives no row, not an error."""
+    metrics = makeMetrics().reset_index(drop=True).assign(medDxCenter=np.nan)
+    assert summarizeGood(metrics, makeRunVisitSet(), ["medDxCenter"], groupBy=[]).empty
+    # Negative control: one finite value gives the pooled row.
+    metrics.loc[0, "medDxCenter"] = 0.1
+    (pooled,) = summarizeGood(metrics, makeRunVisitSet(), ["medDxCenter"], groupBy=[])["group"]
+    assert pooled == "all"
+
+
 def testBadEntryExcludesOnlyItsMetric():
     """A known_bad entry naming pctFlagged leaves its rows good for medFwhm."""
     visitSet = ValidationVisitSet(
