@@ -59,6 +59,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `pfs/drp/qa/metrics/data` with the script that makes it from the PIPE2D-1914 derivation: `medFwhm` (arcs) and
   `nLines`, quartz `nLines` set by hand, twilight `nLines` not judged, no `pctFlagged`. A relative
   `thresholdsFile` is looked up there (`gate.thresholdsPath`). Changes verdicts.
+- **`pfs.drp.qa.crossDispersion`** (PIPE2D-1918) — trace width on a calexp, each fiber fitted jointly with its
+  neighbours, and `profileWidth` for oversampled fiber profiles. FWHM includes the pixel response, as
+  `SdssShape` and `fiberProfiles` widths do. `docs/trace-widths.ipynb` compares it with drp_stella's profiles
+  built from the calexp and with the calibration. Not yet used by `imageQualityQa`.
 - **`iqQaSpeciesMetrics`** (PIPE2D-1915) — the per-species `fitDetectorMap` statistics, in long format
   (`pfs.drp.qa.metrics.longFormat`), replacing the `fitSpeciesXRms_<species>`/`fitSpeciesYRms_<species>`
   columns of `iqQaMetrics`, which are gone. `imageQualityLogQa.py` reads it.
