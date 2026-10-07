@@ -81,3 +81,10 @@ def testFetchSummary(tmp_path, periods, visit, listing, FakeOpDB):
     assert "1  no method for darks" in text
     assert "sky: 1 visits (1 with telescope status), 1 science" in text
     assert "notes: 1 (1 on sequences)" in text
+
+
+def testQgraphFromRun():
+    from pfs.drp.qa.comparison.cli import _qgraph
+
+    command = ["pipetask", "--long-log", "run", "-j", "8", "-b", "/repo", "-d", "visit IN (1)"]
+    assert _qgraph(command) == ["pipetask", "--long-log", "qgraph", "-b", "/repo", "-d", "visit IN (1)"]

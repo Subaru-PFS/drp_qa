@@ -8,7 +8,8 @@ Four steps, each safe to repeat:
     Classify the visits, ask the Butler what it holds, and print the coverage and the
     ``pipetask`` commands that would complete it. Writes nothing to the Butler.
 ``run``
-    Plan, then run those commands.
+    Plan, then run those commands; ``--dry-run`` only builds their graphs, and ``--pass`` picks
+    passes (``scienceArc+scienceTrace``, ``scienceObject``).
 ``report``
     Read the verdicts and write the period's report.
 
@@ -326,6 +327,9 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
     skip = [*args.reductions, *([output] if collectionExists(butler, output) else [])]
     commands = []
     for item in passes(visits, detectors):
+        if args.passes and item.name not in args.passes:
+            print(f"\n# {item.name}: {len(item.visits)} visits, skipped (--pass)")
+            continue
         configFile = workDir / f"cosmicray-{period.name}-{item.name}.py"
         configFile.write_text(item.cosmicrayConfig())
         command = pipetaskCommand(
@@ -338,6 +342,8 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
             cosmicrayConfigFile=str(configFile),
             jobs=args.jobs,
         )
+        if args.dry_run:
+            command = _qgraph(command)
         commands.append((item.name, command))
         print(f"\n# {item.name}: {len(item.visits)} visits")
         print(f"cmd = {command!r}")
@@ -347,7 +353,8 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
         return 0
 
     for name, command in commands:
-        log = workDir / f"pipetask-{period.name}-{name}-{datetime.datetime.now():%Y%m%dT%H%M%S}.log"
+        step = "qgraph" if args.dry_run else "pipetask"
+        log = workDir / f"{step}-{period.name}-{name}-{datetime.datetime.now():%Y%m%dT%H%M%S}.log"
         print(f"running {name}; log: {log}")
         with log.open("w") as stream:
             stream.write(shlex.join(command) + "\n")
@@ -356,7 +363,18 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
         if result.returncode:
             print(f"{name} failed ({result.returncode}); see {log}", file=sys.stderr)
             return result.returncode
+        if args.dry_run:
+            print("\n".join(line for line in log.read_text().splitlines() if "quanta" in line))
     return 0
+
+
+def _qgraph(command: list[str]) -> list[str]:
+    """Turn a ``pipetask run`` command into the ``pipetask qgraph`` that builds its graph only."""
+    index = command.index("run")
+    rest = command[index + 1 :]
+    if rest[:1] == ["-j"]:
+        rest = rest[2:]
+    return [*command[:index], "qgraph", *rest]
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -397,4 +415,16 @@ def _parser() -> argparse.ArgumentParser:
         "--reference-version", default=None, help="the drp_qa version of the reference (default: --version)"
     )
     parser.add_argument("-j", "--jobs", type=int, default=8, help="pipetask processes")
+    parser.add_argument(
+        "--pass",
+        dest="passes",
+        action="append",
+        default=[],
+        help="only this pass, as plan names it (e.g. scienceArc+scienceTrace); repeatable",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="with run: build each pass's graph (pipetask qgraph), write nothing",
+    )
     return parser

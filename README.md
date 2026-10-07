@@ -524,7 +524,10 @@ python bin.src/qaComparison.py run    --period run30 --data-dir ~/Projects/Subar
 python bin.src/qaComparison.py report --period run30 --data-dir ~/Projects/Subaru/PFS/data   # report-run30.html
 ```
 
-`plan` prints the `pipetask` commands as Python lists, for running from a notebook instead. The output collection is
+`plan` prints the `pipetask` commands as Python lists, for running from a notebook instead. `run --dry-run` builds
+each pass's graph (`pipetask qgraph`) and prints its quanta without writing anything; `--pass scienceArc+scienceTrace`
+or `--pass scienceObject` limits `run` to one pass. Visits with no `pfsConfig` in the inputs can't be reduced and are
+reported, not scheduled. The output collection is
 `u/$USER/comparison/<period>/<git describe>`; a checkout with uncommitted changes is refused. Report the reference
 (`--period run25`) first: its stored metrics are what each other run is compared with.
 
