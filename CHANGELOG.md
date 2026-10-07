@@ -31,13 +31,16 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   loads `data/validationVisits.yaml`, visits with known verdicts, each assigned to an observing run;
   `metrics.calibration.calibrate` derives WARN/FAIL from the reference run (Run25) per population (arm and `obsType`; flag rates per species) from the known-good `iqQaMetrics`,
   rounded outwards to a step set by the scatter, with a distribution-free interval on FAIL, and checks
-  each known-bad visit against its expected verdict; `compareRuns` judges the other runs' known-good data
-  against those thresholds; `writeThresholds`/`readThresholds` keep them as a versioned YAML file for the
+  each known-bad visit against its expected verdict; `writeThresholds`/`readThresholds` keep them as a versioned YAML file for the
   judgement step; `metrics.readers.readMetrics` reads the metrics from
   a Butler; `plotting.plotThresholds` draws the result. `docs/qa-thresholds.ipynb` is the step-by-step
   procedure, from reducing the visits (`pipelines/qaThresholds.yaml`, with `drpActor`'s per-sequence-type
   config) to review; `docs/validation-visits.md` describes the set, and `docs/qa-principles.md` holds rules
   R1–R7 and the metric checklist. `pyyaml` is now a dependency.
+- **Known-good validation visits are Run25 only** (PIPE2D-1933) — the loader rejects a `known_good` entry
+  outside `referenceRuns`; other runs give `known_bad` entries only, as fault examples, and are compared
+  with Run25 by comparison mode (PIPE2D-1929). `summarizeGood` describes the known-good values of a metric
+  with no derived thresholds, per population.
 - **One gating path for `imageQualityQa`** (PIPE2D-1915) — `pfs.drp.qa.metrics.gate.gate` judges `iqQaMetrics`
   rows against layered threshold tables: a `writeThresholds` file first, then the config. Each image gets
   `qaStatus` with the metric that decided it (`qaDecidedBy`, new column) and the reasons (`qaReason`, new

@@ -30,11 +30,10 @@ __all__ = [
     "MetricSpec",
     "addSpecies",
     "calibrate",
-    "compareRuns",
     "labelRows",
     "readThresholds",
     "selectGroup",
-    "summarizeRuns",
+    "summarizeGood",
     "writeThresholds",
 ]
 
@@ -59,13 +58,12 @@ _THRESHOLD_FIELDS = (
 #: ``medDxCenter`` is gated by ``imageQualityQa`` but not derived: an offset
 #: from ``detectorMap_calib`` is near zero in the run the calibrations were made
 #: from, so its percentiles say nothing about the drift to tolerate. Its
-#: thresholds are a tolerance (PIPE2D-1921); `summarizeRuns` reports it.
+#: thresholds are a tolerance (PIPE2D-1921); `summarizeGood` reports it.
 DEFAULT_METRICS = ("medFwhm", "pctFlagged")
 
-#: Values of the ``validation`` column added by `labelRows`: known good in a
-#: reference run (thresholds come from these), known good in another run (held
-#: out and compared), known bad, and suspected bad.
-GOOD, HELD_OUT, BAD_WARN, BAD_FAIL, UNCONFIRMED = "good", "heldOut", "bad:WARN", "bad:FAIL", "unconfirmed"
+#: Values of the ``validation`` column added by `labelRows`: known good
+#: (thresholds come from these), known bad, and suspected bad.
+GOOD, BAD_WARN, BAD_FAIL, UNCONFIRMED = "good", "bad:WARN", "bad:FAIL", "unconfirmed"
 
 
 def addSpecies(metrics: pd.DataFrame) -> pd.DataFrame:
@@ -99,8 +97,7 @@ def labelRows(metrics: pd.DataFrame, visitSet: ValidationVisitSet, metric: str) 
     A ``known_bad`` entry asserts something only about the metric it names, or
     about every metric if it names none, and removes its rows from the good
     data of only those metrics: a b-arm arc whose flag rate is a pipeline
-    limitation still measures FWHM. Known-good rows of a reference run are
-    ``good``; those of other runs are ``heldOut``.
+    limitation still measures FWHM. Known-good rows are ``good``.
 
     Parameters
     ----------
@@ -115,8 +112,7 @@ def labelRows(metrics: pd.DataFrame, visitSet: ValidationVisitSet, metric: str) 
     Returns
     -------
     `pandas.DataFrame`
-        The covered rows with a ``validation`` column (``good``, ``heldOut``,
-        ``bad:WARN``, ``bad:FAIL`` or ``unconfirmed``), ``run`` (`None` when
+        The covered rows with a ``validation`` column (``good``, ``bad:WARN``, ``bad:FAIL`` or ``unconfirmed``), ``run`` (`None` when
         the set has no runs table) and ``species`` (see `addSpecies`). Rows
         with no verdict for ``metric``, and rows whose value its `MetricSpec`
         marks as not measured, are dropped.
@@ -127,8 +123,7 @@ def labelRows(metrics: pd.DataFrame, visitSet: ValidationVisitSet, metric: str) 
         return [entry for entry in entries if entry.metric in (None, metric)]
 
     label = np.full(len(metrics), None, dtype=object)
-    label[matchRows(metrics, visitSet.referenceGood)] = GOOD
-    label[matchRows(metrics, visitSet.heldOutGood)] = HELD_OUT
+    label[matchRows(metrics, visitSet.knownGood)] = GOOD
     label[matchRows(metrics, forMetric(visitSet.knownBad))] = None
     label[matchRows(metrics, forMetric(visitSet.unconfirmedBad))] = UNCONFIRMED
     for expect, value in (("WARN", BAD_WARN), ("FAIL", BAD_FAIL)):
@@ -203,7 +198,7 @@ def calibrate(
         the grouping columns
             The population's values.
         ``nGood``, ``nGoodVisits``, ``visitRange``
-            The known-good sample of the reference runs. Detectors of one visit, and repeated
+            The known-good sample. Detectors of one visit, and repeated
             exposures, are correlated, so ``nGoodVisits`` is the more honest
             sample size.
         ``warn``, ``fail``, ``warnRaw``, ``failRaw``, ``failLow``, ``failHigh``
@@ -219,9 +214,6 @@ def calibrate(
         ``nUnconfirmed``, ``unconfirmedFlagged``
             Suspected faults and how many the suggestion would flag at WARN
             or worse. Reported, never judged.
-        ``nHeldOut``, ``heldOutFlaggedWarn``, ``heldOutFlaggedFail``
-            Known-good data of the other runs, and the fractions flagged: an
-            out-of-sample false-alarm rate. Per run in `compareRuns`.
         ``provenance``
             The sentence for the config field's ``doc``.
 
@@ -293,7 +285,6 @@ def _calibrateGroup(
         The table columns described in `calibrate`, less the identifying ones.
     """
     good = subset[(subset["validation"] == GOOD) & np.isfinite(subset["_value"])]
-    heldOut = subset[(subset["validation"] == HELD_OUT) & np.isfinite(subset["_value"])]
     bad = subset[subset["validation"].isin((BAD_WARN, BAD_FAIL))]
     unconfirmed = subset[subset["validation"] == UNCONFIRMED]
     row = {
@@ -302,7 +293,6 @@ def _calibrateGroup(
         "visitRange": f"{good['visit'].min()}-{good['visit'].max()}" if len(good) else "",
         "nBad": len(bad),
         "nUnconfirmed": len(unconfirmed),
-        "nHeldOut": len(heldOut),
         "badOk": pd.NA,
         "badSummary": "",
     }
@@ -351,10 +341,6 @@ def _calibrateGroup(
         row["badOk"] = all(ok for ok, _ in checks)
         row["badSummary"] = "; ".join(message for _, message in checks)
 
-    for name, level in (("heldOutFlaggedWarn", suggestion.warn), ("heldOutFlaggedFail", suggestion.fail)):
-        flagged = heldOut["_value"] >= level if spec.higherIsWorse else heldOut["_value"] <= level
-        row[name] = float(flagged.mean()) if len(heldOut) else np.nan
-
     worse = (
         unconfirmed["_value"] >= suggestion.warn
         if spec.higherIsWorse
@@ -364,73 +350,13 @@ def _calibrateGroup(
     return row
 
 
-def compareRuns(
-    metrics: pd.DataFrame,
-    visitSet: ValidationVisitSet,
-    table: pd.DataFrame,
-    metricNames: Sequence[str] = DEFAULT_METRICS,
-) -> pd.DataFrame:
-    """Compare each run's known-good data with the reference runs' thresholds.
-
-    Parameters
-    ----------
-    metrics : `pandas.DataFrame`
-        Concatenated metrics rows, as given to `calibrate`.
-    visitSet : `ValidationVisitSet`
-        The validation visit set.
-    table : `pandas.DataFrame`
-        The `calibrate` table for ``metrics``.
-    metricNames : sequence of `str`, optional
-        Metrics to compare. Defaults to `DEFAULT_METRICS`.
-
-    Returns
-    -------
-    `pandas.DataFrame`
-        One row per metric, population and run with known-good data:
-        ``metric``, ``group``, ``run``, ``reference`` (the thresholds were
-        derived from this run), ``n``, ``median`` and the fractions flagged at
-        WARN or worse and at FAIL. A held-out run flagged far more often than
-        the reference has moved, or its data differ, which is the comparison
-        this exists for.
-    """
-    rows = []
-    for name in metricNames:
-        spec = specFor(name)
-        labelled = labelRows(metrics, visitSet, name)
-        labelled = labelled[labelled["validation"].isin((GOOD, HELD_OUT))]
-        values = labelled[name].astype(float)
-        labelled = labelled.assign(_value=values.abs() if spec.absolute else values)
-        for _, suggestion in table[(table["metric"] == name) & (table["nGood"] > 0)].iterrows():
-            population = selectGroup(labelled, suggestion)
-            population = population[np.isfinite(population["_value"])]
-            for run, data in population.groupby("run", dropna=False):
-                value = data["_value"]
-                if spec.higherIsWorse:
-                    flaggedWarn, flaggedFail = value >= suggestion["warn"], value >= suggestion["fail"]
-                else:
-                    flaggedWarn, flaggedFail = value <= suggestion["warn"], value <= suggestion["fail"]
-                rows.append(
-                    {
-                        "metric": name,
-                        "group": suggestion["group"],
-                        "run": run,
-                        "reference": bool((data["validation"] == GOOD).all()),
-                        "n": len(data),
-                        "median": float(value.median()),
-                        "flaggedWarn": float(flaggedWarn.mean()),
-                        "flaggedFail": float(flaggedFail.mean()),
-                    }
-                )
-    return pd.DataFrame(rows)
-
-
-def summarizeRuns(
+def summarizeGood(
     metrics: pd.DataFrame,
     visitSet: ValidationVisitSet,
     metricNames: Sequence[str],
     groupBy: Sequence[str] | None = None,
 ) -> pd.DataFrame:
-    """Describe each run's known-good values of metrics that have no derived thresholds.
+    """Describe the known-good values of metrics that have no derived thresholds.
 
     Parameters
     ----------
@@ -446,29 +372,30 @@ def summarizeRuns(
     Returns
     -------
     `pandas.DataFrame`
-        One row per metric, population and run: ``metric``, ``group``, ``run``,
-        ``reference``, ``n``, ``median``, ``robustRms``, ``p99`` and ``max``,
-        of the absolute values for a metric gated on them.
+        One row per metric and population: ``metric``, ``group``, ``n``,
+        ``median``, ``robustRms``, ``p99`` and ``max``, of the absolute values
+        for a metric gated on them.
     """
     rows = []
     for name in metricNames:
         spec = specFor(name)
         labelled = labelRows(metrics, visitSet, name)
-        labelled = labelled[labelled["validation"].isin((GOOD, HELD_OUT))]
+        labelled = labelled[labelled["validation"] == GOOD]
         values = labelled[name].astype(float)
         labelled = labelled.assign(_value=values.abs() if spec.absolute else values)
         labelled = labelled[np.isfinite(labelled["_value"])]
+        if labelled.empty:
+            continue
         columns = [column for column in (spec.groupBy if groupBy is None else groupBy) if column in labelled]
-        for key, data in labelled.groupby([*columns, "run"], dropna=False, sort=True):
-            *group, run = key if isinstance(key, tuple) else (key,)
+        groups = labelled.groupby(columns, dropna=False, sort=True) if columns else [((), labelled)]
+        for key, data in groups:
+            key = key if isinstance(key, tuple) else (key,)
             value = data["_value"].to_numpy()
             q25, q75 = np.percentile(value, [25.0, 75.0])
             rows.append(
                 {
                     "metric": name,
-                    "group": "/".join(str(item) for item in group) if columns else "all",
-                    "run": run,
-                    "reference": bool((data["validation"] == GOOD).all()),
+                    "group": "/".join(str(item) for item in key) if columns else "all",
                     "n": len(value),
                     "median": float(np.median(value)),
                     "robustRms": float(0.741 * (q75 - q25)),

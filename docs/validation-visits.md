@@ -16,9 +16,9 @@ or passes a known-bad one, does not merge.
 Every entry was checked against the run's calibration summary (`calib_data.csv`, one row
 per sequence: `sequence_type`, sequence name, cameras read, notes) for Runs 25, 27 and
 30. Run27 took calibration data only, and no calibrations were made from it: it was
-reduced with another run's, so its metrics are not comparable with Run25's (its known-good
-n-arm flag rates sit 2–5 points higher). A `known_bad` reason quotes the summary's note
-where there is one. The summaries are written by hand, so a sequence name there can
+reduced with another run's, so its metrics are not comparable with Run25's (the n-arm
+flag rates of its fault-free spectrographs sit 2–5 points higher). A `known_bad` reason
+quotes the summary's note where there is one. The summaries are written by hand, so a sequence name there can
 differ from the `W_SEQNAM` header that `seqType` is matched against. The threshold
 notebook lists any entry that matches no data, which is how such a mismatch shows up.
 
@@ -26,13 +26,14 @@ notebook lists any entry that matches no data, which is how such a mismatch show
 
 Thresholds are derived only from the known-good visits of **Run25** (`referenceRuns` in the
 YAML): its calibrations were made for it, and it is the most complete stable set. The set
-holds known-good visits of Run25 only. From other runs it holds only known-bad visits, as
-fault examples: each is checked against the thresholds, and none derives one. The YAML's
-`runs` table gives each run's visit range, so every entry belongs to one run.
+holds known-good visits of Run25 only, and the loader rejects one from another run. From
+other runs it holds only known-bad visits, as fault examples: each is checked against the
+thresholds, and none derives one. The YAML's `runs` table gives each run's visit range, so
+every entry belongs to one run.
 
 Other runs are compared with Run25's thresholds by comparison mode (PIPE2D-1929), which
-reads a run's calibration summary, not by this set; Run30 is the first. The known-good
-entries of Run27 and Run30 still in the YAML are removed by PIPE2D-1933.
+reads a run's calibration summary, not by this set; Run30 is the first. That is also where
+a fault's other spectrographs, in the same exposures, are seen to pass.
 
 ## What belongs in the set
 
@@ -70,14 +71,9 @@ identified by visit number, with no observer, target or design names.
   under a different gravity vector, and it brings b-arm HgCd above the 20-sample floor.
 - **Run25 uniformity traces (2025-11-12 and 11-21):** extra quartz frames, so that trace
   widths can have thresholds of their own rather than borrowing the arcs'.
-- **Same-exposure controls (Run27, held out):** in each SM1-defocused and unlit-spectrograph
-  exposure, the spectrographs the note doesn't name. A metric must fail the faulty
-  spectrograph and pass the others in the same frames. The SM1 controls of 2026-03-15
-  and 03-17 assume SM1 was refocused after the "SM1 defocused" notes of 03-09/10.
-- **Twilight sky, Run25 (2025-11-25 and 11-28; one set at insrot 90) and Run30
-  (2026-09-04 and 09-16):** the reference for a future sky-line check (PIPE2D-1925).
-  Whether they should also be held to the FWHM and flag-rate gates is not yet
-  established. The Run30 set of 2026-09-02 is left out: it was taken near the Moon.
+- **Twilight sky, Run25 (2025-11-25 and 11-28; one set at insrot 90):** the reference for
+  a future sky-line check (PIPE2D-1925). Whether they should also be held to the FWHM and
+  flag-rate gates is not yet established.
 
 ### Known bad
 
@@ -147,22 +143,6 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 133536–133537 | 25 | scienceTrace | b, r | 1, 2, 3, 4 | Trace | PASS |  | Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace; n arm not read. |
 | 134338–134339 | 25 | scienceTrace | b, r, n | 1, 2, 3, 4 | Trace | PASS |  | Run25 uniformity set, 2025-11-21, az 290. 20 s scienceTrace. |
 | 135275–135279 | 25 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run25 uniformity set, 2025-11-28, az 290, insrot 90. 180 s. Reference case for the O2/OH sky-line check, as for the other twilight entries. |
-| 148908–148911 | 30 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run30 twilight sky, 2026-09-04, alt 80, az 270. 180 s. |
-| 150840–150844 | 30 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run30 twilight sky, 2026-09-16, alt 80, az 267. 180 s. |
-| 140005–140006 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: Argon | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140032 | 27 | scienceTrace | b, r, n | 2, 3, 4 | Trace | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140035 | 27 | scienceTrace | b, r, n | 2, 3, 4 | Trace | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140139–140148 | 27 | scienceTrace | b, r, n | 2, 3, 4 | Trace | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140124–140126 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: Argon | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140127–140129 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: Xenon | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140130–140132 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: Neon | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140133–140135 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: Krypton | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 140136–140138 | 27 | scienceArc | b, r, n | 2, 3, 4 | Arc: HgCd | PASS |  | Run27 control for SM1 defocused, same exposures. |
-| 139971 | 27 | scienceArc | b, r, n | 2, 3, 4 | ImageQuality | PASS |  | Run27 control for SM1 unlit, same exposure. |
-| 140477 | 27 | scienceArc | b, r, n | 2, 3, 4 | ImageQuality | PASS |  | Run27 control for SM1 unlit, same exposure. |
-| 140640 | 27 | scienceArc | b, r, n | 1, 3, 4 | ImageQuality | PASS |  | Run27 control for SM2 unlit; SM1 after its 03-11 slit home update, same exposure. |
-| 140649 | 27 | scienceArc | b, r, n | 3, 4 | ImageQuality | PASS |  | Run27 control for SM1 and SM2 unlit, same exposure. |
-| 140651 | 27 | scienceArc | b, r, n | 1, 3, 4 | ImageQuality | PASS |  | Run27 control for SM2 unlit; SM1 after its 03-11 slit home update, same exposure. |
 
 ### Known bad
 

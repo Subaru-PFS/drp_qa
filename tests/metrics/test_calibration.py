@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.calibration import addSpecies, calibrate, compareRuns, labelRows, summarizeRuns
+from pfs.drp.qa.metrics.calibration import addSpecies, calibrate, labelRows, summarizeGood
 from pfs.drp.qa.metrics.validationVisits import ValidationVisit, ValidationVisitSet
 
 ARC_VISITS = tuple(range(1000, 1030))
@@ -164,38 +164,44 @@ def testAddSpeciesFollowsTheTask():
 
 
 def makeRunVisitSet() -> ValidationVisitSet:
-    """Arcs of visits 1000-1014 are the reference run; 1015-1029 are another run."""
-    runs = {25: (1000, 1014), 27: (1015, 3999)}
-    good = (
-        ValidationVisit(visits=tuple(range(1000, 1015)), expect="PASS", sequenceType="scienceArc", run=25),
-        ValidationVisit(visits=tuple(range(1015, 1030)), expect="PASS", sequenceType="scienceArc", run=27),
-    )
-    return ValidationVisitSet(knownGood=good, runs=runs, referenceRuns=(25,))
+    """Every known-good visit is in the reference run 25; visit 3000 is a fault of run 27."""
+    runs = {25: (1000, 2999), 27: (3000, 3999)}
+    good = (ValidationVisit(visits=ARC_VISITS + TRACE_VISITS, expect="PASS", run=25),)
+    bad = (ValidationVisit(visits=(3000,), expect="FAIL", metric="medFwhm", run=27),)
+    return ValidationVisitSet(knownGood=good, knownBad=bad, runs=runs, referenceRuns=(25,))
 
 
 class TestRuns:
-    def testOtherRunsAreHeldOut(self):
+    def testRowsCarryTheirRun(self):
         labelled = labelRows(makeMetrics(), makeRunVisitSet(), "medFwhm")
-        assert set(labelled.loc[labelled["visit"] < 1015, "validation"]) == {"good"}
-        assert set(labelled.loc[labelled["visit"] >= 1015, "validation"]) == {"heldOut"}
-        assert set(labelled["run"]) == {25, 27}
+        assert set(labelled.loc[labelled["visit"] < 3000, "run"]) == {25}
+        assert set(labelled.loc[labelled["visit"] == 3000, "run"]) == {27}
 
-    def testThresholdsComeFromTheReferenceOnly(self):
-        metrics = makeMetrics().reset_index(drop=True)
-        metrics.loc[metrics["visit"].between(1015, 1029), "medFwhm"] += 1.0  # the other run is worse
-        b = row(calibrate(metrics, makeRunVisitSet(), ["medFwhm"]), "medFwhm", "b/arc")
-        assert b["nGood"] == 15 and b["nHeldOut"] == 15
-        assert b["fail"] < 2.8, "the held-out run did not move the thresholds"
-        assert b["heldOutFlaggedFail"] == 1.0
+    def testOtherRunsFaultIsCheckedNotDerived(self):
+        """A known-bad visit of another run is judged against the reference thresholds."""
+        b = row(calibrate(makeMetrics(), makeRunVisitSet(), ["medFwhm"]), "medFwhm", "b/arc")
+        assert b["nGood"] == 30 and b["nBad"] == 1
+        assert bool(b["badOk"]) and b["fail"] < 2.8
 
-    def testCompareRunsPerRun(self):
-        metrics = makeMetrics().reset_index(drop=True)
-        metrics.loc[metrics["visit"].between(1015, 1029), "medFwhm"] += 1.0
-        visitSet = makeRunVisitSet()
-        comparison = compareRuns(metrics, visitSet, calibrate(metrics, visitSet, ["medFwhm"]), ["medFwhm"])
-        b = comparison[comparison["group"] == "b/arc"].set_index("run")
-        assert b.loc[25, "reference"] and not b.loc[27, "reference"]
-        assert b.loc[25, "flaggedFail"] <= 0.1 and b.loc[27, "flaggedFail"] == 1.0
+
+def testSummarizeGoodDescribesEachPopulation():
+    metrics = makeMetrics().reset_index(drop=True)
+    metrics.loc[metrics["obsType"] == "trace", "medDxCenter"] = -0.5
+    metrics.loc[metrics["visit"] == 3000, "medDxCenter"] = 9.0
+    summary = summarizeGood(metrics, makeRunVisitSet(), ["medDxCenter"]).set_index("group")
+    assert summary.loc["b/arc", "n"] == 30 and summary.loc["b/arc", "median"] < 0.1
+    assert summary.loc["b/trace", "median"] == pytest.approx(0.5), "absolute values, as the gate sees them"
+    assert summary.loc["b/arc", "max"] < 9.0, "known-bad values are not described"
+
+
+def testSummarizeGoodSkipsAMetricWithNoUsableValues():
+    """A pooled population with no finite known-good value gives no row, not an error."""
+    metrics = makeMetrics().reset_index(drop=True).assign(medDxCenter=np.nan)
+    assert summarizeGood(metrics, makeRunVisitSet(), ["medDxCenter"], groupBy=[]).empty
+    # Negative control: one finite value gives the pooled row.
+    metrics.loc[0, "medDxCenter"] = 0.1
+    (pooled,) = summarizeGood(metrics, makeRunVisitSet(), ["medDxCenter"], groupBy=[])["group"]
+    assert pooled == "all"
 
 
 def testBadEntryExcludesOnlyItsMetric():
@@ -235,15 +241,6 @@ def testDxIsNotDerivedByDefault():
     """An offset from the calibration is near zero in its own run: not a percentile threshold."""
     table = calibrate(makeMetrics(), makeVisitSet())
     assert "medDxCenter" not in set(table["metric"])
-
-
-def testSummarizeRunsDescribesEachRun():
-    metrics = makeMetrics().reset_index(drop=True)
-    metrics.loc[metrics["visit"].between(1015, 1029), "medDxCenter"] = -0.5
-    summary = summarizeRuns(metrics, makeRunVisitSet(), ["medDxCenter"])
-    b = summary[summary["group"] == "b/arc"].set_index("run")
-    assert b.loc[25, "reference"] and b.loc[25, "median"] < 0.1
-    assert b.loc[27, "median"] == pytest.approx(0.5), "absolute values, as the gate sees them"
 
 
 def testThresholdsFileRoundTrip(tmp_path):
