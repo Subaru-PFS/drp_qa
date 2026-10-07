@@ -98,10 +98,19 @@ def populations(metrics: pd.DataFrame, visits: pd.DataFrame) -> pd.DataFrame:
     Returns
     -------
     `pandas.DataFrame`
-        ``metrics`` with ``night``, ``sequence_type``, ``sequence_name``,
+        ``metrics`` with ``night``, ``sequence_type``, ``cadence``, ``sequence_name``,
         ``group_name``, ``category``, ``focusSweep`` and ``dithered``.
     """
-    columns = ["night", "sequence_type", "sequence_name", "group_name", "category", "focusSweep", "dithered"]
+    columns = [
+        "night",
+        "sequence_type",
+        "cadence",
+        "sequence_name",
+        "group_name",
+        "category",
+        "focusSweep",
+        "dithered",
+    ]
     info = visits.set_index("pfs_visit_id")[columns]
     return metrics.drop(columns=[c for c in columns if c in metrics], errors="ignore").join(info, on="visit")
 
@@ -140,11 +149,11 @@ def verdictCounts(verdicts: pd.DataFrame) -> pd.DataFrame:
     Returns
     -------
     `pandas.DataFrame`
-        ``category``, ``sequence_type``, ``arm``, one column per verdict and
-        ``images``.
+        ``category``, ``sequence_type``, ``cadence``, ``arm``, one column per
+        verdict and ``images``.
     """
     counts = verdicts.pivot_table(
-        index=["category", "sequence_type", "arm"],
+        index=["category", "sequence_type", "cadence", "arm"],
         columns="status",
         values="visit",
         aggfunc="size",
@@ -182,7 +191,7 @@ def armThresholds(judged: pd.DataFrame, metric: str) -> dict[str, tuple[float, f
 
 
 def recurringSequences(visits: pd.DataFrame, minNights: int = MIN_RECURRING_NIGHTS) -> pd.DataFrame:
-    """Return the judged calibration sequences repeated night after night.
+    """Return the daily calibration sequences, by name.
 
     Parameters
     ----------
@@ -195,10 +204,9 @@ def recurringSequences(visits: pd.DataFrame, minNights: int = MIN_RECURRING_NIGH
     -------
     `pandas.DataFrame`
         ``sequence_type``, ``sequence_name``, ``group_name``, ``nights`` and
-        ``visits``, most nights first. Calibrations only: science sequence
-        names identify programs.
+        ``visits``, most nights first, for those on at least ``minNights``.
     """
-    calibrations = visits[visits["judged"] & (visits["category"] == "calibration")]
+    calibrations = visits[visits["judged"] & (visits["cadence"] == "daily")]
     keys = ["sequence_type", "sequence_name", "group_name"]
     counts = (
         calibrations.fillna({"sequence_name": "", "group_name": ""})
@@ -253,24 +261,35 @@ def buildReport(inputs: ReportInputs) -> str:
         parts += [
             "<p>Each image that warns or fails: the metrics that crossed, how far the problem spreads within its "
             "visit (and whether the whole sequence shares it), the setup, and the opdb's notes. Telescope focus "
-            "sweeps are not judged on flux-dependent metrics.</p>",
+            "sweeps are not judged on flux-dependent metrics, nor daily arcs and traces on <code>nLines</code> "
+            "(PIPE2D-1935), so a verdict here can be milder than the stored one.</p>",
             _table(_ordered(inputs.findings)),
         ]
 
     parts.append(f"<h2>Against {_e(inputs.referenceName)}</h2>")
     if reference is None or reference.empty:
         parts.append(f"<p>No {_e(inputs.referenceName)} metrics were given: run its comparison first.</p>")
-    for sequenceType, category in (
-        ("scienceArc", "calibration"),
-        ("scienceTrace", "calibration"),
-        ("scienceObject", "calibration"),
-        ("scienceObject", "science"),
+    parts.append(
+        "<p>Daily arcs and traces are compared with the reference run's sets: the sets are what the thresholds "
+        "were derived from. <code>nLines</code> isn't judged on daily ones until it allows for the fibers a design "
+        "lights (PIPE2D-1935).</p>"
+    )
+    for sequenceType, category, cadence in (
+        ("scienceArc", "calibration", "set"),
+        ("scienceTrace", "calibration", "set"),
+        ("scienceArc", "calibration", "daily"),
+        ("scienceTrace", "calibration", "daily"),
+        ("scienceObject", "calibration", ""),
+        ("scienceObject", "science", ""),
     ):
-        current = _select(metrics, sequenceType, category)
+        current = _select(metrics, sequenceType, category, cadence)
         if current.empty:
             continue
-        previous = None if reference is None else _select(reference, sequenceType, category)
-        parts.append(f"<h3>{_e(sequenceType)}, {category}</h3>")
+        previous = (
+            None if reference is None else _select(reference, sequenceType, category, cadence and "set")
+        )
+        heading = f"{sequenceType}, {category}" + (f", {cadence}" if cadence else "")
+        parts.append(f"<h3>{_e(heading)}</h3>")
         for metric in COMPARED_METRICS:
             if metric not in current or current[metric].dropna().empty:
                 continue
@@ -280,18 +299,18 @@ def buildReport(inputs: ReportInputs) -> str:
                 metric,
                 labels=(inputs.period, inputs.referenceName),
                 thresholds=armThresholds(inputs.judged[inputs.judged["row"].isin(current.index)], metric),
-                title=f"{metric}: {sequenceType} ({category})",
+                title=f"{metric}: {heading}",
             )
             parts.append(_figure(fig))
 
     recurring = recurringSequences(inputs.visits)
-    parts.append("<h2>Recurring calibrations</h2>")
+    parts.append("<h2>Daily calibrations</h2>")
     if recurring.empty:
-        parts.append(f"<p>No calibration sequence recurs on {MIN_RECURRING_NIGHTS} or more nights.</p>")
+        parts.append(f"<p>No daily calibration recurs on {MIN_RECURRING_NIGHTS} or more nights.</p>")
     else:
         parts.append(
-            "<p>Calibrations repeated night after night with the same setup, night by night: the median of each "
-            "detector, with the reference run's 5-95 % range of the same sequence type shaded. "
+            "<p>Single-exposure arcs and traces repeated night after night, night by night: the median of each "
+            "detector, with the 5-95 % range of the reference run's sets of the same type shaded. "
             "<code>medDxCenter</code> is the offset from the calibration detectorMap: drift, shown, not gated.</p>"
         )
         parts.append(_table(recurring))
@@ -302,7 +321,9 @@ def buildReport(inputs: ReportInputs) -> str:
                 & (metrics["group_name"].fillna("") == row["group_name"])
             ]
             label = f"{row['sequence_type']} {row['sequence_name']!r}"
-            previous = None if reference is None else _select(reference, row["sequence_type"], "calibration")
+            previous = (
+                None if reference is None else _select(reference, row["sequence_type"], "calibration", "set")
+            )
             for metric in ("medFwhm", "medDxCenter"):
                 if metric in subset and not subset[metric].dropna().empty:
                     parts.append(
@@ -313,9 +334,11 @@ def buildReport(inputs: ReportInputs) -> str:
     return _page(f"{inputs.period} QA comparison", "\n".join(parts))
 
 
-def _select(metrics: pd.DataFrame, sequenceType: str, category: str) -> pd.DataFrame:
-    """Return the rows of one sequence type and category, less focus sweeps for sky."""
+def _select(metrics: pd.DataFrame, sequenceType: str, category: str, cadence: str = "") -> pd.DataFrame:
+    """Return the rows of one sequence type, category and cadence, less focus sweeps for sky."""
     subset = metrics[(metrics["sequence_type"] == sequenceType) & (metrics["category"] == category)]
+    if cadence:
+        subset = subset[subset["cadence"] == cadence]
     if "focusSweep" in subset:
         subset = subset[~subset["focusSweep"].fillna(False).astype(bool)]
     return subset

@@ -150,3 +150,23 @@ def testNoFindings(defocus):
     result = findings(metrics, judgeImages(metrics, visits, THRESHOLDS), visits)
     assert result.empty
     assert "extent" in result.columns
+
+
+def testDailyNLinesNotJudged(periods, visit, listing):
+    visits = classifyVisits(
+        listing(
+            visit(1, "2026-01-03 17:00", "scienceArc", sequence=50, name="Arc: Neon"),  # daily, one group lit
+            *(visit(10 + i, f"2026-01-03 18:0{i}", "scienceArc", sequence=52) for i in range(3)),  # a set
+        ),
+        periods.values(),
+    )
+    metrics = pd.DataFrame(
+        [(v, "b", 1, 2.3, 50) for v in (1, 10, 11, 12)],
+        columns=["visit", "arm", "spectrograph", "medFwhm", "nLines"],
+    )
+    judged = judgeImages(metrics, visits, THRESHOLDS).set_index(["visit", "metric"])["status"]
+    assert judged[(1, "nLines")] == ""
+    assert judged[(1, "medFwhm")] == "PASS"  # still judged against the set thresholds
+    # Negative control: the same line count in a set fails.
+    assert judged[(10, "nLines")] == "FAIL"
+    assert describeSetup(visits.set_index("pfs_visit_id").loc[1]).startswith("scienceArc 'Arc: Neon' (daily)")

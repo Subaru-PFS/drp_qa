@@ -123,3 +123,19 @@ def testSubLabels(periods, visit, listing):
     assert not result.loc[[200, 300], "focusSweep"].any()
     assert result.loc[200, "dithered"]
     assert not result.loc[300, "dithered"]  # only sky visits are dithered
+
+
+def testCadence(periods, visit, listing):
+    visits = listing(
+        visit(1, "2026-01-03 17:00", "scienceArc", sequence=50, name="Arc: Neon"),  # daily
+        visit(2, "2026-01-03 17:05", "scienceTrace", sequence=51, name="Trace"),  # daily
+        *(visit(10 + i, f"2026-01-03 18:0{i}", "scienceArc", sequence=52) for i in range(3)),  # a set of 3
+        *(
+            visit(20 + i, f"2026-01-03 19:0{i}", "scienceTrace", sequence=53) for i in range(10)
+        ),  # a set of 10
+        visit(40, "2026-01-03 21:00", "scienceObject", sequence=54),  # neither
+    )
+    cadence = classifyVisits(visits, periods.values()).set_index("pfs_visit_id")["cadence"]
+    assert cadence[[1, 2]].tolist() == ["daily", "daily"]
+    assert set(cadence.loc[10:12]) == {"set"} and set(cadence.loc[20:29]) == {"set"}
+    assert cadence[40] == ""

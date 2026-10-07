@@ -10,6 +10,10 @@ The gate (``imageQualityQa``) judges the sequence types in `JUDGED_TYPES`. Every
 listed with the reason it isn't judged, so a run's coverage is complete and a new sequence type
 shows up rather than disappearing.
 
+Arcs and traces are taken two ways: as *sets* (several exposures of a lamp: 3 per arc lamp and 10
+traces for the calibrations) and, from Run28, as *daily* single exposures of one arc and one trace,
+for drift. ``cadence`` tells them apart by the size of the sequence; they are reported apart.
+
 Sky visits also get sub-labels from the telescope status: `focusSweep` (a telescope focus sweep,
 which changes how much light enters the fibers but not the spectrograph's line widths) and
 ``dithered``.
@@ -23,6 +27,7 @@ import pandas as pd
 from pfs.drp.qa.comparison.runs import Period, nightOf, periodOf
 
 __all__ = [
+    "CADENCE_TYPES",
     "ENGINEERING_CATEGORIES",
     "FOCUS_SWEEP_MIN_RANGE",
     "FOCUS_SWEEP_MIN_STEPS",
@@ -38,6 +43,9 @@ JUDGED_TYPES = ("scienceArc", "scienceTrace", "scienceObject")
 
 #: Sequence types taken on sky, whose design says whether they are science.
 SKY_TYPES = ("scienceObject", "scienceObject_windowed")
+
+#: Sequence types taken as a set of exposures or as a daily single one.
+CADENCE_TYPES = ("scienceArc", "scienceTrace")
 
 #: Proposal categories that don't make a design science: engineering (``EN``), a fiber with no
 #: proposal, or an ID that doesn't follow Subaru's pattern.
@@ -133,6 +141,9 @@ def classifyVisits(
             The period's name, or `None` outside every period.
         ``category``
             ``calibration`` or ``science``.
+        ``cadence``
+            For an arc or trace, ``daily`` (a sequence of one visit) or
+            ``set``; empty otherwise.
         ``focusSweep``, ``dithered``
             Sky sub-labels (`bool`).
         ``judged``
@@ -174,6 +185,9 @@ def classifyVisits(
     reason[sequenceType.isna()] = "no sequence"
     reason[visits["exp_type"] == "test"] = "test exposure"
     reason[visits["period"].isna()] = "outside every period"
+    sequenceSize = visits.groupby("iic_sequence_id")["pfs_visit_id"].transform("size")
+    cadence = np.where(sequenceSize.to_numpy() == 1, "daily", "set")
+    visits["cadence"] = np.where(sequenceType.isin(CADENCE_TYPES).to_numpy(), cadence, "")
     visits["reason"] = reason
     visits["judged"] = reason == "judged"
     return visits

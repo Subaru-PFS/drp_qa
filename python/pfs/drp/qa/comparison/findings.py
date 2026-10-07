@@ -3,12 +3,15 @@
 Comparison mode doesn't rely on anyone having noted a problem. For each ``WARN`` or ``FAIL``
 image it says which metrics crossed which thresholds, how far the problem spreads, and what
 the exposure's setup was, so a defocused spectrograph reads as "medFwhm FAIL on every arm of
-SM1 for the whole sequence" and an arc with one lamp group lit as "nLines low, 25% of fibers
-measured". The opdb's notes are shown beside it, never used to decide it.
+SM1 for the whole sequence", and an arc taken with one fiber group lit shows that group. The
+opdb's notes are shown beside it, never used to decide it.
 
 Judging is `pfs.drp.qa.metrics.gate.judge`, the gate's own path, with the thresholds the task
-ran with. Telescope focus sweeps change how much light enters the fibers, not the spectrograph's
-line widths, so the flux-dependent metrics (`FLUX_METRICS`) are not judged on them.
+ran with, less two cases it can't judge yet. Telescope focus sweeps change how much light enters
+the fibers, not the spectrograph's line widths, so the flux-dependent metrics (`FLUX_METRICS`)
+are not judged on them. Daily arcs and traces are often taken with one fiber group lit, and
+``nLines`` doesn't yet allow for the fibers a design lights (PIPE2D-1935), so it isn't judged on
+them (`DAILY_UNJUDGED`).
 """
 
 import re
@@ -19,6 +22,7 @@ import pandas as pd
 from pfs.drp.qa.metrics.gate import STATUS_ORDER, configThresholds, judge, loadThresholds, thresholdsPath
 
 __all__ = [
+    "DAILY_UNJUDGED",
     "FLUX_METRICS",
     "describeSetup",
     "extentOf",
@@ -30,6 +34,9 @@ __all__ = [
 
 #: Metrics that depend on how much light reached the fibers.
 FLUX_METRICS = ("nLines", "pctFlagged")
+
+#: Metrics not judged on daily arcs and traces until they allow for the fibers lit (PIPE2D-1935).
+DAILY_UNJUDGED = ("nLines",)
 
 # The ways an IIC command names a lamp: head='sps iis on=neon ...', iisNeon=30, argon=10.
 _LAMP_RE = re.compile(
@@ -87,6 +94,11 @@ def describeSetup(visit: pd.Series) -> str:
     name = name.strip() if isinstance(name, str) else name
     if isinstance(name, str) and name and visit.get("category") != "science":
         parts[0] += f" {name!r}"  # science sequence names identify programs
+    if visit.get("cadence") == "daily":
+        parts[0] += " (daily)"
+    group = visit.get("group_name")
+    if isinstance(group, str) and group.strip() and visit.get("category") != "science":
+        parts.append(f"group {group.strip()}")
     lamps = lampsOf(visit.get("cmd_str"))
     if lamps:
         parts.append(", ".join(lamps))
@@ -120,7 +132,7 @@ def taskThresholds(config) -> list[pd.DataFrame]:
 
 
 def judgeImages(metrics: pd.DataFrame, visits: pd.DataFrame, thresholds) -> pd.DataFrame:
-    """Judge every metric of every image, as the gate does, less flux on focus sweeps.
+    """Judge every metric of every image as the gate does, less what it can't judge yet.
 
     Parameters
     ----------
@@ -134,12 +146,15 @@ def judgeImages(metrics: pd.DataFrame, visits: pd.DataFrame, thresholds) -> pd.D
     Returns
     -------
     `pandas.DataFrame`
-        `pfs.drp.qa.metrics.gate.judge`'s table, with the status of a
-        `FLUX_METRICS` entry on a focus-sweep visit cleared.
+        `pfs.drp.qa.metrics.gate.judge`'s table, with the status cleared for
+        a `FLUX_METRICS` entry on a focus-sweep visit and a `DAILY_UNJUDGED`
+        entry on a daily arc or trace.
     """
     judged = judge(metrics, thresholds)
     sweeps = set(visits.loc[visits["focusSweep"].astype(bool), "pfs_visit_id"])
+    daily = set(visits.loc[visits["cadence"] == "daily", "pfs_visit_id"])
     skip = judged["visit"].isin(sweeps) & judged["metric"].isin(FLUX_METRICS)
+    skip |= judged["visit"].isin(daily) & judged["metric"].isin(DAILY_UNJUDGED)
     judged.loc[skip, ["status", "reason"]] = ""
     return judged
 
