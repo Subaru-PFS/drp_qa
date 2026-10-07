@@ -1,4 +1,4 @@
-"""Fixtures for the ``pfs.drp.qa.comparison`` tests: pandas, pyyaml and pyarrow, no stack.
+"""Fixtures for the ``pfs.drp.qa.comparison`` tests: pandas, pyyaml, pyarrow, scipy and matplotlib; no stack.
 
 The visits are synthetic. Where a test needs realistic values (focus offsets, camera lists,
 command strings) they follow Run28's engineering visits, which are public.
@@ -7,12 +7,17 @@ command strings) they follow Run28's engineering visits, which are public.
 import re
 from types import SimpleNamespace
 
+import matplotlib
 import pandas as pd
 import pyarrow  # noqa: F401  (parquet, for the cli tests)
 import pytest
+import scipy  # noqa: F401  (pfs.drp.qa.metrics needs it)
+import seaborn  # noqa: F401  (pfs.drp.qa.plotting needs it)
 import yaml
 
 from pfs.drp.qa.comparison.runs import loadPeriods
+
+matplotlib.use("Agg")
 
 ALL_CAMERAS = "b1,b2,b3,b4,n1,n2,n3,n4,r1,r2,r3,r4"
 

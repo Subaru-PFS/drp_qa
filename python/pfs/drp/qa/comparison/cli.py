@@ -158,11 +158,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"{name}: {path}")
         return 0
 
-    frames, stamp = loadFetched(period, dataDir)
-    visits = classifyVisits(
-        frames["listing"], periods.values(), designKinds(frames["designs"]), frames["telStatus"]
-    )
-    visits = visits[visits["period"] == period.name]
+    visits, frames, stamp = _classified(period, periods, dataDir)
     version = args.version or drpQaVersion()
     output = outputCollection(args.prefix, period.name, version)
     workDir = dataDir / period.run / "qa" / version
@@ -172,7 +168,77 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command in ("plan", "run"):
         return _plan(args, period, visits, output, workDir)
-    raise SystemExit(f"{args.command!r} is not implemented yet")
+    return _report(args, period, periods, visits, frames, stamp, output, version, workDir, dataDir)
+
+
+def _classified(period: Period, periods: dict[str, Period], dataDir: Path):
+    """Return a fetched period's classified visits, the fetched frames and their stamp."""
+    frames, stamp = loadFetched(period, dataDir)
+    visits = classifyVisits(
+        frames["listing"], periods.values(), designKinds(frames["designs"]), frames["telStatus"]
+    )
+    return visits[visits["period"] == period.name].reset_index(drop=True), frames, stamp
+
+
+def _report(args, period, periods, visits, frames, stamp, output, version, workDir, dataDir) -> int:
+    """Run the ``report`` command."""
+    from lsst.daf.butler import Butler
+
+    from pfs.drp.qa.comparison.butlerQueries import detectorHoldings
+    from pfs.drp.qa.comparison.findings import findings, judgeImages, taskThresholds
+    from pfs.drp.qa.comparison.report import ReportInputs, buildReport, populations
+    from pfs.drp.qa.metrics.readers import readMetrics
+
+    butler = Butler(args.butler, writeable=False)
+    judgedVisits = visits.loc[visits["judged"], "pfs_visit_id"]
+    holdings = detectorHoldings(butler, judgedVisits, raw=args.raw, reductions=args.reductions, output=output)
+    detectors = coverage(visits, holdings)
+    done = detectors.loc[detectors["status"] == "judged", "visit"].unique()
+    if not len(done):
+        raise SystemExit(f"Nothing judged yet in {output}: run 'run' first")
+    metrics = readMetrics(butler, done, collections=[output])
+    metrics.to_parquet(workDir / f"iqQaMetrics-{period.name}.parquet")
+    config = butler.get("imageQualityQa_config", collections=[output])
+    judged = judgeImages(metrics, visits, taskThresholds(config))
+    found = findings(metrics, judged, visits, frames["notes"])
+    found.to_csv(workDir / f"findings-{period.name}.csv", index=False)
+
+    reference = None
+    if args.reference and args.reference != period.name:
+        referencePeriod = periods[args.reference]
+        referenceVersion = args.reference_version or version
+        cache = (
+            dataDir
+            / referencePeriod.run
+            / "qa"
+            / referenceVersion
+            / f"iqQaMetrics-{referencePeriod.name}.parquet"
+        )
+        if cache.exists():
+            referenceVisits, _, _ = _classified(referencePeriod, periods, dataDir)
+            reference = populations(pd.read_parquet(cache), referenceVisits)
+        else:
+            print(f"No {args.reference} metrics at {cache}: report {args.reference} first", file=sys.stderr)
+
+    page = buildReport(
+        ReportInputs(
+            period=period.name,
+            version=version,
+            collection=output,
+            readUntil=stamp["readUntil"],
+            visits=visits,
+            summary=summarize(visits, detectors),
+            metrics=metrics,
+            judged=judged,
+            findings=found,
+            reference=reference,
+            referenceName=args.reference or "",
+        )
+    )
+    path = workDir / f"report-{period.name}.html"
+    path.write_text(page)
+    print(f"report: {path}")
+    return 0
 
 
 def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path) -> int:
@@ -259,6 +325,10 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--pipeline", default=f"{drpQaDir}/pipelines/qaThresholds.yaml", help="the reduction and QA pipeline"
+    )
+    parser.add_argument("--reference", default="run25", help="the period to compare with, for report")
+    parser.add_argument(
+        "--reference-version", default=None, help="the drp_qa version of the reference (default: --version)"
     )
     parser.add_argument("-j", "--jobs", type=int, default=8, help="pipetask processes")
     return parser
