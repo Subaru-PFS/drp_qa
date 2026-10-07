@@ -28,7 +28,14 @@ def collectionExists(butler, name: str) -> bool:
     -------
     `bool`
     """
-    return bool(butler.collections.query(name))
+    # Querying an explicit name that doesn't exist raises rather than returning nothing. The
+    # exception is matched by name: this module doesn't import the stack.
+    try:
+        return bool(butler.collections.query(name))
+    except Exception as error:
+        if type(error).__name__ == "MissingCollectionError":
+            return False
+        raise
 
 
 def datasetDetectors(
