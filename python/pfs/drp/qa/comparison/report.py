@@ -16,6 +16,8 @@ from dataclasses import dataclass
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from pfs.drp.qa.comparison.findings import lampsOf
+from pfs.drp.qa.comparison.persistence import darkSequences, gapSummary
 from pfs.drp.qa.metrics.gate import STATUS_ORDER
 from pfs.drp.qa.plotting.comparison import (
     plotMetricComparison,
@@ -102,7 +104,8 @@ def populations(metrics: pd.DataFrame, visits: pd.DataFrame) -> pd.DataFrame:
     -------
     `pandas.DataFrame`
         ``metrics`` with ``night``, ``sequence_type``, ``cadence``, ``sequence_name``,
-        ``group_name``, ``category``, ``focusSweep`` and ``dithered``.
+        ``group_name``, ``category``, ``validated``, ``focusSweep``, ``dithered`` and
+        ``lamps`` (from the sequence's command, e.g. ``neon`` or ``krypton (IIS)``).
     """
     columns = [
         "night",
@@ -115,7 +118,9 @@ def populations(metrics: pd.DataFrame, visits: pd.DataFrame) -> pd.DataFrame:
         "focusSweep",
         "dithered",
     ]
-    info = visits.set_index("pfs_visit_id")[columns]
+    indexed = visits.set_index("pfs_visit_id")
+    info = indexed[columns].assign(lamps=indexed["cmd_str"].map(lambda cmd: ", ".join(lampsOf(cmd))))
+    columns = [*columns, "lamps"]
     return metrics.drop(columns=[c for c in columns if c in metrics], errors="ignore").join(info, on="visit")
 
 
@@ -185,7 +190,8 @@ def armThresholds(judged: pd.DataFrame, metric: str) -> dict[str, tuple[float, f
         ``(warn, fail)`` by arm; an arm whose populations have different
         thresholds (per lamp, say) is left out rather than drawn wrongly.
     """
-    rows = judged[(judged["metric"] == metric) & (judged["layer"] >= 0)]
+    # Only entries that judged something: none for a metric skipped on a population.
+    rows = judged[(judged["metric"] == metric) & (judged["layer"] >= 0) & (judged["status"] != "")]
     result = {}
     for arm, group in rows.groupby("arm"):
         pairs = group[["warn", "fail"]].drop_duplicates()
@@ -311,26 +317,31 @@ def buildReport(inputs: ReportInputs) -> str:
         ("scienceObject", "calibration", ""),
         ("scienceObject", "science", ""),
     ):
-        current = _select(metrics, sequenceType, category, cadence)
-        if current.empty:
-            continue
-        previous = (
-            None if reference is None else _select(reference, sequenceType, category, cadence and "set")
-        )
-        heading = f"{sequenceType}, {category}" + (f", {cadence}" if cadence else "")
-        parts.append(f"<h3>{_e(heading)}</h3>")
-        for metric in COMPARED_METRICS:
-            if metric not in current or current[metric].dropna().empty:
-                continue
-            fig = plotMetricComparison(
-                current,
-                previous,
-                metric,
-                labels=(inputs.period, inputs.referenceName),
-                thresholds=armThresholds(inputs.judged[inputs.judged["row"].isin(current.index)], metric),
-                title=f"{metric}: {heading}",
-            )
-            parts.append(_figure(fig))
+        selected = _select(metrics, sequenceType, category, cadence)
+        # Arcs and traces are compared lamp by lamp: line counts and flag rates are the lamp's.
+        byLamp = cadence != ""
+        for lamps, current in selected.groupby("lamps", sort=True) if byLamp else [("", selected)]:
+            previous = None
+            if reference is not None:
+                previous = _select(reference, sequenceType, category, cadence and "set")
+                if byLamp:
+                    previous = previous[previous["lamps"] == lamps]
+            heading = ", ".join(part for part in (sequenceType, category, cadence, lamps) if part)
+            parts.append(f"<h3>{_e(heading)}</h3>")
+            if byLamp and (previous is None or previous.empty):
+                parts.append(f"<p>No {_e(inputs.referenceName)} set with these lamps to compare with.</p>")
+            for metric in COMPARED_METRICS:
+                if metric not in current or current[metric].dropna().empty:
+                    continue
+                fig = plotMetricComparison(
+                    current,
+                    previous,
+                    metric,
+                    labels=(inputs.period, inputs.referenceName),
+                    thresholds=armThresholds(inputs.judged[inputs.judged["row"].isin(current.index)], metric),
+                    title=f"{metric}: {heading}",
+                )
+                parts.append(_figure(fig))
 
     recurring = recurringSequences(inputs.visits)
     parts.append("<h2>Daily calibrations</h2>")
@@ -339,7 +350,7 @@ def buildReport(inputs: ReportInputs) -> str:
     else:
         parts.append(
             "<p>Single-exposure arcs and traces repeated night after night, night by night: the median of each "
-            "detector, with the 5-95 % range of the reference run's sets of the same type shaded. "
+            "detector, with the 5-95 % range of the reference run's sets of the same type and lamps shaded. "
             "<code>medDxCenter</code> is the offset from the calibration detectorMap: drift, shown, not gated.</p>"
         )
         parts.append(_table(recurring))
@@ -350,9 +361,10 @@ def buildReport(inputs: ReportInputs) -> str:
                 & (metrics["group_name"].fillna("") == row["group_name"])
             ]
             label = f"{row['sequence_type']} {row['sequence_name']!r}"
-            previous = (
-                None if reference is None else _select(reference, row["sequence_type"], "calibration", "set")
-            )
+            previous = None
+            if reference is not None:
+                previous = _select(reference, row["sequence_type"], "calibration", "set")
+                previous = previous[previous["lamps"].isin(subset["lamps"].unique())]
             for metric in ("medFwhm", "medDxCenter"):
                 if metric in subset and not subset[metric].dropna().empty:
                     parts.append(
@@ -375,12 +387,12 @@ def _persistenceSection(lastLit: pd.DataFrame, withinMinutes: float = 30) -> lis
     ]
     if lastLit.empty:
         return [*parts, "<p>No n-arm dark in the period.</p>"]
-    from pfs.drp.qa.comparison.persistence import gapSummary
-
-    soon = lastLit[lastLit["minutesSince"] < withinMinutes]
+    sequences = darkSequences(lastLit)
+    soon = sequences[sequences["minutesSince"] < withinMinutes]
     parts += [
         _table(gapSummary(lastLit)),
-        f"<h3>Darks within {withinMinutes:g} minutes of a lit exposure</h3>",
+        f"<h3>Dark sequences starting within {withinMinutes:g} minutes of a lit exposure</h3>",
+        "<p>One row per sequence of darks: its first dark, and the gap from the lit exposure to it.</p>",
         _table(soon) if not soon.empty else "<p>None.</p>",
     ]
     return parts

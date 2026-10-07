@@ -12,7 +12,7 @@ import pandas as pd
 from pfs.drp.qa.comparison.findings import lampsOf
 from pfs.drp.qa.comparison.plan import expectedDetectors
 
-__all__ = ["DARK_TYPES", "UNLIT_EXP_TYPES", "gapSummary", "lastLitBefore"]
+__all__ = ["DARK_TYPES", "UNLIT_EXP_TYPES", "darkSequences", "gapSummary", "lastLitBefore"]
 
 #: Sequence types of darks.
 DARK_TYPES = ("darks", "masterDarks")
@@ -39,14 +39,23 @@ def lastLitBefore(visits: pd.DataFrame, arm: str = "n") -> pd.DataFrame:
     -------
     `pandas.DataFrame`
         One row per dark and set of cameras sharing its last lit exposure:
-        ``visit``, ``night``, ``sequence_type``, ``exptime``, ``cameras``
+        ``visit``, ``iic_sequence_id``, ``night``, ``sequence_type``, ``exptime``, ``cameras``
         (``n1,n2``), ``litVisit``, ``litType`` (sequence type, and its name
         for a calibration), ``litExptime`` (s), ``lamps`` and
         ``minutesSince`` (from the end of the lit exposure to the start of the
         dark). The lit columns are empty when nothing lit the camera earlier
         in the listing. Sorted by ``minutesSince``, shortest first.
     """
-    columns = ["visit", "night", "sequence_type", "exptime", "cameras", "litVisit", "litType"]
+    columns = [
+        "visit",
+        "iic_sequence_id",
+        "night",
+        "sequence_type",
+        "exptime",
+        "cameras",
+        "litVisit",
+        "litType",
+    ]
     columns += ["litExptime", "lamps", "minutesSince"]
     detectors = expectedDetectors(visits)
     detectors = detectors[detectors["arm"] == arm]
@@ -80,6 +89,7 @@ def lastLitBefore(visits: pd.DataFrame, arm: str = "n") -> pd.DataFrame:
         dark = info.loc[visit]
         row = {
             "visit": visit,
+            "iic_sequence_id": dark["iic_sequence_id"],
             "night": dark["night"],
             "sequence_type": dark["sequence_type"],
             "exptime": dark["exptime"],
@@ -102,6 +112,38 @@ def lastLitBefore(visits: pd.DataFrame, arm: str = "n") -> pd.DataFrame:
     result = pd.DataFrame(rows, columns=columns)
     result["litVisit"] = result["litVisit"].astype("Int64")
     return result.sort_values(["minutesSince", "visit"], na_position="last", ignore_index=True)
+
+
+def darkSequences(lastLit: pd.DataFrame) -> pd.DataFrame:
+    """Summarize `lastLitBefore` per sequence of darks.
+
+    The darks of a sequence follow one another, so after the first the gap only grows by the dark
+    time: the first dark of each sequence, and its gap, is what to look at.
+
+    Parameters
+    ----------
+    lastLit : `pandas.DataFrame`
+        From `lastLitBefore`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        One row per sequence: ``iic_sequence_id``, ``night``, ``firstVisit``,
+        ``darks``, ``exptime``, and the first dark's ``cameras``, ``litVisit``,
+        ``litType``, ``litExptime``, ``lamps`` and ``minutesSince``; sorted by
+        ``minutesSince``.
+    """
+    columns = ["iic_sequence_id", "night", "firstVisit", "darks", "exptime", "cameras", "litVisit", "litType"]
+    columns += ["litExptime", "lamps", "minutesSince"]
+    if lastLit.empty:
+        return pd.DataFrame(columns=columns)
+    keyed = lastLit.assign(sequence=lastLit["iic_sequence_id"].fillna(-lastLit["visit"]))
+    # The first dark's row with the shortest gap; head(), not first(), which would fill a missing
+    # lit exposure from a later dark.
+    first = keyed.sort_values(["visit", "minutesSince"]).groupby("sequence", sort=False).head(1)
+    first = first.assign(darks=first["sequence"].map(keyed.groupby("sequence")["visit"].nunique()))
+    first = first.rename(columns={"visit": "firstVisit"})
+    return first[columns].sort_values(["minutesSince", "firstVisit"], na_position="last", ignore_index=True)
 
 
 def gapSummary(lastLit: pd.DataFrame) -> pd.DataFrame:

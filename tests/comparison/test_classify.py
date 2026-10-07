@@ -140,3 +140,8 @@ def testCadence(periods, visit, listing):
     assert cadence[[1, 2]].tolist() == ["daily", "daily"]
     assert set(cadence.loc[10:12]) == {"set"} and set(cadence.loc[20:29]) == {"set"}
     assert cadence[40] == ""
+
+
+def testSequenceNamesAreStripped(periods, visit, listing):
+    visits = listing(visit(1, "2026-01-03 17:00", "scienceArc", name="Arc: Neon "))
+    assert classifyVisits(visits, periods.values())["sequence_name"].tolist() == ["Arc: Neon"]

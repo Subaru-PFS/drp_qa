@@ -38,3 +38,31 @@ def testNoDarks(periods, visit, listing):
         listing(visit(1, "2026-01-03 18:00", "scienceArc", cameras="n1")), periods.values()
     )
     assert lastLitBefore(visits).empty
+
+
+def testDarkSequences(periods, visit, listing):
+    from pfs.drp.qa.comparison.persistence import darkSequences
+
+    visits = classifyVisits(
+        listing(
+            visit(
+                1, "2026-01-03 17:00", "darks", sequence=10, cameras="n1", exptime=300
+            ),  # nothing lit before
+            visit(2, "2026-01-03 17:06", "darks", sequence=10, cameras="n1", exptime=300),
+            visit(
+                3, "2026-01-03 18:00", "scienceArc", sequence=11, cameras="n1", exptime=60, name="Arc: Neon"
+            ),
+            *(
+                visit(
+                    4 + i, f"2026-01-03 18:{2 + 6 * i:02d}", "darks", sequence=12, cameras="n1", exptime=300
+                )
+                for i in range(3)
+            ),
+        ),
+        periods.values(),
+    )
+    sequences = darkSequences(lastLitBefore(visits)).set_index("iic_sequence_id")
+    assert sequences.loc[12, ["firstVisit", "darks", "litVisit", "minutesSince"]].tolist() == [4, 3, 3, 1.0]
+    # The first dark of sequence 10 had nothing lit before it; a later dark mustn't fill that in.
+    assert sequences.loc[10, "firstVisit"] == 1 and pd.isna(sequences.loc[10, "litVisit"])
+    assert sequences.index.tolist() == [12, 10]  # shortest gap first, none last

@@ -53,32 +53,25 @@ def plotMetricComparison(
     -------
     `matplotlib.figure.Figure`
         One panel per arm with data: the cumulative distribution of each run,
-        with its number of images in the legend.
+        with the numbers of images in the panel's title and one legend for the
+        figure.
     """
     frames = [current] if reference is None else [current, reference]
     arms = [arm for arm in _ARM_ORDER if any((frame["arm"] == arm).any() for frame in frames)]
     fig, axes = plt.subplots(
         1, max(1, len(arms)), figsize=(panelSize[0] * max(1, len(arms)), panelSize[1]), squeeze=False
     )
+    styles = ((labels[0], _INK, "-"), (labels[1], _REFERENCE_INK, "--"))
     for ax, arm in zip(axes.flat, arms, strict=False):
-        for frame, label, color, style in (
-            (current, labels[0], _INK, "-"),
-            (reference, labels[1], _REFERENCE_INK, "--"),
-        ):
+        counts = []
+        for frame, (label, color, style) in zip((current, reference), styles, strict=True):
             if frame is None:
                 continue
             values = np.sort(frame.loc[frame["arm"] == arm, metric].astype(float).dropna().to_numpy())
+            counts.append(f"{values.size} {label}")
             if values.size:
                 fraction = np.arange(1, values.size + 1) / values.size
-                ax.step(
-                    values,
-                    fraction,
-                    where="post",
-                    color=color,
-                    linestyle=style,
-                    linewidth=2,
-                    label=f"{label} ({values.size})",
-                )
+                ax.step(values, fraction, where="post", color=color, linestyle=style, linewidth=2)
         if thresholds and arm in thresholds:
             for level, value in zip(("WARN", "FAIL"), thresholds[arm], strict=True):
                 if value is not None and np.isfinite(value):
@@ -93,12 +86,18 @@ def plotMetricComparison(
                         ha="right" if level == "WARN" else "left",  # apart when the two are close
                         va="top",
                     )
-        ax.set_title(f"{arm} arm", fontsize="medium")
+        # The counts go in the title, so no legend sits on the curves.
+        ax.set_title(f"{arm} arm: {', '.join(counts)}", fontsize="small")
         ax.set_xlabel(metric)
         ax.set_ylim(0, 1.02)
         ax.grid(color=_GRID, linewidth=0.8)
-        ax.legend(fontsize="x-small", loc="upper left", frameon=False)
         _recessive(ax)
+    handles = [
+        Line2D([], [], color=color, linestyle=style, linewidth=2, label=label)
+        for (label, color, style), frame in zip(styles, (current, reference), strict=True)
+        if frame is not None
+    ]
+    fig.legend(handles=handles, loc="upper right", fontsize="x-small", frameon=False, ncols=len(handles))
     axes.flat[0].set_ylabel("fraction of images")
     if not arms:
         axes.flat[0].text(0.5, 0.5, "no data", ha="center", va="center", transform=axes.flat[0].transAxes)

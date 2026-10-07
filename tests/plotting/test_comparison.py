@@ -32,11 +32,14 @@ def testMetricComparisonOnePanelPerArm():
         _metrics(rng), _metrics(rng, arms="br", offset=-0.1), "medFwhm", thresholds={"b": (3.2, 3.5)}
     )
     axes = [ax for ax in fig.axes if ax.get_visible()]
-    assert [ax.get_title() for ax in axes] == ["b arm", "r arm", "n arm"]
-    labels = [text.get_text() for text in axes[0].get_legend().get_texts()]
-    assert labels == ["period (8)", "reference (8)"]
+    assert [ax.get_title() for ax in axes] == [
+        "b arm: 8 period, 8 reference",
+        "r arm: 8 period, 8 reference",
+        "n arm: 8 period, 0 reference",
+    ]
+    assert [text.get_text() for text in fig.legends[0].get_texts()] == ["period", "reference"]
+    assert all(ax.get_legend() is None for ax in axes)  # nothing drawn over the curves
     assert len(axes[0].lines) == 4  # two runs, two thresholds
-    assert len(axes[2].get_legend().get_texts()) == 1  # no reference n arm
     plt.close(fig)
 
 

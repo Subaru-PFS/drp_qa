@@ -165,6 +165,7 @@ def classifyVisits(
             method for <type>``.
     """
     visits = listing.copy()
+    visits["sequence_name"] = visits["sequence_name"].str.strip()  # names are typed, with stray spaces
     visits["night"] = nightOf(visits["time_exp_start"]).to_numpy()
     visits["period"] = periodOf(visits["time_exp_start"], periods).to_numpy()
 

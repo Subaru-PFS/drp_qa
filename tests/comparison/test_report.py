@@ -144,4 +144,7 @@ def testDarksSection(periods, visit, listing):
         )
     )
     assert "n-arm darks: the last lit exposure before each" in page
-    assert "Darks within 30 minutes of a lit exposure" in page and "scienceTrace 'Trace'" in page
+    assert (
+        "Dark sequences starting within 30 minutes of a lit exposure" in page
+        and "scienceTrace 'Trace'" in page
+    )
