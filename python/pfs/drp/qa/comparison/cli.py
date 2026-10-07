@@ -39,7 +39,7 @@ from pfs.drp.qa.comparison.plan import (
 )
 from pfs.drp.qa.comparison.runs import Period, loadPeriods
 
-__all__ = ["drpQaVersion", "fetch", "loadFetched", "main"]
+__all__ = ["drpQaVersion", "fetch", "fetchSummary", "loadFetched", "main"]
 
 _FETCHED = ("listing", "notes", "telStatus", "designs")
 
@@ -83,6 +83,66 @@ def fetch(opdb, period: Period, dataDir: Path, now: datetime.datetime | None = N
     stamp = {"period": period.name, "fetchedAt": now.isoformat(timespec="seconds"), "readUntil": str(end)}
     (directory / f"comparison-{period.name}-fetched.json").write_text(json.dumps(stamp, indent=1) + "\n")
     return paths
+
+
+def fetchSummary(
+    frames: dict[str, pd.DataFrame], stamp: dict, period: Period, periods: dict[str, Period]
+) -> str:
+    """Return what a fetch read, in a few lines.
+
+    Parameters
+    ----------
+    frames : `dict` [`str`, `pandas.DataFrame`]
+        From `loadFetched`.
+    stamp : `dict`
+        From `loadFetched`.
+    period : `Period`
+        The period fetched.
+    periods : `dict` [`str`, `Period`]
+        Every period, to classify against.
+
+    Returns
+    -------
+    `str`
+        Visits, sequences and nights; what the gate will judge, by sequence
+        type and category; what it won't, and why; the sky visits' labels; the
+        designs and the notes.
+    """
+    visits = classifyVisits(
+        frames["listing"], periods.values(), designKinds(frames["designs"]), frames["telStatus"]
+    )
+    visits = visits[visits["period"] == period.name]
+    lines = [
+        f"{period.name}: nights {period.firstNight} to {period.lastNight}, read until {stamp['readUntil']}",
+        f"  {len(visits):,} visits in {visits['iic_sequence_id'].nunique():,} sequences,"
+        f" on {visits['night'].nunique()} nights",
+    ]
+    judged = visits[visits["judged"]]
+    lines.append(f"  {len(judged):,} to judge")
+    kinds = judged.groupby(["category", "sequence_type", "cadence"]).size()
+    for (category, sequenceType, cadence), count in kinds.items():
+        lines.append(f"    {count:6,}  {category:<12} {sequenceType} {cadence}".rstrip())
+    others = visits.loc[~visits["judged"], "reason"].value_counts()
+    if len(others):
+        lines.append(f"  {int(others.sum()):,} not judged")
+        lines += [f"    {count:6,}  {reason}" for reason, count in others.items()]
+    sky = visits[visits["sequence_type"].isin(SKY_TYPES)]
+    if len(sky):
+        withStatus = int(sky["pfs_visit_id"].isin(frames["telStatus"]["pfs_visit_id"]).sum())
+        designs = sky["pfs_design_id"].dropna().unique()
+        kinds = designKinds(frames["designs"])
+        science = int(sum(kinds.get(design, "engineering") == "science" for design in designs))
+        lines.append(
+            f"  sky: {len(sky):,} visits ({withStatus:,} with telescope status), "
+            f"{int((sky['category'] == 'science').sum()):,} science; "
+            f"{int(sky['focusSweep'].sum())} in focus sweeps, {int(sky['dithered'].sum())} dithered; "
+            f"{len(designs)} designs, {science} science"
+        )
+    where = {"obslog": "on visits", "obslog_sequence": "on sequences", "sps_annotation": "on cameras"}
+    notes = frames["notes"]["source"].value_counts()
+    detail = ", ".join(f"{count} {where.get(source, source)}" for source, count in notes.items())
+    lines.append(f"  notes: {int(notes.sum())}" + (f" ({detail})" if detail else ""))
+    return "\n".join(lines)
 
 
 def loadFetched(period: Period, dataDir: Path) -> tuple[dict[str, pd.DataFrame], dict]:
@@ -154,8 +214,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from pfs.utils.database.opdb import OpDB
 
         opdb = OpDB(host=args.host, user="public_user")
-        for name, path in fetch(opdb, period, dataDir).items():
-            print(f"{name}: {path}")
+        paths = fetch(opdb, period, dataDir)
+        frames, stamp = loadFetched(period, dataDir)
+        print(fetchSummary(frames, stamp, period, periods))
+        print(f"written to {paths['listing'].parent}")
         return 0
 
     visits, frames, stamp = _classified(period, periods, dataDir)
