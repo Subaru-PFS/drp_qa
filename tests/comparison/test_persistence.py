@@ -66,3 +66,19 @@ def testDarkSequences(periods, visit, listing):
     # The first dark of sequence 10 had nothing lit before it; a later dark mustn't fill that in.
     assert sequences.loc[10, "firstVisit"] == 1 and pd.isna(sequences.loc[10, "litVisit"])
     assert sequences.index.tolist() == [12, 10]  # shortest gap first, none last
+
+
+def testExposureKindAndTimeline(periods, visit, listing):
+    from pfs.drp.qa.comparison.persistence import armTimeline, exposureKind
+
+    kinds = [exposureKind(t) for t in ("arc", "flat", "domeflat", "object", "dark", "bias", "test", None)]
+    assert kinds == ["arc", "quartz", "quartz", "sky", "dark", "other", "other", "other"]
+    visits = classifyVisits(
+        listing(
+            visit(2, "2026-01-03 18:10", "darks", cameras="n1,n2"),
+            visit(1, "2026-01-03 18:00", "scienceArc", cameras="b1,n1"),
+            visit(3, "2026-01-03 18:20", "scienceTrace", cameras="b1,r1"),  # no n camera
+        ),
+        periods.values(),
+    )
+    assert armTimeline(visits)[["visit", "kind"]].values.tolist() == [[1, "arc"], [2, "dark"]]

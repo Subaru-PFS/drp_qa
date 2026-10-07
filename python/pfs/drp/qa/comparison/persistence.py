@@ -12,7 +12,16 @@ import pandas as pd
 from pfs.drp.qa.comparison.findings import lampsOf
 from pfs.drp.qa.comparison.plan import expectedDetectors
 
-__all__ = ["DARK_TYPES", "UNLIT_EXP_TYPES", "darkSequences", "gapSummary", "lastLitBefore"]
+__all__ = [
+    "DARK_TYPES",
+    "EXPOSURE_KINDS",
+    "UNLIT_EXP_TYPES",
+    "armTimeline",
+    "darkSequences",
+    "exposureKind",
+    "gapSummary",
+    "lastLitBefore",
+]
 
 #: Sequence types of darks.
 DARK_TYPES = ("darks", "masterDarks")
@@ -20,8 +29,61 @@ DARK_TYPES = ("darks", "masterDarks")
 #: Exposure types that light nothing.
 UNLIT_EXP_TYPES = ("dark", "bias", "test")
 
+#: What lit (or didn't light) an exposure, from its ``exp_type``; in drawing order.
+EXPOSURE_KINDS = ("arc", "quartz", "sky", "dark", "other")
+
+_KIND_OF_EXP_TYPE = {"arc": "arc", "flat": "quartz", "domeflat": "quartz", "object": "sky", "dark": "dark"}
+
 #: Gap bounds (minutes) for `gapSummary`.
 GAP_BINS = (0, 5, 30, 120, float("inf"))
+
+
+def exposureKind(expType: str | None) -> str:
+    """Return what lit an exposure: one of `EXPOSURE_KINDS`.
+
+    Parameters
+    ----------
+    expType : `str` or `None`
+        ``sps_visit.exp_type``.
+
+    Returns
+    -------
+    `str`
+        ``arc``, ``quartz`` (flats and traces), ``sky``, ``dark`` or ``other``
+        (bias, test, unknown).
+    """
+    return _KIND_OF_EXP_TYPE.get(str(expType).lower(), "other")
+
+
+def armTimeline(visits: pd.DataFrame, arm: str = "n") -> pd.DataFrame:
+    """Return every exposure of an arm, in time, with what lit it.
+
+    Parameters
+    ----------
+    visits : `pandas.DataFrame`
+        From `pfs.drp.qa.comparison.classify.classifyVisits`.
+    arm : `str`, optional
+        The arm. Default ``n``.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``visit``, ``night``, ``start`` (HST), ``exptime`` (s) and ``kind``
+        (`exposureKind`), for the visits with any camera of the arm; sorted by
+        ``start``.
+    """
+    onArm = visits["cameras"].fillna("").str.contains(rf"\b{arm}[1-4]\b", regex=True)
+    subset = visits[onArm]
+    timeline = pd.DataFrame(
+        {
+            "visit": subset["pfs_visit_id"].to_numpy(),
+            "night": subset["night"].to_numpy(),
+            "start": pd.to_datetime(subset["time_exp_start"]).to_numpy(),
+            "exptime": subset["exptime"].astype(float).to_numpy(),
+            "kind": subset["exp_type"].map(exposureKind).to_numpy(),
+        }
+    )
+    return timeline.sort_values("start").reset_index(drop=True)
 
 
 def lastLitBefore(visits: pd.DataFrame, arm: str = "n") -> pd.DataFrame:
@@ -40,8 +102,9 @@ def lastLitBefore(visits: pd.DataFrame, arm: str = "n") -> pd.DataFrame:
     `pandas.DataFrame`
         One row per dark and set of cameras sharing its last lit exposure:
         ``visit``, ``iic_sequence_id``, ``night``, ``sequence_type``, ``exptime``, ``cameras``
-        (``n1,n2``), ``litVisit``, ``litType`` (sequence type, and its name
-        for a calibration), ``litExptime`` (s), ``lamps`` and
+        (``n1,n2``), ``litVisit``, ``litKind`` (`exposureKind`), ``litType``
+        (sequence type, and its name for a calibration), ``litExptime`` (s),
+        ``lamps`` and
         ``minutesSince`` (from the end of the lit exposure to the start of the
         dark). The lit columns are empty when nothing lit the camera earlier
         in the listing. Sorted by ``minutesSince``, shortest first.
@@ -50,10 +113,12 @@ def lastLitBefore(visits: pd.DataFrame, arm: str = "n") -> pd.DataFrame:
         "visit",
         "iic_sequence_id",
         "night",
+        "start",
         "sequence_type",
         "exptime",
         "cameras",
         "litVisit",
+        "litKind",
         "litType",
     ]
     columns += ["litExptime", "lamps", "minutesSince"]
@@ -91,10 +156,12 @@ def lastLitBefore(visits: pd.DataFrame, arm: str = "n") -> pd.DataFrame:
             "visit": visit,
             "iic_sequence_id": dark["iic_sequence_id"],
             "night": dark["night"],
+            "start": dark["time_exp_start"],
             "sequence_type": dark["sequence_type"],
             "exptime": dark["exptime"],
             "cameras": ",".join(sorted(group["camera"])),
             "litVisit": litVisit,
+            "litKind": "",
             "litType": "",
             "litExptime": float("nan"),
             "lamps": "",
@@ -103,6 +170,7 @@ def lastLitBefore(visits: pd.DataFrame, arm: str = "n") -> pd.DataFrame:
         if not pd.isna(litVisit):
             source = info.loc[int(litVisit)]
             name = source.get("sequence_name")
+            row["litKind"] = exposureKind(source["exp_type"])
             row["litType"] = str(source["sequence_type"]) + (
                 f" {name.strip()!r}" if isinstance(name, str) and source["category"] != "science" else ""
             )
@@ -133,8 +201,8 @@ def darkSequences(lastLit: pd.DataFrame) -> pd.DataFrame:
         ``litType``, ``litExptime``, ``lamps`` and ``minutesSince``; sorted by
         ``minutesSince``.
     """
-    columns = ["iic_sequence_id", "night", "firstVisit", "darks", "exptime", "cameras", "litVisit", "litType"]
-    columns += ["litExptime", "lamps", "minutesSince"]
+    columns = ["iic_sequence_id", "night", "firstVisit", "start", "darks", "exptime", "cameras", "litVisit"]
+    columns += ["litKind", "litType", "litExptime", "lamps", "minutesSince"]
     if lastLit.empty:
         return pd.DataFrame(columns=columns)
     keyed = lastLit.assign(sequence=lastLit["iic_sequence_id"].fillna(-lastLit["visit"]))

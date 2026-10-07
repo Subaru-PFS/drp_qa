@@ -143,8 +143,5 @@ def testDarksSection(periods, visit, listing):
             lastLit=lastLitBefore(darks),
         )
     )
-    assert "n-arm darks: the last lit exposure before each" in page
-    assert (
-        "Dark sequences starting within 30 minutes of a lit exposure" in page
-        and "scienceTrace 'Trace'" in page
-    )
+    assert "n-arm darks and the exposures before them" in page
+    assert "after the last lit exposure" in page  # the gap counts

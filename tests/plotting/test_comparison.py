@@ -6,7 +6,12 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 
-from pfs.drp.qa.plotting.comparison import plotMetricComparison, plotNightlySeries, plotVerdictGrid
+from pfs.drp.qa.plotting.comparison import (
+    plotArmTimeline,
+    plotMetricComparison,
+    plotNightlySeries,
+    plotVerdictGrid,
+)
 
 
 def _metrics(rng, arms="brn", nights=4, offset=0.0):
@@ -64,4 +69,24 @@ def testVerdictGrid():
     assert [label.get_text() for label in ax.get_yticklabels()] == ["b1", "b2", "r1", "r2", "n1", "n2"]
     letters = [text.get_text() for text in ax.texts]
     assert letters.count("F") == 1 and letters.count("P") == 23
+    plt.close(fig)
+
+
+def testArmTimeline():
+    nights = [datetime.date(2026, 9, 1), datetime.date(2026, 9, 2)]
+    timeline = pd.DataFrame(
+        {
+            "night": [nights[0], nights[0], nights[1]],
+            "start": pd.to_datetime(["2026-09-02 05:40", "2026-09-02 05:45", "2026-09-02 18:00"]),
+            "exptime": [5.0, 300.0, 30.0],
+            "kind": ["arc", "dark", "quartz"],
+        }
+    )
+    sequences = pd.DataFrame({"night": [nights[0]], "minutesSince": [1.3], "litKind": ["arc"]})
+    fig = plotArmTimeline(timeline, sequences)
+    axTime, axGap = fig.axes
+    assert [label.get_text() for label in axTime.get_yticklabels()] == ["09-01", "09-02"]
+    assert len(axTime.collections) == 3  # one bar group per kind and night
+    assert axGap.get_xscale() == "log"
+    assert sum(len(c.get_offsets()) for c in axGap.collections) == 1
     plt.close(fig)

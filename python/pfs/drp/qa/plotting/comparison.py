@@ -14,11 +14,28 @@ from matplotlib.lines import Line2D
 
 from pfs.drp.qa.plotting.palettes import detector_palette, spectrograph_plot_markers
 
-__all__ = ["STATUS_COLORS", "plotMetricComparison", "plotNightlySeries", "plotVerdictGrid"]
+__all__ = [
+    "EXPOSURE_COLORS",
+    "STATUS_COLORS",
+    "plotArmTimeline",
+    "plotMetricComparison",
+    "plotNightlySeries",
+    "plotVerdictGrid",
+]
 
 #: Verdict colors; each cell also carries its letter, so color is never alone.
 STATUS_COLORS = {"PASS": "#0ca30c", "WARN": "#fab219", "FAIL": "#d03b3b", "UNKNOWN": "#d9d9d6"}
 _INK, _REFERENCE_INK, _GRID = "#222222", "#8c8c8c", "#e6e6e3"
+
+#: What lit an exposure: three categorical hues for the lit kinds (validated together), grays for
+#: the unlit ones.
+EXPOSURE_COLORS = {
+    "arc": "#2a78d6",
+    "quartz": "#eb6834",
+    "sky": "#1baf7a",
+    "dark": "#4d4d4b",
+    "other": "#c4c4c0",
+}
 _ARM_ORDER = ("b", "r", "n", "m")
 
 
@@ -253,3 +270,94 @@ def _recessive(ax) -> None:
     for side in ("left", "bottom"):
         ax.spines[side].set_color(_REFERENCE_INK)
     ax.tick_params(colors="#555555", labelsize="x-small")
+
+
+def plotArmTimeline(
+    timeline: pd.DataFrame,
+    darkSequences: pd.DataFrame,
+    *,
+    arm: str = "n",
+    minWidth: float = 120.0,
+    title: str | None = None,
+) -> Figure:
+    """Show an arm's exposures night by night, and how soon each dark sequence followed a lit one.
+
+    Parameters
+    ----------
+    timeline : `pandas.DataFrame`
+        ``night``, ``start``, ``exptime`` and ``kind``, from
+        `pfs.drp.qa.comparison.persistence.armTimeline`.
+    darkSequences : `pandas.DataFrame`
+        ``night``, ``minutesSince`` and ``litKind``, from
+        `pfs.drp.qa.comparison.persistence.darkSequences`.
+    arm : `str`, optional
+        The arm, for the title.
+    minWidth : `float`, optional
+        Shortest bar (s), so that a 5 s arc is visible.
+    title : `str`, optional
+        The figure title.
+
+    Returns
+    -------
+    `matplotlib.figure.Figure`
+        Left: one row per night, noon to noon, each exposure a bar colored by
+        what lit it, darks dark gray. Right, on the same rows: the gap from
+        the last lit exposure to each dark sequence (minutes, log scale),
+        colored by what that exposure was.
+    """
+    nights = sorted(timeline["night"].dropna().unique())
+    row = {night: i for i, night in enumerate(nights)}
+    height = max(2.5, 0.22 * len(nights) + 1.4)
+    fig, (axTime, axGap) = plt.subplots(
+        1, 2, figsize=(12, height), sharey=True, gridspec_kw={"width_ratios": [4, 1], "wspace": 0.05}
+    )
+    noon = pd.to_datetime(pd.Series(nights)).dt.normalize() + pd.Timedelta(hours=12)
+    noonOf = dict(zip(nights, noon, strict=True))
+    for kind, color in EXPOSURE_COLORS.items():
+        subset = timeline[timeline["kind"] == kind]
+        for night, group in subset.groupby("night"):
+            offset = (pd.to_datetime(group["start"]) - noonOf[night]).dt.total_seconds() / 3600 + 12
+            widths = group["exptime"].clip(lower=minWidth) / 3600
+            axTime.broken_barh(
+                list(zip(offset, widths, strict=True)),
+                (row[night] - 0.38, 0.76),
+                facecolors=color,
+                linewidth=0,
+            )
+    axTime.set_xlim(12, 36)
+    axTime.set_xticks(range(12, 37, 3))
+    axTime.set_xticklabels([f"{hour % 24:02d}:00" for hour in range(12, 37, 3)], fontsize="x-small")
+    axTime.set_xlabel("HST (night runs noon to noon)")
+    axTime.set_yticks(range(len(nights)))
+    axTime.set_yticklabels([pd.Timestamp(night).strftime("%m-%d") for night in nights], fontsize="x-small")
+    axTime.invert_yaxis()
+    axTime.grid(axis="x", color=_GRID, linewidth=0.8)
+    _recessive(axTime)
+
+    gaps = darkSequences.dropna(subset=["minutesSince"])
+    gaps = gaps[gaps["night"].isin(row)]
+    for kind in ("arc", "quartz", "sky"):
+        subset = gaps[gaps["litKind"] == kind]
+        axGap.scatter(
+            subset["minutesSince"].clip(lower=0.1),
+            subset["night"].map(row),
+            s=36,
+            color=EXPOSURE_COLORS[kind],
+            edgecolors="white",
+            linewidths=0.8,
+            zorder=3,
+        )
+    axGap.set_xscale("log")
+    axGap.set_xlim(0.5, 2000)
+    axGap.axvspan(0.5, 5, color=_GRID, zorder=0)
+    axGap.set_xlabel("minutes from lit to dark")
+    axGap.grid(axis="x", color=_GRID, linewidth=0.8)
+    _recessive(axGap)
+
+    handles = [
+        plt.Rectangle((0, 0), 1, 1, color=color, label=kind if kind != "other" else "bias, test")
+        for kind, color in EXPOSURE_COLORS.items()
+    ]
+    fig.legend(handles=handles, loc="upper right", fontsize="x-small", frameon=False, ncols=len(handles))
+    fig.suptitle(title or f"{arm} arm: exposures by night, and each dark sequence's gap", x=0.02, ha="left")
+    return fig

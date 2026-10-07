@@ -20,6 +20,7 @@ from pfs.drp.qa.comparison.findings import lampsOf
 from pfs.drp.qa.comparison.persistence import darkSequences, gapSummary
 from pfs.drp.qa.metrics.gate import STATUS_ORDER
 from pfs.drp.qa.plotting.comparison import (
+    plotArmTimeline,
     plotMetricComparison,
     plotNightlySeries,
     plotVerdictGrid,
@@ -74,6 +75,8 @@ class ReportInputs:
         The reference run, e.g. ``run25``.
     lastLit : `pandas.DataFrame`, optional
         From `pfs.drp.qa.comparison.persistence.lastLitBefore`.
+    timeline : `pandas.DataFrame`, optional
+        From `pfs.drp.qa.comparison.persistence.armTimeline`.
     """
 
     period: str
@@ -88,6 +91,7 @@ class ReportInputs:
     reference: pd.DataFrame | None = None
     referenceName: str = "run25"
     lastLit: pd.DataFrame | None = None
+    timeline: pd.DataFrame | None = None
 
 
 def populations(metrics: pd.DataFrame, visits: pd.DataFrame) -> pd.DataFrame:
@@ -373,28 +377,25 @@ def buildReport(inputs: ReportInputs) -> str:
                         )
                     )
     if inputs.lastLit is not None:
-        parts += _persistenceSection(inputs.lastLit)
+        parts += _persistenceSection(inputs.lastLit, inputs.timeline)
     return _page(f"{inputs.period} QA comparison", "\n".join(parts))
 
 
-def _persistenceSection(lastLit: pd.DataFrame, withinMinutes: float = 30) -> list[str]:
-    """Return the n-arm darks section: how soon each dark followed a lit exposure."""
+def _persistenceSection(lastLit: pd.DataFrame, timeline: pd.DataFrame | None) -> list[str]:
+    """Return the n-arm darks section: when darks were taken relative to lit exposures."""
     parts = [
-        "<h2>n-arm darks: the last lit exposure before each</h2>",
+        "<h2>n-arm darks and the exposures before them</h2>",
         "<p>The n-arm detectors keep an image of a bright exposure for a while, so a dark taken soon after an "
-        "arc or a quartz can still show its traces. Darks aren't measured yet (PIPE2D-1925); this lists, from the "
-        "opdb alone, the last exposure that lit each dark's cameras and how long before the dark it ended.</p>",
+        "arc or a quartz can still show its traces. Darks aren't measured yet (PIPE2D-1925), so this shows only "
+        "when they were taken: each night's n-arm exposures, colored by what lit them with the darks in gray, and "
+        "beside it, for each dark sequence, the minutes from the last lit exposure to its first dark (shaded under "
+        "5 minutes). Whether those darks are dark needs their signal on the trace positions against this gap.</p>",
     ]
     if lastLit.empty:
         return [*parts, "<p>No n-arm dark in the period.</p>"]
-    sequences = darkSequences(lastLit)
-    soon = sequences[sequences["minutesSince"] < withinMinutes]
-    parts += [
-        _table(gapSummary(lastLit)),
-        f"<h3>Dark sequences starting within {withinMinutes:g} minutes of a lit exposure</h3>",
-        "<p>One row per sequence of darks: its first dark, and the gap from the lit exposure to it.</p>",
-        _table(soon) if not soon.empty else "<p>None.</p>",
-    ]
+    if timeline is not None and not timeline.empty:
+        parts.append(_figure(plotArmTimeline(timeline, darkSequences(lastLit))))
+    parts.append(_table(gapSummary(lastLit)))
     return parts
 
 

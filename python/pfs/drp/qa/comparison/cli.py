@@ -293,7 +293,7 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     judged = judgeImages(metrics, visits, taskThresholds(config))
     found = findings(metrics, judged, visits, frames["notes"])
     found.to_csv(workDir / f"findings-{period.name}.csv", index=False)
-    from pfs.drp.qa.comparison.persistence import lastLitBefore
+    from pfs.drp.qa.comparison.persistence import armTimeline, lastLitBefore
 
     lastLit = lastLitBefore(visits)
     lastLit.to_csv(workDir / f"darksLastLit-{period.name}.csv", index=False)
@@ -329,6 +329,7 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
             reference=reference,
             referenceName=args.reference or "",
             lastLit=lastLit,
+            timeline=armTimeline(visits),
         )
     )
     path = workDir / f"report-{period.name}.html"
