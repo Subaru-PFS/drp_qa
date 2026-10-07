@@ -70,6 +70,8 @@ class ReportInputs:
         `populations`.
     referenceName : `str`
         The reference run, e.g. ``run25``.
+    lastLit : `pandas.DataFrame`, optional
+        From `pfs.drp.qa.comparison.persistence.lastLitBefore`.
     """
 
     period: str
@@ -83,6 +85,7 @@ class ReportInputs:
     findings: pd.DataFrame
     reference: pd.DataFrame | None = None
     referenceName: str = "run25"
+    lastLit: pd.DataFrame | None = None
 
 
 def populations(metrics: pd.DataFrame, visits: pd.DataFrame) -> pd.DataFrame:
@@ -357,7 +360,30 @@ def buildReport(inputs: ReportInputs) -> str:
                             plotNightlySeries(subset, metric, reference=previous, title=f"{metric}: {label}")
                         )
                     )
+    if inputs.lastLit is not None:
+        parts += _persistenceSection(inputs.lastLit)
     return _page(f"{inputs.period} QA comparison", "\n".join(parts))
+
+
+def _persistenceSection(lastLit: pd.DataFrame, withinMinutes: float = 30) -> list[str]:
+    """Return the n-arm darks section: how soon each dark followed a lit exposure."""
+    parts = [
+        "<h2>n-arm darks: the last lit exposure before each</h2>",
+        "<p>The n-arm detectors keep an image of a bright exposure for a while, so a dark taken soon after an "
+        "arc or a quartz can still show its traces. Darks aren't measured yet (PIPE2D-1925); this lists, from the "
+        "opdb alone, the last exposure that lit each dark's cameras and how long before the dark it ended.</p>",
+    ]
+    if lastLit.empty:
+        return [*parts, "<p>No n-arm dark in the period.</p>"]
+    from pfs.drp.qa.comparison.persistence import gapSummary
+
+    soon = lastLit[lastLit["minutesSince"] < withinMinutes]
+    parts += [
+        _table(gapSummary(lastLit)),
+        f"<h3>Darks within {withinMinutes:g} minutes of a lit exposure</h3>",
+        _table(soon) if not soon.empty else "<p>None.</p>",
+    ]
+    return parts
 
 
 def _select(metrics: pd.DataFrame, sequenceType: str, category: str, cadence: str = "") -> pd.DataFrame:

@@ -79,6 +79,7 @@ def testBuildReport(periods, visit, listing):
     assert "field" not in page  # a science sequence's name never is
     assert "run 'run' first" not in page
     assert page.count("<svg") >= 3
+    assert "n-arm darks" not in page  # no section without lastLit
 
 
 def testUnvalidatedAreLabelledApart(periods, visit, listing):
@@ -113,3 +114,34 @@ def testUnvalidatedAreLabelledApart(periods, visit, listing):
     assert "2 gated images" in page and "0 findings" in page  # the gate's headline is clean...
     assert "Also 2 unvalidated images (2 FAIL)" in page  # ...the unvalidated FAILs are counted apart
     assert "Unvalidated findings" in page
+
+
+def testDarksSection(periods, visit, listing):
+    from pfs.drp.qa.comparison.persistence import lastLitBefore
+
+    visits, metrics = _period(periods, visit, listing)
+    darks = classifyVisits(
+        listing(
+            visit(1, "2026-01-03 18:00", "scienceTrace", cameras="n1", exptime=20, name="Trace"),
+            visit(2, "2026-01-03 18:02", "darks", cameras="n1", exptime=300),
+        ),
+        periods.values(),
+    )
+    holdings = metrics[["visit", "arm", "spectrograph"]].assign(raw=True, reduced=True, judged=True)
+    judged = judgeImages(metrics, visits, THRESHOLDS)
+    page = buildReport(
+        ReportInputs(
+            period="run1",
+            version="v1",
+            collection="c",
+            readUntil="now",
+            visits=visits,
+            summary=summarize(visits, coverage(visits, holdings)),
+            metrics=metrics,
+            judged=judged,
+            findings=findings(metrics, judged, visits),
+            lastLit=lastLitBefore(darks),
+        )
+    )
+    assert "n-arm darks: the last lit exposure before each" in page
+    assert "Darks within 30 minutes of a lit exposure" in page and "scienceTrace 'Trace'" in page

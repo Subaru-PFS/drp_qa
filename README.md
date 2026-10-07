@@ -506,6 +506,10 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
   types) is judged the same way but labelled *unvalidated*, in its own pass and its own report section: a `FAIL`
   there may be what an engineering test expected. Biases and darks have no method yet; test exposures are listed
   only.
+- **n-arm darks are listed with the last lit exposure before them**, from the opdb alone: the n detectors keep an image
+  of a bright exposure for a while, so the darks taken soonest after an arc or quartz are the ones to check for
+  persistence until darks are measured (PIPE2D-1925). The report shows those within 30 minutes;
+  `darksLastLit-<period>.csv` has them all.
 - **Daily arcs and traces are reported apart from sets.** A sequence of one visit is *daily* (from Run28, one
   neon arc and one trace a day, for drift); a calibration *set* is 3 exposures per arc lamp and 10 traces. Both are
   judged against the thresholds derived from Run25's sets, but `nLines` and `pctFlagged` aren't judged on daily ones:
