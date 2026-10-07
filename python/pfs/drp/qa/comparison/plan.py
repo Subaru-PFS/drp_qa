@@ -104,7 +104,16 @@ def coverage(visits: pd.DataFrame, holdings: pd.DataFrame) -> pd.DataFrame:
     judged = visits[visits["judged"]]
     expected = expectedDetectors(judged).assign(expected=True)
     held = holdings[holdings["visit"].isin(judged["pfs_visit_id"])]
-    detectors = expected.merge(held, on=keys, how="outer")
+    # A spectrograph has one red camera, read as arm r (low resolution) or m (medium); match the
+    # camera, not the arm, and keep the Butler's arm where it has one.
+    match = ["visit", "spectrograph", "camera"]
+    detectors = (
+        expected.rename(columns={"arm": "opdbArm"})
+        .assign(camera=lambda f: _camera(f["opdbArm"]))
+        .merge(held.assign(camera=lambda f: _camera(f["arm"])), on=match, how="outer")
+    )
+    detectors["arm"] = detectors["arm"].fillna(detectors["opdbArm"])
+    detectors = detectors.drop(columns=["opdbArm", "camera"])
     for column in ("expected", "raw", "reduced", "judged"):
         detectors[column] = detectors[column].astype("boolean").fillna(False).astype(bool)
 
@@ -314,6 +323,11 @@ def pipetaskCommand(
     command += ["-C", f"cosmicray:{cosmicrayConfigFile}"]
     command += ["-d", f"instrument = '{instrument}' AND {visitExpression(item.visits)}"]
     return command
+
+
+def _camera(arm: pd.Series) -> pd.Series:
+    """Return the camera of each arm: ``m`` and ``r`` are the same red camera."""
+    return arm.replace({"m": "r"})
 
 
 def _configKey(sequenceType: str) -> tuple:

@@ -148,3 +148,32 @@ def testOutputCollection():
     )
     with pytest.raises(ValueError, match="uncommitted"):
         outputCollection("u/me/comparison", "run30", "w.2026.41-2-gabc1234-dirty")
+
+
+def testMediumResolutionIsTheRedCamera(periods, visit, listing):
+    visits = classifyVisits(
+        listing(
+            visit(1, "2026-01-03 20:00", "scienceObject", cameras="b1,r1"),  # opdb says r1...
+            visit(2, "2026-01-03 20:10", "scienceObject", cameras="b1,m1"),  # ...or m1
+        ),
+        periods.values(),
+    )
+    holdings = _holdings(
+        [
+            (1, "b", 1, True, False, False),
+            (1, "m", 1, True, False, False),  # ...where the Butler has m1
+            (2, "b", 1, True, False, False),
+            (2, "r", 1, True, False, False),  # ...or r1
+        ]
+    )
+    detectors = coverage(visits, holdings).set_index(["visit", "arm", "spectrograph"])["status"]
+    assert detectors.to_dict() == {
+        (1, "b", 1): "to reduce",
+        (1, "m", 1): "to reduce",
+        (2, "b", 1): "to reduce",
+        (2, "r", 1): "to reduce",
+    }
+    # Negative control: a different spectrograph is still a mismatch.
+    holdings.loc[holdings["arm"] == "m", "spectrograph"] = 2
+    statuses = set(coverage(visits, holdings)["status"])
+    assert {"no raw", "raw not in opdb"} <= statuses
