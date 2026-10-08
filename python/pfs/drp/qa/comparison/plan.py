@@ -301,6 +301,7 @@ def pipetaskCommand(
     cosmicrayConfigFile: str,
     jobs: int = 8,
     instrument: str = "PFS",
+    rebase: bool = False,
 ) -> list[str]:
     """Return the ``pipetask run`` command of a pass, as a list.
 
@@ -325,6 +326,11 @@ def pipetaskCommand(
         Parallel processes.
     instrument : `str`, optional
         Instrument name. Default is ``PFS``.
+    rebase : `bool`, optional
+        Pass ``--rebase``, for an output collection that already exists:
+        ``drpActor/reductions`` is a chain that grows with every reduction, so
+        without it pipetask refuses an output whose recorded inputs no longer
+        match.
 
     Returns
     -------
@@ -333,6 +339,8 @@ def pipetaskCommand(
     """
     command = ["pipetask", "--long-log", "--log-level", "PFS=INFO", "run", "-j", str(jobs)]
     command += ["-b", butler, "-p", pipeline, "-i", ",".join(inputs), "-o", output]
+    if rebase:
+        command += ["--rebase"]
     if skipExistingIn:
         command += ["--skip-existing-in", ",".join(skipExistingIn)]
     for key, value in item.config.items():

@@ -21,6 +21,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -367,7 +368,8 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
         print(summary.to_string(index=False))
     print("detector images:", ", ".join(f"{(detectors['status'] == s).sum()} {s}" for s in STATUS_ORDER))
 
-    skip = [*args.reductions, *([output] if collectionExists(butler, output) else [])]
+    outputExists = collectionExists(butler, output)
+    skip = [*args.reductions, *([output] if outputExists else [])]
     commands = []
     for item in passes(visits, detectors):
         if args.passes and item.name not in args.passes:
@@ -384,6 +386,7 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
             skipExistingIn=skip,
             cosmicrayConfigFile=str(configFile),
             jobs=args.jobs,
+            rebase=outputExists,
         )
         if args.dry_run:
             command = _qgraph(command)
@@ -444,8 +447,8 @@ def pipetaskFailures(text: str, limit: int = MAX_FAILURE_LINES) -> tuple[str | N
         pipetask's closing ``Executed N quanta successfully, M failed ...`` line, without its log
         prefix; `None` when the log has none (a dry run, or pipetask stopped before executing).
     lines : `list` [`str`]
-        The distinct ``ERROR`` lines and lines saying something failed, in order, at most ``limit``
-        (the last), each cut to 300 characters.
+        The distinct ``ERROR`` lines, lines saying something failed and the exceptions ending
+        tracebacks, in order, at most ``limit`` (the last), each cut to 300 characters.
     """
     summary = None
     lines = []
@@ -453,7 +456,8 @@ def pipetaskFailures(text: str, limit: int = MAX_FAILURE_LINES) -> tuple[str | N
         if "Executed" in line and "quanta successfully" in line:
             summary = line[line.index("Executed") :].strip()
             continue
-        if ("ERROR" in line or " failed" in line.lower()) and line.strip() not in lines:
+        isException = re.match(r"[A-Za-z_.]*(Error|Exception): ", line) is not None
+        if ("ERROR" in line or " failed" in line.lower() or isException) and line.strip() not in lines:
             lines.append(line.strip())
     return summary, [line[:300] for line in lines[-limit:]]
 

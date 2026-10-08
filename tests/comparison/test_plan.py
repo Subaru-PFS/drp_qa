@@ -146,6 +146,18 @@ def testPipetaskCommand():
     assert "-c isr:h4.quickCDS=True" in joined
     assert "-C cosmicray:/tmp/cr.py" in joined
     assert command[-2:] == ["-d", "instrument = 'PFS' AND visit IN (10..12, 20)"]
+    assert "--rebase" not in command
+    rebased = pipetaskCommand(
+        item,
+        butler="/work/datastore",
+        pipeline="pipelines/qaThresholds.yaml",
+        inputs=["drpActor/reductions", "PFS/defaults"],
+        output="u/me/comparison/run30/w.2026.41",
+        skipExistingIn=["drpActor/reductions"],
+        cosmicrayConfigFile="/tmp/cr.py",
+        rebase=True,
+    )
+    assert rebased[rebased.index("-o") + 2] == "--rebase"
 
 
 def testOutputCollection():

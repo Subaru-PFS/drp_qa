@@ -106,6 +106,10 @@ def testPipetaskFailures():
     summary, lines = pipetaskFailures(log)
     assert summary == "Executed 30 quanta successfully, 1 failed and 9 remain out of total 40 quanta."
     assert len(lines) == 1 and "148144" in lines[0]  # repeated lines once
+    traceback = (
+        "ERROR ... Caught an exception\nTraceback:\n  File x.py\nValueError: Output CHAINED collection"
+    )
+    assert pipetaskFailures(traceback)[1][-1] == "ValueError: Output CHAINED collection"
     assert pipetaskFailures("INFO nothing to see") == (None, [])
     many = "\n".join(f"ERROR quantum {i} failed" for i in range(50))
     assert pipetaskFailures(many, limit=5)[1][0] == "ERROR quantum 45 failed"  # the last ones
