@@ -40,7 +40,7 @@ from pfs.drp.qa.comparison.plan import (
 )
 from pfs.drp.qa.comparison.runs import Period, loadPeriods
 
-__all__ = ["drpQaVersion", "fetch", "fetchSummary", "loadFetched", "main"]
+__all__ = ["drpQaVersion", "fetch", "fetchSummary", "loadFetched", "main", "pipetaskFailures"]
 
 _FETCHED = ("listing", "notes", "telStatus", "designs")
 
@@ -287,6 +287,15 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     done = detectors.loc[detectors["status"] == "judged", "visit"].unique()
     if not len(done):
         raise SystemExit(f"Nothing judged yet in {output}: run 'run' first")
+    pending = detectors["status"].isin(["to judge", "to reduce"])
+    if pending.any():
+        byType = detectors[pending].groupby("sequence_type").size().sort_values(ascending=False)
+        listed = ", ".join(f"{n} {kind}" for kind, n in byType.items())
+        print(
+            f"!! INCOMPLETE: {pending.sum()} of {len(detectors)} detector images not judged yet ({listed});"
+            " the report covers the rest. Run 'run' (and check its failures) to complete it.",
+            file=sys.stderr,
+        )
     metrics = readMetrics(butler, done, collections=[output])
     metrics.to_parquet(workDir / f"iqQaMetrics-{period.name}.parquet")
     config = butler.get("imageQualityQa_config", collections=[output])
@@ -386,6 +395,8 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
     if args.command == "plan":
         return 0
 
+    # A failed quantum fails its pass but not the others: run every pass, then say what failed.
+    failed = []
     for name, command in commands:
         step = "qgraph" if args.dry_run else "pipetask"
         log = workDir / f"{step}-{period.name}-{name}-{datetime.datetime.now():%Y%m%dT%H%M%S}.log"
@@ -394,12 +405,57 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
             stream.write(shlex.join(command) + "\n")
             stream.flush()
             result = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT)
-        if result.returncode:
-            print(f"{name} failed ({result.returncode}); see {log}", file=sys.stderr)
-            return result.returncode
+        text = log.read_text(errors="replace")
         if args.dry_run:
-            print("\n".join(line for line in log.read_text().splitlines() if "quanta" in line))
+            print("\n".join(line for line in text.splitlines() if "quanta" in line))
+        summary, lines = pipetaskFailures(text)
+        if summary:
+            print(f"{name}: {summary}")
+        if result.returncode:
+            failed.append((name, result.returncode, log, lines))
+    for name, code, log, lines in failed:
+        print(f"\n{'!' * 80}\n!! {name} FAILED (exit {code}); log: {log}", file=sys.stderr)
+        for line in lines:
+            print(f"!!   {line}", file=sys.stderr)
+    if failed:
+        names = ", ".join(name for name, *_ in failed)
+        print(f"{'!' * 80}\n!! {len(failed)} of {len(commands)} passes failed: {names}", file=sys.stderr)
+        return 1
     return 0
+
+
+#: How many failure lines of a pipetask log `pipetaskFailures` keeps.
+MAX_FAILURE_LINES = 20
+
+
+def pipetaskFailures(text: str, limit: int = MAX_FAILURE_LINES) -> tuple[str | None, list[str]]:
+    """Return a ``pipetask run`` log's outcome and the lines saying what failed.
+
+    Parameters
+    ----------
+    text : `str`
+        The log.
+    limit : `int`, optional
+        How many failure lines to keep; the last ones, where pipetask lists the failed quanta.
+
+    Returns
+    -------
+    summary : `str` or `None`
+        pipetask's closing ``Executed N quanta successfully, M failed ...`` line, without its log
+        prefix; `None` when the log has none (a dry run, or pipetask stopped before executing).
+    lines : `list` [`str`]
+        The distinct ``ERROR`` lines and lines saying something failed, in order, at most ``limit``
+        (the last), each cut to 300 characters.
+    """
+    summary = None
+    lines = []
+    for line in text.splitlines():
+        if "Executed" in line and "quanta successfully" in line:
+            summary = line[line.index("Executed") :].strip()
+            continue
+        if ("ERROR" in line or " failed" in line.lower()) and line.strip() not in lines:
+            lines.append(line.strip())
+    return summary, [line[:300] for line in lines[-limit:]]
 
 
 def _qgraph(command: list[str]) -> list[str]:

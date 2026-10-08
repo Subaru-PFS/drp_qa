@@ -318,6 +318,23 @@ def coverageRows(summary: pd.DataFrame) -> pd.DataFrame:
     return judged[["label", "judged", "to judge", "to reduce", "blocked"]].reset_index(drop=True)
 
 
+def _incomplete(summary: pd.DataFrame) -> str:
+    """Return a banner when some judged types' images aren't judged yet, else nothing."""
+    rows = coverageRows(summary)
+    pending = rows[(rows["to judge"] + rows["to reduce"]) > 0]
+    if pending.empty:
+        return ""
+    total = int((pending["to judge"] + pending["to reduce"]).sum())
+    listed = ", ".join(
+        f"{label} ({int(row['to judge'] + row['to reduce'])})"
+        for label, row in pending.set_index("label").iterrows()
+    )
+    return (
+        f"<p class='alert'><b>Incomplete:</b> {total} detector images are not judged yet: {_e(listed)}. "
+        "The verdicts below leave them out.</p>"
+    )
+
+
 def buildReport(inputs: ReportInputs) -> str:
     """Return the report as one HTML page: pictures and counts first, detail folded away.
 
@@ -347,6 +364,7 @@ def buildReport(inputs: ReportInputs) -> str:
         f"<h1>{_e(inputs.period)} against {_e(inputs.referenceName)}</h1>",
         f"<p class='meta'>nights {_e(_date(nights.min()))} to {_e(_date(nights.max()))} · drp_qa {_e(inputs.version)} · "
         f"<code>{_e(inputs.collection)}</code> · opdb to {_e(inputs.readUntil)}</p>",
+        _incomplete(inputs.summary),
         _tiles(verdicts, gatedFindings, unvalidated),
         "<h2>Coverage</h2>",
     ]
@@ -598,6 +616,7 @@ figure svg {{ max-width:100%; height:auto; }}
 code {{ font-size:12px; }}
 .unvalidated {{ border-left:4px solid #8c8c8c; padding-left:8px; color:var(--muted); }}
 .caption {{ color:var(--muted); font-size:13px; margin:4px 0 8px; }}
+.alert {{ border-left:4px solid #d03b3b; padding:6px 10px; background:rgba(208,59,59,0.08); }}
 .tiles {{ display:flex; gap:12px; flex-wrap:wrap; margin:12px 0 4px; }}
 .tile {{ flex:1 1 120px; border-radius:8px; padding:10px 14px; color:#222; font-weight:600; font-size:13px; }}
 .tile span {{ display:block; font-size:30px; line-height:1.1; }}

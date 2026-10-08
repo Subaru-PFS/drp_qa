@@ -89,3 +89,23 @@ def testQgraphFromRun():
 
     command = ["pipetask", "--long-log", "run", "-j", "8", "-b", "/repo", "-d", "visit IN (1)"]
     assert _qgraph(command) == ["pipetask", "--long-log", "qgraph", "-b", "/repo", "-d", "visit IN (1)"]
+
+
+def testPipetaskFailures():
+    from pfs.drp.qa.comparison.cli import pipetaskFailures
+
+    log = "\n".join(
+        [
+            "INFO 2026-10-08T07:53:20 lsst.ctrl.mpexec ... Executing 40 quanta",
+            "ERROR 2026-10-08T07:54:01 lsst.ctrl.mpexec ... Task <reduceExposure dataId={visit: 148144}> failed",
+            "ERROR 2026-10-08T07:54:01 lsst.ctrl.mpexec ... Task <reduceExposure dataId={visit: 148144}> failed",
+            "INFO 2026-10-08T07:54:09 lsst.ctrl.mpexec ... Executed 30 quanta successfully, 1 failed and 9 remain"
+            " out of total 40 quanta.",
+        ]
+    )
+    summary, lines = pipetaskFailures(log)
+    assert summary == "Executed 30 quanta successfully, 1 failed and 9 remain out of total 40 quanta."
+    assert len(lines) == 1 and "148144" in lines[0]  # repeated lines once
+    assert pipetaskFailures("INFO nothing to see") == (None, [])
+    many = "\n".join(f"ERROR quantum {i} failed" for i in range(50))
+    assert pipetaskFailures(many, limit=5)[1][0] == "ERROR quantum 45 failed"  # the last ones

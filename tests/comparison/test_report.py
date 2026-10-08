@@ -73,6 +73,7 @@ def testBuildReport(periods, visit, listing):
     )
     assert page.startswith("<!doctype html>")
     assert "32 gated images" in page
+    assert "Incomplete" not in page
     assert "32 gated images · 2 problem images" in page
     assert "SM1" in page  # visit 21: b1 and r1 together, one problem
     assert "Arc: Neon" in page  # a calibration's name
@@ -176,3 +177,25 @@ def testProblemsGroupFindings():
         result.loc[0, "setup"] == "scienceArc 'Arc: Neon', neon"
         and result.loc[0, "nights"] == "2026-01-02 to 2026-01-03"
     )
+
+
+def testIncompleteReportSaysSo(periods, visit, listing):
+    visits, metrics = _period(periods, visit, listing)
+    holdings = metrics[["visit", "arm", "spectrograph"]].assign(raw=True, reduced=True, judged=True)
+    holdings.loc[holdings.index[:3], "judged"] = False  # three images still to judge
+    judged = judgeImages(metrics, visits, THRESHOLDS)
+    page = buildReport(
+        ReportInputs(
+            period="run1",
+            version="w.2026.41",
+            collection="u/me/comparison/run1/w.2026.41",
+            readUntil="now",
+            visits=visits,
+            summary=summarize(visits, coverage(visits, holdings)),
+            metrics=metrics,
+            judged=judged,
+            findings=findings(metrics, judged, visits),
+            reference=None,
+        )
+    )
+    assert "<b>Incomplete:</b> 3 detector images are not judged yet" in page
