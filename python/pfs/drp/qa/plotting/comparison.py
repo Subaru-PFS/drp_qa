@@ -18,6 +18,7 @@ __all__ = [
     "EXPOSURE_COLORS",
     "STATUS_COLORS",
     "plotArmTimeline",
+    "plotCoverage",
     "plotMetricComparison",
     "plotNightlySeries",
     "plotVerdictGrid",
@@ -360,4 +361,51 @@ def plotArmTimeline(
     ]
     fig.legend(handles=handles, loc="upper right", fontsize="x-small", frameon=False, ncols=len(handles))
     fig.suptitle(title or f"{arm} arm: exposures by night, and each dark sequence's gap", x=0.02, ha="left")
+    return fig
+
+
+#: Coverage states of a judged image, darkest first; ``blocked`` (no raw, no pfsConfig, raw opdb didn't
+#: list) is the one that needs attention, so it alone has a hue.
+COVERAGE_COLORS = {"judged": "#4d4d4b", "to judge": "#8c8c8c", "to reduce": "#c4c4c0", "blocked": "#eb6834"}
+
+
+def plotCoverage(coverage: pd.DataFrame, *, title: str = "Coverage of judged images") -> Figure:
+    """Show how far each judged sequence type is covered, as stacked horizontal bars.
+
+    Parameters
+    ----------
+    coverage : `pandas.DataFrame`
+        One row per bar: ``label`` and one image count per key of
+        `COVERAGE_COLORS`.
+    title : `str`, optional
+        The figure title.
+
+    Returns
+    -------
+    `matplotlib.figure.Figure`
+        One bar per row, its segments in `COVERAGE_COLORS` order, the number
+        of images judged written at the bar's end.
+    """
+    rows = coverage.reset_index(drop=True)
+    fig, ax = plt.subplots(figsize=(9, max(1.6, 0.34 * len(rows) + 0.9)))
+    left = np.zeros(len(rows))
+    for state, color in COVERAGE_COLORS.items():
+        values = rows[state].to_numpy(dtype=float) if state in rows else np.zeros(len(rows))
+        ax.barh(range(len(rows)), values, left=left, color=color, height=0.7, edgecolor="white", linewidth=1)
+        left += values
+    for i, (judged, total) in enumerate(zip(rows.get("judged", left * 0), left, strict=True)):
+        ax.text(total, i, f"  {int(judged)}/{int(total)}", va="center", fontsize="x-small", color=_INK)
+    ax.set_yticks(range(len(rows)))
+    ax.set_yticklabels(rows["label"], fontsize="x-small")
+    ax.invert_yaxis()
+    ax.set_xlabel("detector images")
+    ax.set_xlim(0, max(1.0, left.max()) * 1.15)
+    ax.grid(axis="x", color=_GRID, linewidth=0.8)
+    _recessive(ax)
+    handles = [
+        plt.Rectangle((0, 0), 1, 1, color=color, label=state) for state, color in COVERAGE_COLORS.items()
+    ]
+    fig.legend(handles=handles, loc="upper right", fontsize="x-small", frameon=False, ncols=len(handles))
+    fig.suptitle(title, x=0.02, ha="left", fontsize="medium")
+    fig.tight_layout()
     return fig

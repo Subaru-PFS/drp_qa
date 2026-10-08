@@ -16,7 +16,6 @@ the fibers a design lights yet (PIPE2D-1935), so they aren't judged on them (`DA
 
 import re
 
-import numpy as np
 import pandas as pd
 
 from pfs.drp.qa.metrics.gate import STATUS_ORDER, configThresholds, judge, loadThresholds, thresholdsPath
@@ -201,7 +200,11 @@ def extentOf(verdicts: pd.DataFrame) -> pd.Series:
 
 
 def findings(
-    metrics: pd.DataFrame, judged: pd.DataFrame, visits: pd.DataFrame, notes: pd.DataFrame | None = None
+    metrics: pd.DataFrame,
+    judged: pd.DataFrame,
+    visits: pd.DataFrame,
+    notes: pd.DataFrame | None = None,
+    visitSet=None,
 ) -> pd.DataFrame:
     """Write a finding for each image that warns or fails.
 
@@ -215,6 +218,9 @@ def findings(
         From `pfs.drp.qa.comparison.classify.classifyVisits`.
     notes : `pandas.DataFrame`, optional
         From `pfs.drp.qa.comparison.queries.readNotes`.
+    visitSet : `pfs.drp.qa.metrics.validationVisits.ValidationVisitSet`, optional
+        The validation visit set: a finding it records as known-bad is
+        expected.
 
     Returns
     -------
@@ -224,8 +230,9 @@ def findings(
         ``validated`` (a gated type), ``iic_sequence_id``, ``status``, ``metrics`` (each crossing, e.g.
         ``medFWHM=3.20px >= fail threshold 2.8px``), ``extent`` (`extentOf`, with
         ``, whole sequence`` when every visit of the sequence shares it),
-        ``fibers`` (fibers measured), ``setup`` (`describeSetup`) and
-        ``notes`` (the opdb's, joined by `` | ``).
+        ``expected`` (the metrics the validation set records the image as
+        known-bad for, ``any`` for every metric, or empty), ``setup``
+        (`describeSetup`) and ``notes`` (the opdb's, joined by `` | ``).
     """
     keys = ["visit", "arm", "spectrograph"]
     images = metrics.reset_index(drop=True)[keys].copy()
@@ -235,16 +242,13 @@ def findings(
     crossings = judged[judged["status"].isin(["WARN", "FAIL"])]
     images["metrics"] = crossings.groupby("row")["reason"].agg("; ".join).reindex(images.index).fillna("")
     images["extent"] = extentOf(images)
-    if "fiberIds" in metrics.columns:
-        images["fibers"] = [_count(ids) for ids in metrics.reset_index(drop=True)["fiberIds"]]
-    else:
-        images["fibers"] = np.nan
+    images["expected"] = _expected(metrics.reset_index(drop=True), visitSet)
 
     info = visits.rename(columns={"pfs_visit_id": "visit"}).set_index("visit")
     result = images[images["status"].isin(["WARN", "FAIL"])].copy()
     if result.empty:
         columns = [*keys, "night", "sequence_type", "category", "validated", "iic_sequence_id", "status"]
-        return pd.DataFrame(columns=[*columns, "metrics", "extent", "fibers", "setup", "notes"])
+        return pd.DataFrame(columns=[*columns, "metrics", "extent", "expected", "setup", "notes"])
     for column in ("night", "sequence_type", "category", "validated", "iic_sequence_id"):
         result[column] = result["visit"].map(info[column])
     result["setup"] = [
@@ -253,15 +257,25 @@ def findings(
     result["extent"] = _wholeSequence(result, images, info)
     result["notes"] = _notesFor(result, info, notes)
     columns = [*keys, "night", "sequence_type", "category", "validated", "iic_sequence_id", "status"]
-    columns += ["metrics", "extent", "fibers", "setup", "notes"]
+    columns += ["metrics", "extent", "expected", "setup", "notes"]
     return result[columns].sort_values(keys, ignore_index=True)
 
 
-def _count(ids) -> float:
-    """Return the number of fibers in a stored ``fiberIds`` value."""
-    if ids is None or (np.isscalar(ids) and pd.isna(ids)):
-        return np.nan
-    return float(len(ids))
+def _expected(metrics: pd.DataFrame, visitSet) -> list[str]:
+    """Return, for each image, the metrics the validation set records it as known-bad for."""
+    if visitSet is None:
+        return [""] * len(metrics)
+    seqNames = metrics["seqName"] if "seqName" in metrics else pd.Series([None] * len(metrics))
+    result = []
+    for visit, arm, spectrograph, seqName in zip(
+        metrics["visit"], metrics["arm"], metrics["spectrograph"], seqNames, strict=True
+    ):
+        entries = visitSet.find(
+            int(visit), arm, int(spectrograph), seqName if isinstance(seqName, str) else None
+        )
+        bad = {entry.metric or "any" for entry in entries if entry.expect in ("WARN", "FAIL")}
+        result.append(",".join(sorted(bad)))
+    return result
 
 
 def _wholeSequence(result: pd.DataFrame, images: pd.DataFrame, info: pd.DataFrame) -> pd.Series:

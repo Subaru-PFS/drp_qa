@@ -1,5 +1,7 @@
 """Tests for `pfs.drp.qa.comparison.findings`."""
 
+from types import SimpleNamespace
+
 import pandas as pd
 import pytest
 
@@ -125,7 +127,7 @@ def testDefocusedSpectrographIsOneFinding(defocus):
     assert set(zip(result["visit"], result["spectrograph"], strict=True)) == {(v, 1) for v in (1, 2, 3)}
     assert set(result["extent"]) == {"SM1, whole sequence"}
     assert result["metrics"].str.contains("medFWHM=3.20px >= fail threshold 2.8px", regex=False).all()
-    assert set(result["fibers"]) == {600.0}
+    assert set(result["expected"]) == {""}  # no validation set given
     assert result.loc[result["visit"] == 2, "notes"].tolist() == ["SM1 slit moved | check focus"] * 2
     assert result.loc[result["visit"] == 1, "notes"].tolist() == ["check focus"] * 2
 
@@ -174,3 +176,17 @@ def testDailyLitFiberMetricsNotJudged(periods, visit, listing):
     # Negative control: the same values in a set fail.
     assert judged[(10, "nLines")] == "FAIL" and judged[(10, "pctFlagged")] == "FAIL"
     assert describeSetup(visits.set_index("pfs_visit_id").loc[1]).startswith("scienceArc 'Arc: Neon' (daily)")
+
+
+def testExpectedFromTheValidationSet(defocus):
+    visits, metrics = defocus
+    entry = SimpleNamespace(expect="WARN", metric="medFwhm")
+
+    class VisitSet:
+        def find(self, visit, arm, spectrograph, seqName):
+            return (entry,) if (visit, spectrograph) == (2, 1) else ()
+
+    result = findings(metrics, judgeImages(metrics, visits, THRESHOLDS), visits, visitSet=VisitSet())
+    expected = result.set_index(["visit", "spectrograph"])["expected"]
+    assert set(expected.loc[(2, 1)]) == {"medFwhm"}  # the known-bad detectors of visit 2
+    assert set(expected.drop((2, 1))) == {""}

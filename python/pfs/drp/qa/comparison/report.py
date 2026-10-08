@@ -8,7 +8,6 @@ The page shows science visits, so it stays local: science sequence names are nev
 only visit IDs.
 """
 
-import datetime
 import html
 import io
 from dataclasses import dataclass
@@ -21,6 +20,7 @@ from pfs.drp.qa.comparison.persistence import darkSequences, gapSummary
 from pfs.drp.qa.metrics.gate import STATUS_ORDER
 from pfs.drp.qa.plotting.comparison import (
     plotArmTimeline,
+    plotCoverage,
     plotMetricComparison,
     plotNightlySeries,
     plotVerdictGrid,
@@ -31,8 +31,10 @@ __all__ = [
     "ReportInputs",
     "armThresholds",
     "buildReport",
+    "coverageRows",
     "imageVerdicts",
     "populations",
+    "problems",
     "recurringSequences",
     "verdictCounts",
 ]
@@ -232,8 +234,92 @@ def recurringSequences(visits: pd.DataFrame, minNights: int = MIN_RECURRING_NIGH
     return counts.sort_values(["nights", "visits"], ascending=False, ignore_index=True)
 
 
+def problems(findings: pd.DataFrame) -> pd.DataFrame:
+    """Group findings into problems: the same metrics crossed, on the same arm, in the same setup.
+
+    Parameters
+    ----------
+    findings : `pandas.DataFrame`
+        From `pfs.drp.qa.comparison.findings.findings`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        One row per problem: ``status`` (the worst), ``metrics`` (the names
+        crossed), ``arm``, ``setup`` (without the exposure time), ``extent``
+        (the commonest, without a visit's counts), ``expected``, ``images``, ``visits``,
+        ``nights`` (first to last) and ``examples`` (up to three visits);
+        failures first, then by images.
+    """
+    columns = [
+        "status",
+        "metrics",
+        "arm",
+        "setup",
+        "extent",
+        "expected",
+        "images",
+        "visits",
+        "nights",
+        "examples",
+    ]
+    if findings.empty:
+        return pd.DataFrame(columns=columns)
+    frame = findings.assign(
+        metricNames=findings["metrics"]
+        .str.findall(r"(\w+)=")
+        .map(lambda names: ", ".join(dict.fromkeys(names))),
+        setupKind=findings["setup"].str.split(";").str[0],
+        extentKind=findings["extent"].str.replace(r"^visit \(.*?\)", "most of the visit", regex=True),
+        expected=findings["expected"].fillna("") if "expected" in findings else "",
+        rank=findings["status"].map({"FAIL": 0, "WARN": 1}),
+    )
+    grouped = frame.groupby(["metricNames", "arm", "setupKind", "expected"], dropna=False)
+    result = grouped.agg(
+        rank=("rank", "min"),
+        extentKind=("extentKind", lambda e: e.value_counts().index[0]),
+        images=("visit", "size"),
+        visits=("visit", "nunique"),
+        first=("night", "min"),
+        last=("night", "max"),
+        examples=("visit", lambda v: ", ".join(str(x) for x in sorted(v.unique())[:3])),
+    ).reset_index()
+    result["status"] = result["rank"].map({0: "FAIL", 1: "WARN"})
+    result["nights"] = [
+        str(first) if first == last else f"{first} to {last}"
+        for first, last in zip(result["first"], result["last"], strict=True)
+    ]
+    result = result.rename(columns={"metricNames": "metrics", "setupKind": "setup", "extentKind": "extent"})
+    return result.sort_values(["rank", "images"], ascending=[True, False])[columns].reset_index(drop=True)
+
+
+def coverageRows(summary: pd.DataFrame) -> pd.DataFrame:
+    """Return the judged rows of a coverage summary as bars for `plotCoverage`.
+
+    Parameters
+    ----------
+    summary : `pandas.DataFrame`
+        From `pfs.drp.qa.comparison.plan.summarize`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``label`` and image counts ``judged``, ``to judge``, ``to reduce`` and
+        ``blocked``, one row per judged sequence type, cadence and category.
+    """
+    judged = summary[summary["reason"].isin(["gated", "unvalidated"])].copy()
+    blocked = [column for column in ("no pfsConfig", "no raw", "raw not in opdb") if column in judged]
+    judged["blocked"] = judged[blocked].sum(axis=1) if blocked else 0
+    judged["label"] = [
+        " ".join(part for part in (row.sequence_type, row.cadence, row.category) if part)
+        + (" (unvalidated)" if row.reason == "unvalidated" else "")
+        for row in judged.itertuples()
+    ]
+    return judged[["label", "judged", "to judge", "to reduce", "blocked"]].reset_index(drop=True)
+
+
 def buildReport(inputs: ReportInputs) -> str:
-    """Return the report as one HTML page.
+    """Return the report as one HTML page: pictures and counts first, detail folded away.
 
     Parameters
     ----------
@@ -249,24 +335,39 @@ def buildReport(inputs: ReportInputs) -> str:
     allVerdicts = imageVerdicts(metrics, inputs.judged)
     verdicts = allVerdicts[allVerdicts["validated"].astype(bool)]
     unvalidated = allVerdicts[~allVerdicts["validated"].astype(bool)]
-    isGated = inputs.findings["validated"].astype(bool)
-    gatedFindings, otherFindings = inputs.findings[isGated], inputs.findings[~isGated]
+    findings = inputs.findings
+    if "expected" not in findings:
+        findings = findings.assign(expected="")
+    isGated = findings["validated"].astype(bool)
+    gatedFindings, otherFindings = findings[isGated], findings[~isGated]
     reference = inputs.reference
     nights = inputs.visits["night"].dropna()
+
     parts = [
-        f"<h1>{_e(inputs.period)}: image-quality gate against {_e(inputs.referenceName)}</h1>",
-        "<p class='meta'>"
-        f"drp_qa {_e(inputs.version)} · collection <code>{_e(inputs.collection)}</code> · "
-        f"nights {_e(_date(nights.min()))} to {_e(_date(nights.max()))} · opdb read until {_e(inputs.readUntil)} · "
-        f"built {datetime.datetime.now():%Y-%m-%d %H:%M}</p>",
-        _headline(verdicts, gatedFindings, unvalidated),
+        f"<h1>{_e(inputs.period)} against {_e(inputs.referenceName)}</h1>",
+        f"<p class='meta'>nights {_e(_date(nights.min()))} to {_e(_date(nights.max()))} · drp_qa {_e(inputs.version)} · "
+        f"<code>{_e(inputs.collection)}</code> · opdb to {_e(inputs.readUntil)}</p>",
+        _tiles(verdicts, gatedFindings, unvalidated),
         "<h2>Coverage</h2>",
-        "<p>Every visit of the period, by what it is and what happened to it: <code>gated</code> visits are "
-        "judged against validated thresholds, <code>unvalidated</code> ones are judged the same way but have none, "
-        "the rest aren't measured. Detector images are counted for judged visits only.</p>",
-        _table(inputs.summary),
-        "<h2>Verdicts</h2>",
     ]
+    rows = coverageRows(inputs.summary)
+    if not rows.empty:
+        parts.append(_figure(plotCoverage(rows)))
+    notMeasured = inputs.summary[~inputs.summary["reason"].isin(["gated", "unvalidated"])]
+    if not notMeasured.empty:
+        byReason = []
+        for reason, group in notMeasured.groupby("reason", sort=False):
+            counts = group.groupby("sequence_type")["visits"].sum().sort_values(ascending=False)
+            label = "no method" if reason.startswith("no method") else reason
+            byReason.append((label, counts))
+        merged = {}
+        for label, counts in byReason:
+            merged.setdefault(label, []).extend(f"{n} {kind}" for kind, n in counts.items())
+        listed = "; ".join(f"{label}: {', '.join(items)}" for label, items in merged.items())
+        parts.append(f"<p class='caption'>Not measured (visits): {_e(listed)}.</p>")
+    parts.append(_details("Coverage table", _table(inputs.summary)))
+
+    parts.append("<h2>Verdicts</h2>")
     for category in ("calibration", "science"):
         subset = verdicts[verdicts["category"] == category]
         if not subset.empty:
@@ -274,45 +375,45 @@ def buildReport(inputs: ReportInputs) -> str:
                 _figure(plotVerdictGrid(subset, title=f"{category.capitalize()}: worst verdict per night"))
             )
     if not verdicts.empty:
-        parts.append(_table(verdictCounts(verdicts)))
-    parts.append("<h2>Findings</h2>")
+        parts.append(_details("Counts by type and arm", _table(verdictCounts(verdicts))))
+
+    parts.append("<h2>Problems</h2>")
+    new = gatedFindings[gatedFindings["expected"] == ""]
+    known = gatedFindings[gatedFindings["expected"] != ""]
     if gatedFindings.empty:
         parts.append("<p>No gated image warns or fails.</p>")
     else:
-        parts += [
-            "<p>Each image that warns or fails: the metrics that crossed, how far the problem spreads within its "
-            "visit (and whether the whole sequence shares it), the setup, and the opdb's notes. Telescope focus "
-            "sweeps are not judged on flux-dependent metrics, nor daily arcs and traces on <code>nLines</code> and <code>pctFlagged</code> "
-            "(PIPE2D-1935), so a verdict here can be milder than the stored one.</p>",
-            _table(_ordered(gatedFindings).drop(columns="validated")),
-        ]
+        parts.append(_table(problems(new).drop(columns="expected")) if not new.empty else "<p>None new.</p>")
+        if not known.empty:
+            parts.append(
+                _details(
+                    f"Expected by the validation set: {len(known)} images",
+                    _table(problems(known)),
+                )
+            )
+        parts.append(
+            _details(
+                f"Every finding: {len(gatedFindings)} images",
+                _table(_ordered(gatedFindings).drop(columns="validated")),
+            )
+        )
 
-    parts.append("<h2 id='unvalidated'>Unvalidated exposures</h2>")
-    if unvalidated.empty:
-        parts.append("<p>No unvalidated exposure was judged.</p>")
-    else:
+    if not unvalidated.empty:
         parts += [
-            "<p class='unvalidated'><strong>Unvalidated:</strong> engineering and test exposures (engineering arcs, "
-            "flats, fiber profiles, focus sweeps, windowed readouts, new sequence types) judged with the same "
-            "thresholds, which weren't derived or checked for them. Many are off-nominal on purpose, so a "
-            "<code>FAIL</code> here may be what the test expected: read it as a measurement, not a verdict.</p>",
+            "<h2 id='unvalidated'>Unvalidated</h2>",
+            "<p class='caption unvalidated'>Judged without validated thresholds: a FAIL may be what the test expected.</p>",
             _figure(plotVerdictGrid(unvalidated, title="Unvalidated: worst verdict per night")),
-            _table(verdictCounts(unvalidated)),
         ]
         if not otherFindings.empty:
-            parts += [
-                "<h3>Unvalidated findings</h3>",
-                _table(_ordered(otherFindings).drop(columns="validated")),
-            ]
+            parts.append(
+                _details(
+                    f"Unvalidated problems: {len(otherFindings)} images", _table(problems(otherFindings))
+                )
+            )
 
     parts.append(f"<h2>Against {_e(inputs.referenceName)}</h2>")
     if reference is None or reference.empty:
-        parts.append(f"<p>No {_e(inputs.referenceName)} metrics were given: run its comparison first.</p>")
-    parts.append(
-        "<p>Daily arcs and traces are compared with the reference run's sets: the sets are what the thresholds "
-        "were derived from. <code>nLines</code> and <code>pctFlagged</code> aren't judged on daily ones until they "
-        "allow for the fibers a design lights (PIPE2D-1935).</p>"
-    )
+        parts.append(f"<p class='caption'>No {_e(inputs.referenceName)} metrics: report it first.</p>")
     for sequenceType, category, cadence in (
         ("scienceArc", "calibration", "set"),
         ("scienceTrace", "calibration", "set"),
@@ -325,15 +426,15 @@ def buildReport(inputs: ReportInputs) -> str:
         # Arcs and traces are compared lamp by lamp: line counts and flag rates are the lamp's.
         byLamp = cadence != ""
         for lamps, current in selected.groupby("lamps", sort=True) if byLamp else [("", selected)]:
+            if current.empty:
+                continue
             previous = None
             if reference is not None:
                 previous = _select(reference, sequenceType, category, cadence and "set")
                 if byLamp:
                     previous = previous[previous["lamps"] == lamps]
             heading = ", ".join(part for part in (sequenceType, category, cadence, lamps) if part)
-            parts.append(f"<h3>{_e(heading)}</h3>")
-            if byLamp and (previous is None or previous.empty):
-                parts.append(f"<p>No {_e(inputs.referenceName)} set with these lamps to compare with.</p>")
+            figures = []
             for metric in COMPARED_METRICS:
                 if metric not in current or current[metric].dropna().empty:
                     continue
@@ -345,20 +446,20 @@ def buildReport(inputs: ReportInputs) -> str:
                     thresholds=armThresholds(inputs.judged[inputs.judged["row"].isin(current.index)], metric),
                     title=f"{metric}: {heading}",
                 )
-                parts.append(_figure(fig))
+                figures.append(_figure(fig))
+            noReference = byLamp and reference is not None and (previous is None or previous.empty)
+            summary = f"{heading}: {len(current)} images" + (
+                f", no {inputs.referenceName} set" if noReference else ""
+            )
+            parts.append(_details(summary, "".join(figures)))
 
     recurring = recurringSequences(inputs.visits)
-    parts.append("<h2>Daily calibrations</h2>")
-    if recurring.empty:
-        parts.append(f"<p>No daily calibration recurs on {MIN_RECURRING_NIGHTS} or more nights.</p>")
-    else:
-        parts.append(
-            "<p>Single-exposure arcs and traces repeated night after night, night by night: the median of each "
-            "detector, with the 5-95 % range of the reference run's sets of the same type and lamps shaded. "
-            "<code>medDxCenter</code> is the offset from the calibration detectorMap: drift, shown, not gated.</p>"
-        )
-        parts.append(_table(recurring))
-        for _, row in recurring.iterrows():
+    if not recurring.empty:
+        parts += [
+            "<h2>Daily calibrations</h2>",
+            "<p class='caption'>Median per detector and night; shaded: the reference sets' 5-95 %.</p>",
+        ]
+        for index, row in recurring.iterrows():
             subset = metrics[
                 (metrics["sequence_type"] == row["sequence_type"])
                 & (metrics["sequence_name"].fillna("") == row["sequence_name"])
@@ -369,33 +470,46 @@ def buildReport(inputs: ReportInputs) -> str:
             if reference is not None:
                 previous = _select(reference, row["sequence_type"], "calibration", "set")
                 previous = previous[previous["lamps"].isin(subset["lamps"].unique())]
-            for metric in ("medFwhm", "medDxCenter"):
-                if metric in subset and not subset[metric].dropna().empty:
-                    parts.append(
-                        _figure(
-                            plotNightlySeries(subset, metric, reference=previous, title=f"{metric}: {label}")
-                        )
-                    )
+            figures = [
+                _figure(plotNightlySeries(subset, metric, reference=previous, title=f"{metric}: {label}"))
+                for metric in ("medFwhm", "medDxCenter")
+                if metric in subset and not subset[metric].dropna().empty
+            ]
+            if figures:
+                parts.append(
+                    _details(f"{label}: {row['nights']} nights", "".join(figures), opened=index == 0)
+                )
     if inputs.lastLit is not None:
         parts += _persistenceSection(inputs.lastLit, inputs.timeline)
+    parts.append(_details("How to read this", _HOW_TO_READ))
     return _page(f"{inputs.period} QA comparison", "\n".join(parts))
+
+
+_HOW_TO_READ = """<ul>
+<li><b>Gated</b>: <code>scienceArc</code>, <code>scienceTrace</code>, <code>scienceObject</code>, judged against
+thresholds derived from the reference run. <b>Unvalidated</b>: other measurable types, judged the same way without
+validated thresholds. Biases, darks and test exposures aren't measured.</li>
+<li><b>Problems</b> group the images that warn or fail by metric, arm, setup and extent: <i>detector</i>, an arm on
+every spectrograph, a whole spectrograph (<i>SMn</i>), <i>most of the visit</i>, and <i>whole sequence</i> when every
+visit of the sequence shares it. Problems the validation set records as known-bad are folded away as expected.</li>
+<li>Not judged: flux-dependent metrics on telescope focus sweeps, and <code>nLines</code> and <code>pctFlagged</code>
+on daily arcs and traces, which are often taken with one fiber group lit (PIPE2D-1935). A verdict here can therefore
+be milder than the stored one.</li>
+<li><b>Against the reference</b>: arcs and traces lamp by lamp, daily ones against the reference's sets.</li>
+<li><code>medDxCenter</code> is the offset from the calibration detectorMap: drift, shown, not gated.</li>
+<li><b>n-arm darks</b>: the n detectors keep an image of a bright exposure for a while. Darks aren't measured yet
+(PIPE2D-1925), so the timeline shows only when they were taken relative to lit exposures.</li>
+</ul>"""
 
 
 def _persistenceSection(lastLit: pd.DataFrame, timeline: pd.DataFrame | None) -> list[str]:
     """Return the n-arm darks section: when darks were taken relative to lit exposures."""
-    parts = [
-        "<h2>n-arm darks and the exposures before them</h2>",
-        "<p>The n-arm detectors keep an image of a bright exposure for a while, so a dark taken soon after an "
-        "arc or a quartz can still show its traces. Darks aren't measured yet (PIPE2D-1925), so this shows only "
-        "when they were taken: each night's n-arm exposures, colored by what lit them with the darks in gray, and "
-        "beside it, for each dark sequence, the minutes from the last lit exposure to its first dark (shaded under "
-        "5 minutes). Whether those darks are dark needs their signal on the trace positions against this gap.</p>",
-    ]
+    parts = ["<h2>n-arm darks</h2>"]
     if lastLit.empty:
-        return [*parts, "<p>No n-arm dark in the period.</p>"]
+        return [*parts, "<p class='caption'>No n-arm dark in the period.</p>"]
     if timeline is not None and not timeline.empty:
         parts.append(_figure(plotArmTimeline(timeline, darkSequences(lastLit))))
-    parts.append(_table(gapSummary(lastLit)))
+    parts.append(_details("Darks by gap after the last lit exposure", _table(gapSummary(lastLit))))
     return parts
 
 
@@ -409,26 +523,20 @@ def _select(metrics: pd.DataFrame, sequenceType: str, category: str, cadence: st
     return subset
 
 
-def _headline(verdicts: pd.DataFrame, findings: pd.DataFrame, unvalidated: pd.DataFrame) -> str:
-    """Return the counts at the top of the page: the gate's, then the unvalidated ones apart."""
+def _tiles(verdicts: pd.DataFrame, findings: pd.DataFrame, unvalidated: pd.DataFrame) -> str:
+    """Return the verdict tiles at the top of the page, and one line under them."""
     counts = verdicts["status"].value_counts()
-    items = [
-        f"<span class='pill {s.lower()}'>{s[0]}</span> {counts.get(s, 0)} {s}"
-        for s in (*STATUS_ORDER, "UNKNOWN")
-    ]
-    extents = (
-        findings["extent"].str.replace(", whole sequence", "", regex=False) if not findings.empty else []
+    tiles = "".join(
+        f"<div class='tile {status.lower()}'><span>{counts.get(status, 0)}</span>{status}</div>"
+        for status in (*STATUS_ORDER, "UNKNOWN")
     )
-    wide = int(sum(1 for extent in extents if extent and extent != "detector"))
-    other = unvalidated["status"].value_counts()
-    otherItems = ", ".join(f"{other.get(s, 0)} {s}" for s in (*STATUS_ORDER, "UNKNOWN") if other.get(s, 0))
-    return (
-        f"<p class='headline'>{len(verdicts)} gated images: {' · '.join(items)}.<br>"
-        f"{len(findings)} findings, {wide} spreading beyond one detector.</p>"
-        f"<p class='unvalidated'>Also {len(unvalidated)} unvalidated images"
-        + (f" ({otherItems})" if otherItems else "")
-        + ": judged without validated thresholds; see <a href='#unvalidated'>Unvalidated exposures</a>.</p>"
-    )
+    expected = int((findings["expected"] != "").sum()) if not findings.empty else 0
+    line = f"{len(verdicts)} gated images · {len(findings) - expected} problem images"
+    if expected:
+        line += f" (+{expected} expected)"
+    if len(unvalidated):
+        line += f" · {len(unvalidated)} <a href='#unvalidated'>unvalidated</a>"
+    return f"<div class='tiles'>{tiles}</div><p class='meta'>{line}</p>"
 
 
 def _ordered(findings: pd.DataFrame) -> pd.DataFrame:
@@ -439,6 +547,11 @@ def _ordered(findings: pd.DataFrame) -> pd.DataFrame:
         .sort_values(["_order", "visit", "arm", "spectrograph"])
         .drop(columns="_order")
     )
+
+
+def _details(summary: str, body: str, opened: bool = False) -> str:
+    """Return a collapsible block."""
+    return f"<details{' open' if opened else ''}><summary>{_e(summary)}</summary>{body}</details>"
 
 
 def _date(value) -> str:
@@ -484,6 +597,11 @@ figure {{ margin:12px 0; background:var(--card); border-radius:6px; padding:6px;
 figure svg {{ max-width:100%; height:auto; }}
 code {{ font-size:12px; }}
 .unvalidated {{ border-left:4px solid #8c8c8c; padding-left:8px; color:var(--muted); }}
+.caption {{ color:var(--muted); font-size:13px; margin:4px 0 8px; }}
+.tiles {{ display:flex; gap:12px; flex-wrap:wrap; margin:12px 0 4px; }}
+.tile {{ flex:1 1 120px; border-radius:8px; padding:10px 14px; color:#222; font-weight:600; font-size:13px; }}
+.tile span {{ display:block; font-size:30px; line-height:1.1; }}
+details {{ margin:6px 0; }} summary {{ cursor:pointer; color:var(--ink); font-size:14px; padding:4px 0; }}
 </style></head><body>
 {body}
 </body></html>

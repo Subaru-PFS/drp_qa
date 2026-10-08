@@ -73,13 +73,13 @@ def testBuildReport(periods, visit, listing):
     )
     assert page.startswith("<!doctype html>")
     assert "32 gated images" in page
-    assert "Also 0 unvalidated images" in page
-    assert "2 findings, 2 spreading beyond one detector" in page  # SM1 of visit 21: b1 and r1
+    assert "32 gated images · 2 problem images" in page
+    assert "SM1" in page  # visit 21: b1 and r1 together, one problem
     assert "Arc: Neon" in page  # a calibration's name
     assert "field" not in page  # a science sequence's name never is
     assert "run 'run' first" not in page
     assert page.count("<svg") >= 3
-    assert "n-arm darks" not in page  # no section without lastLit
+    assert "<h2>n-arm darks</h2>" not in page  # no section without lastLit
 
 
 def testUnvalidatedAreLabelledApart(periods, visit, listing):
@@ -111,9 +111,9 @@ def testUnvalidatedAreLabelledApart(periods, visit, listing):
             findings=found,
         )
     )
-    assert "2 gated images" in page and "0 findings" in page  # the gate's headline is clean...
-    assert "Also 2 unvalidated images (2 FAIL)" in page  # ...the unvalidated FAILs are counted apart
-    assert "Unvalidated findings" in page
+    assert "2 gated images · 0 problem images" in page  # the gate's line is clean...
+    assert "2 <a href='#unvalidated'>unvalidated</a>" in page  # ...the unvalidated are counted apart
+    assert "Unvalidated problems: 2 images" in page
 
 
 def testDarksSection(periods, visit, listing):
@@ -143,5 +143,36 @@ def testDarksSection(periods, visit, listing):
             lastLit=lastLitBefore(darks),
         )
     )
-    assert "n-arm darks and the exposures before them" in page
-    assert "after the last lit exposure" in page  # the gap counts
+    assert "<h2>n-arm darks</h2>" in page
+    assert "Darks by gap after the last lit exposure" in page
+
+
+def testProblemsGroupFindings():
+    from pfs.drp.qa.comparison.report import problems
+
+    found = pd.DataFrame(
+        {
+            "visit": [1, 1, 2, 3],
+            "arm": ["n", "n", "n", "b"],
+            "night": ["2026-01-02", "2026-01-02", "2026-01-03", "2026-01-03"],
+            "status": ["WARN", "FAIL", "WARN", "WARN"],
+            "metrics": [
+                "pctFlagged=30% >= warn",
+                "pctFlagged=40% >= fail",
+                "pctFlagged=31% >= warn",
+                "nLines=1 <= fail",
+            ],
+            "extent": ["n arm", "n arm", "n arm", "detector"],
+            "expected": ["", "", "", ""],
+            "setup": ["scienceArc 'Arc: Neon', neon; 5 s"] * 3 + ["scienceArc 'Arc: Argon', argon; 5 s"],
+        }
+    )
+    result = problems(found)
+    assert result[["status", "metrics", "arm", "images", "visits"]].values.tolist() == [
+        ["FAIL", "pctFlagged", "n", 3, 2],
+        ["WARN", "nLines", "b", 1, 1],
+    ]
+    assert (
+        result.loc[0, "setup"] == "scienceArc 'Arc: Neon', neon"
+        and result.loc[0, "nights"] == "2026-01-02 to 2026-01-03"
+    )

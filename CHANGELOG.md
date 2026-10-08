@@ -18,7 +18,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   single-exposure arcs and traces are reported apart from calibration sets, and not judged on `nLines` or
   `pctFlagged` until PIPE2D-1935. The observing
   runs and their pre-run periods are in `comparison/data/observingRuns.yaml`. New plots in
-  `pfs.drp.qa.plotting.comparison`: `plotMetricComparison`, `plotNightlySeries`, `plotVerdictGrid`.
+  `pfs.drp.qa.plotting.comparison`: `plotMetricComparison`, `plotNightlySeries`, `plotVerdictGrid`. The report leads with verdict tiles, a coverage chart and problems (findings grouped by
+  metric, arm and setup, those the validation set expects folded away), with the detail collapsed.
 - **GitHub Actions CI** — `.github/workflows/tests.yml` runs the stack-free test suite on Python 3.12 and
   3.13; `.github/workflows/lint.yml` runs `ruff check .` and `ruff format --check .` over the whole tree.
   Both are blocking.

@@ -291,7 +291,9 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     metrics.to_parquet(workDir / f"iqQaMetrics-{period.name}.parquet")
     config = butler.get("imageQualityQa_config", collections=[output])
     judged = judgeImages(metrics, visits, taskThresholds(config))
-    found = findings(metrics, judged, visits, frames["notes"])
+    from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
+
+    found = findings(metrics, judged, visits, frames["notes"], visitSet=loadValidationVisits())
     found.to_csv(workDir / f"findings-{period.name}.csv", index=False)
     from pfs.drp.qa.comparison.persistence import armTimeline, lastLitBefore
 
