@@ -4,8 +4,8 @@ import pandas as pd
 
 from pfs.drp.qa.comparison.classify import classifyVisits
 from pfs.drp.qa.comparison.findings import findings, judgeImages
-from pfs.drp.qa.comparison.plan import coverage, summarize
-from pfs.drp.qa.comparison.report import ReportInputs, buildReport, recurringSequences
+from pfs.drp.qa.comparison.plan import coverage, failedQuanta, summarize
+from pfs.drp.qa.comparison.report import ReportInputs, buildReport, failedSummary, recurringSequences
 
 THRESHOLDS = pd.DataFrame(
     {
@@ -199,3 +199,26 @@ def testIncompleteReportSaysSo(periods, visit, listing):
         )
     )
     assert "<b>Incomplete:</b> 3 detector images are not judged yet" in page
+
+
+def testFailedSummary():
+    detectors = pd.DataFrame(
+        {
+            "visit": [1, 1, 1, 2],
+            "arm": ["n", "n", "b", "n"],
+            "spectrograph": [1, 2, 1, 1],
+            "sequence_type": "scienceArc",
+            "cadence": "set",
+            "status": ["failed", "failed", "judged", "judged"],
+        }
+    )
+    failed = failedQuanta(
+        "\n".join(
+            f"Execution of task 'reduceExposure' on quantum {{instrument: 'PFS', arm: 'n', spectrograph: {s},"
+            f" visit: {v}}} failed. Exception ValueError: need at least one array to concatenate"
+            for v, s in [(1, 1), (1, 2), (2, 1)]
+        )
+    )
+    summary = failedSummary(detectors, failed)
+    assert summary[["visit", "cameras", "task"]].values.tolist() == [[1, "n1,n2", "reduceExposure"]]
+    assert summary.loc[0, "error"].startswith("ValueError: need at least one array")

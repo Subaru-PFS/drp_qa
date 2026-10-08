@@ -8,7 +8,9 @@ The reductions are drp_stella's ``reduceExposure`` with the configuration ``drpA
 the sequence type (`drpActorConfig`), and ``cosmicray`` combines the exposures of one sequence
 only, as ``drpActor``, which reduces one sequence at a time. Reductions already in
 ``drpActor/reductions`` and verdicts already in the output collection are reused through
-``--skip-existing-in``, so re-running a plan after more nights only adds quanta.
+``--skip-existing-in``, so re-running a plan after more nights only adds quanta. Detector images
+whose reduction failed (`failedQuanta`, read from the ``pipetask`` logs) are ``failed``, not
+rescheduled: the same exposure fails the same way every time.
 """
 
 import re
@@ -25,6 +27,7 @@ __all__ = [
     "coverage",
     "drpActorConfig",
     "expectedDetectors",
+    "failedQuanta",
     "outputCollection",
     "passes",
     "pipetaskCommand",
@@ -32,7 +35,12 @@ __all__ = [
 ]
 
 #: Coverage of a judged visit's detector, from done to blocked.
-STATUS_ORDER = ("judged", "to judge", "to reduce", "no pfsConfig", "no raw", "raw not in opdb")
+STATUS_ORDER = ("judged", "to judge", "to reduce", "failed", "no pfsConfig", "no raw", "raw not in opdb")
+
+#: A failed quantum in a ``pipetask`` log.
+_FAILED_RE = re.compile(r"Execution of task '(\w+)' on quantum \{([^}]*)\} failed\. Exception (.*)$")
+#: A ``key: value`` of a data ID; strings are quoted.
+_DATA_ID_RE = re.compile(r"(\w+): '?([^,']*)'?")
 
 _CAMERA_RE = re.compile(r"^([brnm])([1-4])$")
 
@@ -81,7 +89,45 @@ def expectedDetectors(visits: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["visit", "arm", "spectrograph"])
 
 
-def coverage(visits: pd.DataFrame, holdings: pd.DataFrame) -> pd.DataFrame:
+def failedQuanta(text: str) -> pd.DataFrame:
+    """Return the detector images whose quanta failed in a ``pipetask run`` log.
+
+    Parameters
+    ----------
+    text : `str`
+        The log.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``visit``, ``arm``, ``spectrograph``, ``task`` and ``error`` (the
+        exception and its message), one row per failed quantum with a detector
+        data ID, in the log's order.
+    """
+    columns = ["visit", "arm", "spectrograph", "task", "error"]
+    rows = []
+    for line in text.splitlines():
+        match = _FAILED_RE.search(line)
+        if match is None:
+            continue
+        dataId = dict(_DATA_ID_RE.findall(match.group(2)))
+        if not {"visit", "arm", "spectrograph"} <= dataId.keys():
+            continue
+        rows.append(
+            (
+                int(dataId["visit"]),
+                dataId["arm"],
+                int(dataId["spectrograph"]),
+                match.group(1),
+                match.group(3).strip(),
+            )
+        )
+    return pd.DataFrame(rows, columns=columns)
+
+
+def coverage(
+    visits: pd.DataFrame, holdings: pd.DataFrame, failed: pd.DataFrame | None = None
+) -> pd.DataFrame:
     """Return the status of each detector image of the judged visits.
 
     Parameters
@@ -90,6 +136,10 @@ def coverage(visits: pd.DataFrame, holdings: pd.DataFrame) -> pd.DataFrame:
         From `pfs.drp.qa.comparison.classify.classifyVisits`.
     holdings : `pandas.DataFrame`
         From `pfs.drp.qa.comparison.butlerQueries.detectorHoldings`.
+    failed : `pandas.DataFrame`, optional
+        ``visit``, ``arm`` and ``spectrograph`` of images whose reduction or
+        judgement failed (`failedQuanta`); those not judged since are
+        ``failed``.
 
     Returns
     -------
@@ -122,6 +172,13 @@ def coverage(visits: pd.DataFrame, holdings: pd.DataFrame) -> pd.DataFrame:
 
     status = pd.Series("to reduce", index=detectors.index, dtype=object)
     status[detectors["reduced"]] = "to judge"
+    if failed is not None and not failed.empty:
+        failedKeys = failed.assign(camera=lambda f: _camera(f["arm"]))[["visit", "spectrograph", "camera"]]
+        cameras = detectors[["visit", "spectrograph"]].assign(camera=_camera(detectors["arm"]))
+        isFailed = pd.MultiIndex.from_frame(cameras).isin(
+            pd.MultiIndex.from_frame(failedKeys.astype(cameras.dtypes))
+        )
+        status[isFailed] = "failed"
     # Without a pfsConfig the visit can't be reduced, and one such quantum stops the whole graph,
     # so none of the visit's pending detectors is scheduled.
     status[~detectors["pfsConfig"]] = "no pfsConfig"

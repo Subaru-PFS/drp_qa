@@ -536,7 +536,10 @@ python bin.src/qaComparison.py report --period run30 --data-dir ~/Projects/Subar
 `sky` and `unvalidated-calibration`, gated first. `run --dry-run` builds
 each pass's graph (`pipetask qgraph`) and prints its quanta without writing anything; `--pass calibration`
 or `--pass sky` limits `run` to one pass. Visits with no `pfsConfig` in the inputs can't be reduced and are
-reported, not scheduled. The output collection is
+reported, not scheduled. A failed quantum fails its pass but not the others; `run` lists the failures at the end and
+exits 1. Images whose quanta failed in an earlier run (read from the period's `pipetask` logs) are `failed`, listed
+in the report and not rescheduled, since they fail the same way each time; `--retry-failed` retries them. The
+output collection is
 `u/$USER/comparison/<period>/<version>`, the version being `git describe` of the last commit that could change what
 the pipeline writes (not the comparison driver, its report, tests or docs), so a change to the driver keeps the
 collection; uncommitted changes to the rest are refused. Report the reference

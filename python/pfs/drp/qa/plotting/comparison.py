@@ -366,7 +366,13 @@ def plotArmTimeline(
 
 #: Coverage states of a judged image, darkest first; ``blocked`` (no raw, no pfsConfig, raw opdb didn't
 #: list) is the one that needs attention, so it alone has a hue.
-COVERAGE_COLORS = {"judged": "#4d4d4b", "to judge": "#8c8c8c", "to reduce": "#c4c4c0", "blocked": "#eb6834"}
+COVERAGE_COLORS = {
+    "judged": "#4d4d4b",
+    "to judge": "#8c8c8c",
+    "to reduce": "#c4c4c0",
+    "failed": "#d03b3b",
+    "blocked": "#eb6834",
+}
 
 
 def plotCoverage(coverage: pd.DataFrame, *, title: str = "Coverage of judged images") -> Figure:

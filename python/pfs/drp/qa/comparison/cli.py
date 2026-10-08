@@ -34,6 +34,7 @@ from pfs.drp.qa.comparison.classify import SKY_TYPES, classifyVisits, designKind
 from pfs.drp.qa.comparison.plan import (
     STATUS_ORDER,
     coverage,
+    failedQuanta,
     outputCollection,
     passes,
     pipetaskCommand,
@@ -276,7 +277,7 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
 
     from pfs.drp.qa.comparison.butlerQueries import detectorHoldings
     from pfs.drp.qa.comparison.findings import findings, judgeImages, taskThresholds
-    from pfs.drp.qa.comparison.report import ReportInputs, buildReport, populations
+    from pfs.drp.qa.comparison.report import ReportInputs, buildReport, failedSummary, populations
     from pfs.drp.qa.metrics.readers import readMetrics
 
     butler = Butler(args.butler, writeable=False)
@@ -284,7 +285,8 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     holdings = detectorHoldings(
         butler, judgedVisits, raw=args.raw, reductions=args.reductions, output=output, inputs=args.inputs
     )
-    detectors = coverage(visits, holdings)
+    failed = _failedImages(workDir, period)
+    detectors = coverage(visits, holdings, failed)
     done = detectors.loc[detectors["status"] == "judged", "visit"].unique()
     if not len(done):
         raise SystemExit(f"Nothing judged yet in {output}: run 'run' first")
@@ -342,6 +344,7 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
             referenceName=args.reference or "",
             lastLit=lastLit,
             timeline=armTimeline(visits),
+            failed=failedSummary(detectors, failed),
         )
     )
     path = workDir / f"report-{period.name}.html"
@@ -361,12 +364,15 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
     holdings = detectorHoldings(
         butler, judged, raw=args.raw, reductions=args.reductions, output=output, inputs=args.inputs
     )
-    detectors = coverage(visits, holdings)
+    failed = None if args.retry_failed else _failedImages(workDir, period)
+    detectors = coverage(visits, holdings, failed)
     detectors.to_parquet(workDir / f"coverage-{period.name}.parquet")
     summary = summarize(visits, detectors)
     with pd.option_context("display.width", 200, "display.max_rows", 200):
         print(summary.to_string(index=False))
     print("detector images:", ", ".join(f"{(detectors['status'] == s).sum()} {s}" for s in STATUS_ORDER))
+    if (detectors["status"] == "failed").any():
+        print("failed images are not rescheduled (they fail the same way each time); --retry-failed to retry")
 
     outputExists = collectionExists(butler, output)
     skip = [*args.reductions, *([output] if outputExists else [])]
@@ -414,6 +420,9 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
         summary, lines = pipetaskFailures(text)
         if summary:
             print(f"{name}: {summary}")
+        newlyFailed = failedQuanta(text)
+        if not newlyFailed.empty:
+            print(f"{name}: {len(newlyFailed)} detector images failed, now marked failed")
         if result.returncode:
             failed.append((name, result.returncode, log, lines))
     for name, code, log, lines in failed:
@@ -425,6 +434,16 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
         print(f"{'!' * 80}\n!! {len(failed)} of {len(commands)} passes failed: {names}", file=sys.stderr)
         return 1
     return 0
+
+
+def _failedImages(workDir: Path, period: Period) -> pd.DataFrame:
+    """Return the detector images that failed in any of a period's ``pipetask run`` logs."""
+    logs = sorted(workDir.glob(f"pipetask-{period.name}-*.log"))
+    found = [failedQuanta(log.read_text(errors="replace")) for log in logs]
+    if not found:
+        return failedQuanta("")
+    failed = pd.concat(found, ignore_index=True)
+    return failed.drop_duplicates(["visit", "arm", "spectrograph"], keep="last", ignore_index=True)
 
 
 #: How many failure lines of a pipetask log `pipetaskFailures` keeps.
@@ -515,6 +534,11 @@ def _parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="only this pass, as plan names it: calibration, sky, unvalidated-calibration, ...; repeatable",
+    )
+    parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="with plan or run: reschedule the images whose quanta failed in an earlier run",
     )
     parser.add_argument(
         "--dry-run",

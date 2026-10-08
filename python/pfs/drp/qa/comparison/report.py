@@ -32,6 +32,7 @@ __all__ = [
     "armThresholds",
     "buildReport",
     "coverageRows",
+    "failedSummary",
     "imageVerdicts",
     "populations",
     "problems",
@@ -79,6 +80,8 @@ class ReportInputs:
         From `pfs.drp.qa.comparison.persistence.lastLitBefore`.
     timeline : `pandas.DataFrame`, optional
         From `pfs.drp.qa.comparison.persistence.armTimeline`.
+    failed : `pandas.DataFrame`, optional
+        From `failedSummary`.
     """
 
     period: str
@@ -94,6 +97,36 @@ class ReportInputs:
     referenceName: str = "run25"
     lastLit: pd.DataFrame | None = None
     timeline: pd.DataFrame | None = None
+    failed: pd.DataFrame | None = None
+
+
+def failedSummary(detectors: pd.DataFrame, failed: pd.DataFrame) -> pd.DataFrame:
+    """Return the images that failed, one row per visit, task and error.
+
+    Parameters
+    ----------
+    detectors : `pandas.DataFrame`
+        From `pfs.drp.qa.comparison.plan.coverage`.
+    failed : `pandas.DataFrame`
+        From `pfs.drp.qa.comparison.plan.failedQuanta`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``visit``, ``sequence_type``, ``cadence``, ``cameras`` (``n1,n2``),
+        ``task`` and ``error``, for the images still ``failed``; sorted by
+        visit.
+    """
+    columns = ["visit", "sequence_type", "cadence", "cameras", "task", "error"]
+    stillFailed = detectors[detectors["status"] == "failed"]
+    if stillFailed.empty or failed.empty:
+        return pd.DataFrame(columns=columns)
+    merged = stillFailed.merge(failed, on=["visit", "arm", "spectrograph"], how="left")
+    merged["camera"] = merged["arm"] + merged["spectrograph"].astype(str)
+    merged[["task", "error"]] = merged[["task", "error"]].fillna("")
+    keys = ["visit", "sequence_type", "cadence", "task", "error"]
+    grouped = merged.groupby(keys, sort=True, dropna=False)["camera"].agg(lambda c: ",".join(sorted(c)))
+    return grouped.rename("cameras").reset_index()[columns]
 
 
 def populations(metrics: pd.DataFrame, visits: pd.DataFrame) -> pd.DataFrame:
@@ -304,8 +337,9 @@ def coverageRows(summary: pd.DataFrame) -> pd.DataFrame:
     Returns
     -------
     `pandas.DataFrame`
-        ``label`` and image counts ``judged``, ``to judge``, ``to reduce`` and
-        ``blocked``, one row per judged sequence type, cadence and category.
+        ``label`` and image counts ``judged``, ``to judge``, ``to reduce``,
+        ``failed`` and ``blocked``, one row per judged sequence type, cadence
+        and category.
     """
     judged = summary[summary["reason"].isin(["gated", "unvalidated"])].copy()
     blocked = [column for column in ("no pfsConfig", "no raw", "raw not in opdb") if column in judged]
@@ -315,7 +349,9 @@ def coverageRows(summary: pd.DataFrame) -> pd.DataFrame:
         + (" (unvalidated)" if row.reason == "unvalidated" else "")
         for row in judged.itertuples()
     ]
-    return judged[["label", "judged", "to judge", "to reduce", "blocked"]].reset_index(drop=True)
+    if "failed" not in judged:
+        judged["failed"] = 0
+    return judged[["label", "judged", "to judge", "to reduce", "failed", "blocked"]].reset_index(drop=True)
 
 
 def _incomplete(summary: pd.DataFrame) -> str:
@@ -383,6 +419,14 @@ def buildReport(inputs: ReportInputs) -> str:
             merged.setdefault(label, []).extend(f"{n} {kind}" for kind, n in counts.items())
         listed = "; ".join(f"{label}: {', '.join(items)}" for label, items in merged.items())
         parts.append(f"<p class='caption'>Not measured (visits): {_e(listed)}.</p>")
+    failed = inputs.failed
+    if failed is not None and not failed.empty:
+        images = int(failed["cameras"].str.count(",").sum() + len(failed))
+        parts.append(
+            f"<p class='caption'>Failed (not retried): {images} detector images of {failed['visit'].nunique()}"
+            " visits, whose reduction raised; they fail the same way each time.</p>"
+        )
+        parts.append(_details("Failed images", _table(failed)))
     parts.append(_details("Coverage table", _table(inputs.summary)))
 
     parts.append("<h2>Verdicts</h2>")

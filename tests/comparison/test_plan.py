@@ -9,6 +9,7 @@ from pfs.drp.qa.comparison.plan import (
     coverage,
     drpActorConfig,
     expectedDetectors,
+    failedQuanta,
     outputCollection,
     passes,
     pipetaskCommand,
@@ -223,3 +224,45 @@ def testUnvalidatedPassComesLast(periods, visit, listing):
         ("calibration", ("scienceArc",), (1,)),
         ("unvalidated-calibration", ("dotRoach", "slitThroughFocus"), (2, 3)),
     ]  # the darks aren't measured
+
+
+_LOG = "\n".join(
+    [
+        "INFO 2026-10-07T18:06:00 lsst.ctrl.mpexec ... Executing 40 quanta",
+        "ERROR 2026-10-07T18:06:08 lsst.pipe.base.single_quantum_executor (reduceExposure:{instrument: 'PFS',"
+        " arm: 'r', spectrograph: 1, visit: 1, dither: 42})(single_quantum_executor.py:286) - Execution of task"
+        " 'reduceExposure' on quantum {instrument: 'PFS', arm: 'r', spectrograph: 1, visit: 1, dither: 42,"
+        " pfs_design_id: 2834093894857062924} failed. Exception ValueError: No objects to concatenate",
+        "ERROR 2026-10-07T18:06:09 ... Execution of task 'isr' on quantum {instrument: 'PFS', visit: 9} failed."
+        " Exception ValueError: not a detector",
+    ]
+)
+
+
+def testFailedQuanta():
+    failed = failedQuanta(_LOG)
+    assert failed.to_dict("records") == [
+        {
+            "visit": 1,
+            "arm": "r",
+            "spectrograph": 1,
+            "task": "reduceExposure",
+            "error": "ValueError: No objects to concatenate",
+        }
+    ]  # the per-visit quantum has no detector, so it's left out
+    assert failedQuanta("").empty
+
+
+def testFailedImagesAreNotRescheduled(classified):
+    holdings = _holdings([(visit, arm, 1, True, False, visit == 3) for visit in (1, 2, 3, 4) for arm in "br"])
+    failed = failedQuanta(_LOG)
+    detectors = coverage(classified, holdings, failed)
+    status = detectors.set_index(["visit", "arm", "spectrograph"])["status"]
+    assert status[(1, "r", 1)] == "failed"
+    assert status[(1, "b", 1)] == "to reduce"  # same visit, other camera
+    assert [item.visits for item in passes(classified, detectors)] == [(1, 2), (4,)]  # 1 b1 is still to do
+
+    # An image judged since it failed is judged; without the failures, everything is rescheduled.
+    holdings.loc[(holdings["visit"] == 1) & (holdings["arm"] == "r"), "judged"] = True
+    assert coverage(classified, holdings, failed).set_index(["visit", "arm"])["status"][(1, "r")] == "judged"
+    assert "failed" not in set(coverage(classified, holdings)["status"])
