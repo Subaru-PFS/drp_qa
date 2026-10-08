@@ -260,6 +260,9 @@ class Pass:
     groups : `dict` [`int`, `int`]
         Visit to cosmic-ray group, the group being the first visit of its
         sequence: ``cosmicray``'s ``groups`` with ``grouping="manual"``.
+    judgeOnly : `bool`, optional
+        Whether every image is already reduced, so only ``imageQualityQa``
+        runs; its name ends ``-judge``.
     """
 
     name: str
@@ -267,6 +270,7 @@ class Pass:
     visits: tuple[int, ...]
     config: dict[str, bool] = field(hash=False)
     groups: dict[int, int] = field(hash=False)
+    judgeOnly: bool = False
 
     def cosmicrayConfig(self) -> str:
         """Return the ``cosmicray`` config file that groups by sequence."""
@@ -278,6 +282,11 @@ def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
 
     The gated passes come first in the list, so the gate's visits are done before the
     unvalidated ones, which can be many.
+
+    Each is split by sequence: a sequence with an image ``to reduce`` gets the whole pipeline,
+    and one whose images are all reduced only ``imageQualityQa`` (a ``-judge`` pass, listed
+    first). Without the split, pipetask reruns ``cosmicray`` on every image whose reduction lacks
+    a ``cosmicray_log``, an optional input of ``imageQualityQa``, though nothing is reduced again.
 
     Parameters
     ----------
@@ -298,15 +307,22 @@ def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
         return []
 
     sequenceFirst = todo.groupby("iic_sequence_id")["pfs_visit_id"].transform("min")
-    todo = todo.assign(group=sequenceFirst.astype(int), configKey=todo["sequence_type"].map(_configKey))
+    toReduce = set(detectors.loc[detectors["status"] == "to reduce", "visit"])
+    reduceSequence = todo["pfs_visit_id"].isin(toReduce).groupby(todo["iic_sequence_id"]).transform("any")
+    todo = todo.assign(
+        group=sequenceFirst.astype(int),
+        configKey=todo["sequence_type"].map(_configKey),
+        judgeOnly=~reduceSequence.astype(bool),
+    )
     result = []
-    for (_, validated), group in todo.groupby(["configKey", "validated"]):
+    for (_, validated, judgeOnly), group in todo.groupby(["configKey", "validated", "judgeOnly"]):
         types = sorted(group["sequence_type"].unique())
         config = drpActorConfig(types[0])
         name = "sky" if config["reduceExposure:requireAdjustDetectorMap"] else "calibration"
+        name = name if validated else f"unvalidated-{name}"
         result.append(
             Pass(
-                name=name if validated else f"unvalidated-{name}",
+                name=f"{name}-judge" if judgeOnly else name,
                 types=tuple(types),
                 visits=tuple(sorted(int(visit) for visit in group["pfs_visit_id"])),
                 config=config,
@@ -314,9 +330,17 @@ def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
                     int(visit): int(first)
                     for visit, first in sorted(zip(group["pfs_visit_id"], group["group"], strict=True))
                 },
+                judgeOnly=bool(judgeOnly),
             )
         )
-    return sorted(result, key=lambda item: (item.name.startswith("unvalidated"), item.name))
+    return sorted(
+        result,
+        key=lambda item: (
+            item.name.startswith("unvalidated"),
+            item.name.removesuffix("-judge"),
+            not item.judgeOnly,
+        ),
+    )
 
 
 def outputCollection(prefix: str, period: str, version: str) -> str:
@@ -355,7 +379,7 @@ def pipetaskCommand(
     inputs: Sequence[str],
     output: str,
     skipExistingIn: Sequence[str],
-    cosmicrayConfigFile: str,
+    cosmicrayConfigFile: str | None = None,
     jobs: int = 8,
     instrument: str = "PFS",
     rebase: bool = False,
@@ -377,8 +401,9 @@ def pipetaskCommand(
     skipExistingIn : sequence of `str`
         Collections whose outputs are reused, e.g. ``drpActor/reductions``
         and, once it exists, ``output``.
-    cosmicrayConfigFile : `str`
-        Where `Pass.cosmicrayConfig` was written.
+    cosmicrayConfigFile : `str`, optional
+        Where `Pass.cosmicrayConfig` was written; needed unless
+        ``item.judgeOnly``.
     jobs : `int`, optional
         Parallel processes.
     instrument : `str`, optional
@@ -395,14 +420,19 @@ def pipetaskCommand(
         The command, one argument per element.
     """
     command = ["pipetask", "--long-log", "--log-level", "PFS=INFO", "run", "-j", str(jobs)]
-    command += ["-b", butler, "-p", pipeline, "-i", ",".join(inputs), "-o", output]
+    # A judge-only pass runs one task, so the reduction's overrides would name labels it lacks.
+    subset = f"{pipeline}#imageQualityQa" if item.judgeOnly else pipeline
+    command += ["-b", butler, "-p", subset, "-i", ",".join(inputs), "-o", output]
     if rebase:
         command += ["--rebase"]
     if skipExistingIn:
         command += ["--skip-existing-in", ",".join(skipExistingIn)]
-    for key, value in item.config.items():
-        command += ["-c", f"{key}={value}"]
-    command += ["-C", f"cosmicray:{cosmicrayConfigFile}"]
+    if not item.judgeOnly:
+        if cosmicrayConfigFile is None:
+            raise ValueError(f"Pass {item.name} reduces, so it needs cosmicrayConfigFile")
+        for key, value in item.config.items():
+            command += ["-c", f"{key}={value}"]
+        command += ["-C", f"cosmicray:{cosmicrayConfigFile}"]
     command += ["-d", f"instrument = '{instrument}' AND {visitExpression(item.visits)}"]
     return command
 

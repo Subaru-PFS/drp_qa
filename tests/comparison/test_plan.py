@@ -117,6 +117,42 @@ def testPassesGroupByConfigAndSequence(classified):
     assert "config.groups = {1: 1, 2: 1, 3: 3}" in arcsAndTraces.cosmicrayConfig()
 
 
+def testReducedSequencesAreOnlyJudged(classified):
+    holdings = _holdings(
+        [
+            (1, "b", 1, True, True, False),
+            (1, "r", 1, True, True, False),
+            (2, "b", 1, True, False, False),  # one image to reduce: its whole sequence is reduced
+            (2, "r", 1, True, True, False),
+            (3, "b", 1, True, True, False),
+            (3, "r", 1, True, True, False),
+            (4, "b", 1, True, True, False),
+            (4, "r", 1, True, True, True),
+        ]
+    )
+    result = passes(classified, coverage(classified, holdings))
+    assert [(item.name, item.visits, item.judgeOnly) for item in result] == [
+        ("calibration-judge", (3,), True),
+        ("calibration", (1, 2), False),
+        ("sky-judge", (4,), True),
+    ]
+    common = {
+        "butler": "/work/datastore",
+        "pipeline": "pipelines/qaThresholds.yaml",
+        "inputs": ["drpActor/reductions", "PFS/defaults"],
+        "output": "u/me/comparison/run1/w.2026.41",
+        "skipExistingIn": ["drpActor/reductions"],
+    }
+    judge = pipetaskCommand(result[0], **common)
+    assert judge[judge.index("-p") + 1] == "pipelines/qaThresholds.yaml#imageQualityQa"
+    assert "-c" not in judge and "-C" not in judge  # no reduction labels to configure
+    reduce = pipetaskCommand(result[1], cosmicrayConfigFile="/tmp/cr.py", **common)
+    assert reduce[reduce.index("-p") + 1] == "pipelines/qaThresholds.yaml"
+    assert "-C" in reduce
+    with pytest.raises(ValueError, match="cosmicrayConfigFile"):
+        pipetaskCommand(result[1], **common)
+
+
 def testNothingPendingNoPasses(classified):
     holdings = _holdings([(visit, arm, 1, True, True, True) for visit in (1, 2, 3, 4) for arm in "br"])
     assert passes(classified, coverage(classified, holdings)) == []

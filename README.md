@@ -533,7 +533,11 @@ python bin.src/qaComparison.py report --period run30 --data-dir ~/Projects/Subar
 ```
 
 `plan` prints the `pipetask` commands as Python lists, for running from a notebook instead. Passes are `calibration`,
-`sky` and `unvalidated-calibration`, gated first. `run --dry-run` builds
+`sky` and `unvalidated-calibration`, gated first, each split by sequence: sequences with an image to reduce get the
+whole pipeline, and sequences already reduced by drpActor only `imageQualityQa` (a `-judge` pass, e.g. `sky-judge`;
+`--pass sky` selects both). Otherwise pipetask reruns `cosmicray` wherever a reduction lacks the `cosmicray_log`
+that `imageQualityQa` optionally reads, though the reduction is reused; the judge-only images then have no
+cosmic-ray counts, which are not gated. `run --dry-run` builds
 each pass's graph (`pipetask qgraph`) and prints its quanta without writing anything; `--pass calibration`
 or `--pass sky` limits `run` to one pass. Visits with no `pfsConfig` in the inputs can't be reduced and are
 reported, not scheduled. A failed quantum fails its pass but not the others; `run` lists the failures at the end and

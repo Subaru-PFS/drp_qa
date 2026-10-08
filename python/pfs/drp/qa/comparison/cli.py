@@ -378,11 +378,17 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
     skip = [*args.reductions, *([output] if outputExists else [])]
     commands = []
     for item in passes(visits, detectors):
-        if args.passes and item.name not in args.passes:
+        if (
+            args.passes
+            and item.name.removesuffix("-judge") not in args.passes
+            and item.name not in args.passes
+        ):
             print(f"\n# {item.name} ({', '.join(item.types)}): {len(item.visits)} visits, skipped (--pass)")
             continue
-        configFile = workDir / f"cosmicray-{period.name}-{item.name}.py"
-        configFile.write_text(item.cosmicrayConfig())
+        configFile = None
+        if not item.judgeOnly:
+            configFile = workDir / f"cosmicray-{period.name}-{item.name}.py"
+            configFile.write_text(item.cosmicrayConfig())
         command = pipetaskCommand(
             item,
             butler=args.butler,
@@ -390,7 +396,7 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
             inputs=args.inputs,
             output=output,
             skipExistingIn=skip,
-            cosmicrayConfigFile=str(configFile),
+            cosmicrayConfigFile=None if configFile is None else str(configFile),
             jobs=args.jobs,
             rebase=outputExists,
         )
@@ -533,7 +539,8 @@ def _parser() -> argparse.ArgumentParser:
         dest="passes",
         action="append",
         default=[],
-        help="only this pass, as plan names it: calibration, sky, unvalidated-calibration, ...; repeatable",
+        help="only this pass, as plan names it: calibration, sky, unvalidated-calibration, ... (with its"
+        " -judge pass), or sky-judge, ...; repeatable",
     )
     parser.add_argument(
         "--retry-failed",
