@@ -205,11 +205,11 @@ def testOutputCollection():
     with pytest.raises(ValueError, match="uncommitted"):
         outputCollection("u/me/comparison", "run30", "w.2026.41-2-gabc1234-dirty")
     assert (
-        outputCollection("u/me/comparison", "run30", "w.2026.41", "drp_stella-w.2026.40")
-        == "u/me/comparison/run30/w.2026.41/drp_stella-w.2026.40"
+        outputCollection("u/me/comparison", "run30", "w.2026.41", "pfs-w.2026.40")
+        == "u/me/comparison/run30/w.2026.41/pfs-w.2026.40"
     )
     with pytest.raises(ValueError, match="uncommitted"):
-        outputCollection("u/me/comparison", "run30", "w.2026.41", "drp_stella-w.2026.40-dirty")
+        outputCollection("u/me/comparison", "run30", "w.2026.41", "pfs-w.2026.40-dirty")
 
 
 def testMediumResolutionIsTheRedCamera(periods, visit, listing):

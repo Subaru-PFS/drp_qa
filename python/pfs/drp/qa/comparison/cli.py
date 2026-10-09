@@ -13,8 +13,9 @@ Four steps, each safe to repeat:
 
 By default the reductions in ``drpActor/reductions`` are reused, each made with the pipeline of its
 day. ``--fresh`` reduces everything with the current pipeline instead, so that runs are compared on
-a level field. Its collection and files are named after that pipeline (`pipelineVersion`), and a
-later drp_qa version reuses the fresh reductions of the same pipeline, judging them again.
+a level field. Its collection and files are named after that pipeline (`pipelineVersion`, from
+drp_stella's ``getPfsVersions``), and a later drp_qa version reuses the fresh reductions of the
+same pipeline, judging them again.
 ``report``
     Read the verdicts and write the period's report.
 
@@ -276,7 +277,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args.variant = ""
     if args.fresh:
         try:
-            args.variant = f"drp_stella-{args.pipeline_version or pipelineVersion()}"
+            args.variant = args.pipeline_version or pipelineVersion()
         except RuntimeError as error:
             raise SystemExit(str(error)) from None
     try:
@@ -293,39 +294,42 @@ def main(argv: Sequence[str] | None = None) -> int:
     return _report(args, period, periods, visits, frames, stamp, output, version, workDir, dataDir)
 
 
-def pipelineVersion(environ: dict[str, str] | None = None) -> str:
-    """Return the version of the drp_stella that reduces, which names fresh reductions.
+def pipelineVersion(versions: dict[str, str] | None = None) -> str:
+    """Return the label of the pipeline that reduces, which names fresh reductions.
 
     Parameters
     ----------
-    environ : `dict` [`str`, `str`], optional
-        The environment. Default `os.environ`.
+    versions : `dict` [`str`, `str`], optional
+        `pfs.drp.stella.utils.sysUtils.getPfsVersions` with ``prefix=""``
+        (``DATAMODEL``, ``OBS_PFS``, ``DRP_STELLA``); read from it by default.
 
     Returns
     -------
     `str`
-        The EUPS version of the drp_stella set up (``SETUP_DRP_STELLA``), e.g.
-        ``w.2026.40``; for one set up from a checkout (``setup -r``), ``git
-        describe`` of ``DRP_STELLA_DIR``, with ``-dirty`` if it has changes.
+        ``pfs-<version>`` when every product has the same version, as a
+        weekly does (``pfs-w.2026.40``); otherwise each product's,
+        ``datamodel-<v>+obs_pfs-<v>+drp_stella-<v>``.
 
     Raises
     ------
     RuntimeError
-        If drp_stella isn't set up, or its checkout can't be described.
+        If the versions can't be read (drp_stella isn't set up), or one is
+        unknown.
     """
-    environ = os.environ if environ is None else environ
-    setup = environ.get("SETUP_DRP_STELLA", "").split()
-    if len(setup) > 1 and not setup[1].startswith("LOCAL:"):
-        return setup[1]
-    directory = environ.get("DRP_STELLA_DIR")
-    if not directory:
-        raise RuntimeError("drp_stella isn't set up: set it up, or name the pipeline with --pipeline-version")
-    result = subprocess.run(
-        ["git", "-C", directory, "describe", "--tags", "--always", "--dirty"], capture_output=True, text=True
-    )
-    if result.returncode:
-        raise RuntimeError(f"Can't describe drp_stella in {directory}: name it with --pipeline-version")
-    return result.stdout.strip()
+    if versions is None:
+        try:
+            from pfs.drp.stella.utils.sysUtils import getPfsVersions
+        except ImportError as error:
+            raise RuntimeError(
+                f"Can't read the pipeline's versions ({error}): use --pipeline-version"
+            ) from None
+        versions = getPfsVersions(prefix="")
+    versions = {key.replace("HIERARCH ", "").lower(): str(value) for key, value in versions.items()}
+    if not versions or any(value in ("", "unknown") for value in versions.values()):
+        raise RuntimeError(f"Unknown pipeline versions {versions}: use --pipeline-version")
+    if len(set(versions.values())) == 1:
+        return f"pfs-{next(iter(versions.values()))}"
+    return "+".join(f"{name}-{value}" for name, value in versions.items())
 
 
 def resolveCollections(
@@ -657,12 +661,12 @@ def _parser() -> argparse.ArgumentParser:
         "--fresh",
         action="store_true",
         help="reduce everything with the current pipeline, reusing nothing of drpActor's; the collection and"
-        " files are named after the pipeline (drp_stella-<version>)",
+        " files are named after the pipeline (pfs-<weekly>, from getPfsVersions)",
     )
     parser.add_argument(
         "--pipeline-version",
         default=None,
-        help="with --fresh: the drp_stella version naming the reductions (default: the one set up)",
+        help="with --fresh: the label naming the reductions (default: from getPfsVersions)",
     )
     parser.add_argument(
         "--pipeline", default=f"{drpQaDir}/pipelines/qaThresholds.yaml", help="the reduction and QA pipeline"

@@ -355,7 +355,7 @@ def outputCollection(prefix: str, period: str, version: str, reductions: str = "
     version : `str`
         The drp_qa version, e.g. from ``git describe``.
     reductions : `str`, optional
-        What made the reductions, for fresh ones: e.g. ``drp_stella-w.2026.40``.
+        What made the reductions, for fresh ones: e.g. ``pfs-w.2026.40``.
         Empty for drpActor's.
 
     Returns

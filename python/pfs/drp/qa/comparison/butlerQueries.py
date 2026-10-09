@@ -61,7 +61,7 @@ def earlierReductions(butler, prefix: str, period: str, reductions: str, exclude
     period : `str`
         The period, e.g. ``run30``.
     reductions : `str`
-        What made them, e.g. ``drp_stella-w.2026.40``.
+        What made them, e.g. ``pfs-w.2026.40``.
     exclude : `str`
         The current output collection.
 

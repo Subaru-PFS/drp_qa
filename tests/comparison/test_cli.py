@@ -130,14 +130,13 @@ def testResolveCollections():
         resolveCollections(True, "PFS/defaults", ["drpActor/reductions"], None)
 
 
-def testPipelineVersion(tmp_path):
+def testPipelineVersion():
     from pfs.drp.qa.comparison.cli import pipelineVersion
 
-    assert pipelineVersion({"SETUP_DRP_STELLA": "drp_stella w.2026.40 -f Linux64 -Z /stack"}) == "w.2026.40"
-    # Set up from a checkout: described by git, not by the LOCAL: path EUPS gives.
-    with pytest.raises(RuntimeError, match="describe"):
-        pipelineVersion(
-            {"SETUP_DRP_STELLA": "drp_stella LOCAL:/x -f Linux64", "DRP_STELLA_DIR": str(tmp_path)}
-        )
-    with pytest.raises(RuntimeError, match="set up"):
-        pipelineVersion({})
+    weekly = {"DATAMODEL": "w.2026.40", "OBS_PFS": "w.2026.40", "DRP_STELLA": "w.2026.40"}
+    assert pipelineVersion(weekly) == "pfs-w.2026.40"
+    mixed = weekly | {"HIERARCH OBS_PFS": "w.2026.41-2-gabc"}
+    del mixed["OBS_PFS"]
+    assert pipelineVersion(mixed) == "datamodel-w.2026.40+drp_stella-w.2026.40+obs_pfs-w.2026.41-2-gabc"
+    with pytest.raises(RuntimeError, match="Unknown"):
+        pipelineVersion(weekly | {"DRP_STELLA": "unknown"})

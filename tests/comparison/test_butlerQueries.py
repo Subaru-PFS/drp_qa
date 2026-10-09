@@ -49,17 +49,17 @@ def testEarlierReductions():
 
     names = [
         "u/me/comparison/run30/v1",  # drpActor's reductions
-        "u/me/comparison/run30/v1/drp_stella-w.2026.40",
-        "u/me/comparison/run30/v1/drp_stella-w.2026.40/20261009T120000Z",  # a run inside the chain
-        "u/me/comparison/run30/v2/drp_stella-w.2026.40",  # the current output
-        "u/me/comparison/run30/v2/drp_stella-w.2026.44",  # another pipeline
+        "u/me/comparison/run30/v1/pfs-w.2026.40",
+        "u/me/comparison/run30/v1/pfs-w.2026.40/20261009T120000Z",  # a run inside the chain
+        "u/me/comparison/run30/v2/pfs-w.2026.40",  # the current output
+        "u/me/comparison/run30/v2/pfs-w.2026.44",  # another pipeline
     ]
     butler = SimpleNamespace(collections=SimpleNamespace(query=lambda pattern: names))
     found = earlierReductions(
         butler,
         "u/me/comparison",
         "run30",
-        "drp_stella-w.2026.40",
-        "u/me/comparison/run30/v2/drp_stella-w.2026.40",
+        "pfs-w.2026.40",
+        "u/me/comparison/run30/v2/pfs-w.2026.40",
     )
-    assert found == ["u/me/comparison/run30/v1/drp_stella-w.2026.40"]
+    assert found == ["u/me/comparison/run30/v1/pfs-w.2026.40"]

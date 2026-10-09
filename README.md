@@ -544,9 +544,9 @@ python bin.src/qaComparison.py report --period run30 --data-dir ~/Projects/Subar
 `plan` prints the `pipetask` commands as Python lists, for running from a notebook instead. By default the
 reductions in `drpActor/reductions` are reused, each made with the pipeline of its day; `--fresh` reduces everything
 with the current pipeline instead, so runs are compared on a level field (their calibrations are still each
-run's own). Its collection and files are named after that pipeline, `<period>/<version>/drp_stella-<version>` (the
-EUPS version set up, or `git describe` of a checkout; `--pipeline-version` names it), so a new pipeline starts
-afresh while a new drp_qa version reuses the same pipeline's reductions and only judges again. Passes are `calibration`,
+run's own). Its collection and files are named after that pipeline, `<period>/<version>/pfs-<weekly>` (from
+drp_stella's `getPfsVersions`, each product's version if they differ; `--pipeline-version` names it), so a new
+pipeline starts afresh while a new drp_qa version reuses the same pipeline's reductions and only judges again. Passes are `calibration`,
 `sky` and `unvalidated-calibration`, gated first, each split by sequence: sequences with an image to reduce get the
 whole pipeline, and sequences already reduced by drpActor only `imageQualityQa` (a `-judge` pass, e.g. `sky-judge`;
 `--pass sky` selects both). Otherwise pipetask reruns `cosmicray` wherever a reduction lacks the `cosmicray_log`
