@@ -151,11 +151,13 @@ def cadences(visits: pd.DataFrame) -> pd.Series:
     size = calib.groupby("iic_sequence_id")["pfs_visit_id"].transform("size").fillna(1)
     isSingle = (size == 1) | calib["iic_sequence_id"].isna()
     group = calib["group_id"] if "group_id" in calib else pd.Series(pd.NA, index=calib.index)
+    # Rows with no group drop out of the groupby, and come back from the reindex as missing.
     groupHasSet = (
         (~isSingle)
         .groupby([group, calib["sequence_type"]], dropna=True)
         .transform("any")
         .reindex(calib.index)
+        .astype("boolean")
         .fillna(False)
         .astype(bool)
     )
