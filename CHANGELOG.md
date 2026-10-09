@@ -10,6 +10,18 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Comparison mode** (PIPE2D-1929) — `bin.src/qaComparison.py` (`fetch`, `plan`, `run`, `report`) gates every
+  image of an observing run against the Run25 thresholds. `pfs.drp.qa.comparison` lists a period's visits from
+  the opdb (`queries`), says whether each is a calibration or science and whether the gate judges it
+  (`classify`), plans the `pipetask` runs with `drpActor`'s per-sequence-type config (`plan`), writes a finding
+  for each `WARN`/`FAIL` image (`findings`) and builds a self-contained HTML report (`report`). Daily
+  single-exposure arcs and traces are reported apart from calibration sets, and not judged on `nLines` or
+  `pctFlagged` until PIPE2D-1935. The observing
+  runs and their pre-run periods are in `comparison/data/observingRuns.yaml`. New plots in
+  `pfs.drp.qa.plotting.comparison`: `plotMetricComparison`, `plotNightlySeries`, `plotVerdictGrid`. The report leads with verdict tiles, a coverage chart and problems (findings grouped by
+  metric, arm and setup, those the validation set expects folded away), with the detail collapsed. An image with
+  nothing judged is `NOT JUDGED`, with the reason (no method for the type, IIS lamp, FWHM from `fiberProfiles`, no
+  FLUXSTD FWHM, twilight), and `UNKNOWN` only when a measured metric has no threshold for its population.
 - **GitHub Actions CI** — `.github/workflows/tests.yml` runs the stack-free test suite on Python 3.12 and
   3.13; `.github/workflows/lint.yml` runs `ruff check .` and `ruff format --check .` over the whole tree.
   Both are blocking.
@@ -57,8 +69,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   missing result (`NOT_RUN`).
 - **Run25 thresholds adopted** (PIPE2D-1917) — `thresholdsFile` defaults to `iqQaThresholds-run25.yaml`, shipped in
   `pfs/drp/qa/metrics/data` with the script that makes it from the PIPE2D-1914 derivation: `medFwhm` (arcs) and
-  `nLines`, quartz `nLines` set by hand, twilight `nLines` not judged, no `pctFlagged`. A relative
+  `nLines`, quartz `nLines` set by hand, twilight `nLines` not judged. A relative
   `thresholdsFile` is looked up there (`gate.thresholdsPath`). Changes verdicts.
+- **`pctFlagged` is no longer judged** (PIPE2D-1929) — the shipped thresholds file has one entry for it with
+  neither WARN nor FAIL, which overrides the `flagRate*Threshold` config fields: their n-arm 15/20 % sits below
+  the known-good n-arm Neon sets of Run25 and Run30. Changes verdicts.
 - **`iqQaSpeciesMetrics`** (PIPE2D-1915) — the per-species `fitDetectorMap` statistics, in long format
   (`pfs.drp.qa.metrics.longFormat`), replacing the `fitSpeciesXRms_<species>`/`fitSpeciesYRms_<species>`
   columns of `iqQaMetrics`, which are gone. `imageQualityLogQa.py` reads it.

@@ -17,14 +17,17 @@ detector. Its verdict is persisted, so that calibration building and the science
 - **It judges quick reductions.** `drpActor` reduces each image during observing (`reduceExposure`, its
   `hilo` pipeline). That is not the reduction the science release uses. `qaActor` listens to `drpActor` and
   reads `drpActor/reductions`, so QA never reduces anything a second time; production QA must not re-reduce.
-  Thresholds are therefore derived in `drpActor`'s reduction context.
+  Thresholds are therefore derived in `drpActor`'s reduction context. Comparison mode is the one exception: it
+  reduces only what `drpActor/reductions` lacks, with `drpActor`'s per-sequence-type config, into its own
+  collection.
 - **Two modes, one judgement.** *Real time*: `qaActor` judges each sequence group as `drpActor` finishes it
-  (INSTRM-3040). *Comparison*: a batch over a run, driven by the run's calibration summary (PIPE2D-1929). Both
-  call `pfs.drp.qa.metrics.gate.gate`.
+  (INSTRM-3040). *Comparison*: a batch over every visit of a run, listed from the opdb (PIPE2D-1929; see
+  [Comparison mode](#comparison-mode)). Both judge with `pfs.drp.qa.metrics.gate`.
 - **Comparison works on a partial run.** Run on day 10 of a 20-day run, it gives valid verdicts, and a later
-  re-run with the fuller summary updates them: a verdict depends only on its own image, and results are
-  upserted by visit × detector.
-- **Verdicts live in qadb** (`spt_qa_database`), with the long-term QA results (PIPE2D-1385).
+  re-run adds the new nights' images without changing earlier verdicts: a verdict depends only on its own
+  image, each period and drp_qa version has its own collection, and what is already judged is skipped.
+- **Verdicts are stored in the Butler**, in `iqQaMetrics` (`qaStatus`, `qaReason`). qadb (`spt_qa_database`)
+  loads them later, with the long-term QA results (PIPE2D-1385).
 - **Gate, not product assessment.** Judging the quality of science products is a separate job, not yet
   designed; tasks here should stay on one side of that line.
 - **Not covered yet:** cosmic-ray processing (PIPE2D-1609).
@@ -212,8 +215,10 @@ The default, `iqQaThresholds-run25.yaml`, holds the thresholds derived from the 
 - `medFwhm` on arcs, per arm (b 2.872/2.89, r 2.987/2.993, n 3.05/3.1, m 3.18/3.21 px).
 - `nLines` per arm and sequence (`seqName`), lower is worse. On quartz it is set by hand, 0.5 %/1 % below the
   smallest known-good Run25 count, as the derivation was degenerate; on twilight it is not judged.
-- No `pctFlagged`: the config fields judge it, since Run27's n-arm flag rates sit above Run25's. Run27 was
-  reduced without calibrations of its own; flag rates are revisited against Run30 in comparison mode.
+- `pctFlagged` is not judged: one entry with neither WARN nor FAIL, which also overrides the config fields. Run25's
+  derivation had 5 visits per population, and the config's n-arm 15/20 % sits below the known-good n-arm Neon sets
+  of Run25 (34 %) and Run30 (26–35 %), as comparison mode showed (PIPE2D-1929). It stays unjudged until there is a
+  valid reference.
 - `medFwhm` on quartz has no entry yet; the config fields judge a calexp-measured width.
 
 The config fields:
@@ -415,11 +420,16 @@ verdict is known. The decisions behind the current set:
 - **The validation set holds Run25's known-good visits only.** From other runs it holds only known-bad visits, as
   fault examples: each is checked against the thresholds, and none derives one. (Run27 and Run30 known-good entries
   still in the YAML are removed by PIPE2D-1933.)
-- **Other runs are compared, not used for derivation.** Comparison mode (PIPE2D-1929) judges a run from its
-  calibration summary against Run25's thresholds; Run30 is the first. Run27 is not a fair comparison: no
+- **A set is never its own reference.** The gate decides whether a run's calibration set should be used to build its
+  calibrations, so a set counts as known-good only once the calibrations built from it have proved out (used, with good
+  reductions), and then only for later runs. Each arm's reference is chosen from such sets (PIPE2D-1938): Run25's
+  n-arm thresholds predate the pipeline changes that made the n arm reliable (about Run29–30), so n-arm verdicts are
+  provisional until then.
+- **Other runs are compared, not used for derivation.** Comparison mode (PIPE2D-1929) judges every visit of a run
+  against Run25's thresholds; Run30 is the first. Run27 is not a fair comparison: no
   calibrations were made from it, and its n-arm flag rates sit 2–5 points above Run25's.
 - **`imageQualityQa` judges by the adopted Run25 file** (`iqQaThresholds-run25.yaml`): `medFwhm` on arcs and
-  `nLines`. Flag rates (`pctFlagged`) stay on the config fields until compared with Run30; quartz `medFwhm` has no
+  `nLines`. Flag rates (`pctFlagged`) are not judged until there is a valid reference; quartz `medFwhm` has no
   derived threshold until the calexp width is fixed (PIPE2D-1918); twilight is not measured. Details under
   [Pass/Warn/Fail Thresholds](#passwarnfail-thresholds).
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
@@ -483,6 +493,76 @@ A raster scan visit holds two pointings: once its shutters close, the telescope 
 `boresight` reference, and the plots using it, are only right for its shutter-open rows (`shutter_open == 1`)
 (PIPE2D-1910).
 
+## Comparison mode
+
+`bin.src/qaComparison.py` gates every image of an observing run, or of the calibrations taken before it, against
+the reference thresholds, and writes a report comparing the run with Run25 (`pfs.drp.qa.comparison`).
+
+- **The visits come from the opdb**, not from the hand-written run summaries: every SpS visit between the
+  period's dates, with its sequence, `cmd_str`, cameras, design, obslog notes and telescope status. The periods
+  (each run's nights and its pre-run calibration nights, HST, a night running noon to noon) are in
+  [`comparison/data/observingRuns.yaml`](python/pfs/drp/qa/comparison/data/observingRuns.yaml), derived from
+  gaps in SpS activity.
+- **Calibration or science is what the exposure is**, not when it was taken: every sequence type but
+  `scienceObject` and `scienceObject_windowed` is a calibration, and those are science when their design has a
+  science proposal. Twilight frames, dithers and telescope focus sweeps are on engineering designs, so they are
+  calibrations.
+- **Everything measurable is judged; only validated types are gated.** `scienceArc`, `scienceTrace` and
+  `scienceObject` are *gated*: their thresholds were derived from and checked against such visits. Every other type
+  `imageQualityQa` can measure (engineering arcs, flats, fiber profiles, focus sweeps, windowed readouts, new
+  types) is judged the same way but labelled *unvalidated*, in its own pass and its own report section: a `FAIL`
+  there may be what an engineering test expected. Biases and darks have no method yet; test exposures are listed
+  only.
+- **n-arm darks are listed with the last lit exposure before them**, from the opdb alone: the n detectors keep an image
+  of a bright exposure for a while, so the darks taken soonest after an arc or quartz are the ones to check for
+  persistence until darks are measured (PIPE2D-1925). The report shows each night's n-arm exposures on a
+  timeline, colored by what lit them, beside the gap before each dark sequence; `darksLastLit-<period>.csv` has
+  every dark.
+- **Daily arcs and traces are reported apart from sets.** A calibration *set* is 3 exposures per arc lamp and 10
+  traces; one-visit sequences of its sequence group (`group_id`) belong to it. Another one-visit sequence is *daily* when
+  its name recurs on 4 or more nights (from Run28, a neon arc and a trace, and IIS frames, each day, for drift), and a
+  one-off *single* otherwise (positioner scans, bootstrap exposures), judged like a set. All are
+  judged against the thresholds derived from Run25's sets, but `nLines` and `pctFlagged` aren't judged on daily ones:
+  they are often taken with one fiber group lit, which neither allows for yet (PIPE2D-1935).
+- **Sky visits are labelled** from the telescope status: a *focus sweep* (10 or more focus offsets spanning at least
+  0.5 mm on one field in one night) changes how much light enters the fibers but not the line widths, so its
+  `nLines` and `pctFlagged` aren't judged; *dithered* visits are marked.
+- **Findings are written from the data.** Each `WARN` or `FAIL` image gets the metrics that crossed, how far the
+  problem spreads (detector, arm, spectrograph, most of the visit, the whole sequence), the setup and the opdb's
+  notes beside it. Notes never decide a verdict.
+
+Four steps, each safe to repeat. Files go under `--data-dir`: opdb reads in `opdb/`, everything else in
+`<run>/qa/<drp_qa version>/`; the report shows science visits, so keep it local.
+
+```bash
+python bin.src/qaComparison.py fetch  --period run30 --data-dir ~/Projects/Subaru/PFS/data   # opdb, read-only
+python bin.src/qaComparison.py plan   --period run30 --data-dir ~/Projects/Subaru/PFS/data   # coverage, pipetask commands
+python bin.src/qaComparison.py run    --period run30 --data-dir ~/Projects/Subaru/PFS/data   # reduce what's missing, judge
+python bin.src/qaComparison.py report --period run30 --data-dir ~/Projects/Subaru/PFS/data   # report-run30.html
+```
+
+`plan` prints the `pipetask` commands as Python lists, for running from a notebook instead. By default the
+reductions in `drpActor/reductions` are reused, each made with the pipeline of its day; `--fresh` reduces everything
+with the current pipeline instead, so runs are compared on a level field (their calibrations are still each
+run's own). Its collection and files are named after that pipeline, `<period>/<version>/pfs-<weekly>` (from
+drp_stella's `getPfsVersions`, each product's version if they differ; `--pipeline-version` names it), so a new
+pipeline starts afresh while a new drp_qa version reuses the same pipeline's reductions and only judges again. Passes are `calibration`,
+`sky` and `unvalidated-calibration`, gated first, each split by sequence: sequences with an image to reduce get the
+whole pipeline, and sequences already reduced by drpActor only `imageQualityQa` (a `-judge` pass, e.g. `sky-judge`;
+`--pass sky` selects both). Otherwise pipetask reruns `cosmicray` wherever a reduction lacks the `cosmicray_log`
+that `imageQualityQa` optionally reads, though the reduction is reused; the judge-only images then have no
+cosmic-ray counts, which are not gated. `run --dry-run` builds
+each pass's graph (`pipetask qgraph`) and prints its quanta without writing anything; `--pass calibration`
+or `--pass sky` limits `run` to one pass. Visits with no `pfsConfig` in the inputs can't be reduced and are
+reported, not scheduled. A failed quantum fails its pass but not the others; `run` lists the failures at the end and
+exits 1. Images whose quanta failed in an earlier run (read from the period's `pipetask` logs) are `failed`, listed
+in the report and not rescheduled, since they fail the same way each time; `--retry-failed` retries them. The
+output collection is
+`u/$USER/comparison/<period>/<version>`, the version being `git describe` of the last commit that could change what
+the pipeline writes (not the comparison driver, its report, tests or docs), so a change to the driver keeps the
+collection; uncommitted changes to the rest are refused. Report the reference
+(`--period run25`) first: its stored metrics are what each other run is compared with.
+
 ## Command-line tools
 
 Scripts live in `bin.src/` and are run directly — there is no SCons step to copy them into a `bin/` directory on `PATH`:
@@ -490,6 +570,10 @@ Scripts live in `bin.src/` and are run directly — there is no SCons step to co
 ```bash
 python bin.src/<script>.py --help
 ```
+
+### `qaComparison.py`
+
+Comparison mode; see [Comparison mode](#comparison-mode).
 
 ### `fiberNormsQa.py`
 

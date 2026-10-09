@@ -171,5 +171,7 @@ def testDefaultConfigJudgesByTheShippedFile(iqqa):
     task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
     assert len(task.thresholds) == 2
     shipped = task.thresholds[0]
-    assert set(shipped["metric"]) == {"medFwhm", "nLines"}
+    assert set(shipped["metric"]) == {"medFwhm", "nLines", "pctFlagged"}
+    flags = shipped[shipped["metric"] == "pctFlagged"]
+    assert len(flags) == 1 and flags[["warn", "fail"]].isna().all(axis=None)  # not judged
     assert (shipped.loc[shipped["metric"] == "medFwhm", "obsType"] == "arc").all()
