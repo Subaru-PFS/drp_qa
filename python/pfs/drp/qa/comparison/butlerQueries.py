@@ -58,7 +58,7 @@ def datasetDetectors(
     visits : iterable of `int`
         The visits.
     collections : `str` or sequence of `str`
-        Collections to search.
+        Collections to search; none finds nothing.
     instrument : `str`, optional
         Instrument name. Default is ``PFS``.
 
@@ -68,7 +68,7 @@ def datasetDetectors(
         ``visit``, ``arm`` and ``spectrograph``, one row per detector, sorted.
     """
     visits = sorted({int(visit) for visit in visits})
-    if not visits:
+    if not visits or not collections:
         return pd.DataFrame(columns=list(DETECTOR_KEYS))
     refs = butler.query_datasets(
         datasetType,

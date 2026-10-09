@@ -32,3 +32,13 @@ def testOtherErrorsPropagate():
 
     with pytest.raises(RuntimeError, match="database gone"):
         collectionExists(_butler(broken), "u/me/comparison/run25/v1")
+
+
+def testNoCollectionsFindNothing():
+    from pfs.drp.qa.comparison.butlerQueries import datasetDetectors
+
+    def query(*args, **kwargs):
+        raise AssertionError("a query with no collections searches the whole repository")
+
+    butler = SimpleNamespace(query_datasets=query)
+    assert datasetDetectors(butler, "calexp", [1, 2], []).empty  # --fresh: no reductions to reuse

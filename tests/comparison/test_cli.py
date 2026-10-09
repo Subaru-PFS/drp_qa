@@ -113,3 +113,18 @@ def testPipetaskFailures():
     assert pipetaskFailures("INFO nothing to see") == (None, [])
     many = "\n".join(f"ERROR quantum {i} failed" for i in range(50))
     assert pipetaskFailures(many, limit=5)[1][0] == "ERROR quantum 45 failed"  # the last ones
+
+
+def testResolveCollections():
+    from pfs.drp.qa.comparison.cli import resolveCollections
+
+    assert resolveCollections(False, "PFS/defaults", None, None) == (
+        ["drpActor/reductions"],
+        ["drpActor/reductions", "PFS/defaults"],
+    )
+    assert resolveCollections(True, "PFS/defaults", None, None) == ([], ["PFS/defaults"])
+    # Negative control: --fresh with drpActor's reductions among the inputs would reuse them.
+    with pytest.raises(ValueError, match="--fresh"):
+        resolveCollections(True, "PFS/defaults", None, ["drpActor/reductions", "PFS/defaults"])
+    with pytest.raises(ValueError, match="--fresh"):
+        resolveCollections(True, "PFS/defaults", ["drpActor/reductions"], None)

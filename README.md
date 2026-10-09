@@ -541,7 +541,10 @@ python bin.src/qaComparison.py run    --period run30 --data-dir ~/Projects/Subar
 python bin.src/qaComparison.py report --period run30 --data-dir ~/Projects/Subaru/PFS/data   # report-run30.html
 ```
 
-`plan` prints the `pipetask` commands as Python lists, for running from a notebook instead. Passes are `calibration`,
+`plan` prints the `pipetask` commands as Python lists, for running from a notebook instead. By default the
+reductions in `drpActor/reductions` are reused, each made with the pipeline of its day; `--fresh` reduces everything
+with the current pipeline instead, so runs are compared on a level field (their calibrations are still each
+run's own). Its collection and files carry the version suffixed `-fresh`. Passes are `calibration`,
 `sky` and `unvalidated-calibration`, gated first, each split by sequence: sequences with an image to reduce get the
 whole pipeline, and sequences already reduced by drpActor only `imageQualityQa` (a `-judge` pass, e.g. `sky-judge`;
 `--pass sky` selects both). Otherwise pipetask reruns `cosmicray` wherever a reduction lacks the `cosmicray_log`

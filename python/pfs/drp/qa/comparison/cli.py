@@ -10,6 +10,10 @@ Four steps, each safe to repeat:
 ``run``
     Plan, then run those commands; ``--dry-run`` only builds their graphs, and ``--pass`` picks
     passes (``calibration``, ``sky``, ``unvalidated-calibration``).
+
+By default the reductions in ``drpActor/reductions`` are reused, each made with the pipeline of its
+day. ``--fresh`` reduces everything with the current pipeline instead, so that runs are compared on
+a level field; its collection and files carry the version suffixed ``-fresh``.
 ``report``
     Read the verdicts and write the period's report.
 
@@ -42,7 +46,19 @@ from pfs.drp.qa.comparison.plan import (
 )
 from pfs.drp.qa.comparison.runs import Period, loadPeriods
 
-__all__ = ["drpQaVersion", "fetch", "fetchSummary", "loadFetched", "main", "pipetaskFailures"]
+__all__ = [
+    "DRPACTOR_REDUCTIONS",
+    "drpQaVersion",
+    "fetch",
+    "fetchSummary",
+    "loadFetched",
+    "main",
+    "pipetaskFailures",
+    "resolveCollections",
+]
+
+#: Where drpActor writes its reductions.
+DRPACTOR_REDUCTIONS = "drpActor/reductions"
 
 _FETCHED = ("listing", "notes", "telStatus", "designs")
 
@@ -250,7 +266,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     visits, frames, stamp = _classified(period, periods, dataDir)
-    version = args.version or drpQaVersion()
+    try:
+        args.reductions, args.inputs = resolveCollections(args.fresh, args.raw, args.reductions, args.inputs)
+    except ValueError as error:
+        raise SystemExit(str(error)) from None
+    version = (args.version or drpQaVersion()) + ("-fresh" if args.fresh else "")
     output = outputCollection(args.prefix, period.name, version)
     workDir = dataDir / period.run / "qa" / version
     workDir.mkdir(parents=True, exist_ok=True)
@@ -260,6 +280,41 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command in ("plan", "run"):
         return _plan(args, period, visits, output, workDir)
     return _report(args, period, periods, visits, frames, stamp, output, version, workDir, dataDir)
+
+
+def resolveCollections(
+    fresh: bool, raw: str, reductions: Sequence[str] | None, inputs: Sequence[str] | None
+) -> tuple[list[str], list[str]]:
+    """Return the collections whose reductions are reused, and the pipeline's inputs.
+
+    Parameters
+    ----------
+    fresh : `bool`
+        Whether everything is reduced afresh.
+    raw : `str`
+        The collection with the raw data and calibrations, e.g. ``PFS/defaults``.
+    reductions, inputs : sequence of `str`, or `None`
+        As given on the command line; `None` for the default.
+
+    Returns
+    -------
+    reductions : `list` [`str`]
+        ``drpActor/reductions`` by default; none when ``fresh``.
+    inputs : `list` [`str`]
+        ``reductions`` then ``raw`` by default.
+
+    Raises
+    ------
+    ValueError
+        If ``fresh`` and reductions are named, or the inputs include
+        ``drpActor/reductions``: they would be reused.
+    """
+    if fresh:
+        if reductions or (inputs and DRPACTOR_REDUCTIONS in inputs):
+            raise ValueError(f"--fresh reuses no reductions: drop --reductions and {DRPACTOR_REDUCTIONS}")
+        return [], list(inputs or [raw])
+    reductions = list(reductions) if reductions is not None else [DRPACTOR_REDUCTIONS]
+    return reductions, list(inputs) if inputs is not None else [*reductions, raw]
 
 
 def _classified(period: Period, periods: dict[str, Period], dataDir: Path):
@@ -517,14 +572,20 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--reductions",
         nargs="+",
-        default=["drpActor/reductions"],
-        help="collections whose reductions are reused",
+        default=None,
+        help=f"collections whose reductions are reused (default: {DRPACTOR_REDUCTIONS})",
     )
     parser.add_argument(
         "--inputs",
         nargs="+",
-        default=["drpActor/reductions", "PFS/defaults"],
-        help="pipetask input collections",
+        default=None,
+        help="pipetask input collections (default: the reductions, then --raw)",
+    )
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="reduce everything with the current pipeline, reusing nothing of drpActor's; the version"
+        " (collection and files) is suffixed -fresh",
     )
     parser.add_argument(
         "--pipeline", default=f"{drpQaDir}/pipelines/qaThresholds.yaml", help="the reduction and QA pipeline"
