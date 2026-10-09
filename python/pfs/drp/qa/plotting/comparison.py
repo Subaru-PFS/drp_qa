@@ -25,7 +25,13 @@ __all__ = [
 ]
 
 #: Verdict colors; each cell also carries its letter, so color is never alone.
-STATUS_COLORS = {"PASS": "#0ca30c", "WARN": "#fab219", "FAIL": "#d03b3b", "UNKNOWN": "#d9d9d6"}
+STATUS_COLORS = {
+    "PASS": "#0ca30c",
+    "WARN": "#fab219",
+    "FAIL": "#d03b3b",
+    "UNKNOWN": "#d9d9d6",
+    "NOT JUDGED": "#eeeeec",
+}
 _INK, _REFERENCE_INK, _GRID = "#222222", "#8c8c8c", "#e6e6e3"
 
 #: What lit an exposure: three categorical hues for the lit kinds (validated together), grays for
@@ -207,7 +213,7 @@ def plotVerdictGrid(verdicts: pd.DataFrame, *, title: str = "Verdicts by detecto
     ----------
     verdicts : `pandas.DataFrame`
         One row per image: ``night``, ``arm``, ``spectrograph`` and
-        ``status`` (``PASS``, ``WARN``, ``FAIL`` or ``UNKNOWN``).
+        ``status`` (``PASS``, ``WARN``, ``FAIL``, ``UNKNOWN`` or ``NOT JUDGED``).
     title : `str`, optional
         The figure title.
 
@@ -217,7 +223,7 @@ def plotVerdictGrid(verdicts: pd.DataFrame, *, title: str = "Verdicts by detecto
         Detectors down, nights across; each cell colored and lettered by its
         worst verdict, blank where nothing was judged.
     """
-    order = {status: i for i, status in enumerate(("UNKNOWN", "PASS", "WARN", "FAIL"))}
+    order = {status: i for i, status in enumerate(("NOT JUDGED", "UNKNOWN", "PASS", "WARN", "FAIL"))}
     frame = verdicts.assign(
         rank=verdicts["status"].map(order).fillna(0),
         detector=verdicts["arm"].astype(str) + verdicts["spectrograph"].astype(str),

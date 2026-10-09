@@ -128,15 +128,28 @@ def testSubLabels(periods, visit, listing):
 
 def testCadence(periods, visit, listing):
     daily = [
-        visit(100 + day, f"2026-01-{3 + day:02d} 17:00", "scienceArc", sequence=100 + day, name="Arc: Neon")
+        visit(
+            100 + day,
+            f"2026-01-{3 + day:02d} 17:00",
+            "scienceArc",
+            sequence=100 + day,
+            name="Arc: Neon",
+            group=7,
+        )
         for day in range(4)
-    ]  # one visit a night, four nights
+    ]  # one visit a night, four nights; a group of its own each day in practice, shared here
     visits = listing(
         *daily,
         visit(2, "2026-01-03 17:05", "scienceTrace", sequence=51, name="Trace"),  # once: a one-off
-        *(visit(10 + i, f"2026-01-03 18:0{i}", "scienceArc", sequence=52) for i in range(3)),  # a set of 3
-        visit(13, "2026-01-03 18:09", "scienceArc", sequence=60, name="Arc: Neon"),  # ends the set
-        visit(14, "2026-01-03 18:15", "scienceTrace", sequence=61, name="Trace"),  # ...through a chain
+        *(
+            visit(10 + i, f"2026-01-03 18:0{i}", "scienceArc", sequence=52, group=8) for i in range(3)
+        ),  # a set
+        visit(
+            13, "2026-01-03 18:09", "scienceArc", sequence=60, name="Arc: Neon", group=8
+        ),  # ...with a single
+        visit(
+            14, "2026-01-03 18:15", "scienceTrace", sequence=61, name="theta_020", group=8
+        ),  # no trace set in 8
         *(
             visit(20 + i, f"2026-01-03 19:0{i}", "scienceTrace", sequence=53) for i in range(10)
         ),  # a set of 10
@@ -145,7 +158,8 @@ def testCadence(periods, visit, listing):
     cadence = classifyVisits(visits, periods.values()).set_index("pfs_visit_id")["cadence"]
     assert set(cadence.loc[100:103]) == {"daily"}
     assert cadence[2] == "single"
-    assert set(cadence.loc[10:14]) == {"set"}  # the one-visit sequences after the set belong to it
+    assert set(cadence.loc[10:13]) == {"set"}  # the one-visit arc of the set's group belongs to it
+    assert cadence[14] == "single"  # the group has no trace set
     assert set(cadence.loc[20:29]) == {"set"}
     assert cadence[40] == ""
 

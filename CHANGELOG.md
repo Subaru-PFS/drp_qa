@@ -19,7 +19,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `pctFlagged` until PIPE2D-1935. The observing
   runs and their pre-run periods are in `comparison/data/observingRuns.yaml`. New plots in
   `pfs.drp.qa.plotting.comparison`: `plotMetricComparison`, `plotNightlySeries`, `plotVerdictGrid`. The report leads with verdict tiles, a coverage chart and problems (findings grouped by
-  metric, arm and setup, those the validation set expects folded away), with the detail collapsed.
+  metric, arm and setup, those the validation set expects folded away), with the detail collapsed. An image with
+  nothing judged is `NOT JUDGED`, with the reason (no method for the type, IIS lamp, FWHM from `fiberProfiles`, no
+  FLUXSTD FWHM, twilight), and `UNKNOWN` only when a measured metric has no threshold for its population.
 - **GitHub Actions CI** — `.github/workflows/tests.yml` runs the stack-free test suite on Python 3.12 and
   3.13; `.github/workflows/lint.yml` runs `ruff check .` and `ruff format --check .` over the whole tree.
   Both are blocking.

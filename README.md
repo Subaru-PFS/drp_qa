@@ -514,7 +514,7 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
   timeline, colored by what lit them, beside the gap before each dark sequence; `darksLastLit-<period>.csv` has
   every dark.
 - **Daily arcs and traces are reported apart from sets.** A calibration *set* is 3 exposures per arc lamp and 10
-  traces; one-visit sequences taken within 10 minutes of it belong to it. Another one-visit sequence is *daily* when
+  traces; one-visit sequences of its sequence group (`group_id`) belong to it. Another one-visit sequence is *daily* when
   its name recurs on 4 or more nights (from Run28, a neon arc and a trace, and IIS frames, each day, for drift), and a
   one-off *single* otherwise (positioner scans, bootstrap exposures), judged like a set. All are
   judged against the thresholds derived from Run25's sets, but `nLines` and `pctFlagged` aren't judged on daily ones:

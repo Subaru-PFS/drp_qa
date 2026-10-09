@@ -54,6 +54,7 @@ def visit(
     design=None,
     cameras=ALL_CAMERAS,
     exptime=60.0,
+    group=None,
 ):
     """Return one row of a visit listing."""
     defaultExpType = {"scienceArc": "arc", "scienceTrace": "flat", "darks": "dark"}.get(
@@ -67,7 +68,7 @@ def visit(
         "iic_sequence_id": sequence if sequence is not None else (visitId if sequenceType else None),
         "sequence_type": sequenceType,
         "sequence_name": name,
-        "group_id": None,
+        "group_id": group,
         "group_name": None,
         "cmd_str": "",
         "sequence_comments": None,

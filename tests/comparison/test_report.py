@@ -1,11 +1,20 @@
 """Tests for `pfs.drp.qa.comparison.report`."""
 
+import numpy as np
 import pandas as pd
 
 from pfs.drp.qa.comparison.classify import classifyVisits
 from pfs.drp.qa.comparison.findings import findings, judgeImages
 from pfs.drp.qa.comparison.plan import coverage, failedQuanta, summarize
-from pfs.drp.qa.comparison.report import ReportInputs, buildReport, failedSummary, recurringSequences
+from pfs.drp.qa.comparison.report import (
+    NOT_JUDGED,
+    ReportInputs,
+    buildReport,
+    failedSummary,
+    imageVerdicts,
+    notJudgedSummary,
+    recurringSequences,
+)
 
 THRESHOLDS = pd.DataFrame(
     {
@@ -220,5 +229,72 @@ def testFailedSummary():
         )
     )
     summary = failedSummary(detectors, failed)
-    assert summary[["visit", "cameras", "task"]].values.tolist() == [[1, "n1,n2", "reduceExposure"]]
+    assert summary[["visits", "cameras", "task", "images"]].values.tolist() == [
+        ["1", "n1,n2", "reduceExposure", 2]
+    ]
     assert summary.loc[0, "error"].startswith("ValueError: need at least one array")
+
+
+def testFailedSummaryGroupsVisits():
+    visits = [10, 11, 12, 14]
+    detectors = pd.DataFrame(
+        {
+            "visit": visits,
+            "arm": "r",
+            "spectrograph": 1,
+            "sequence_type": "dotScan",
+            "cadence": "",
+            "status": "failed",
+        }
+    )
+    failed = pd.DataFrame(
+        {
+            "visit": visits,
+            "arm": "r",
+            "spectrograph": 1,
+            "task": "reduceExposure",
+            "error": "ValueError: none",
+        }
+    )
+    summary = failedSummary(detectors, failed)
+    assert summary[["visits", "images"]].values.tolist() == [["10..12, 14", 4]]
+
+
+def testNotJudgedIsToldFromUnknown():
+    metrics = pd.DataFrame(
+        {
+            "visit": [1, 2, 3, 4, 5, 6, 7],
+            "arm": "b",
+            "spectrograph": 1,
+            "obsType": ["arc", "arc", "trace", "unknown", "science", "arc", "arc"],
+            "traceOnly": [False, False, True, False, False, False, False],
+            "medFwhm": [2.5, np.nan, 2.6, np.nan, np.nan, np.nan, np.nan],
+            "lamps": ["neon", "neon (IIS)", "halogen", "", "", "neon (IIS)", "neon"],
+            "cadence": ["set", "daily", "daily", "", "", "set", "set"],
+            "category": ["calibration"] * 4 + ["science", "calibration", "calibration"],
+            "sequence_type": ["scienceArc", "scienceArc", "scienceTrace", "dotRoach", "scienceObject"]
+            + ["scienceArc"] * 2,
+        }
+    )
+    # medFwhm for the first five; nLines with no threshold (layer -1) for the last two.
+    judged = pd.DataFrame(
+        {
+            "row": range(7),
+            "metric": ["medFwhm"] * 5 + ["nLines"] * 2,
+            "value": [2.5, np.nan, 2.6, np.nan, np.nan, 1000.0, 1000.0],
+            "status": ["PASS", "", "", "", "", "", ""],
+            "layer": [1, 1, 1, 1, 1, -1, -1],
+        }
+    )
+    verdicts = imageVerdicts(metrics, judged)
+    assert verdicts["status"].tolist() == ["PASS", *[NOT_JUDGED] * 5, "UNKNOWN"]
+    assert verdicts["why"].tolist() == [
+        "",
+        "IIS lamp: no FWHM; nLines not judged on daily",
+        "FWHM from fiberProfiles; nLines not judged on daily",
+        "no method for dotRoach",
+        "FLUXSTD FWHM not measured",
+        "IIS lamp: no FWHM",  # the reason, not the missing nLines threshold
+        "no threshold: nLines",  # measured, nothing else explains it: a gap in the reference
+    ]
+    assert notJudgedSummary(verdicts)["images"].sum() == 6

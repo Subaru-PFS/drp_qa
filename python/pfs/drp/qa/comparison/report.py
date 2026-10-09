@@ -13,6 +13,7 @@ import io
 from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 from pfs.drp.qa.comparison.findings import lampsOf
@@ -28,17 +29,25 @@ from pfs.drp.qa.plotting.comparison import (
 
 __all__ = [
     "COMPARED_METRICS",
+    "NOT_JUDGED",
     "ReportInputs",
     "armThresholds",
     "buildReport",
     "coverageRows",
     "failedSummary",
     "imageVerdicts",
+    "notJudgedSummary",
     "populations",
     "problems",
     "recurringSequences",
     "verdictCounts",
+    "whyNotJudged",
 ]
+
+#: An image none of whose measured metrics is judged.
+NOT_JUDGED = "NOT JUDGED"
+#: `whyNotJudged` when it knows no reason.
+NOTHING_MEASURED = "nothing measured"
 
 #: The metrics compared with the reference, in order.
 COMPARED_METRICS = ("medFwhm", "medDxCenter", "pctFlagged", "nLines")
@@ -113,20 +122,46 @@ def failedSummary(detectors: pd.DataFrame, failed: pd.DataFrame) -> pd.DataFrame
     Returns
     -------
     `pandas.DataFrame`
-        ``visit``, ``sequence_type``, ``cadence``, ``cameras`` (``n1,n2``),
-        ``task`` and ``error``, for the images still ``failed``; sorted by
-        visit.
+        ``visits`` (``148467, 148471..148483``), ``sequence_type``,
+        ``cadence``, ``cameras`` (``n1,n2``), ``task``, ``error`` and
+        ``images``, for the images still ``failed``: one row per sequence
+        type, cadence, cameras, task and error, in visit order.
     """
-    columns = ["visit", "sequence_type", "cadence", "cameras", "task", "error"]
+    columns = ["visits", "sequence_type", "cadence", "cameras", "task", "error", "images"]
     stillFailed = detectors[detectors["status"] == "failed"]
     if stillFailed.empty or failed.empty:
         return pd.DataFrame(columns=columns)
     merged = stillFailed.merge(failed, on=["visit", "arm", "spectrograph"], how="left")
     merged["camera"] = merged["arm"] + merged["spectrograph"].astype(str)
     merged[["task", "error"]] = merged[["task", "error"]].fillna("")
-    keys = ["visit", "sequence_type", "cadence", "task", "error"]
-    grouped = merged.groupby(keys, sort=True, dropna=False)["camera"].agg(lambda c: ",".join(sorted(c)))
-    return grouped.rename("cameras").reset_index()[columns]
+    perVisit = (
+        merged.groupby(["visit", "sequence_type", "cadence", "task", "error"], sort=True, dropna=False)[
+            "camera"
+        ]
+        .agg(lambda c: ",".join(sorted(c)))
+        .rename("cameras")
+        .reset_index()
+    )
+    keys = ["sequence_type", "cadence", "cameras", "task", "error"]
+    grouped = perVisit.groupby(keys, sort=False, dropna=False).agg(
+        visits=("visit", lambda v: _visitRanges(v)), first=("visit", "min"), nVisits=("visit", "size")
+    )
+    grouped = grouped.reset_index()
+    grouped["images"] = grouped["nVisits"] * (grouped["cameras"].str.count(",") + 1)
+    return grouped.sort_values("first", ignore_index=True)[columns]
+
+
+def _visitRanges(visits) -> str:
+    """Return visits as ranges: ``1, 3..5``."""
+    numbers = sorted({int(visit) for visit in visits})
+    ranges, start = [], None
+    for previous, current in zip([None, *numbers], [*numbers, None], strict=True):
+        if start is None:
+            start = current
+        elif current is None or current != previous + 1:
+            ranges.append(str(start) if start == previous else f"{start}..{previous}")
+            start = current
+    return ", ".join(ranges)
 
 
 def populations(metrics: pd.DataFrame, visits: pd.DataFrame) -> pd.DataFrame:
@@ -177,13 +212,88 @@ def imageVerdicts(metrics: pd.DataFrame, judged: pd.DataFrame) -> pd.DataFrame:
     Returns
     -------
     `pandas.DataFrame`
-        ``metrics`` with ``status``: ``PASS``, ``WARN``, ``FAIL`` or
-        ``UNKNOWN`` where no metric was judged.
+        ``metrics`` with ``status`` and ``why``. ``status`` is ``PASS``,
+        ``WARN`` or ``FAIL``; ``NOT JUDGED`` when nothing measured is judged
+        for a known reason (`whyNotJudged`, in ``why``); or ``UNKNOWN`` when
+        there is no such reason but a metric was measured with no threshold
+        for its population (``why``: ``no threshold: nLines``).
     """
     rank = judged["status"].map({status: i for i, status in enumerate(STATUS_ORDER)})
     worst = rank.groupby(judged["row"]).max().reindex(range(len(metrics)))
-    status = [STATUS_ORDER[int(r)] if not pd.isna(r) else "UNKNOWN" for r in worst]
-    return metrics.reset_index(drop=True).assign(status=status)
+    result = metrics.reset_index(drop=True)
+    status = pd.Series([STATUS_ORDER[int(r)] if not pd.isna(r) else "" for r in worst], index=result.index)
+    why = pd.Series("", index=result.index, dtype=object)
+
+    noThreshold = judged[(judged["layer"] == -1) & np.isfinite(judged["value"].astype(float))]
+    unthresholded = noThreshold.groupby("row")["metric"].agg(lambda names: ", ".join(dict.fromkeys(names)))
+    for index in status.index[status == ""]:
+        reason = whyNotJudged(result.loc[index])
+        missing = unthresholded.get(index)
+        if reason == NOTHING_MEASURED and missing:
+            # Measured, but no threshold covers the population: a gap in the reference.
+            status[index], why[index] = "UNKNOWN", f"no threshold: {missing}"
+        else:
+            status[index], why[index] = NOT_JUDGED, reason
+    return result.assign(status=status, why=why)
+
+
+def whyNotJudged(image: pd.Series) -> str:
+    """Return why nothing measured on an image is judged.
+
+    Parameters
+    ----------
+    image : `pandas.Series`
+        One row of `populations`: ``obsType``, ``traceOnly``, ``medFwhm``,
+        ``lamps``, ``cadence``, ``category``, ``sequence_type``.
+
+    Returns
+    -------
+    `str`
+        E.g. ``no method for dotRoach``, ``IIS lamp: no FWHM``, ``FWHM from
+        fiberProfiles; nLines not judged on daily``, ``FLUXSTD FWHM not
+        measured``.
+    """
+    obsType = image.get("obsType")
+    daily = "; nLines not judged on daily" if image.get("cadence") == "daily" else ""
+    if obsType == "unknown":
+        return f"no method for {image.get('sequence_type')}"
+    if obsType == "twilight":
+        return "twilight: not measured"
+    if "(IIS)" in str(image.get("lamps") or ""):
+        return "IIS lamp: no FWHM" + daily
+    if bool(image.get("traceOnly")):
+        return "FWHM from fiberProfiles" + daily
+    if obsType in ("science", "allsky") and pd.isna(image.get("medFwhm")):
+        if image.get("category") == "calibration":
+            return "no FLUXSTD FWHM (engineering design)"
+        return "FLUXSTD FWHM not measured"
+    return NOTHING_MEASURED
+
+
+def notJudgedSummary(verdicts: pd.DataFrame) -> pd.DataFrame:
+    """Count the images that weren't judged, by why and population.
+
+    Parameters
+    ----------
+    verdicts : `pandas.DataFrame`
+        From `imageVerdicts`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``status`` (``NOT JUDGED`` or ``UNKNOWN``), ``why``, ``sequence_type``,
+        ``cadence``, ``category``, ``arms`` (``b, n``) and ``images``; most
+        images first.
+    """
+    columns = ["status", "why", "sequence_type", "cadence", "category", "arms", "images"]
+    subset = verdicts[verdicts["status"].isin([NOT_JUDGED, "UNKNOWN"])]
+    if subset.empty:
+        return pd.DataFrame(columns=columns)
+    keys = ["status", "why", "sequence_type", "cadence", "category"]
+    grouped = subset.groupby(keys, dropna=False).agg(
+        arms=("arm", lambda arms: ", ".join(sorted(set(arms)))), images=("visit", "size")
+    )
+    return grouped.reset_index().sort_values("images", ascending=False, ignore_index=True)[columns]
 
 
 def verdictCounts(verdicts: pd.DataFrame) -> pd.DataFrame:
@@ -207,7 +317,7 @@ def verdictCounts(verdicts: pd.DataFrame) -> pd.DataFrame:
         aggfunc="size",
         fill_value=0,
     )
-    counts = counts.reindex(columns=[*STATUS_ORDER, "UNKNOWN"], fill_value=0)
+    counts = counts.reindex(columns=[*STATUS_ORDER, "UNKNOWN", NOT_JUDGED], fill_value=0)
     counts["images"] = counts.sum(axis=1)
     counts.columns.name = None
     return counts.reset_index()
@@ -421,10 +531,9 @@ def buildReport(inputs: ReportInputs) -> str:
         parts.append(f"<p class='caption'>Not measured (visits): {_e(listed)}.</p>")
     failed = inputs.failed
     if failed is not None and not failed.empty:
-        images = int(failed["cameras"].str.count(",").sum() + len(failed))
         parts.append(
-            f"<p class='caption'>Failed (not retried): {images} detector images of {failed['visit'].nunique()}"
-            " visits, whose reduction raised; they fail the same way each time.</p>"
+            f"<p class='caption'>Failed (not retried): {int(failed['images'].sum())} detector images whose"
+            " reduction raised; they fail the same way each time.</p>"
         )
         parts.append(_details("Failed images", _table(failed)))
     parts.append(_details("Coverage table", _table(inputs.summary)))
@@ -438,6 +547,14 @@ def buildReport(inputs: ReportInputs) -> str:
             )
     if not verdicts.empty:
         parts.append(_details("Counts by type and arm", _table(verdictCounts(verdicts))))
+    unjudged = notJudgedSummary(verdicts)
+    if not unjudged.empty:
+        parts.append(
+            f"<h3>Not judged: {int(unjudged['images'].sum())} images</h3>"
+            "<p class='caption'><b>NOT JUDGED</b>: nothing measured on the image is judged, for the reason given. "
+            "<b>UNKNOWN</b>: a metric was measured but no threshold covers its population.</p>"
+        )
+        parts.append(_table(unjudged))
 
     parts.append("<h2>Problems</h2>")
     new = gatedFindings[gatedFindings["expected"] == ""]
@@ -464,8 +581,15 @@ def buildReport(inputs: ReportInputs) -> str:
         parts += [
             "<h2 id='unvalidated'>Unvalidated</h2>",
             "<p class='caption unvalidated'>Judged without validated thresholds: a FAIL may be what the test expected.</p>",
-            _figure(plotVerdictGrid(unvalidated, title="Unvalidated: worst verdict per night")),
         ]
+        judgedUnvalidated = unvalidated[unvalidated["status"].isin(STATUS_ORDER)]
+        if judgedUnvalidated.empty:
+            parts.append(f"<p>None of the {len(unvalidated)} unvalidated images is judged:</p>")
+        else:
+            parts.append(_figure(plotVerdictGrid(unvalidated, title="Unvalidated: worst verdict per night")))
+        unjudgedUnvalidated = notJudgedSummary(unvalidated)
+        if not unjudgedUnvalidated.empty:
+            parts.append(_table(unjudgedUnvalidated))
         if not otherFindings.empty:
             parts.append(
                 _details(
@@ -559,7 +683,13 @@ visit of the sequence shares it. Problems the validation set records as known-ba
 <li>Not judged: flux-dependent metrics on telescope focus sweeps, and <code>nLines</code> and <code>pctFlagged</code>
 on daily arcs and traces, which are often taken with one fiber group lit (PIPE2D-1935). A verdict here can therefore
 be milder than the stored one.</li>
-<li><b>Against the reference</b>: arcs and traces lamp by lamp, daily ones against the reference's sets.</li>
+<li><b>Nights</b> are named by their evening: a night runs from noon to noon HST, so an exposure taken after
+midnight carries the previous day's date.</li>
+<li><b>Sets, daily and singles</b>: a calibration set is several exposures per lamp, with any one-visit sequences
+of its sequence group; a one-visit arc or trace whose name recurs on 4 or more nights is daily; any other is a
+one-off single, judged like a set.</li>
+<li><b>Against the reference</b>: arcs and traces lamp by lamp, daily ones and singles against the reference's
+sets.</li>
 <li><code>medDxCenter</code> is the offset from the calibration detectorMap: drift, shown, not gated.</li>
 <li><b>n-arm darks</b>: the n detectors keep an image of a bright exposure for a while. Darks aren't measured yet
 (PIPE2D-1925), so the timeline shows only when they were taken relative to lit exposures.</li>
@@ -591,8 +721,8 @@ def _tiles(verdicts: pd.DataFrame, findings: pd.DataFrame, unvalidated: pd.DataF
     """Return the verdict tiles at the top of the page, and one line under them."""
     counts = verdicts["status"].value_counts()
     tiles = "".join(
-        f"<div class='tile {status.lower()}'><span>{counts.get(status, 0)}</span>{status}</div>"
-        for status in (*STATUS_ORDER, "UNKNOWN")
+        f"<div class='tile {status.lower().replace(' ', '-')}'><span>{counts.get(status, 0)}</span>{status}</div>"
+        for status in (*STATUS_ORDER, "UNKNOWN", NOT_JUDGED)
     )
     expected = int((findings["expected"] != "").sum()) if not findings.empty else 0
     line = f"{len(verdicts)} gated images · {len(findings) - expected} problem images"
@@ -654,7 +784,7 @@ body {{ margin:0 auto; max-width:1200px; padding:16px; background:var(--surface)
 h1 {{ font-size:22px; }} h2 {{ font-size:18px; margin-top:32px; border-bottom:1px solid var(--rule); }} h3 {{ font-size:15px; }}
 .meta {{ color:var(--muted); }} .headline {{ font-size:15px; }}
 .pill {{ display:inline-block; width:1.4em; text-align:center; border-radius:4px; color:#222; font-weight:600; }}
-.pass {{ background:#0ca30c; }} .warn {{ background:#fab219; }} .fail {{ background:#d03b3b; }} .unknown {{ background:#d9d9d6; }}
+.pass {{ background:#0ca30c; }} .warn {{ background:#fab219; }} .fail {{ background:#d03b3b; }} .unknown {{ background:#d9d9d6; }} .not-judged {{ background:#eeeeec; }}
 table.data {{ border-collapse:collapse; font-size:12px; margin:8px 0; display:block; overflow-x:auto; }}
 table.data th, table.data td {{ padding:3px 8px; border-bottom:1px solid var(--rule); text-align:left; vertical-align:top; }}
 figure {{ margin:12px 0; background:var(--card); border-radius:6px; padding:6px; overflow-x:auto; }}
