@@ -420,6 +420,11 @@ verdict is known. The decisions behind the current set:
 - **The validation set holds Run25's known-good visits only.** From other runs it holds only known-bad visits, as
   fault examples: each is checked against the thresholds, and none derives one. (Run27 and Run30 known-good entries
   still in the YAML are removed by PIPE2D-1933.)
+- **A set is never its own reference.** The gate decides whether a run's calibration set should be used to build its
+  calibrations, so a set counts as known-good only once the calibrations built from it have proved out (used, with good
+  reductions), and then only for later runs. Each arm's reference is chosen from such sets (PIPE2D-1938): Run25's
+  n-arm thresholds predate the pipeline changes that made the n arm reliable (about Run29–30), so n-arm verdicts are
+  provisional until then.
 - **Other runs are compared, not used for derivation.** Comparison mode (PIPE2D-1929) judges every visit of a run
   against Run25's thresholds; Run30 is the first. Run27 is not a fair comparison: no
   calibrations were made from it, and its n-arm flag rates sit 2–5 points above Run25's.
