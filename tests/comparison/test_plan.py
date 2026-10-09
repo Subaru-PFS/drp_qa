@@ -308,3 +308,19 @@ def testFailedImagesAreNotRescheduled(classified):
     holdings.loc[(holdings["visit"] == 1) & (holdings["arm"] == "r"), "judged"] = True
     assert coverage(classified, holdings, failed).set_index(["visit", "arm"])["status"][(1, "r")] == "judged"
     assert "failed" not in set(coverage(classified, holdings)["status"])
+
+
+def testReducePassTakesTheWholeSequence(classified):
+    # Arc sequence 50 is visits 1 and 2: 1 is judged, 2 still has an image to reduce.
+    holdings = _holdings(
+        [
+            (1, "b", 1, True, True, True),
+            (1, "r", 1, True, True, True),
+            (2, "b", 1, True, False, False),
+            (2, "r", 1, True, True, False),
+        ]
+    )
+    result = passes(classified, coverage(classified, holdings))
+    calibration = next(item for item in result if item.name == "calibration")
+    assert calibration.visits == (1, 2)  # visit 1 too, so cosmicray combines the sequence
+    assert calibration.groups == {1: 1, 2: 1}

@@ -204,7 +204,24 @@ def loadFetched(period: Period, dataDir: Path) -> tuple[dict[str, pd.DataFrame],
 
 #: Paths that can't change what the pipeline writes: they don't name the output collection.
 RESULT_NEUTRAL_PATHS = (
-    "python/pfs/drp/qa/comparison",
+    # The comparison driver and its report, module by module: comparison/reduction.py configures
+    # the reduction and counts, as would any new module until listed here.
+    *(
+        f"python/pfs/drp/qa/comparison/{name}"
+        for name in (
+            "__init__.py",
+            "butlerQueries.py",
+            "classify.py",
+            "cli.py",
+            "data",
+            "findings.py",
+            "persistence.py",
+            "plan.py",
+            "queries.py",
+            "report.py",
+            "runs.py",
+        )
+    ),
     "python/pfs/drp/qa/plotting/comparison.py",
     "bin.src/qaComparison.py",
     "tests",
@@ -221,7 +238,8 @@ def drpQaVersion(directory: Path | str | None = None) -> str:
     It is ``git describe`` of the last commit that could change what the
     pipeline writes: every path but `RESULT_NEUTRAL_PATHS`. Changing the
     comparison driver or its report therefore keeps the collection, and its
-    finished quanta, while a change to a task or a threshold starts a new one.
+    finished quanta, while a change to a task, a threshold or the reduction's
+    configuration (`pfs.drp.qa.comparison.reduction`) starts a new one.
 
     Parameters
     ----------

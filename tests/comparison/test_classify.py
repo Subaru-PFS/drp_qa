@@ -167,3 +167,10 @@ def testCadence(periods, visit, listing):
 def testSequenceNamesAreStripped(periods, visit, listing):
     visits = listing(visit(1, "2026-01-03 17:00", "scienceArc", name="Arc: Neon "))
     assert classifyVisits(visits, periods.values())["sequence_name"].tolist() == ["Arc: Neon"]
+
+
+def testUnnamedVisitsAreNotASweep():
+    offsets = np.round(np.arange(2.705, 3.756, 0.075), 3)
+    assert not focusSweeps(_sweepVisits(offsets, name=None)).any()
+    assert not focusSweeps(_sweepVisits(offsets, name="  ")).any()
+    assert focusSweeps(_sweepVisits(offsets, name="M39")).all()  # negative control: named, it is one

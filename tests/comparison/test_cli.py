@@ -140,3 +140,16 @@ def testPipelineVersion():
     assert pipelineVersion(mixed) == "datamodel-w.2026.40+drp_stella-w.2026.40+obs_pfs-w.2026.41-2-gabc"
     with pytest.raises(RuntimeError, match="Unknown"):
         pipelineVersion(weekly | {"DRP_STELLA": "unknown"})
+
+
+def testOnlyTheReductionConfigCountsTowardsTheVersion():
+    from pathlib import Path
+
+    from pfs.drp.qa.comparison.cli import RESULT_NEUTRAL_PATHS
+
+    package = Path(__file__).parents[2] / "python" / "pfs" / "drp" / "qa" / "comparison"
+    neutral = {
+        Path(path).name for path in RESULT_NEUTRAL_PATHS if path.startswith("python/pfs/drp/qa/comparison/")
+    }
+    modules = {path.name for path in package.iterdir() if path.name != "__pycache__"}
+    assert modules - neutral == {"reduction.py"}  # a new module counts until it is listed

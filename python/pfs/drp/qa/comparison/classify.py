@@ -103,7 +103,8 @@ def focusSweeps(sky: pd.DataFrame) -> pd.Series:
 
     A sweep steps the hexapod focus offset between short exposures of one
     field: at least `FOCUS_SWEEP_MIN_STEPS` distinct offsets spanning
-    `FOCUS_SWEEP_MIN_RANGE` mm, within one night and sequence name.
+    `FOCUS_SWEEP_MIN_RANGE` mm, within one night and sequence name. Visits with
+    no sequence name are never a sweep.
 
     Parameters
     ----------
@@ -119,10 +120,13 @@ def focusSweeps(sky: pd.DataFrame) -> pd.Series:
     if sky.empty:
         return pd.Series(dtype=bool, index=sky.index)
     focus = sky["focus_offset_max"].round(3)
-    keys = [sky["night"], sky["sequence_name"].fillna("")]
+    name = sky["sequence_name"].fillna("").str.strip()
+    keys = [sky["night"], name]
     steps = focus.groupby(keys).transform("nunique")
     span = focus.groupby(keys).transform("max") - focus.groupby(keys).transform("min")
-    return ((steps >= FOCUS_SWEEP_MIN_STEPS) & (span >= FOCUS_SWEEP_MIN_RANGE)).fillna(False).astype(bool)
+    # Unnamed visits share one key, though they need not share a field: never a sweep.
+    sweep = (steps >= FOCUS_SWEEP_MIN_STEPS) & (span >= FOCUS_SWEEP_MIN_RANGE) & (name != "")
+    return sweep.astype("boolean").fillna(False).astype(bool)
 
 
 def cadences(visits: pd.DataFrame) -> pd.Series:

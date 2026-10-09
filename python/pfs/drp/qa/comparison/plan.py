@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from pfs.drp.qa.comparison.reduction import cosmicrayConfig, cosmicrayGroups, drpActorConfig
 from pfs.drp.qa.metrics.validationVisits import visitExpression
 
 __all__ = [
@@ -43,28 +44,6 @@ _FAILED_RE = re.compile(r"Execution of task '(\w+)' on quantum \{([^}]*)\} faile
 _DATA_ID_RE = re.compile(r"(\w+): '?([^,']*)'?")
 
 _CAMERA_RE = re.compile(r"^([brnm])([1-4])$")
-
-
-def drpActorConfig(sequenceType: str) -> dict[str, bool]:
-    """Return the configuration ``drpActor`` reduces a sequence type with.
-
-    As ``ics_drpActor``'s ``Engine.newVisitGroup``.
-
-    Parameters
-    ----------
-    sequenceType : `str`
-        The IIC sequence type.
-
-    Returns
-    -------
-    `dict` [`str`, `bool`]
-        ``pipetask -c`` overrides, ``label:field`` to value.
-    """
-    return {
-        "reduceExposure:requireAdjustDetectorMap": sequenceType == "scienceObject",
-        "isr:h4.quickCDS": sequenceType not in ("scienceObject", "masterDarks"),
-        "cosmicray:doNormalizeChiRms": sequenceType != "darks",
-    }
 
 
 def expectedDetectors(visits: pd.DataFrame) -> pd.DataFrame:
@@ -274,7 +253,7 @@ class Pass:
 
     def cosmicrayConfig(self) -> str:
         """Return the ``cosmicray`` config file that groups by sequence."""
-        return f'config.grouping = "manual"\nconfig.groups = {self.groups!r}\n'
+        return cosmicrayConfig(self.groups)
 
 
 def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
@@ -283,8 +262,9 @@ def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
     The gated passes come first in the list, so the gate's visits are done before the
     unvalidated ones, which can be many.
 
-    Each is split by sequence: a sequence with an image ``to reduce`` gets the whole pipeline,
-    and one whose images are all reduced only ``imageQualityQa`` (a ``-judge`` pass, listed
+    Each is split by sequence: a sequence with an image ``to reduce`` gets the whole pipeline, on
+    every visit of the sequence so ``cosmicray`` combines all of it, and one whose images are all
+    reduced only ``imageQualityQa`` (a ``-judge`` pass, listed
     first). Without the split, pipetask reruns ``cosmicray`` on every image whose reduction lacks
     a ``cosmicray_log``, an optional input of ``imageQualityQa``, though nothing is reduced again.
 
@@ -302,17 +282,21 @@ def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
         Gated first, then by name.
     """
     pending = set(detectors.loc[detectors["status"].isin(["to reduce", "to judge"]), "visit"])
-    todo = visits[visits["pfs_visit_id"].isin(pending)]
+    judged = visits[visits["judged"].astype(bool)]
+    todo = judged[judged["pfs_visit_id"].isin(pending)]
     if todo.empty:
         return []
 
-    sequenceFirst = todo.groupby("iic_sequence_id")["pfs_visit_id"].transform("min")
+    # A sequence with an image to reduce is reduced whole, so cosmicray combines all of it; the
+    # quanta already done are skipped (--skip-existing-in).
     toReduce = set(detectors.loc[detectors["status"] == "to reduce", "visit"])
-    reduceSequence = todo["pfs_visit_id"].isin(toReduce).groupby(todo["iic_sequence_id"]).transform("any")
+    reduceSequences = set(todo.loc[todo["pfs_visit_id"].isin(toReduce), "iic_sequence_id"].dropna())
+    whole = judged[judged["iic_sequence_id"].isin(reduceSequences)]
+    todo = pd.concat([todo, whole]).drop_duplicates("pfs_visit_id")
+    groups = cosmicrayGroups(judged[judged["iic_sequence_id"].isin(set(todo["iic_sequence_id"].dropna()))])
     todo = todo.assign(
-        group=sequenceFirst.astype(int),
         configKey=todo["sequence_type"].map(_configKey),
-        judgeOnly=~reduceSequence.astype(bool),
+        judgeOnly=~todo["iic_sequence_id"].isin(reduceSequences),
     )
     result = []
     for (_, validated, judgeOnly), group in todo.groupby(["configKey", "validated", "judgeOnly"]):
@@ -326,10 +310,7 @@ def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
                 types=tuple(types),
                 visits=tuple(sorted(int(visit) for visit in group["pfs_visit_id"])),
                 config=config,
-                groups={
-                    int(visit): int(first)
-                    for visit, first in sorted(zip(group["pfs_visit_id"], group["group"], strict=True))
-                },
+                groups={int(visit): groups[int(visit)] for visit in sorted(group["pfs_visit_id"])},
                 judgeOnly=bool(judgeOnly),
             )
         )
