@@ -481,6 +481,8 @@ def buildReport(inputs: ReportInputs) -> str:
         ("scienceTrace", "calibration", "set"),
         ("scienceArc", "calibration", "daily"),
         ("scienceTrace", "calibration", "daily"),
+        ("scienceArc", "calibration", "single"),
+        ("scienceTrace", "calibration", "single"),
         ("scienceObject", "calibration", ""),
         ("scienceObject", "science", ""),
     ):

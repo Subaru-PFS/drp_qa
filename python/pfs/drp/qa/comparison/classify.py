@@ -16,7 +16,10 @@ type shows up rather than disappearing.
 
 Arcs and traces are taken two ways: as *sets* (several exposures of a lamp: 3 per arc lamp and 10
 traces for the calibrations) and, from Run28, as *daily* single exposures of one arc and one trace,
-for drift. ``cadence`` tells them apart by the size of the sequence; they are reported apart.
+for drift. ``cadence`` tells them apart; they are reported apart. A set can end with one-visit
+sequences of the same lamps, so a one-visit sequence within `SET_BLOCK_GAP` of a longer sequence
+belongs to the set; one whose name recurs on `DAILY_MIN_NIGHTS` nights is daily; any other is a
+one-off ``single`` (a positioner scan, a bootstrap exposure), judged like a set.
 
 Sky visits also get sub-labels from the telescope status: `focusSweep` (a telescope focus sweep,
 which changes how much light enters the fibers but not the spectrograph's line widths) and
@@ -32,12 +35,15 @@ from pfs.drp.qa.comparison.runs import Period, nightOf, periodOf
 
 __all__ = [
     "CADENCE_TYPES",
+    "DAILY_MIN_NIGHTS",
     "ENGINEERING_CATEGORIES",
     "FOCUS_SWEEP_MIN_RANGE",
     "FOCUS_SWEEP_MIN_STEPS",
     "NOT_MEASURED_TYPES",
+    "SET_BLOCK_GAP",
     "SKY_TYPES",
     "VALIDATED_TYPES",
+    "cadences",
     "classifyVisits",
     "designKinds",
     "focusSweeps",
@@ -54,6 +60,11 @@ SKY_TYPES = ("scienceObject", "scienceObject_windowed")
 
 #: Sequence types taken as a set of exposures or as a daily single one.
 CADENCE_TYPES = ("scienceArc", "scienceTrace")
+
+#: A one-visit arc or trace this close to a longer arc or trace sequence belongs to its set.
+SET_BLOCK_GAP = pd.Timedelta(minutes=10)
+#: A one-visit arc or trace is daily when its sequence name recurs as one on this many nights.
+DAILY_MIN_NIGHTS = 4
 
 #: Proposal categories that don't make a design science: engineering (``EN``), a fiber with no
 #: proposal, or an ID that doesn't follow Subaru's pattern.
@@ -117,6 +128,50 @@ def focusSweeps(sky: pd.DataFrame) -> pd.Series:
     return ((steps >= FOCUS_SWEEP_MIN_STEPS) & (span >= FOCUS_SWEEP_MIN_RANGE)).fillna(False).astype(bool)
 
 
+def cadences(visits: pd.DataFrame) -> pd.Series:
+    """Return whether each arc or trace is part of a set, daily, or a one-off single.
+
+    Parameters
+    ----------
+    visits : `pandas.DataFrame`
+        ``pfs_visit_id``, ``iic_sequence_id``, ``sequence_type``,
+        ``sequence_name``, ``time_exp_start`` and ``night``.
+
+    Returns
+    -------
+    `pandas.Series`
+        ``set`` for a sequence of several visits, or a one-visit sequence
+        started within `SET_BLOCK_GAP` of one (through any chain of arcs and
+        traces); ``daily`` for another one-visit sequence whose type and name
+        recur as one-visit sequences on `DAILY_MIN_NIGHTS` nights or more;
+        ``single`` otherwise; empty for other sequence types. Aligned with
+        ``visits``.
+    """
+    result = pd.Series("", index=visits.index, dtype=object)
+    isCadence = visits["sequence_type"].isin(CADENCE_TYPES)
+    if not isCadence.any():
+        return result
+    calib = visits[isCadence].assign(start=pd.to_datetime(visits.loc[isCadence, "time_exp_start"]))
+    calib = calib.sort_values("start")
+    size = calib.groupby("iic_sequence_id")["pfs_visit_id"].transform("size").fillna(1)
+    isSingle = (size == 1) | calib["iic_sequence_id"].isna()
+
+    # Arcs and traces taken back to back form a block; a block with a longer sequence is a set.
+    block = (calib["start"].diff() > SET_BLOCK_GAP).cumsum()
+    blockHasSet = (~isSingle).groupby(block).transform("any")
+
+    singles = calib[isSingle]
+    keys = [singles["sequence_type"], singles["sequence_name"].fillna("")]
+    nights = singles.groupby(keys)["night"].transform("nunique")
+
+    cadence = pd.Series("set", index=calib.index, dtype=object)
+    loose = isSingle & ~blockHasSet
+    cadence[loose] = "single"
+    cadence[loose & (nights.reindex(calib.index) >= DAILY_MIN_NIGHTS)] = "daily"
+    result.loc[cadence.index] = cadence
+    return result
+
+
 def classifyVisits(
     listing: pd.DataFrame,
     periods: Iterable[Period],
@@ -150,8 +205,8 @@ def classifyVisits(
         ``category``
             ``calibration`` or ``science``.
         ``cadence``
-            For an arc or trace, ``daily`` (a sequence of one visit) or
-            ``set``; empty otherwise.
+            For an arc or trace, ``set``, ``daily`` or ``single`` (`cadences`);
+            empty otherwise.
         ``focusSweep``, ``dithered``
             Sky sub-labels (`bool`).
         ``judged``
@@ -199,9 +254,7 @@ def classifyVisits(
     reason[sequenceType.isna()] = "no sequence"
     reason[visits["exp_type"] == "test"] = "test exposure"
     reason[visits["period"].isna()] = "outside every period"
-    sequenceSize = visits.groupby("iic_sequence_id")["pfs_visit_id"].transform("size")
-    cadence = np.where(sequenceSize.to_numpy() == 1, "daily", "set")
-    visits["cadence"] = np.where(sequenceType.isin(CADENCE_TYPES).to_numpy(), cadence, "")
+    visits["cadence"] = cadences(visits)
     visits["reason"] = reason
     visits["judged"] = reason.isin(["gated", "unvalidated"])
     visits["validated"] = reason == "gated"

@@ -76,7 +76,7 @@ def testFetchSummary(tmp_path, periods, visit, listing, FakeOpDB):
     assert (
         "2 gated" in text
         and "0 unvalidated" in text
-        and "1  calibration  scienceArc daily" in text
+        and "1  calibration  scienceArc single" in text
         and "1  science      scienceObject" in text
     )
     assert "1  no method for darks" in text

@@ -157,8 +157,14 @@ def testNoFindings(defocus):
 def testDailyLitFiberMetricsNotJudged(periods, visit, listing):
     visits = classifyVisits(
         listing(
-            visit(1, "2026-01-03 17:00", "scienceArc", sequence=50, name="Arc: Neon"),  # daily, one group lit
-            *(visit(10 + i, f"2026-01-03 18:0{i}", "scienceArc", sequence=52) for i in range(3)),  # a set
+            # Daily, one group lit: one a night for four nights.
+            *(
+                visit(
+                    1 + day, f"2026-01-{3 + day:02d} 17:00", "scienceArc", sequence=50 + day, name="Arc: Neon"
+                )
+                for day in range(4)
+            ),
+            *(visit(10 + i, f"2026-01-03 18:0{i}", "scienceArc", sequence=60) for i in range(3)),  # a set
         ),
         periods.values(),
     )

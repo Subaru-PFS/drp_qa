@@ -513,8 +513,10 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
   persistence until darks are measured (PIPE2D-1925). The report shows each night's n-arm exposures on a
   timeline, colored by what lit them, beside the gap before each dark sequence; `darksLastLit-<period>.csv` has
   every dark.
-- **Daily arcs and traces are reported apart from sets.** A sequence of one visit is *daily* (from Run28, one
-  neon arc and one trace a day, for drift); a calibration *set* is 3 exposures per arc lamp and 10 traces. Both are
+- **Daily arcs and traces are reported apart from sets.** A calibration *set* is 3 exposures per arc lamp and 10
+  traces; one-visit sequences taken within 10 minutes of it belong to it. Another one-visit sequence is *daily* when
+  its name recurs on 4 or more nights (from Run28, a neon arc and a trace, and IIS frames, each day, for drift), and a
+  one-off *single* otherwise (positioner scans, bootstrap exposures), judged like a set. All are
   judged against the thresholds derived from Run25's sets, but `nLines` and `pctFlagged` aren't judged on daily ones:
   they are often taken with one fiber group lit, which neither allows for yet (PIPE2D-1935).
 - **Sky visits are labelled** from the telescope status: a *focus sweep* (10 or more focus offsets spanning at least
