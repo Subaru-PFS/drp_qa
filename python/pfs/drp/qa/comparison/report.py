@@ -30,6 +30,7 @@ from pfs.drp.qa.plotting.comparison import (
 __all__ = [
     "COMPARED_METRICS",
     "NOT_JUDGED",
+    "PROVISIONAL_ARMS",
     "ReportInputs",
     "armThresholds",
     "buildReport",
@@ -46,6 +47,10 @@ __all__ = [
 
 #: An image none of whose measured metrics is judged.
 NOT_JUDGED = "NOT JUDGED"
+#: Arms whose verdicts are provisional, and the ticket that will make them firm: the Run25 n-arm
+#: thresholds predate the pipeline changes that made the n arm reliable, around Run29-30.
+PROVISIONAL_ARMS = {"n": "PIPE2D-1938"}
+
 #: `whyNotJudged` when it knows no reason.
 NOTHING_MEASURED = "nothing measured"
 
@@ -433,6 +438,7 @@ def problems(findings: pd.DataFrame) -> pd.DataFrame:
         for first, last in zip(result["first"], result["last"], strict=True)
     ]
     result = result.rename(columns={"metricNames": "metrics", "setupKind": "setup", "extentKind": "extent"})
+    result["arm"] = [f"{arm} (provisional)" if arm in PROVISIONAL_ARMS else arm for arm in result["arm"]]
     return result.sort_values(["rank", "images"], ascending=[True, False])[columns].reset_index(drop=True)
 
 
@@ -557,6 +563,11 @@ def buildReport(inputs: ReportInputs) -> str:
         parts.append(_table(unjudged))
 
     parts.append("<h2>Problems</h2>")
+    provisional = ", ".join(f"{arm} ({ticket})" for arm, ticket in PROVISIONAL_ARMS.items())
+    parts.append(
+        f"<p class='caption'>Provisional arms: {_e(provisional)}. Their thresholds come from Run25, whose reductions"
+        " of them predate the pipeline changes that made them reliable; a finding there may be the threshold's.</p>"
+    )
     new = gatedFindings[gatedFindings["expected"] == ""]
     known = gatedFindings[gatedFindings["expected"] != ""]
     if gatedFindings.empty:

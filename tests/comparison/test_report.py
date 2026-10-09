@@ -179,7 +179,7 @@ def testProblemsGroupFindings():
     )
     result = problems(found)
     assert result[["status", "metrics", "arm", "images", "visits"]].values.tolist() == [
-        ["FAIL", "pctFlagged", "n", 3, 2],
+        ["FAIL", "pctFlagged", "n (provisional)", 3, 2],  # the n arm's Run25 thresholds are suspect
         ["WARN", "nLines", "b", 1, 1],
     ]
     assert (
