@@ -13,7 +13,8 @@ Four steps, each safe to repeat:
 
 By default the reductions in ``drpActor/reductions`` are reused, each made with the pipeline of its
 day. ``--fresh`` reduces everything with the current pipeline instead, so that runs are compared on
-a level field; its collection and files carry the version suffixed ``-fresh``.
+a level field. Its collection and files are named after that pipeline (`pipelineVersion`), and a
+later drp_qa version reuses the fresh reductions of the same pipeline, judging them again.
 ``report``
     Read the verdicts and write the period's report.
 
@@ -53,6 +54,7 @@ __all__ = [
     "fetchSummary",
     "loadFetched",
     "main",
+    "pipelineVersion",
     "pipetaskFailures",
     "resolveCollections",
 ]
@@ -270,9 +272,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.reductions, args.inputs = resolveCollections(args.fresh, args.raw, args.reductions, args.inputs)
     except ValueError as error:
         raise SystemExit(str(error)) from None
-    version = (args.version or drpQaVersion()) + ("-fresh" if args.fresh else "")
-    output = outputCollection(args.prefix, period.name, version)
-    workDir = dataDir / period.run / "qa" / version
+    version = args.version or drpQaVersion()
+    args.variant = ""
+    if args.fresh:
+        try:
+            args.variant = f"drp_stella-{args.pipeline_version or pipelineVersion()}"
+        except RuntimeError as error:
+            raise SystemExit(str(error)) from None
+    try:
+        output = outputCollection(args.prefix, period.name, version, args.variant)
+    except ValueError as error:
+        raise SystemExit(str(error)) from None
+    workDir = dataDir / period.run / "qa" / version / args.variant
     workDir.mkdir(parents=True, exist_ok=True)
     print(f"{period.name}: {len(visits)} visits read from the opdb up to {stamp['readUntil']}")
     print(f"output collection: {output}")
@@ -280,6 +291,41 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command in ("plan", "run"):
         return _plan(args, period, visits, output, workDir)
     return _report(args, period, periods, visits, frames, stamp, output, version, workDir, dataDir)
+
+
+def pipelineVersion(environ: dict[str, str] | None = None) -> str:
+    """Return the version of the drp_stella that reduces, which names fresh reductions.
+
+    Parameters
+    ----------
+    environ : `dict` [`str`, `str`], optional
+        The environment. Default `os.environ`.
+
+    Returns
+    -------
+    `str`
+        The EUPS version of the drp_stella set up (``SETUP_DRP_STELLA``), e.g.
+        ``w.2026.40``; for one set up from a checkout (``setup -r``), ``git
+        describe`` of ``DRP_STELLA_DIR``, with ``-dirty`` if it has changes.
+
+    Raises
+    ------
+    RuntimeError
+        If drp_stella isn't set up, or its checkout can't be described.
+    """
+    environ = os.environ if environ is None else environ
+    setup = environ.get("SETUP_DRP_STELLA", "").split()
+    if len(setup) > 1 and not setup[1].startswith("LOCAL:"):
+        return setup[1]
+    directory = environ.get("DRP_STELLA_DIR")
+    if not directory:
+        raise RuntimeError("drp_stella isn't set up: set it up, or name the pipeline with --pipeline-version")
+    result = subprocess.run(
+        ["git", "-C", directory, "describe", "--tags", "--always", "--dirty"], capture_output=True, text=True
+    )
+    if result.returncode:
+        raise RuntimeError(f"Can't describe drp_stella in {directory}: name it with --pipeline-version")
+    return result.stdout.strip()
 
 
 def resolveCollections(
@@ -337,8 +383,14 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
 
     butler = Butler(args.butler, writeable=False)
     judgedVisits = visits.loc[visits["judged"], "pfs_visit_id"]
+    earlier = _earlier(butler, args, period, output)
     holdings = detectorHoldings(
-        butler, judgedVisits, raw=args.raw, reductions=args.reductions, output=output, inputs=args.inputs
+        butler,
+        judgedVisits,
+        raw=args.raw,
+        reductions=[*args.reductions, *earlier],
+        output=output,
+        inputs=[*earlier, *args.inputs],
     )
     failed = _failedImages(workDir, period)
     detectors = coverage(visits, holdings, failed)
@@ -376,6 +428,7 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
             / referencePeriod.run
             / "qa"
             / referenceVersion
+            / args.variant
             / f"iqQaMetrics-{referencePeriod.name}.parquet"
         )
         if cache.exists():
@@ -416,8 +469,16 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
 
     butler = Butler(args.butler, writeable=False)
     judged = visits.loc[visits["judged"], "pfs_visit_id"]
+    earlier = _earlier(butler, args, period, output)
+    if earlier:
+        print(f"reusing the fresh reductions of {', '.join(earlier)}")
     holdings = detectorHoldings(
-        butler, judged, raw=args.raw, reductions=args.reductions, output=output, inputs=args.inputs
+        butler,
+        judged,
+        raw=args.raw,
+        reductions=[*args.reductions, *earlier],
+        output=output,
+        inputs=[*earlier, *args.inputs],
     )
     failed = None if args.retry_failed else _failedImages(workDir, period)
     detectors = coverage(visits, holdings, failed)
@@ -448,7 +509,9 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
             item,
             butler=args.butler,
             pipeline=args.pipeline,
-            inputs=args.inputs,
+            # Earlier fresh collections are inputs but not skipped: their imageQualityQa outputs are
+            # an older drp_qa's, to be judged again.
+            inputs=[*earlier, *args.inputs],
             output=output,
             skipExistingIn=skip,
             cosmicrayConfigFile=None if configFile is None else str(configFile),
@@ -542,6 +605,15 @@ def pipetaskFailures(text: str, limit: int = MAX_FAILURE_LINES) -> tuple[str | N
     return summary, [line[:300] for line in lines[-limit:]]
 
 
+def _earlier(butler, args, period: Period, output: str) -> list[str]:
+    """Return the earlier collections whose fresh reductions this one reuses; none unless --fresh."""
+    from pfs.drp.qa.comparison.butlerQueries import earlierReductions
+
+    if not args.fresh:
+        return []
+    return earlierReductions(butler, args.prefix, period.name, args.variant, output)
+
+
 def _qgraph(command: list[str]) -> list[str]:
     """Turn a ``pipetask run`` command into the ``pipetask qgraph`` that builds its graph only."""
     index = command.index("run")
@@ -584,8 +656,13 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--fresh",
         action="store_true",
-        help="reduce everything with the current pipeline, reusing nothing of drpActor's; the version"
-        " (collection and files) is suffixed -fresh",
+        help="reduce everything with the current pipeline, reusing nothing of drpActor's; the collection and"
+        " files are named after the pipeline (drp_stella-<version>)",
+    )
+    parser.add_argument(
+        "--pipeline-version",
+        default=None,
+        help="with --fresh: the drp_stella version naming the reductions (default: the one set up)",
     )
     parser.add_argument(
         "--pipeline", default=f"{drpQaDir}/pipelines/qaThresholds.yaml", help="the reduction and QA pipeline"

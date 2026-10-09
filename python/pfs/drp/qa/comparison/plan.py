@@ -343,7 +343,7 @@ def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
     )
 
 
-def outputCollection(prefix: str, period: str, version: str) -> str:
+def outputCollection(prefix: str, period: str, version: str, reductions: str = "") -> str:
     """Return the output collection of a period's comparison.
 
     Parameters
@@ -354,11 +354,14 @@ def outputCollection(prefix: str, period: str, version: str) -> str:
         E.g. ``run30`` or ``run30-pre``.
     version : `str`
         The drp_qa version, e.g. from ``git describe``.
+    reductions : `str`, optional
+        What made the reductions, for fresh ones: e.g. ``drp_stella-w.2026.40``.
+        Empty for drpActor's.
 
     Returns
     -------
     `str`
-        ``<prefix>/<period>/<version>``.
+        ``<prefix>/<period>/<version>``, then ``/<reductions>`` if given.
 
     Raises
     ------
@@ -366,9 +369,10 @@ def outputCollection(prefix: str, period: str, version: str) -> str:
         If the version marks a modified tree (``-dirty``), whose results no
         version could reproduce.
     """
-    if version.endswith("-dirty"):
-        raise ValueError(f"drp_qa version {version!r} has uncommitted changes: commit them first")
-    return f"{prefix.rstrip('/')}/{period}/{version}"
+    if version.endswith("-dirty") or reductions.endswith("-dirty"):
+        raise ValueError(f"{version} {reductions}: uncommitted changes; commit them first")
+    collection = f"{prefix.rstrip('/')}/{period}/{version}"
+    return f"{collection}/{reductions}" if reductions else collection
 
 
 def pipetaskCommand(

@@ -4,11 +4,19 @@ This is the only module in `pfs.drp.qa.comparison` that touches a Butler. It tak
 as an argument and never imports one, so the package stays stack-free; read-only is enough.
 """
 
+import re
 from collections.abc import Iterable, Sequence
 
 import pandas as pd
 
-__all__ = ["DETECTOR_KEYS", "collectionExists", "datasetDetectors", "datasetVisits", "detectorHoldings"]
+__all__ = [
+    "DETECTOR_KEYS",
+    "collectionExists",
+    "datasetDetectors",
+    "datasetVisits",
+    "detectorHoldings",
+    "earlierReductions",
+]
 
 #: The data ID keys of a detector image.
 DETECTOR_KEYS = ("visit", "arm", "spectrograph")
@@ -36,6 +44,36 @@ def collectionExists(butler, name: str) -> bool:
         if type(error).__name__ == "MissingCollectionError":
             return False
         raise
+
+
+def earlierReductions(butler, prefix: str, period: str, reductions: str, exclude: str) -> list[str]:
+    """Return a period's comparison collections made with the same fresh reductions.
+
+    Fresh reductions depend on the pipeline, not on drp_qa, so a new drp_qa version reuses those
+    an earlier one made with the same pipeline, and only judges again.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        The Butler.
+    prefix : `str`
+        The comparison prefix, e.g. ``u/someone/comparison``.
+    period : `str`
+        The period, e.g. ``run30``.
+    reductions : `str`
+        What made them, e.g. ``drp_stella-w.2026.40``.
+    exclude : `str`
+        The current output collection.
+
+    Returns
+    -------
+    `list` [`str`]
+        ``<prefix>/<period>/<any version>/<reductions>``, newest name first.
+    """
+    base = f"{prefix.rstrip('/')}/{period}"
+    pattern = re.compile(rf"{re.escape(base)}/[^/]+/{re.escape(reductions)}")
+    names = butler.collections.query(f"{base}/*")
+    return sorted((name for name in names if pattern.fullmatch(name) and name != exclude), reverse=True)
 
 
 def datasetDetectors(
