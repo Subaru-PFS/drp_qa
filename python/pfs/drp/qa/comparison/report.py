@@ -47,8 +47,9 @@ __all__ = [
 
 #: An image none of whose measured metrics is judged.
 NOT_JUDGED = "NOT JUDGED"
-#: Arms whose verdicts are provisional, and the ticket that will make them firm: the Run25 n-arm
-#: thresholds predate the pipeline changes that made the n arm reliable, around Run29-30.
+#: Arms whose verdicts are provisional, and the ticket choosing their reference from independently
+#: verified sets: the Run25 n-arm thresholds predate the pipeline changes that made the n arm
+#: reliable, around Run29-30.
 PROVISIONAL_ARMS = {"n": "PIPE2D-1938"}
 
 #: `whyNotJudged` when it knows no reason.
@@ -565,8 +566,8 @@ def buildReport(inputs: ReportInputs) -> str:
     parts.append("<h2>Problems</h2>")
     provisional = ", ".join(f"{arm} ({ticket})" for arm, ticket in PROVISIONAL_ARMS.items())
     parts.append(
-        f"<p class='caption'>Provisional arms: {_e(provisional)}. Their thresholds come from Run25, whose reductions"
-        " of them predate the pipeline changes that made them reliable; a finding there may be the threshold's.</p>"
+        f"<p class='caption'>Provisional arms: {_e(provisional)}. Their reference is under review: Run25's predates"
+        " the pipeline changes that made the arm reliable, so a finding there may be the threshold's.</p>"
     )
     new = gatedFindings[gatedFindings["expected"] == ""]
     known = gatedFindings[gatedFindings["expected"] != ""]
