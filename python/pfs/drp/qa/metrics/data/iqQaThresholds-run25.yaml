@@ -495,3 +495,12 @@ thresholds:
   provenance: 'Not judged (adopted 2026-10-06, PIPE2D-1917): on a twilight frame nLines follows the sky brightness,
     not the instrument. Derived values were: Derived 2026-10-05 from validation visits 134880-135279 (n=48): WARN
     at p5, FAIL at p1. FAIL UNBOUNDED: n=48 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+- metric: pctFlagged
+  population: {}
+  higherIsWorse: true
+  absolute: false
+  warn: null
+  fail: null
+  provenance: 'Not judged (2026-10-08, PIPE2D-1929) until there is a valid reference: the Run25 derivation had 5
+    visits per population, and the config''s n-arm 15/20 % is below the known-good n-arm Neon sets of Run25 (34
+    %) and Run30 (26-35 %).'

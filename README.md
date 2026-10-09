@@ -215,8 +215,10 @@ The default, `iqQaThresholds-run25.yaml`, holds the thresholds derived from the 
 - `medFwhm` on arcs, per arm (b 2.872/2.89, r 2.987/2.993, n 3.05/3.1, m 3.18/3.21 px).
 - `nLines` per arm and sequence (`seqName`), lower is worse. On quartz it is set by hand, 0.5 %/1 % below the
   smallest known-good Run25 count, as the derivation was degenerate; on twilight it is not judged.
-- No `pctFlagged`: the config fields judge it, since Run27's n-arm flag rates sit above Run25's. Run27 was
-  reduced without calibrations of its own; flag rates are revisited against Run30 in comparison mode.
+- `pctFlagged` is not judged: one entry with neither WARN nor FAIL, which also overrides the config fields. Run25's
+  derivation had 5 visits per population, and the config's n-arm 15/20 % sits below the known-good n-arm Neon sets
+  of Run25 (34 %) and Run30 (26–35 %), as comparison mode showed (PIPE2D-1929). It stays unjudged until there is a
+  valid reference.
 - `medFwhm` on quartz has no entry yet; the config fields judge a calexp-measured width.
 
 The config fields:
@@ -422,7 +424,7 @@ verdict is known. The decisions behind the current set:
   against Run25's thresholds; Run30 is the first. Run27 is not a fair comparison: no
   calibrations were made from it, and its n-arm flag rates sit 2–5 points above Run25's.
 - **`imageQualityQa` judges by the adopted Run25 file** (`iqQaThresholds-run25.yaml`): `medFwhm` on arcs and
-  `nLines`. Flag rates (`pctFlagged`) stay on the config fields until compared with Run30; quartz `medFwhm` has no
+  `nLines`. Flag rates (`pctFlagged`) are not judged until there is a valid reference; quartz `medFwhm` has no
   derived threshold until the calexp width is fixed (PIPE2D-1918); twilight is not measured. Details under
   [Pass/Warn/Fail Thresholds](#passwarnfail-thresholds).
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a

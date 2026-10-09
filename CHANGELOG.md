@@ -67,8 +67,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   missing result (`NOT_RUN`).
 - **Run25 thresholds adopted** (PIPE2D-1917) — `thresholdsFile` defaults to `iqQaThresholds-run25.yaml`, shipped in
   `pfs/drp/qa/metrics/data` with the script that makes it from the PIPE2D-1914 derivation: `medFwhm` (arcs) and
-  `nLines`, quartz `nLines` set by hand, twilight `nLines` not judged, no `pctFlagged`. A relative
+  `nLines`, quartz `nLines` set by hand, twilight `nLines` not judged. A relative
   `thresholdsFile` is looked up there (`gate.thresholdsPath`). Changes verdicts.
+- **`pctFlagged` is no longer judged** (PIPE2D-1929) — the shipped thresholds file has one entry for it with
+  neither WARN nor FAIL, which overrides the `flagRate*Threshold` config fields: their n-arm 15/20 % sits below
+  the known-good n-arm Neon sets of Run25 and Run30. Changes verdicts.
 - **`iqQaSpeciesMetrics`** (PIPE2D-1915) — the per-species `fitDetectorMap` statistics, in long format
   (`pfs.drp.qa.metrics.longFormat`), replacing the `fitSpeciesXRms_<species>`/`fitSpeciesYRms_<species>`
   columns of `iqQaMetrics`, which are gone. `imageQualityLogQa.py` reads it.
