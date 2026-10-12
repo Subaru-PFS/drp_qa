@@ -5,10 +5,12 @@ validation visits (collection ``u/wtg/qa-thresholds/003``), kept in the tests as
 ``tests/metrics/data/iqQaThresholds-run25.yaml`` beside the metrics it was
 derived from. Adopting it (PIPE2D-1917) changed three things:
 
-- **No pctFlagged.** Its populations hold 5 visits each, so FAIL sits at the
-  sample's maximum, and Run27's known-good n-arm flag rates are 2-5 points
-  higher, likely because Run27 had no calibrations of its own. The task config
-  judges flag rates until they are compared with Run30 (comparison mode).
+- **pctFlagged is not judged.** Its populations hold 5 visits each, so FAIL
+  sits at the sample's maximum, and Run27's known-good n-arm flag rates are 2-5
+  points higher, likely because Run27 had no calibrations of its own. The task
+  config's fallback (n 15/20 %) is no better: Run25's known-good n-arm Neon
+  sets flag 34 % and Run30's 26-35 % (comparison mode, PIPE2D-1929). One entry
+  with neither WARN nor FAIL stops the search, so the config isn't used either.
 - **Twilight nLines is not judged.** On a twilight frame the count follows the
   sky brightness, not the instrument.
 - **Quartz nLines is set by hand.** Its derivation was degenerate (WARN = FAIL
@@ -37,6 +39,8 @@ OUTPUT = Path(__file__).parent / "iqQaThresholds-run25.yaml"
 #: Fractions below the smallest known-good value for quartz nLines WARN and FAIL.
 TRACE_MARGINS = (0.005, 0.01)
 ADOPTED = "2026-10-06"
+#: When pctFlagged stopped being judged.
+FLAGS_UNJUDGED = "2026-10-08"
 
 
 def adopt(document: dict, metrics: pd.DataFrame) -> dict:
@@ -80,6 +84,21 @@ def adopt(document: dict, metrics: pd.DataFrame) -> dict:
                 f"FAIL 1 % below the smallest known-good value, {minimum}."
             )
         entries.append(entry)
+    entries.append(
+        {
+            "metric": "pctFlagged",
+            "population": {},
+            "higherIsWorse": True,
+            "absolute": False,
+            "warn": None,
+            "fail": None,
+            "provenance": (
+                f"Not judged ({FLAGS_UNJUDGED}, PIPE2D-1929) until there is a valid reference: the Run25 "
+                "derivation had 5 visits per population, and the config's n-arm 15/20 % is below the known-good "
+                "n-arm Neon sets of Run25 (34 %) and Run30 (26-35 %)."
+            ),
+        }
+    )
     return {key: value for key, value in document.items() if key != "thresholds"} | {"thresholds": entries}
 
 
