@@ -32,6 +32,7 @@ __all__ = [
     "outputCollection",
     "passes",
     "pipetaskCommand",
+    "selectCadences",
     "summarize",
 ]
 
@@ -44,6 +45,31 @@ _FAILED_RE = re.compile(r"Execution of task '(\w+)' on quantum \{([^}]*)\} faile
 _DATA_ID_RE = re.compile(r"(\w+): '?([^,']*)'?")
 
 _CAMERA_RE = re.compile(r"^([brnm])([1-4])$")
+
+
+def selectCadences(visits: pd.DataFrame, cadences: Sequence[str]) -> pd.DataFrame:
+    """Judge only the arcs and traces of some cadences, e.g. the calibration sets.
+
+    Parameters
+    ----------
+    visits : `pandas.DataFrame`
+        From `pfs.drp.qa.comparison.classify.classifyVisits`.
+    cadences : sequence of `str`
+        ``set``, ``daily`` and/or ``single``; empty for all.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``visits`` with every other judged visit, sky frames included, no longer judged, with
+        reason ``cadence not selected``. Other visits stay, so the coverage still lists them.
+    """
+    if not cadences:
+        return visits
+    deselect = visits["judged"].astype(bool) & ~visits["cadence"].isin(cadences)
+    visits = visits.copy()
+    visits.loc[deselect, ["judged", "validated"]] = False
+    visits.loc[deselect, "reason"] = "cadence not selected"
+    return visits
 
 
 def expectedDetectors(visits: pd.DataFrame) -> pd.DataFrame:

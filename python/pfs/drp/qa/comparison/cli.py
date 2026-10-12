@@ -44,6 +44,7 @@ from pfs.drp.qa.comparison.plan import (
     outputCollection,
     passes,
     pipetaskCommand,
+    selectCadences,
     summarize,
 )
 from pfs.drp.qa.comparison.runs import Period, loadPeriods
@@ -287,6 +288,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     visits, frames, stamp = _classified(period, periods, dataDir)
+    visits = selectCadences(visits, args.cadence)
     try:
         args.reductions, args.inputs = resolveCollections(args.fresh, args.raw, args.reductions, args.inputs)
     except ValueError as error:
@@ -701,6 +703,13 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         help="only this pass, as plan names it: calibration, sky, unvalidated-calibration, ... (with its"
         " -judge pass), or sky-judge, ...; repeatable",
+    )
+    parser.add_argument(
+        "--cadence",
+        action="append",
+        default=[],
+        choices=["set", "daily", "single"],
+        help="judge only the arcs and traces of this cadence, e.g. set for the calibration sets; repeatable",
     )
     parser.add_argument(
         "--retry-failed",

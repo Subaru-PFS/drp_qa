@@ -541,7 +541,9 @@ python bin.src/qaComparison.py run    --period run30 --data-dir ~/Projects/Subar
 python bin.src/qaComparison.py report --period run30 --data-dir ~/Projects/Subaru/PFS/data   # report-run30.html
 ```
 
-`plan` prints the `pipetask` commands as Python lists, for running from a notebook instead. By default the
+`plan` prints the `pipetask` commands as Python lists, for running from a notebook instead. `--cadence set` (or
+`daily`, `single`; repeatable) judges only the arcs and traces of those cadences, e.g. the calibration sets that
+thresholds are derived from; the other visits stay listed as `cadence not selected`. By default the
 reductions in `drpActor/reductions` are reused, each made with the pipeline of its day; `--fresh` reduces everything
 with the current pipeline instead, so runs are compared on a level field (their calibrations are still each
 run's own). Its collection and files are named after that pipeline, `<period>/<version>/pfs-<weekly>` (from

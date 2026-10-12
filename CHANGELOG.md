@@ -10,6 +10,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **`qaComparison.py --cadence`** (PIPE2D-1938) — judge only the arcs and traces of a cadence (`set`, `daily`,
+  `single`), e.g. the calibration sets, so a fresh reduction of a run's sets doesn't reduce its daily frames too.
+
 - **Comparison mode** (PIPE2D-1929) — `bin.src/qaComparison.py` (`fetch`, `plan`, `run`, `report`) gates every
   image of an observing run against the Run25 thresholds. `pfs.drp.qa.comparison` lists a period's visits from
   the opdb (`queries`), says whether each is a calibration or science and whether the gate judges it
