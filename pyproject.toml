@@ -48,6 +48,7 @@ where = ["python"]
 include = ["pfs", "pfs.*"]
 
 [tool.setuptools.package-data]
+"pfs.drp.qa.comparison" = ["data/*.yaml"]
 "pfs.drp.qa.metrics" = ["data/*.yaml"]
 
 # ==============================================================================

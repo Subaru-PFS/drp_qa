@@ -1,0 +1,30 @@
+# Observing runs: the periods that comparison mode (PIPE2D-1929) gates.
+#
+# Times are HST. A night runs from noon to noon and is named by its evening's date; `nights` and
+# `preRun` are inclusive ranges of nights. `preRun` holds calibrations taken for the run before
+# its first night.
+#
+# Derived 2026-10-06 from gaps in SpS activity in opdb (pfsa-db); Run29's nights are the
+# official ones, 07-07 to 07-23.
+runs:
+  - name: run25
+    nights: ["2025-11-07", "2025-12-03"]
+    preRun: ["2025-11-02", "2025-11-03"]
+
+  - name: run26
+    nights: ["2026-01-02", "2026-01-26"]
+
+  - name: run27  # weathered out: two nights with any sky
+    nights: ["2026-02-26", "2026-03-25"]
+
+  - name: run28
+    nights: ["2026-04-27", "2026-05-20"]
+    preRun: ["2026-04-22", "2026-04-24"]
+
+  - name: run29
+    nights: ["2026-07-07", "2026-07-23"]
+    preRun: ["2026-06-10", "2026-07-03"]
+
+  - name: run30
+    nights: ["2026-08-24", "2026-09-15"]
+    preRun: ["2026-08-17", "2026-08-18"]

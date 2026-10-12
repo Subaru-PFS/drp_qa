@@ -285,7 +285,7 @@ def testShippedFileIsTheAdoptedRun25(stored):
 
 
 def testShippedFileVerdicts(stored):
-    """Adopted Run25: obstructed frames fail, good Run25 quartz passes, twilight nLines is not judged."""
+    """Adopted Run25: obstructed frames fail, good Run25 quartz passes; twilight nLines and flags aren't judged."""
     thresholds = [thresholdsPath(configDefaults().thresholdsFile), configThresholds(configDefaults())]
     judged = judge(stored, thresholds)
     verdicts = gate(stored, thresholds, default="UNKNOWN")
@@ -304,5 +304,9 @@ def testShippedFileVerdicts(stored):
         & judged["row"].isin(np.flatnonzero(stored["seqName"] == "Twilight sky"))
     ]
     assert len(twilight) and (twilight["status"] == "").all() and (twilight["layer"] == 0).all()
+    # pctFlagged is not judged at all: the shipped file's entry stops the search before the config.
     flags = judged[judged["metric"] == "pctFlagged"]
-    assert (flags["layer"] == 1).all()
+    assert len(flags) and (flags["layer"] == 0).all() and (flags["status"] == "").all()
+    # Negative control: the config alone judges them, some badly.
+    configOnly = judge(stored, [configThresholds(configDefaults())])
+    assert configOnly.loc[configOnly["metric"] == "pctFlagged", "status"].isin(["WARN", "FAIL"]).any()

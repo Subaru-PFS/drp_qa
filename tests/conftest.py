@@ -37,6 +37,7 @@ _STACK_MODULES = [
 
 # Test directories whose conftest.py imports non-stdlib packages.
 _OPTIONAL_DIRS = [
+    "comparison",
     "guiders",
     "imageQualityQa",
     "metrics",
