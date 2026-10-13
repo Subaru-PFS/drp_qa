@@ -138,7 +138,7 @@ The task writes data only; plotting lives in `pfs.drp.qa.plotting.iqQa` and is d
 | `detectorMap`       | `detectorMap`        | Yes         | Adjusted mapping from `(fiberId, wavelength)` to detector `(x, y)`. Used to enrich arc lines with wavelength and trace position.                                                                                            |
 | `fiberProfiles`     | `fiberProfiles`      | Yes (calib) | Stored fiber profile shapes. Used as a last-resort fallback to derive trace-width FWHM when neither arc lines nor a calexp are available.                                                                                   |
 | `detectorMapCalib`  | `detectorMap_calib`  | Yes (calib) | Static, pre-adjustment detectorMap. Differencing its `xCenter` against the measured fiber positions gives the flexure diagnostic `dxCenter`.                                                                                |
-| `calexp`            | `calexp`             | No          | Post-ISR calibrated image. When present, cross-dispersion 2nd moments are measured directly from pixel data — the primary path for trace/quartz visits and a fallback for sparse arc visits.                                |
+| `calexp`            | `calexp`             | No          | Post-ISR calibrated image. When present, trace widths are measured directly from its pixels (each fiber fitted with its neighbours) — the primary path for trace/quartz visits and a fallback for sparse arc visits.        |
 | `pfsConfig`         | `pfsConfig`          | No          | Fiber configuration for the visit. When provided alongside `calexp`, restricts FWHM measurement to `FLUXSTD+GOOD` fibers to avoid contamination from sky fibers. Also supplies `W_SEQTYP` metadata when `calexp` is absent. |
 | `isrLog`            | `isr_log`            | No          | ISR task log. Parsed for bad-pixel counts and runtime.                                                                                                                                                                      |
 | `cosmicrayLog`      | `cosmicray_log`      | No          | Cosmic-ray task log. Parsed for CR counts, affected pixels, and runtime.                                                                                                                                                    |
@@ -154,22 +154,29 @@ descending preference order:
 
 | Visit type                                        | Primary path                                                           | Fallback                                                               |
 |---------------------------------------------------|------------------------------------------------------------------------|------------------------------------------------------------------------|
-| Regular arc (`scienceArc`, all fibers)            | Arc-line second moments (`ixx`/`iyy` → FWHM)                           | `calexp` cross-dispersion moments if `nGoodLines < minGoodLines`       |
+| Regular arc (`scienceArc`, all fibers)            | Arc-line second moments (`ixx`/`iyy` → FWHM)                           | `calexp` trace widths if `nGoodLines < minGoodLines`                   |
 | IIS arc (16 engineering fibers)                   | —                                                                      | Reported as sparse (no FWHM); arc catalog does not match IIS positions |
-| Regular trace/quartz (`scienceTrace`, all fibers) | `calexp` cross-dispersion moments                                      | Fiber profile calibration widths if no `calexp`                        |
+| Regular trace/quartz (`scienceTrace`, all fibers) | `calexp` trace widths                                                  | Fiber profile calibration widths if the `calexp` is absent or unusable |
 | IIS trace/quartz                                  | —                                                                      | Reported as sparse; too few fibers for a reliable measurement          |
-| Science / all-sky (`scienceObject*`)              | `calexp` moments on `FLUXSTD+GOOD` fibers                              | Sparse if FLUXSTD good fraction < `minFluxstdGoodFrac`                 |
+| Science / all-sky (`scienceObject*`)              | `calexp` trace widths of `FLUXSTD+GOOD` fibers                         | Sparse if FLUXSTD good fraction < `minFluxstdGoodFrac`                 |
 | Unknown (`W_SEQTYP` absent)                       | Heuristic: arc lines if sufficient, else `calexp`, else fiber profiles | —                                                                      |
 
-For arc visits, FWHM is computed as the Gaussian-equivalent width
-`2√(2 ln 2) × σ` from the second moments of each arc-line profile. For calexp and fiber-profile paths, the same formula
-is applied to the cross-dispersion intensity profile measured at regular row intervals.
+For arc visits, FWHM is computed as the Gaussian-equivalent width `2√(2 ln 2) × σ` from the second moments of each
+arc-line profile. On the calexp, every `profileYStride`-th row is fitted with `pfs.drp.qa.crossDispersion`: each fiber
+jointly with its neighbours, as pixel-integrated Gaussians sharing one width, plus a background, with no aperture
+(fibers are 6.17 px apart). The `fiberProfiles` fallback reads each profile's width at half its maximum. Every FWHM
+includes the pixel response, as the arc-line moments do; `iqQaData.fwhmIntrinsic` leaves it out.
+
+The PFS trace profile is not Gaussian, so these readings were chosen by comparing them on real quartz
+([`docs/trace-widths.ipynb`](docs/trace-widths.ipynb), PIPE2D-1918): the joint fit recovers the profile's half-maximum
+width, a Gaussian fitted to the profile understates it by 8–10 %, and drp_stella's second moment
+(`calculateStatistics().width`) varies between detectors whose profiles agree.
 
 ##### What the Metrics Tell Us
 
 - **`medFwhm`** — Median FWHM in pixels across all good measurements for the detector quantum. Reflects the
-  cross-dispersion width of the fiber PSF. Typical good values are 2.5–3.2 px; values above 3.5 px indicate a focus or
-  alignment problem.
+  cross-dispersion width of the fiber PSF. Typical good values (Run25) are 2.5–3.2 px on arcs and 3.1–3.4 px on quartz;
+  values above 3.5 px indicate a focus or alignment problem (SM1 defocused in Run27 read 4.1–4.5 px on quartz).
 - **`medDxCenter`** / **`dxCenterRms`** — Median and scatter of the spatial offset between the static calibration
   detectorMap and the measured fiber positions, in pixels. This is a flexure diagnostic: a large `|medDxCenter|` means
   the whole detector has shifted relative to the calibration, while a large `dxCenterRms` at small median suggests a
@@ -210,7 +217,7 @@ has none. `thresholdsFile` is an absolute path, or one relative to `pfs/drp/qa/m
 judge alone.
 
 The default, `iqQaThresholds-run25.yaml`, holds the thresholds derived from the Run25 validation visits, as adopted
-(PIPE2D-1917) by `makeRun25Thresholds.py` beside it; each entry records its provenance:
+(PIPE2D-1917, PIPE2D-1918) by `makeRun25Thresholds.py` beside it; each entry records its provenance:
 
 - `medFwhm` on arcs, per arm (b 2.872/2.89, r 2.987/2.993, n 3.05/3.1, m 3.18/3.21 px).
 - `nLines` per arm and sequence (`seqName`), lower is worse. On quartz it is set by hand, 0.5 %/1 % below the
@@ -219,7 +226,11 @@ The default, `iqQaThresholds-run25.yaml`, holds the thresholds derived from the 
   derivation had 5 visits per population, and the config's n-arm 15/20 % sits below the known-good n-arm Neon sets
   of Run25 (34 %) and Run30 (26–35 %), as comparison mode showed (PIPE2D-1929). It stays unjudged until there is a
   valid reference.
-- `medFwhm` on quartz has no entry yet; the config fields judge a calexp-measured width.
+- `medFwhm` on quartz, per arm, from the calexp width (b 3.192/3.198, r 3.39/3.391, n 3.257/3.26 px). The m arm's
+  derivation has 16 known-good values, below the 20-sample floor, so it is not judged: the config's 3.2 px WARN would
+  flag every known-good m quartz (3.31–3.42 px). Within an arm the
+  spectrographs differ by more than one spectrograph varies, so a per-arm FAIL sits at the widest one's known-good
+  maximum (r4, n3, b2).
 
 The config fields:
 
@@ -255,13 +266,13 @@ does not exist in `drp_stella`, so the permissive thresholds above are the curre
 ###### Measurement
 
 - `imageQualityQa:minGoodLines`: Minimum good arc-line measurements to trust the arc path. Default `10`.
-- `imageQualityQa:minPeakSN`: Minimum peak S/N for calexp profile samples. Default `5.0`.
+- `imageQualityQa:minPeakSN`: Minimum significance of a calexp trace (fitted flux over its error). Default `5.0`.
 - `imageQualityQa:maxCalexpFlagRate`: Max fraction of bad calexp samples before rejecting the calexp path. Default
   `0.5`.
 - `imageQualityQa:minFluxstdGoodFrac`: Min fraction of good FLUXSTD samples for the stellar calexp path. Default `0.10`.
-- `imageQualityQa:profileHalfWidth`: Half-width (pixels) of the cross-dispersion aperture for calexp measurements.
-  Default `7`.
-- `imageQualityQa:profileYStride`: Row sampling interval (pixels) for calexp profile measurements. Default `50`.
+- `imageQualityQa:profileHalfWidth`: Deprecated and ignored; the calexp width uses no aperture.
+- `imageQualityQa:profileYStride`: Row sampling interval (pixels) for calexp trace widths. Default `100` (about 40
+  rows); the fit's cost is proportional to the rows.
 
 ###### Pass/Fail Thresholds
 
@@ -285,7 +296,7 @@ does not exist in `drp_stella`, so the permissive thresholds above are the curre
 
 | DataSet Type  | Dimensions                             | Description                                                                                                                                                                       |
 |---------------|----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `iqQaData`    | `instrument, visit, arm, spectrograph` | Per-line measurements: `fiberId`, `x`, `y`, `lam`, `fwhm`, `theta`, `dxCenter`, `flux`, `fluxErr`, `flag`, `traceOnly`, `peakRatio`, `status`, plus `visit`/`arm`/`spectrograph`. |
+| `iqQaData`    | `instrument, visit, arm, spectrograph` | Per-line or per-trace-sample measurements: `fiberId`, `x`, `y`, `lam`, `fwhm`, `fwhmIntrinsic` (calexp only), `theta`, `dxCenter`, `flux`, `fluxErr`, `flag`, `traceOnly`, `peakRatio`, `snr` (calexp only), `status`, plus `visit`/`arm`/`spectrograph`. |
 | `iqQaMetrics` | `instrument, visit, arm, spectrograph` | Single-row summary; see below.                                                                                                                                                    |
 | `iqQaSpeciesMetrics` | `instrument, visit, arm, spectrograph` | Per-species `fitDetectorMap` statistics from the `reduceExposure` log, one row per species and metric: `visit`, `arm`, `spectrograph`, `description` (line species, e.g. `NeI`), `metric` (`fitXRms`, `fitYRms`), `value`. |
 
@@ -429,8 +440,8 @@ verdict is known. The decisions behind the current set:
   against Run25's thresholds; Run30 is the first. Run27 is not a fair comparison: no
   calibrations were made from it, and its n-arm flag rates sit 2–5 points above Run25's.
 - **`imageQualityQa` judges by the adopted Run25 file** (`iqQaThresholds-run25.yaml`): `medFwhm` on arcs and
-  `nLines`. Flag rates (`pctFlagged`) are not judged until there is a valid reference; quartz `medFwhm` has no
-  derived threshold until the calexp width is fixed (PIPE2D-1918); twilight is not measured. Details under
+  quartz, and `nLines`. Flag rates (`pctFlagged`) are not judged until there is a valid reference; quartz `medFwhm` is
+  judged on b, r and n, from the calexp width (PIPE2D-1918); twilight is not measured. Details under
   [Pass/Warn/Fail Thresholds](#passwarnfail-thresholds).
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
@@ -541,8 +552,10 @@ python bin.src/qaComparison.py run    --period run30 --data-dir ~/Projects/Subar
 python bin.src/qaComparison.py report --period run30 --data-dir ~/Projects/Subaru/PFS/data   # report-run30.html
 ```
 
-`plan` prints the `pipetask` commands as Python lists, for running from a notebook instead. By default the
-reductions in `drpActor/reductions` are reused, each made with the pipeline of its day; `--fresh` reduces everything
+`plan` prints the `pipetask` commands as Python lists, for running from a notebook instead; `-j` sets the
+`pipetask` processes (default 8). By default the reductions in `drpActor/reductions` are reused, each made with the
+pipeline of its day, and so are those an earlier drp_qa version's comparison of the period made beside them, its
+verdicts being judged again; `--fresh` reduces everything
 with the current pipeline instead, so runs are compared on a level field (their calibrations are still each
 run's own). Its collection and files are named after that pipeline, `<period>/<version>/pfs-<weekly>` (from
 drp_stella's `getPfsVersions`, each product's version if they differ; `--pipeline-version` names it), so a new

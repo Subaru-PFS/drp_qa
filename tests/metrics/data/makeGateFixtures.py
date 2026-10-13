@@ -1,8 +1,16 @@
-"""Remake the gate regression fixtures from the PIPE2D-1914 threshold run.
+"""Remake the gate regression fixtures from the threshold runs.
 
-The inputs are what ``docs/qa-thresholds.ipynb`` caches for the collection
-``u/wtg/qa-thresholds/003``: the validation visits' ``iqQaMetrics``, and the
-thresholds derived from them. Both are engineering and calibration visits.
+The inputs are what ``docs/qa-thresholds.ipynb`` caches for each collection:
+the validation visits' ``iqQaMetrics``, and the thresholds derived from them.
+All are engineering and calibration visits.
+
+- ``iqQaMetrics-validation.parquet`` and ``iqQaThresholds-run25.yaml``, from
+  ``u/wtg/qa-thresholds/004``: ``003``'s reductions with ``imageQualityQa``
+  rerun once the calexp trace width worked (PIPE2D-1918). The adopted
+  thresholds are made from these.
+- ``iqQaMetrics-config.parquet``, from ``u/wtg/qa-thresholds/003``, whose
+  verdicts the task made from its config alone, before it read a thresholds
+  file: the regression check of ``gate.configThresholds``.
 
     uv run --no-project --with pandas --with pyarrow python makeGateFixtures.py [DIR]
 
@@ -15,7 +23,8 @@ from pathlib import Path
 
 import pandas as pd
 
-STEM = "u_wtg_qa-thresholds_003"
+STEM = "u_wtg_qa-thresholds_004"
+CONFIG_STEM = "u_wtg_qa-thresholds_003"
 
 #: The columns the gate reads, and the verdict the task stored.
 COLUMNS = [
@@ -35,8 +44,9 @@ COLUMNS = [
 
 source = Path(sys.argv[1] if len(sys.argv) > 1 else "~/Projects/Subaru/PFS/data").expanduser()
 here = Path(__file__).parent
-metrics = pd.read_parquet(source / f"iqQaMetrics-{STEM}.parquet")[COLUMNS]
-metrics.sort_values(["visit", "arm", "spectrograph"], ignore_index=True).to_parquet(
-    here / "iqQaMetrics-validation.parquet", index=False
-)
+for stem, name in ((STEM, "iqQaMetrics-validation.parquet"), (CONFIG_STEM, "iqQaMetrics-config.parquet")):
+    metrics = pd.read_parquet(source / f"iqQaMetrics-{stem}.parquet")[COLUMNS]
+    metrics.sort_values(["visit", "arm", "spectrograph"], ignore_index=True).to_parquet(
+        here / name, index=False
+    )
 shutil.copyfile(source / f"iqQaThresholds-{STEM}.yaml", here / "iqQaThresholds-run25.yaml")

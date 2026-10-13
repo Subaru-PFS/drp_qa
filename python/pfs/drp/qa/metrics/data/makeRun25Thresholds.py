@@ -1,9 +1,11 @@
 """Make ``iqQaThresholds-run25.yaml``, the thresholds ``imageQualityQa`` uses by default.
 
 The source is the file ``docs/qa-thresholds.ipynb`` derived from the Run25
-validation visits (collection ``u/wtg/qa-thresholds/003``), kept in the tests as
-``tests/metrics/data/iqQaThresholds-run25.yaml`` beside the metrics it was
-derived from. Adopting it (PIPE2D-1917) changed three things:
+validation visits (collection ``u/wtg/qa-thresholds/004``: the reductions of
+``003`` with ``imageQualityQa`` rerun once the calexp trace width worked,
+PIPE2D-1918), kept in the tests as ``tests/metrics/data/iqQaThresholds-run25.yaml``
+beside the metrics it was derived from. Arc metrics are the same in both runs.
+Adopting it changed four things:
 
 - **pctFlagged is not judged.** Its populations hold 5 visits each, so FAIL
   sits at the sample's maximum, and Run27's known-good n-arm flag rates are 2-5
@@ -16,6 +18,10 @@ derived from. Adopting it (PIPE2D-1917) changed three things:
 - **Quartz nLines is set by hand.** Its derivation was degenerate (WARN = FAIL
   at the sample's minimum): WARN is 0.5 % and FAIL 1 % below the smallest
   known-good Run25 value of the arm, rounded down to 1000.
+- **Quartz medFwhm is judged on b, r and n as derived** (PIPE2D-1918), from the
+  calexp width. The m arm's derivation has 16 known-good values, below the
+  20-sample floor, so m-arm quartz medFwhm is not judged: the config's 3.2 px
+  WARN would flag every known-good one (3.31-3.42 px).
 
 Run from the repository root:
 
@@ -41,6 +47,8 @@ TRACE_MARGINS = (0.005, 0.01)
 ADOPTED = "2026-10-06"
 #: When pctFlagged stopped being judged.
 FLAGS_UNJUDGED = "2026-10-08"
+#: When quartz medFwhm was adopted.
+TRACE_FWHM_ADOPTED = "2026-10-12"
 
 
 def adopt(document: dict, metrics: pd.DataFrame) -> dict:
@@ -66,8 +74,20 @@ def adopt(document: dict, metrics: pd.DataFrame) -> dict:
     for entry in document["thresholds"]:
         entry = dict(entry)
         seqName = entry["population"].get("seqName")
+        population = entry["population"]
         if entry["metric"] == "pctFlagged":
             continue
+        if entry["metric"] == "medFwhm" and population.get("obsType") == "trace":
+            if entry["reliable"]:
+                entry["provenance"] = f"Adopted {TRACE_FWHM_ADOPTED} (PIPE2D-1918). {entry['provenance']}"
+            else:
+                entry |= {"warn": None, "fail": None}
+                entry["provenance"] = (
+                    f"Not judged ({TRACE_FWHM_ADOPTED}, PIPE2D-1918): the derivation from visits "
+                    f"{entry['visitRange']} has n={entry['nGood']}, below the 20-sample floor, and the config's "
+                    "medFwhm WARN would flag every known-good value. Derived values were: "
+                    f"{entry['provenance']}"
+                )
         if entry["metric"] == "nLines" and seqName == "Twilight sky":
             entry |= {"warn": None, "fail": None, "degenerate": False}
             entry["provenance"] = (

@@ -7,7 +7,7 @@ current data before acting on a number here.
 
 Anything labelled **proposed** below is not implemented in any merged branch — check the code
 before relying on it. Claims here were last verified against `drp_qa` `main` and `drp_stella`
-`master` `c771d507` on 2026-10-02.
+`master` `c771d507` on 2026-10-02; the trace-width section on 2026-10-12.
 
 Conventions and build/test rules live in [`AGENTS.md`](../AGENTS.md); this file holds only the
 domain knowledge that used to sit in sections 7, 8 and 10 of it.
@@ -28,8 +28,8 @@ descending preference order:
 
 1. **Arc-line shape measurements** — second-moment `ixx`/`iyy` from `ArcLineSet`
    (`lines` dataset); requires `arcLines` connection.
-2. **Calexp image moments** — direct cross-dispersion profile fit from post-ISR pixel
-   data (`calexp` connection); used when arc lines are absent or sparse
+2. **Calexp trace widths** — each fiber fitted jointly with its neighbours on sampled rows
+   of the `calexp` (`pfs.drp.qa.crossDispersion`); used when arc lines are absent or sparse
    (`nGoodLines < minGoodLines`).
 3. **Fiber profile calibration** — reads stored profile widths from `fiberProfiles`;
    last resort when neither of the above is reliable.
@@ -63,11 +63,11 @@ fallback is preferred in that case.
 | Config field | Purpose |
 |---|---|
 | `minGoodLines` (default 10) | Min good arc-line measurements to trust the arc path |
-| `minPeakSN` (default 5.0) | Min peak S/N for calexp profile samples |
+| `minPeakSN` (default 5.0) | Min significance (fitted flux / its error) of a calexp trace sample |
 | `maxCalexpFlagRate` (default 0.5) | Max fraction of bad calexp samples before rejecting calexp path |
 | `minFluxstdGoodFrac` (default 0.10) | Min fraction of good FLUXSTD samples for stellar calexp path |
-| `profileHalfWidth` (default 7) | Half-width (px) of the cross-dispersion aperture for calexp measurements |
-| `profileYStride` (default 50) | Row sampling interval (px) for calexp profile measurements |
+| `profileHalfWidth` | Deprecated, ignored: the calexp width uses no aperture |
+| `profileYStride` (default 100) | Row sampling interval (px) for calexp trace widths; cost is proportional to the rows |
 | `fwhmWarnThreshold` / `fwhmFailThreshold` (3.2/3.5 px) | FWHM pass/warn/fail thresholds |
 | `dxCenterWarnThreshold` / `dxCenterFailThreshold` (1.0/2.0 px) | `\|medDxCenter\|` flexure thresholds |
 | `flagRateWarnThreshold` / `flagRateFailThreshold` | `pctFlagged` thresholds; DictField keyed by `arm` **or** `arm:species` |
@@ -90,6 +90,32 @@ lines (see [Arc Lamp Physics](#arc-lamp-physics-and-b-arm-pctflagged-failures)):
 `DictField` values can't be set with dot notation on the command line — assign the whole
 dict as a Python literal:
 `-c "imageQualityQa:flagRateWarnThreshold={'b': 50.0, 'b:Argon': 93.0}"`.
+
+### Trace widths (PIPE2D-1918)
+
+From [`trace-widths.ipynb`](trace-widths.ipynb), Run25 quartz 133040 (12 detectors), Run27
+SM1-defocused quartz 140032 and 140139, and the test fixtures in `tests/imageQualityQa/data`:
+
+- **Fibers are 6.17 px apart** on every arm. Any aperture or background window wider than about
+  3 px on each side of a trace takes in its neighbours; the old `profileHalfWidth` 7 aperture
+  flagged nearly every quartz sample.
+- **The trace profile is not Gaussian.** The Run25 `fiberProfiles` read 3.00-3.03 px at half
+  maximum, 2.75-2.80 px by a Gaussian fit, and 2.80-2.94 px by the second moment of the median
+  profile. The joint fit, on rows built from those profiles, recovers the half-maximum width to
+  0-4 %; on the real rows it reads 3.18-3.32 px, a further 3-6 % that is not explained.
+- **drp_stella's per-fiber second moment** (`FiberProfile.calculateStatistics().width`), median per
+  detector, ranged 2.32-3.66 px where the Gaussian fit ranged 2.72-2.84 px. Cause not identified.
+- **The calibration profiles fit a fully lit quartz** to within ±2.4 % of the peak (median residual
+  by offset from the trace center), although they were built from sparse MOD4 quartz
+  (133096-133102). A defocused spectrograph against its focused calibration leaves -11 % at the
+  center and +32 % on the flanks.
+- **SM1 defocus** reads 4.13-4.46 px, 1.24-1.41 times the same detectors in focus. The calibration
+  used for those reductions (Run26) does not change: only the exposure shows it.
+- **Which calibration a reduction used** is in the calexp's provenance; Run27 was reduced with
+  Run26 `fiberProfiles` and Run29's for 150116. `pfs.drp.qa.utils.provenance` reads it.
+- **Obstructed quartz** (150116, M1 cover closed): joint-fit usable fraction drops to 3 % (b),
+  52 % (r) and 25 % (n), so b and n fall back to the calibration; `nLines` catches it.
+- **`lines` on a quartz** holds about 2.4 M trace centroids: 0.8-1.1 s and about 400 MB to read.
 
 ### Output metrics
 
@@ -244,7 +270,6 @@ From engineering run data:
 | `medDxCenter` ≈ 0 but `dxCenterRms` large | Distortion rather than bulk shift | Look at the `dxCenter` distribution in `iqQaData`, not just the summary |
 | `traceOnly=True` for all arc visits | `arcLines` connection missing or `minGoodLines` not satisfied | Check `fitDetectorMap` ran and produced `lines` |
 | No `medFwhm` (sparse result) for IIS arc or IIS quartz frames | Deliberate. The science arc catalog does not match the 16 engineering fibers, and scattered light from them gave a spurious ~7 px calexp FWHM, so both `is_iis` branches of `imageQualityQa` set `force_sparse = True` and never run the calexp measurement. `pctFlagged` is suppressed as well | Expected; no action. Were the calexp path re-enabled for IIS, the ~7 px figure would return for a second, independent reason — see the next row |
-| Regular quartz/trace calexp logs "too sparse … FWHM will be sparse", or a calexp FWHM near the aperture width | `profileHalfWidth` (default 7 px) exceeds the 6.17 px fiber pitch on every arm, so the aperture always contains neighbouring traces. Here calexp *is* the primary path, so the bug bites | `maxCalexpFlagRate` discards the result and the visit reports sparse, which masks the cause rather than fixing it. Root-cause analysis and a proposed estimator are in `doc/tickets/drp_qa-calexp-width-estimator.md` on the unmerged branch |
 | All `fit*` metric columns are `NaN`/0 | The `*_log` connections were absent from the input collection | Expected when `reduceExposure` hasn't run; the IQ metrics themselves are unaffected |
 | `ValueError: f(a) = NaN` in bisect during `fitDetectorMap` | Per-fiber dof=0 when very few arc lines remain after S/N cut | Proposed `dof <= 0` guard in `calculateSoftening` is **not** committed (see above), so relaxing per-species S/N is not yet safe |
 

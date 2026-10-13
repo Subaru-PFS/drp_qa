@@ -1,9 +1,9 @@
 version: 1
-derivedOn: '2026-10-05'
-collection: u/wtg/qa-thresholds/003
+derivedOn: '2026-10-12'
+collection: u/wtg/qa-thresholds/004
 referenceRuns:
 - 25
-drpQaVersion: w.2026.35-75-ge792efc-dirty
+drpQaVersion: w.2026.35-111-gea1f6f0-dirty
 thresholds:
 - metric: medFwhm
   population:
@@ -19,8 +19,24 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133025-135848 (n=184): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=184 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133025-135848 (n=184): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=184 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: medFwhm
+  population:
+    arm: b
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  warn: 3.192
+  fail: 3.198
+  nGood: 56
+  nGoodVisits: 14
+  visitRange: 133040-135850
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-12 from validation visits 133040-135850 (n=56): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=56 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
     arm: m
@@ -35,8 +51,25 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133042-135848 (n=80): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=80 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133042-135848 (n=80): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=80 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: medFwhm
+  population:
+    arm: m
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  warn: 3.415
+  fail: 3.416
+  nGood: 16
+  nGoodVisits: 4
+  visitRange: 133054-135850
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-12 from validation visits 133054-135850 (n=16): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=16 is below the 20-sample floor. FAIL UNBOUNDED: n=16 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
     arm: n
@@ -51,8 +84,24 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=104 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=104 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: medFwhm
+  population:
+    arm: n
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  warn: 3.257
+  fail: 3.26
+  nGood: 32
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-12 from validation visits 133040-135829 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=32 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
     arm: r
@@ -67,8 +116,24 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=104 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=104 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: medFwhm
+  population:
+    arm: r
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  warn: 3.39
+  fail: 3.391
+  nGood: 40
+  nGoodVisits: 10
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-12 from validation visits 133040-135829 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=40 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -84,9 +149,9 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-05 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=24 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
-    severe than FAIL, so WARN can never fire.'
+  provenance: 'Derived 2026-10-12 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -102,8 +167,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133042-135842 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133042-135842 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -119,8 +184,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133051-135848 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133051-135848 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -136,8 +201,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133048-135846 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133048-135846 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -153,8 +218,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133045-135844 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133045-135844 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -170,8 +235,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133025-135831 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133025-135831 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -187,8 +252,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=24 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -204,8 +269,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -221,9 +286,9 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-05 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
-    severe than FAIL, so WARN can never fire.'
+  provenance: 'Derived 2026-10-12 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -239,8 +304,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -256,8 +321,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133025-135831 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133025-135831 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -273,8 +338,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=24 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -290,8 +355,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -307,9 +372,9 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-05 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
-    severe than FAIL, so WARN can never fire.'
+  provenance: 'Derived 2026-10-12 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -325,8 +390,78 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: pctFlagged
+  population:
+    obsType: trace
+    arm: b
+    species: ''
+  higherIsWorse: true
+  absolute: false
+  warn: 8.2
+  fail: 8.24
+  nGood: 56
+  nGoodVisits: 14
+  visitRange: 133040-135850
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-12 from validation visits 133040-135850 (n=56): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=56 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: pctFlagged
+  population:
+    obsType: trace
+    arm: m
+    species: ''
+  higherIsWorse: true
+  absolute: false
+  warn: 3.39
+  fail: 3.4
+  nGood: 16
+  nGoodVisits: 4
+  visitRange: 133054-135850
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-12 from validation visits 133054-135850 (n=16): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=16 is below the 20-sample floor. FAIL UNBOUNDED: n=16 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data.'
+- metric: pctFlagged
+  population:
+    obsType: trace
+    arm: n
+    species: ''
+  higherIsWorse: true
+  absolute: false
+  warn: 6.7
+  fail: 6.7
+  nGood: 32
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-12 from validation visits 133040-135829 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=32 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: pctFlagged
+  population:
+    obsType: trace
+    arm: r
+    species: ''
+  higherIsWorse: true
+  absolute: false
+  warn: 5.07
+  fail: 5.09
+  nGood: 40
+  nGoodVisits: 10
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-12 from validation visits 133040-135829 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=40 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: b
@@ -341,8 +476,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133025-135842 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=40 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133025-135842 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=40 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: b
@@ -357,9 +492,9 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-05 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=24 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
-    severe than FAIL, so WARN can never fire.'
+  provenance: 'Derived 2026-10-12 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=24 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
+    WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
   population:
     arm: b
@@ -374,9 +509,9 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-05 from validation visits 133034-135848 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=40 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
-    severe than FAIL, so WARN can never fire.'
+  provenance: 'Derived 2026-10-12 from validation visits 133034-135848 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=40 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
+    WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
   population:
     arm: b
@@ -391,8 +526,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133031-135846 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=40 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133031-135846 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=40 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: b
@@ -407,8 +542,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133028-135844 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=40 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133028-135844 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=40 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: b
@@ -423,9 +558,9 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-05 from validation visits 133040-135850 (n=56): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=56 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
-    severe than FAIL, so WARN can never fire.'
+  provenance: 'Derived 2026-10-12 from validation visits 133040-135850 (n=56): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=56 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
+    WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
   population:
     arm: b
@@ -440,8 +575,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 134880-135279 (n=48): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=48 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 134880-135279 (n=48): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=48 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: m
@@ -456,9 +591,9 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-05 from validation visits 133042-135842 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
-    severe than FAIL, so WARN can never fire.'
+  provenance: 'Derived 2026-10-12 from validation visits 133042-135842 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
+    WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
   population:
     arm: m
@@ -473,9 +608,9 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-05 from validation visits 133051-135848 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
-    severe than FAIL, so WARN can never fire.'
+  provenance: 'Derived 2026-10-12 from validation visits 133051-135848 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
+    WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
   population:
     arm: m
@@ -490,8 +625,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133048-135846 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133048-135846 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: m
@@ -506,8 +641,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133045-135844 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133045-135844 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: m
@@ -522,9 +657,10 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-05 from validation visits 133054-135850 (n=16): WARN at p5, FAIL at p1. NOT RELIABLE:
-    n=16 is below the 20-sample floor. FAIL UNBOUNDED: n=16 cannot bound p1 at 95% confidence, so FAIL sits at the
-    sample''s extreme. DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+  provenance: 'Derived 2026-10-12 from validation visits 133054-135850 (n=16): WARN at p5, FAIL at p1. NOT RELIABLE:
+    n=16 is below the 20-sample floor. FAIL UNBOUNDED: n=16 cannot bound p1 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
 - metric: nLines
   population:
     arm: n
@@ -539,8 +675,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133025-135831 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133025-135831 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: n
@@ -555,8 +691,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=24 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=24 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: n
@@ -571,8 +707,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133034-135837 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133034-135837 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: n
@@ -587,9 +723,9 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-05 from validation visits 133031-135835 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
-    severe than FAIL, so WARN can never fire.'
+  provenance: 'Derived 2026-10-12 from validation visits 133031-135835 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
+    WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
   population:
     arm: n
@@ -604,8 +740,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133028-135833 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133028-135833 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: n
@@ -620,9 +756,9 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-05 from validation visits 133040-135829 (n=32): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=32 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
-    severe than FAIL, so WARN can never fire.'
+  provenance: 'Derived 2026-10-12 from validation visits 133040-135829 (n=32): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=32 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
+    WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
   population:
     arm: n
@@ -637,8 +773,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 134880-135279 (n=48): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=48 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 134880-135279 (n=48): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=48 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: r
@@ -653,9 +789,9 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-05 from validation visits 133025-135831 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
-    severe than FAIL, so WARN can never fire.'
+  provenance: 'Derived 2026-10-12 from validation visits 133025-135831 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
+    WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
   population:
     arm: r
@@ -670,8 +806,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=24 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=24 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: r
@@ -686,8 +822,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133034-135837 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133034-135837 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: r
@@ -702,8 +838,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133031-135835 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133031-135835 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: r
@@ -718,8 +854,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 133028-135833 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=20 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 133028-135833 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
     arm: r
@@ -734,9 +870,9 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-05 from validation visits 133040-135829 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=40 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme. DEGENERATE: WARN is not less
-    severe than FAIL, so WARN can never fire.'
+  provenance: 'Derived 2026-10-12 from validation visits 133040-135829 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=40 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
+    WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
   population:
     arm: r
@@ -751,5 +887,5 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-05 from validation visits 134880-135279 (n=48): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=48 cannot bound p1 at 95% confidence, so FAIL sits at the sample''s extreme.'
+  provenance: 'Derived 2026-10-12 from validation visits 134880-135279 (n=48): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=48 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'

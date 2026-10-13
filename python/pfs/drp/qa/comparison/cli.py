@@ -12,10 +12,11 @@ Four steps, each safe to repeat:
     passes (``calibration``, ``sky``, ``unvalidated-calibration``).
 
 By default the reductions in ``drpActor/reductions`` are reused, each made with the pipeline of its
-day. ``--fresh`` reduces everything with the current pipeline instead, so that runs are compared on
-a level field. Its collection and files are named after that pipeline (`pipelineVersion`, from
+day, and so are those an earlier drp_qa version's comparison of the period made beside them.
+``--fresh`` reduces everything with the current pipeline instead, so that runs are compared on a
+level field. Its collection and files are named after that pipeline (`pipelineVersion`, from
 drp_stella's ``getPfsVersions``), and a later drp_qa version reuses the fresh reductions of the
-same pipeline, judging them again.
+same pipeline. Either way the earlier collections' verdicts are judged again.
 ``report``
     Read the verdicts and write the period's report.
 
@@ -428,7 +429,10 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
             " the report covers the rest. Run 'run' (and check its failures) to complete it.",
             file=sys.stderr,
         )
-    metrics = readMetrics(butler, done, collections=[output])
+    from pfs.drp.qa.comparison.butlerQueries import ownRuns
+
+    # The output's own runs only: the chain also holds earlier versions' verdicts.
+    metrics = readMetrics(butler, done, collections=ownRuns(butler, output))
     metrics.to_parquet(workDir / f"iqQaMetrics-{period.name}.parquet")
     config = butler.get("imageQualityQa_config", collections=[output])
     judged = judgeImages(metrics, visits, taskThresholds(config))
@@ -487,13 +491,13 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
     """Run the ``plan`` and ``run`` commands."""
     from lsst.daf.butler import Butler
 
-    from pfs.drp.qa.comparison.butlerQueries import collectionExists, detectorHoldings
+    from pfs.drp.qa.comparison.butlerQueries import collectionExists, detectorHoldings, ownRuns
 
     butler = Butler(args.butler, writeable=False)
     judged = visits.loc[visits["judged"], "pfs_visit_id"]
     earlier = _earlier(butler, args, period, output)
     if earlier:
-        print(f"reusing the fresh reductions of {', '.join(earlier)}")
+        print(f"reusing the reductions of {', '.join(earlier)}")
     holdings = detectorHoldings(
         butler,
         judged,
@@ -513,7 +517,9 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
         print("failed images are not rescheduled (they fail the same way each time); --retry-failed to retry")
 
     outputExists = collectionExists(butler, output)
-    skip = [*args.reductions, *([output] if outputExists else [])]
+    # Skip what this version has judged, in its own runs: skipping the output chain would also skip
+    # every image an earlier version in its inputs judged.
+    skip = [*args.reductions, *(ownRuns(butler, output) if outputExists else [])]
     commands = []
     for item in passes(visits, detectors):
         if (
@@ -531,8 +537,8 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
             item,
             butler=args.butler,
             pipeline=args.pipeline,
-            # Earlier fresh collections are inputs but not skipped: their imageQualityQa outputs are
-            # an older drp_qa's, to be judged again.
+            # Earlier collections are inputs but not skipped: their imageQualityQa outputs are an
+            # older drp_qa's, to be judged again.
             inputs=[*earlier, *args.inputs],
             output=output,
             skipExistingIn=skip,
@@ -628,11 +634,9 @@ def pipetaskFailures(text: str, limit: int = MAX_FAILURE_LINES) -> tuple[str | N
 
 
 def _earlier(butler, args, period: Period, output: str) -> list[str]:
-    """Return the earlier collections whose fresh reductions this one reuses; none unless --fresh."""
+    """Return the earlier collections of this period, and mode, whose reductions this one reuses."""
     from pfs.drp.qa.comparison.butlerQueries import earlierReductions
 
-    if not args.fresh:
-        return []
     return earlierReductions(butler, args.prefix, period.name, args.variant, output)
 
 

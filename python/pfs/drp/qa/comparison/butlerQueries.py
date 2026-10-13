@@ -47,10 +47,12 @@ def collectionExists(butler, name: str) -> bool:
 
 
 def earlierReductions(butler, prefix: str, period: str, reductions: str, exclude: str) -> list[str]:
-    """Return a period's comparison collections made with the same fresh reductions.
+    """Return a period's comparison collections whose reductions a new one reuses.
 
-    Fresh reductions depend on the pipeline, not on drp_qa, so a new drp_qa version reuses those
-    an earlier one made with the same pipeline, and only judges again.
+    Reductions depend on the pipeline, not on drp_qa, so a new drp_qa version reuses those an
+    earlier one made, and only judges again: with ``--fresh``, those made with the same pipeline;
+    by default, those any earlier version made beside drpActor's, which mix pipelines as
+    drpActor's do.
 
     Parameters
     ----------
@@ -61,19 +63,52 @@ def earlierReductions(butler, prefix: str, period: str, reductions: str, exclude
     period : `str`
         The period, e.g. ``run30``.
     reductions : `str`
-        What made them, e.g. ``pfs-w.2026.40``.
+        What made them, e.g. ``pfs-w.2026.40``; ``""`` for the default mode's collections.
     exclude : `str`
         The current output collection.
 
     Returns
     -------
     `list` [`str`]
-        ``<prefix>/<period>/<any version>/<reductions>``, newest name first.
+        ``<prefix>/<period>/<any version>/<reductions>``, or ``<prefix>/<period>/<any version>``
+        for the default mode, newest name first.
     """
     base = f"{prefix.rstrip('/')}/{period}"
-    pattern = re.compile(rf"{re.escape(base)}/[^/]+/{re.escape(reductions)}")
+    suffix = f"/{re.escape(reductions)}" if reductions else ""
+    pattern = re.compile(rf"{re.escape(base)}/[^/]+{suffix}")
     names = butler.collections.query(f"{base}/*")
     return sorted((name for name in names if pattern.fullmatch(name) and name != exclude), reverse=True)
+
+
+def ownRuns(butler, output: str) -> list[str]:
+    """Return the RUN collections a comparison's ``pipetask`` runs wrote, newest first.
+
+    The output collection is a chain that also holds its inputs, earlier
+    versions' collections among them, so a search of it finds their verdicts
+    too. Its own runs are the RUN collections one level under it
+    (``<output>/<timestamp>``); a ``--fresh`` variant beside them
+    (``<output>/pfs-<weekly>``) is a chain and its runs are a level deeper.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        The Butler.
+    output : `str`
+        The comparison's output collection.
+
+    Returns
+    -------
+    `list` [`str`]
+        The runs, newest name first; empty if there are none.
+    """
+    prefix = f"{output}/"
+    infos = butler.collections.query_info(f"{prefix}*")
+    names = (
+        info.name
+        for info in infos
+        if info.name.startswith(prefix) and "/" not in info.name[len(prefix) :] and info.type.name == "RUN"
+    )
+    return sorted(names, reverse=True)
 
 
 def datasetDetectors(
@@ -198,7 +233,8 @@ def detectorHoldings(
     `pandas.DataFrame`
         ``visit``, ``arm``, ``spectrograph`` and four `bool` columns:
         ``raw``, ``reduced`` (a ``calexp`` in ``reductions`` or ``output``),
-        ``judged`` (an ``iqQaMetrics`` in ``output``) and ``pfsConfig`` (the
+        ``judged`` (an ``iqQaMetrics`` in ``output``'s own runs, see `ownRuns`:
+        not one an earlier version left in its inputs) and ``pfsConfig`` (the
         visit has one in ``inputs``: without it ``reduceExposure`` can't run).
         One row per detector with any of the first three.
     """
@@ -211,7 +247,7 @@ def detectorHoldings(
             butler, "calexp", visits, [*reductions, *([output] if outputExists else [])], instrument
         ),
         "judged": (
-            datasetDetectors(butler, "iqQaMetrics", visits, output, instrument)
+            datasetDetectors(butler, "iqQaMetrics", visits, ownRuns(butler, output), instrument)
             if outputExists
             else pd.DataFrame(columns=list(DETECTOR_KEYS))
         ),
