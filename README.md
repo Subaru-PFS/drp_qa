@@ -217,20 +217,21 @@ has none. `thresholdsFile` is an absolute path, or one relative to `pfs/drp/qa/m
 judge alone.
 
 The default, `iqQaThresholds-run25.yaml`, holds the thresholds derived from the Run25 validation visits, as adopted
-(PIPE2D-1917, PIPE2D-1918) by `makeRun25Thresholds.py` beside it; each entry records its provenance:
+(PIPE2D-1917, PIPE2D-1918, PIPE2D-1942) by `makeRun25Thresholds.py` beside it; each entry records its provenance:
 
-- `medFwhm` on arcs, per arm (b 2.872/2.89, r 2.987/2.993, n 3.05/3.1, m 3.18/3.21 px).
+- `medFwhm` per detector and lamp: WARN 3 % and FAIL 5 % above the Run25 known-good median of the image's arm,
+  spectrograph, `obsType` and lamp (`species`), on arcs and quartz (from the calexp width), every arm included.
+  Spectrographs of one arm differ by more than one varies (r quartz: r2 3.27 px, r4 3.39 px), and lamps of one arm
+  by more still (b arcs: Argon 2.5 px, Krypton 2.85 px).
+- `medFwhm` per arm, judging only an image whose detector and lamp have no Run25 median: arcs b 2.872/2.89,
+  r 2.987/2.993, n 3.05/3.1, m 3.18/3.21 px; quartz b 3.192/3.198, r 3.39/3.391, n 3.257/3.26 px, and m not judged
+  (16 known-good values, below the 20-sample floor).
 - `nLines` per arm and sequence (`seqName`), lower is worse. On quartz it is set by hand, 0.5 %/1 % below the
   smallest known-good Run25 count, as the derivation was degenerate; on twilight it is not judged.
 - `pctFlagged` is not judged: one entry with neither WARN nor FAIL, which also overrides the config fields. Run25's
   derivation had 5 visits per population, and the config's n-arm 15/20 % sits below the known-good n-arm Neon sets
   of Run25 (34 %) and Run30 (26–35 %), as comparison mode showed (PIPE2D-1929). It stays unjudged until there is a
   valid reference.
-- `medFwhm` on quartz, per arm, from the calexp width (b 3.192/3.198, r 3.39/3.391, n 3.257/3.26 px). The m arm's
-  derivation has 16 known-good values, below the 20-sample floor, so it is not judged: the config's 3.2 px WARN would
-  flag every known-good m quartz (3.31–3.42 px). Within an arm the
-  spectrographs differ by more than one spectrograph varies, so a per-arm FAIL sits at the widest one's known-good
-  maximum (r4, n3, b2).
 
 The config fields:
 
@@ -441,8 +442,15 @@ verdict is known. The decisions behind the current set:
   calibrations were made from it, and its n-arm flag rates sit 2–5 points above Run25's.
 - **`imageQualityQa` judges by the adopted Run25 file** (`iqQaThresholds-run25.yaml`): `medFwhm` on arcs and
   quartz, and `nLines`. Flag rates (`pctFlagged`) are not judged until there is a valid reference; quartz `medFwhm` is
-  judged on b, r and n, from the calexp width (PIPE2D-1918); twilight is not measured. Details under
+  measured from the calexp width (PIPE2D-1918); twilight is not measured. Details under
   [Pass/Warn/Fail Thresholds](#passwarnfail-thresholds).
+- **`medFwhm` is judged against each detector's own Run25 width, per lamp** (PIPE2D-1942): WARN 3 % and FAIL 5 %
+  above the known-good median of its arm, spectrograph, `obsType` and lamp. Per-arm percentiles put each arm's widest
+  spectrograph, or broadest lamp, at FAIL, and per detector and lamp there are only 4–14 known-good values, too few
+  for a tail percentile but plenty for a median. The 3 % and 5 % are set from the data, not from an image-quality
+  requirement: Run25's known-good values sit at most 1.4 % above their median (3.3 % for Argon arcs, whose b, r and m
+  widths scatter most), healthy detectors moved −3 to +4 % between Run25 and Run30, and the SM1 defocus reads +24 to
+  +41 %. On Run25 no known-good arc or quartz fails and one warns (135841 m1 Argon); every known-bad one fails.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
 
