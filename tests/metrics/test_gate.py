@@ -46,6 +46,12 @@ def stored() -> pd.DataFrame:
     return pd.read_parquet(DATA / "iqQaMetrics-validation.parquet")
 
 
+@pytest.fixture(scope="module")
+def configStored() -> pd.DataFrame:
+    """Return ``iqQaMetrics`` from a run whose verdicts the task made from its config alone."""
+    return pd.read_parquet(DATA / "iqQaMetrics-config.parquet")
+
+
 def image(**values) -> pd.DataFrame:
     """Return one image's metrics row."""
     base = {"visit": 1, "arm": "b", "spectrograph": 1, "obsType": "arc", "seqName": "Arc: Neon"}
@@ -58,17 +64,18 @@ def table(*entries) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def testConfigReproducesStoredVerdicts(stored):
+def testConfigReproducesStoredVerdicts(configStored):
     """The config defaults as a table give every verdict the task stored."""
-    verdicts = gate(stored, configThresholds(configDefaults()))
-    assert (verdicts["qaStatus"] == stored["qaStatus"]).all()
+    verdicts = gate(configStored, configThresholds(configDefaults()))
+    assert (verdicts["qaStatus"] == configStored["qaStatus"]).all()
     # The data cover every verdict and every deciding metric.
-    assert set(stored["qaStatus"]) == {"PASS", "WARN", "FAIL"}
+    assert set(configStored["qaStatus"]) == {"PASS", "WARN", "FAIL"}
     assert set(verdicts["qaDecidedBy"]) == {"", "medFwhm", "pctFlagged", "medDxCenter"}
 
 
-def testConfigRegressionHasTeeth(stored):
+def testConfigRegressionHasTeeth(configStored):
     """Negative controls: the comparison fails without per-arm or per-species keys."""
+    stored = configStored
     blended = configDefaults()
     blended.flagRateWarnThreshold = {}
     blended.flagRateFailThreshold = {}
@@ -81,12 +88,13 @@ def testConfigRegressionHasTeeth(stored):
 
 
 def testReadsRun25(stored):
-    """The Run25 file gates the arcs it has populations for; the config takes the rest."""
+    """The Run25 file gates the arcs and quartz it has populations for; the config takes the rest."""
     thresholds = [RUN25, configThresholds(configDefaults())]
     judged = judge(stored, thresholds).merge(stored[["obsType", "seqName"]], left_on="row", right_index=True)
     fwhm = judged[judged["metric"] == "medFwhm"]
-    assert (fwhm.loc[fwhm["obsType"] == "arc", "layer"] == 0).all()
-    assert (fwhm.loc[fwhm["obsType"] != "arc", "layer"] == 1).all()
+    derived = fwhm["obsType"].isin(["arc", "trace"])
+    assert (fwhm.loc[derived, "layer"] == 0).all()
+    assert (fwhm.loc[~derived, "layer"] == 1).all()
     # Run25 has no b-arm Argon flag rate: the config's b:Argon entry judges it.
     argon = judged[
         (judged["metric"] == "pctFlagged") & (judged["arm"] == "b") & (judged["seqName"] == "Arc: Argon")
@@ -285,7 +293,7 @@ def testShippedFileIsTheAdoptedRun25(stored):
 
 
 def testShippedFileVerdicts(stored):
-    """Adopted Run25: obstructed frames fail, good Run25 quartz passes; twilight nLines and flags aren't judged."""
+    """Adopted Run25: obstructed and defocused quartz fail, good Run25 quartz passes; twilight nLines and flags aren't judged."""
     thresholds = [thresholdsPath(configDefaults().thresholdsFile), configThresholds(configDefaults())]
     judged = judge(stored, thresholds)
     verdicts = gate(stored, thresholds, default="UNKNOWN")
@@ -294,7 +302,23 @@ def testShippedFileVerdicts(stored):
     assert (verdicts.loc[obstructed, "qaStatus"] == "FAIL").all()
     # Run25 quartz of the validation set: the hand-set nLines passes every one.
     run25Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(133040, 135850)
-    assert (verdicts.loc[run25Quartz, "qaStatus"] == "PASS").all()
+    rows = np.flatnonzero(run25Quartz)
+    quartzLines = judged[(judged["metric"] == "nLines") & judged["row"].isin(rows)]
+    assert len(quartzLines) == len(rows) and (quartzLines["status"] == "PASS").all()
+    # Its medFwhm is judged by the file at the rates WARN at p95 and FAIL at p99 give on b, r and n;
+    # the m arm's derivation is below the sample floor, so its entry stops the search and judges nothing.
+    quartzFwhm = judged[(judged["metric"] == "medFwhm") & judged["row"].isin(rows)]
+    onBrn = quartzFwhm["arm"].isin(["b", "r", "n"])
+    assert (quartzFwhm["layer"] == 0).all()
+    assert len(quartzFwhm[~onBrn]) and (quartzFwhm.loc[~onBrn, "status"] == "").all()
+    assert (quartzFwhm.loc[onBrn, "status"] == "PASS").mean() > 0.9
+    assert (quartzFwhm.loc[onBrn, "status"] == "FAIL").mean() < 0.02
+    # SM1 defocused (Run27): every SM1 quartz fails on medFwhm.
+    defocused = np.flatnonzero(
+        stored["visit"].isin([140032, 140035, *range(140139, 140149)]) & (stored["spectrograph"] == 1)
+    )
+    defocusedFwhm = judged[(judged["metric"] == "medFwhm") & judged["row"].isin(defocused)]
+    assert len(defocusedFwhm) == len(defocused) and (defocusedFwhm["status"] == "FAIL").all()
     # Negative control: the derived (degenerate) quartz entries fail some of them.
     derived = gate(stored, [RUN25, configThresholds(configDefaults())])
     assert (derived.loc[run25Quartz, "qaStatus"] == "FAIL").any()

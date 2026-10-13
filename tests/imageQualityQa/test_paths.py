@@ -193,4 +193,11 @@ def testDefaultConfigJudgesByTheShippedFile(iqqa):
     assert set(shipped["metric"]) == {"medFwhm", "nLines", "pctFlagged"}
     flags = shipped[shipped["metric"] == "pctFlagged"]
     assert len(flags) == 1 and flags[["warn", "fail"]].isna().all(axis=None)  # not judged
-    assert (shipped.loc[shipped["metric"] == "medFwhm", "obsType"] == "arc").all()
+    fwhm = shipped[shipped["metric"] == "medFwhm"]
+    assert set(fwhm["obsType"]) == {"arc", "trace"}
+    # The m arm's quartz derivation is below the sample floor: its entry judges nothing.
+    trace = fwhm[fwhm["obsType"] == "trace"].set_index("arm")
+    assert set(trace.index) == {"b", "r", "n", "m"}
+    assert trace.loc[["b", "r", "n"], "fail"].notna().all() and trace.loc[["m"], ["warn", "fail"]].isna().all(
+        axis=None
+    )
