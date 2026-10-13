@@ -1,5 +1,6 @@
 """Tests for `pfs.drp.qa.comparison.butlerQueries`, with a stub Butler."""
 
+from fnmatch import fnmatch
 from types import SimpleNamespace
 
 import pytest
@@ -63,3 +64,32 @@ def testEarlierReductions():
         "u/me/comparison/run30/v2/pfs-w.2026.40",
     )
     assert found == ["u/me/comparison/run30/v1/pfs-w.2026.40"]
+
+    # The default mode: earlier versions' collections beside drpActor's, not fresh ones or runs.
+    names.append("u/me/comparison/run30/v2")
+    found = earlierReductions(butler, "u/me/comparison", "run30", "", "u/me/comparison/run30/v2")
+    assert found == ["u/me/comparison/run30/v1"]
+
+
+def testOwnRuns():
+    """Only the RUN collections pipetask wrote directly under the output."""
+    from pfs.drp.qa.comparison.butlerQueries import ownRuns
+
+    def info(name, kind):
+        return SimpleNamespace(name=name, type=SimpleNamespace(name=kind))
+
+    infos = [
+        info("u/me/comparison/run30/v2/20261013T105556Z", "RUN"),
+        info("u/me/comparison/run30/v2/20261013T120326Z", "RUN"),
+        info("u/me/comparison/run30/v2/pfs-w.2026.40", "CHAINED"),  # a --fresh variant
+        info("u/me/comparison/run30/v2/pfs-w.2026.40/20261014T000000Z", "RUN"),  # its run
+        info("u/me/comparison/run30/v20/20261013T000000Z", "RUN"),  # another version
+    ]
+    butler = SimpleNamespace(
+        collections=SimpleNamespace(query_info=lambda pattern: [i for i in infos if fnmatch(i.name, pattern)])
+    )
+    assert ownRuns(butler, "u/me/comparison/run30/v2") == [
+        "u/me/comparison/run30/v2/20261013T120326Z",
+        "u/me/comparison/run30/v2/20261013T105556Z",
+    ]
+    assert ownRuns(butler, "u/me/comparison/run30/v3") == []
