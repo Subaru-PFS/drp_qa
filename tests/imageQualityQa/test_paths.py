@@ -47,7 +47,7 @@ def testTraceFallsBackWhenCalexpUnusable(runTask, fakes, caplog):
 
     metrics = outputs.iqQaMetrics.iloc[0]
     assert metrics["traceOnly"]
-    assert metrics["medFwhm"] == pytest.approx(FWHM_FACTOR * 1.2)
+    assert metrics["medFwhm"] == pytest.approx(FWHM_FACTOR * 1.2, rel=0.005)  # read at half maximum
     # The profile path flags nothing, so its flag rate would be zero by construction.
     assert np.isnan(metrics["pctFlagged"])
     # nLines counts the rows of ``lines``, not the 50 profile swaths.
@@ -57,7 +57,8 @@ def testTraceFallsBackWhenCalexpUnusable(runTask, fakes, caplog):
     assert "fiberProfiles" in metrics["qaReason"]
 
     warnings = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
-    assert any("calexp unusable" in message and "of 80 cross-dispersion" in message for message in warnings)
+    # 10 fibers on 4 rows: 400 rows sampled every profileYStride (100).
+    assert any("calexp unusable" in message and "of 40 cross-dispersion" in message for message in warnings)
     assert any("fiber profile calibration widths" in message for message in warnings)
 
     # Negative control: with no fiberProfiles the same quantum is sparse.
@@ -115,6 +116,24 @@ def testTraceFwhmIsGatedPerArm(iqqa, runTask, fakes):
     outputs = runTask(arc, arm="r", detectorMap=detectorMap, calexp=arcExposure, thresholds=thresholds)
     metrics = outputs.iqQaMetrics.iloc[0]
     assert metrics["obsType"] == "arc" and metrics["qaStatus"] == "PASS"
+
+
+def testQuartzAtThePfsPitchIsMeasuredFromTheCalexp(runTask, fakes):
+    """At 6.17 px, where an aperture of half-width 7 holds two neighbours, the calexp is still measured.
+
+    The aperture measurement this replaced flagged essentially every sample at
+    this pitch, so every quartz fell back to the fiberProfiles calibration.
+    """
+    detectorMap = fakes.DetectorMap(numFibers=60, pitch=fakes.PFS_PITCH)
+    lines = fakes.arcLines(detectorMap, numPerFiber=30)
+    calexp = fakes.Exposure(fakes.traceImage(detectorMap, sigma=1.3), fakes.header(*TRACE))
+    profiles = fakes.FiberProfiles(detectorMap, sigma=1.0)  # must not be used
+    outputs = runTask(lines, detectorMap=detectorMap, calexp=calexp, fiberProfiles=profiles)
+
+    metrics = outputs.iqQaMetrics.iloc[0]
+    assert not metrics["traceOnly"]
+    assert metrics["medFwhm"] == pytest.approx(FWHM_FACTOR * 1.3, rel=0.02)
+    assert (~outputs.iqQaData["flag"]).mean() > 0.9
 
 
 def testNothingMeasuredIsUnknown(runTask, fakes):

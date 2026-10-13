@@ -1,8 +1,8 @@
 """Image quality QA pipeline task.
 
 Produces per-detector FWHM and image-shape QA plots from arc-line
-second-moment measurements, fiber profile calibrations, or direct
-cross-dispersion moment measurements from post-ISR pixel data.
+second-moment measurements, cross-dispersion trace widths measured on the
+calexp (`pfs.drp.qa.crossDispersion`), or fiber profile calibrations.
 """
 
 import re
@@ -32,13 +32,12 @@ from lsst.pipe.base.connectionTypes import (
 )
 
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
+from pfs.drp.qa.crossDispersion import measureImageWidths, profileFwhm
 from pfs.drp.qa.metrics.gate import configThresholds, gate, loadThresholds, thresholdsPath
 from pfs.drp.qa.metrics.longFormat import speciesFrame
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
 from pfs.drp.stella.utils.stability import addTraceLambdaToArclines
-
-_FWHM_FACTOR = 2.0 * np.sqrt(2.0 * np.log(2.0))  # sigma → Gaussian-equivalent FWHM
 
 __all__ = ["ImageQualityQaTask"]
 
@@ -127,9 +126,10 @@ class ImageQualityQaConnections(
         name="calexp",
         doc=(
             "Calibrated exposure output by ReduceExposureTask.  When present for"
-            " non-arc visits, fiber profile widths are measured directly from"
-            " pixel data via cross-dispersion 2nd moments rather than read from"
-            " the calibration."
+            " non-arc visits, trace widths are measured directly from its"
+            " pixels, each fiber fitted jointly with its neighbours"
+            " (`pfs.drp.qa.crossDispersion`), rather than read from the"
+            " calibration."
         ),
         storageClass="Exposure",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -185,18 +185,19 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
     profileHalfWidth = Field(
         dtype=int,
         default=7,
-        doc=(
-            "Half-width in pixels of the cross-dispersion aperture used when"
-            " measuring fiber profile widths directly from the calexp image."
+        doc="Unused: the calexp trace width is fitted with its neighbours, with no aperture.",
+        deprecated=(
+            "The calexp trace width no longer uses an aperture (PIPE2D-1918); this field is ignored and"
+            " will be removed."
         ),
     )
     profileYStride = Field(
         dtype=int,
-        default=50,
+        default=100,
         doc=(
-            "Row sampling interval (pixels) for image-based fiber profile"
-            " width measurements.  Smaller values give denser sampling at"
-            " the cost of increased computation time."
+            "Row sampling interval (pixels) for the calexp trace-width measurement."
+            "  The fit's cost is proportional to the rows sampled; 100 gives about 40"
+            " rows, some 25,000 samples on a quartz."
         ),
     )
     minGoodLines = Field(
@@ -216,14 +217,12 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
         dtype=float,
         default=5.0,
         doc=(
-            "Minimum peak signal-to-noise ratio required to accept a fiber"
-            " profile sample in the calexp-based width measurement."
-            " Noise is estimated from the 4 background edge pixels of the"
-            " cross-dispersion strip.  Samples below this threshold — e.g."
-            " scattered light in an IIS frame, or rows where a fiber is not"
-            " illuminated — are flagged and excluded from the FWHM median."
-            " Without this check pure-noise strips pass the total>0 gate"
-            " roughly 50 % of the time and corrupt the FWHM distribution."
+            "Minimum significance of a trace in the calexp-based width"
+            " measurement: its fitted flux over that flux's standard error,"
+            " from the joint fit's covariance and the calexp variance plane."
+            " Samples below it (rows where a fiber is not illuminated,"
+            " scattered light in an IIS frame) are flagged and excluded from"
+            " the FWHM median."
         ),
     )
     maxCalexpFlagRate = Field(
@@ -429,7 +428,7 @@ class ImageQualityQaTask(PipelineTask):
           catalog does not match the 16 IIS positions; FWHM is reported as
           sparse (no value, no pass/fail).
         * **Regular trace/quartz** (``scienceTrace``, all fibers): calexp
-          cross-dispersion moments are the primary path. When they are absent
+          trace widths are the primary path. When they are absent
           or unusable, the fiber profile calibration widths are reported with
           ``traceOnly``, and neither ``medFwhm`` nor ``pctFlagged`` is judged.
         * **IIS trace/quartz** (``scienceTrace``, engineering fibers): too few
@@ -592,7 +591,7 @@ class ImageQualityQaTask(PipelineTask):
 
         elif obs_type == "trace" and not is_iis:
             # Regular quartz/trace (all fibers, quartz lamp): no arc lines to
-            # fit, so use calexp cross-dispersion moments as the primary path.
+            # fit, so use calexp trace widths as the primary path.
             # Any arc-line rows still held in ``data`` describe a catalog that
             # does not apply to a quartz frame, so the visit stays sparse
             # unless one of the two measurement paths succeeds.
@@ -836,6 +835,7 @@ class ImageQualityQaTask(PipelineTask):
             "y",
             "lam",
             "fwhm",
+            "fwhmIntrinsic",
             "theta",
             "dxCenter",
             "flux",
@@ -843,6 +843,7 @@ class ImageQualityQaTask(PipelineTask):
             "flag",
             "traceOnly",
             "peakRatio",
+            "snr",
             "status",
             "visit",
             "arm",
@@ -1234,9 +1235,14 @@ class ImageQualityQaTask(PipelineTask):
     def _buildProfileData(self, fiberProfiles: FiberProfileSet, detectorMap: DetectorMap) -> pd.DataFrame:
         """Build an image-quality DataFrame from fiber profile trace widths.
 
-        Computes Gaussian-equivalent FWHM (``2√(2 ln 2) × σ``) per swath from
-        `FiberProfile.calculateStatistics` and maps each swath centre to
-        detector (x, y) coordinates and wavelength via ``detectorMap``.
+        Reads the FWHM of each swath's profile directly, at half its maximum
+        (`pfs.drp.qa.crossDispersion.profileFwhm`), and maps each swath centre
+        to detector (x, y) coordinates and wavelength via ``detectorMap``. The
+        profile is not Gaussian: a Gaussian fitted to it understates this
+        width by 8-10 %, and drp_stella's second moment
+        (``calculateStatistics().width``) gave 2.3-3.7 px on Run25 detectors
+        whose profiles a Gaussian fit put at 2.7-2.8 px
+        (``docs/trace-widths.ipynb``).
 
         Parameters
         ----------
@@ -1258,13 +1264,12 @@ class ImageQualityQaTask(PipelineTask):
 
         for fiberId in fiberProfiles.fiberId:
             profile = fiberProfiles[fiberId]
-            stats = profile.calculateStatistics()
             swath_rows = profile.rows
             n = len(swath_rows)
             if n == 0:
                 continue
 
-            fwhm = _FWHM_FACTOR * np.asarray(stats.width)
+            fwhm = profileFwhm(profile.index, profile.profiles)
 
             fiberIds_arr = np.full(n, fiberId, dtype=np.int32)
             swath_rows_f64 = np.asarray(swath_rows, dtype=np.float64)
@@ -1327,163 +1332,62 @@ class ImageQualityQaTask(PipelineTask):
         detectorMapCalib: DetectorMap | None = None,
         fiberIds: set | None = None,
     ) -> pd.DataFrame:
-        """Measure fiber profile FWHM directly from post-ISR image pixel data.
+        """Measure trace widths directly from the calexp's pixels.
 
-        Samples the cross-dispersion intensity profile at regular row
-        intervals, computes the background-subtracted 2nd moment (converting
-        to a Gaussian-equivalent FWHM), and records the peak-to-total flux
-        ratio as a secondary focus indicator.
-
-        Unlike ``_buildProfileData``, this method reflects the actual optical
-        state of the exposure rather than a (possibly stale) calibration.
+        Every ``profileYStride``-th row is fitted with
+        `pfs.drp.qa.crossDispersion.measureImageWidths`: each fiber jointly
+        with its neighbours, as pixel-integrated Gaussians sharing one width,
+        plus a background. ``fwhm`` includes the pixel response, as arc-line
+        ``SdssShape`` widths and ``fiberProfiles`` do; ``fwhmIntrinsic`` does
+        not. Unlike ``_buildProfileData``, this reflects the optical state of
+        the exposure rather than of a (possibly stale) calibration.
 
         Parameters
         ----------
         calexp : `lsst.afw.image.Exposure`
-            Post-ISR calibrated image for this quantum.
+            Calibrated exposure for this quantum.
         detectorMap : `DetectorMap`
-            Adjusted detector mapping used to locate fiber centers.
+            This visit's detector map, giving the trace centers the fit starts
+            from and the wavelengths.
         detectorMapCalib : `DetectorMap` or `None`, optional
             Static calibration detectorMap.  When provided, the spatial
             offset ``dxCenter`` (calibration prediction minus measured
             center) is recorded for each sample as a flexure diagnostic.
         fiberIds : `set` or `None`, optional
-            If provided, only fibers whose IDs are in this set are sampled.
-            Use this to restrict measurement to known bright fibers (e.g.
-            FLUXSTD fibers from ``pfsConfig``) and avoid dilution from dark
-            sky fibers.  When ``None``, all fibers in the detectorMap are
-            sampled.
+            If provided, only these fibers are reported (e.g. FLUXSTD fibers
+            from ``pfsConfig``). Every fiber is still fitted, because a
+            fiber's fit depends on its neighbours.
 
         Returns
         -------
         `pandas.DataFrame`
-            Columns: ``fiberId``, ``x``, ``y``, ``lam``, ``fwhm``, ``theta``,
-            ``flux``, ``fluxErr``, ``flag``, ``traceOnly``, ``peakRatio``,
-            ``dxCenter``.  ``traceOnly`` is `False`: these are live
-            measurements of the exposure, not calibration trace widths.
+            One row per (fiber, sampled row), with the columns of
+            `pfs.drp.qa.crossDispersion.IMAGE_WIDTH_COLUMNS`. ``traceOnly``
+            is `False`: these are measurements of the exposure.
         """
-        image = calexp.image.array.astype(np.float64)
-        mask_arr = calexp.mask.array
-        nRows, nCols = image.shape
-
-        halfWidth = self.config.profileHalfWidth
-        yStride = self.config.profileYStride
+        height = calexp.image.array.shape[0]
+        rows = np.arange(self.config.profileYStride // 2, height, self.config.profileYStride)
+        allFiberIds = np.asarray(detectorMap.fiberId, dtype=np.int32)
+        yy = np.repeat(rows[:, None].astype(np.float64), len(allFiberIds), axis=1).ravel()
+        ff = np.tile(allFiberIds, len(rows))
+        shape = (len(rows), len(allFiberIds))
+        xCenters = np.asarray(detectorMap.getXCenter(ff, yy), dtype=np.float64).reshape(shape)
+        wavelengths = np.asarray(detectorMap.findWavelength(ff, yy), dtype=np.float64).reshape(shape)
+        calibXCenters = None
+        if detectorMapCalib is not None:
+            calibXCenters = np.asarray(detectorMapCalib.getXCenter(ff, yy), dtype=np.float64).reshape(shape)
         badBits = calexp.mask.getPlaneBitMask(["BAD", "SAT", "CR", "NO_DATA"])
-
-        all_det_fiberIds = np.asarray(detectorMap.fiberId, dtype=np.int32)
-        if fiberIds is not None:
-            mask = np.isin(all_det_fiberIds, list(fiberIds))
-            det_fiberIds = all_det_fiberIds[mask]
-        else:
-            det_fiberIds = all_det_fiberIds
-        y_samples = np.arange(yStride // 2, nRows, yStride, dtype=np.float64)
-
-        all_fiberIds: list = []
-        all_y: list = []
-        all_x: list = []
-        all_lam: list = []
-        all_fwhm: list = []
-        all_flux: list = []
-        all_flag: list = []
-        all_peakRatio: list = []
-        all_dxCenter: list = []
-
-        for y_val in y_samples:
-            y_int = round(y_val)
-            if y_int < 0 or y_int >= nRows:
-                continue
-
-            y_arr = np.full(len(det_fiberIds), y_val, dtype=np.float64)
-            x_centers = detectorMap.getXCenter(det_fiberIds, y_arr)
-            lams = detectorMap.findWavelength(det_fiberIds, y_arr)
-            calibXCenters = (
-                detectorMapCalib.getXCenter(det_fiberIds, y_arr) if detectorMapCalib is not None else None
-            )
-            row_image = image[y_int, :]
-            row_mask = mask_arr[y_int, :]
-
-            for ii, (fiberId, x_cen, lam) in enumerate(zip(det_fiberIds, x_centers, lams, strict=False)):
-                if not (np.isfinite(x_cen) and np.isfinite(lam)):
-                    continue
-
-                x_lo = max(0, int(x_cen) - halfWidth)
-                x_hi = min(nCols, int(x_cen) + halfWidth + 1)
-                if x_hi - x_lo < 5:
-                    continue
-
-                strip = row_image[x_lo:x_hi]
-                is_bad = (row_mask[x_lo:x_hi] & badBits) != 0
-
-                fwhm_val = np.nan
-                flag_val = True
-                peak_ratio = np.nan
-                flux_val = np.nan
-                dx_center = np.nan
-
-                if is_bad.sum() <= halfWidth:
-                    # Background from outermost 2 pixels on each side.
-                    edge = np.concatenate([strip[:2], strip[-2:]])
-                    edge_bad = np.concatenate([is_bad[:2], is_bad[-2:]])
-                    good_edge = ~edge_bad
-                    bg = float(np.nanmean(np.where(good_edge, edge, np.nan)))
-                    if not np.isfinite(bg):
-                        bg = 0.0
-
-                    # Per-pixel noise from edge scatter; fall back to sqrt(|bg|)
-                    # when fewer than 2 good edge pixels are available.
-                    bg_rms = float(np.nanstd(np.where(good_edge, edge, np.nan)))
-                    if not np.isfinite(bg_rms) or bg_rms <= 0:
-                        bg_rms = max(1.0, np.sqrt(abs(bg)))
-
-                    strip_bg = np.where(is_bad, 0.0, strip - bg)
-                    peak_val = float(strip_bg.max())
-                    total = float(strip_bg.sum())
-
-                    # Require a minimum peak S/N before accepting this sample.
-                    # Without this gate, pure-noise strips (e.g. dark rows in
-                    # an IIS frame) pass the total>0 check ~50 % of the time
-                    # and contribute garbage FWHM values.
-                    if peak_val >= self.config.minPeakSN * bg_rms and total > 0:
-                        x_rel = np.arange(x_lo, x_hi, dtype=np.float64) - x_cen
-                        mu = float((x_rel * strip_bg).sum()) / total
-                        var = float(((x_rel - mu) ** 2 * strip_bg).sum()) / total
-                        if var > 0:
-                            fwhm_val = _FWHM_FACTOR * np.sqrt(var)
-                            peak_ratio = peak_val / total
-                            flag_val = False
-                            if calibXCenters is not None:
-                                dx_center = float(calibXCenters[ii]) - (x_cen + mu)
-                        flux_val = total
-
-                all_fiberIds.append(int(fiberId))
-                all_y.append(y_val)
-                all_x.append(float(x_cen))
-                all_lam.append(float(lam))
-                all_fwhm.append(fwhm_val)
-                all_flux.append(flux_val)
-                all_flag.append(flag_val)
-                all_peakRatio.append(peak_ratio)
-                all_dxCenter.append(dx_center)
-
-        n = len(all_fwhm)
-        return pd.DataFrame(
-            {
-                "fiberId": np.array(all_fiberIds, dtype=np.int32),
-                "y": np.array(all_y),
-                "x": np.array(all_x),
-                "lam": np.array(all_lam),
-                "fwhm": np.array(all_fwhm),
-                "theta": np.zeros(n),
-                "flux": np.array(all_flux),
-                "fluxErr": np.ones(n),
-                "flag": np.array(all_flag, dtype=bool),
-                # These are measurements of the exposure itself, not widths
-                # read back from a fiber profile calibration, so the FWHM
-                # thresholds apply to them.
-                "traceOnly": False,
-                "peakRatio": np.array(all_peakRatio),
-                "dxCenter": np.array(all_dxCenter),
-            }
+        return measureImageWidths(
+            calexp.image.array[rows],
+            calexp.variance.array[rows],
+            (calexp.mask.array[rows] & badBits) != 0,
+            rows,
+            allFiberIds,
+            xCenters,
+            wavelengths,
+            calibXCenters,
+            select=fiberIds,
+            minPeakSN=self.config.minPeakSN,
         )
 
     @staticmethod

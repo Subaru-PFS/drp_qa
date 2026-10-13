@@ -30,10 +30,11 @@ import yaml  # noqa: F401 (pfs.drp.qa.metrics needs it; listed so the directory 
 
 TASK_MODULE = "pfs.drp.qa.imageQualityQa"
 
-#: Fiber pitch of the fake detector, wide enough that the calexp aperture
-#: (``profileHalfWidth`` 7) holds one trace: these tests are about which path
-#: is taken, not about the width estimator.
+#: Default fiber pitch of the fake detector: wide, because most of these tests
+#: are about which path is taken, not about the width estimator. PFS fibers are
+#: 6.17 px apart (`PFS_PITCH`).
 PITCH = 20.0
+PFS_PITCH = 6.17
 
 
 def _missing(name: str) -> bool:
@@ -173,14 +174,15 @@ def iqqa() -> ModuleType:
 
 
 class FakeDetectorMap:
-    """Straight vertical traces ``PITCH`` apart; wavelength is the row."""
+    """Straight vertical traces ``pitch`` apart; wavelength is the row."""
 
-    def __init__(self, numFibers: int = 10, offset: float = 0.0):
+    def __init__(self, numFibers: int = 10, offset: float = 0.0, pitch: float = PITCH):
         self.fiberId = np.arange(1, numFibers + 1, dtype=np.int32)
         self.offset = offset
+        self.pitch = pitch
 
     def getXCenter(self, fiberId, y):
-        return PITCH * np.asarray(fiberId, dtype=float) + self.offset + 0.0 * np.asarray(y)
+        return self.pitch * np.asarray(fiberId, dtype=float) + self.offset + 0.0 * np.asarray(y)
 
     def findWavelength(self, fiberId, y):
         return 500.0 + 0.1 * np.asarray(y, dtype=float) + 0.0 * np.asarray(fiberId)
@@ -191,6 +193,7 @@ class FakeExposure:
 
     def __init__(self, image: np.ndarray, metadata: dict):
         self.image = SimpleNamespace(array=image)
+        self.variance = SimpleNamespace(array=np.ones(image.shape))  # unit noise, as the images have
         self.mask = SimpleNamespace(
             array=np.zeros(image.shape, dtype=np.int32), getPlaneBitMask=lambda names: 1
         )
@@ -209,7 +212,7 @@ def traceImage(
     detectorMap: FakeDetectorMap, sigma: float, height: int = 400, peak: float = 1000.0, seed: int = 1
 ) -> np.ndarray:
     """Return an image of Gaussian traces of width ``sigma`` with unit noise."""
-    width = int(PITCH * (len(detectorMap.fiberId) + 2))
+    width = int(detectorMap.pitch * (len(detectorMap.fiberId) + 2))
     columns = np.arange(width, dtype=float)
     centers = detectorMap.getXCenter(detectorMap.fiberId, np.zeros(len(detectorMap.fiberId)))
     row = sum(peak * np.exp(-0.5 * ((columns - center) / sigma) ** 2) for center in centers)
@@ -219,7 +222,7 @@ def traceImage(
 
 def noiseImage(detectorMap: FakeDetectorMap, height: int = 400, seed: int = 1) -> np.ndarray:
     """Return an image with no trace, so every calexp sample is flagged."""
-    width = int(PITCH * (len(detectorMap.fiberId) + 2))
+    width = int(detectorMap.pitch * (len(detectorMap.fiberId) + 2))
     return np.random.default_rng(seed).normal(0.0, 1.0, (height, width))
 
 
@@ -233,11 +236,13 @@ class FakeFiberProfiles:
 
     def __getitem__(self, fiberId):
         rows = np.linspace(20.0, 380.0, self.numSwaths)
+        index = np.arange(-33, 34) / 3.0  # radius 10, oversampled 3x, as the Run25 calibrations are
+        profile = np.exp(-0.5 * (index / self.sigma) ** 2)
         return SimpleNamespace(
             rows=rows,
             norm=np.ones(400),
-            profiles=None,
-            calculateStatistics=lambda: SimpleNamespace(width=np.full(self.numSwaths, self.sigma)),
+            index=index,
+            profiles=np.ma.masked_array(np.tile(profile, (self.numSwaths, 1))),
         )
 
 
@@ -310,4 +315,5 @@ def fakes() -> SimpleNamespace:
         traceImage=traceImage,
         noiseImage=noiseImage,
         arcLines=arcLines,
+        PFS_PITCH=PFS_PITCH,
     )
