@@ -44,8 +44,14 @@ __all__ = [
     "writeThresholds",
 ]
 
-#: Schema version of the thresholds file written by `writeThresholds`.
-THRESHOLDS_VERSION = 1
+#: Schema version of the thresholds file written by `writeThresholds`. Version 2
+#: added each entry's ``method``; a reader that predates it would take
+#: ``method`` for a population column, match nothing, and judge nothing, so
+#: such readers must reject the file.
+THRESHOLDS_VERSION = 2
+
+#: Versions `readThresholds` reads. A version-1 entry is a percentile one.
+_READABLE_VERSIONS = (1, 2)
 
 #: Columns of a `calibrate` row kept in the thresholds file, besides the population.
 _THRESHOLD_FIELDS = (
@@ -522,13 +528,15 @@ def readThresholds(path: Path | str) -> tuple[dict, pd.DataFrame]:
     Raises
     ------
     ValueError
-        If the file's version is not `THRESHOLDS_VERSION`.
+        If the file's version is not one this reader knows (1 or
+        `THRESHOLDS_VERSION`).
     """
     document = yaml.safe_load(Path(path).read_text())
-    if document.get("version") != THRESHOLDS_VERSION:
-        raise ValueError(
-            f"{path}: thresholds version {document.get('version')!r}, expected {THRESHOLDS_VERSION}"
-        )
+    version = document.get("version")
+    if version not in _READABLE_VERSIONS:
+        raise ValueError(f"{path}: thresholds version {version!r}, expected one of {_READABLE_VERSIONS}")
+    if version == 1:
+        document["thresholds"] = [{"method": "percentile"} | entry for entry in document["thresholds"]]
     rows = [
         {"metric": entry["metric"], **entry["population"]}
         | {key: value for key, value in entry.items() if key not in ("metric", "population")}

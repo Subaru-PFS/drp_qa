@@ -138,9 +138,10 @@ _CALIB = (
 #: (``species``, from ``seqName``) because the line lists differ per lamp;
 #: ``nLines`` by sequence because the line count is a property of the lamp.
 #: ``medFwhm`` is judged against each detector's own width per lamp
-#: (PIPE2D-1942): spectrographs of one arm differ by more than one varies, and
-#: lamps of one arm by more still (b: Argon 2.5 px, Krypton 2.85 px), so a
-#: per-arm percentile sits at the widest one's tail. Run25's known-good values
+#: (PIPE2D-1942): the spectrographs of one arm differ from each other by more
+#: than any one of them varies, and the lamps of one arm differ even more (b:
+#: Argon 2.5 px, Krypton 2.85 px), so a per-arm percentile sits at the tail of
+#: the widest spectrograph or lamp. Run25's known-good values
 #: sit at most 1.4 % above their population's median (3.3 % for Argon), the
 #: SM1 defocus 24-41 %.
 METRIC_SPECS = {

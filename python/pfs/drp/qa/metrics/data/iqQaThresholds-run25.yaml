@@ -1,5 +1,5 @@
 # Made by makeRun25Thresholds.py from tests/metrics/data/iqQaThresholds-run25.yaml; see its docstring.
-version: 1
+version: 2
 derivedOn: '2026-10-13'
 collection: u/wtg/qa-thresholds/004
 referenceRuns:

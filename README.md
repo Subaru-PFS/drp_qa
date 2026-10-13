@@ -221,8 +221,8 @@ The default, `iqQaThresholds-run25.yaml`, holds the thresholds derived from the 
 
 - `medFwhm` per detector and lamp: WARN 3 % and FAIL 5 % above the Run25 known-good median of the image's arm,
   spectrograph, `obsType` and lamp (`species`), on arcs and quartz (from the calexp width), every arm included.
-  Spectrographs of one arm differ by more than one varies (r quartz: r2 3.27 px, r4 3.39 px), and lamps of one arm
-  by more still (b arcs: Argon 2.5 px, Krypton 2.85 px).
+  The spectrographs of one arm differ from each other by more than any one of them varies (r quartz: r2 3.27 px,
+  r4 3.39 px, each within 0.03 px), and the lamps of one arm differ even more (b arcs: Argon 2.5 px, Krypton 2.85 px).
 - `medFwhm` per arm, judging only an image whose detector and lamp have no Run25 median: arcs b 2.872/2.89,
   r 2.987/2.993, n 3.05/3.1, m 3.18/3.21 px; quartz b 3.192/3.198, r 3.39/3.391, n 3.257/3.26 px, and m not judged
   (16 known-good values, below the 20-sample floor).

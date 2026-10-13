@@ -84,7 +84,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **`medFwhm` is judged per detector and lamp** (PIPE2D-1942) — WARN 3 % and FAIL 5 % above the Run25 known-good
   median of each arm, spectrograph, `obsType` and lamp (`MetricSpec.tolerance`, `thresholds.deriveTolerance`); the
   per-arm percentiles judge only an image with no such median. `calibrate` adds these rows (`method` `tolerance`),
-  thresholds files record each entry's `method`, and `plotting.plotTolerances` draws them. m-arm quartz is now
+  thresholds files record each entry's `method` (schema version 2; version 1 still reads), and `plotting.plotTolerances` draws them. m-arm quartz is now
   judged. No Run25 known-good arc or quartz fails. Changes verdicts.
 - **`pctFlagged` is no longer judged** (PIPE2D-1929) — the shipped thresholds file has one entry for it with
   neither WARN nor FAIL, which overrides the `flagRate*Threshold` config fields: their n-arm 15/20 % sits below

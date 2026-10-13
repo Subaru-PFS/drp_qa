@@ -20,9 +20,10 @@ Adopting it changed five things:
   known-good Run25 value of the arm, rounded down to 1000.
 - **medFwhm is judged per detector and lamp** (PIPE2D-1942): WARN 3 % and FAIL
   5 % above the Run25 known-good median of its arm, spectrograph, obsType and
-  lamp, adopted as derived. Spectrographs of one arm differ by more than one
-  varies (r quartz: r2 3.27 px, r4 3.39 px), so the per-arm percentiles put
-  each arm's widest spectrograph at FAIL. The per-arm entries stay, judging
+  lamp, adopted as derived. The spectrographs of one arm differ from each
+  other by more than any one of them varies (r quartz: r2 3.27 px, r4 3.39 px,
+  each within 0.03 px), so the per-arm percentiles put each arm's widest
+  spectrograph at FAIL. The per-arm entries stay, judging
   only an image whose detector and lamp have no Run25 median.
 - **Per-arm quartz medFwhm is judged on b, r and n as derived** (PIPE2D-1918),
   from the calexp width. The m arm's derivation has 16 known-good values,

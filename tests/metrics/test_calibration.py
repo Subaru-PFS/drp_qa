@@ -343,3 +343,29 @@ def testThresholdsFileVersionIsChecked(tmp_path):
     path.write_text("version: 99\nthresholds: []\n")
     with pytest.raises(ValueError, match="thresholds version"):
         readThresholds(path)
+
+
+def testThresholdsFileVersionTwoMarksTheMethod(tmp_path):
+    """Version 2 added ``method``: a version-1 reader rejects the file rather than misread it."""
+    import yaml
+
+    from pfs.drp.qa.metrics.calibration import writeThresholds
+
+    table = calibrate(makeMetrics(), makeVisitSet(), ["medFwhm"])
+    document = yaml.safe_load(writeThresholds(table, tmp_path / "t.yaml", "c", [25], "v").read_text())
+    assert document["version"] == 2
+    assert {entry["method"] for entry in document["thresholds"]} == {"percentile", "tolerance"}
+
+
+def testVersionOneFileReadsAsPercentile(tmp_path):
+    from pfs.drp.qa.metrics.calibration import readThresholds
+
+    path = tmp_path / "t.yaml"
+    path.write_text(
+        "version: 1\nderivedOn: '2026-10-05'\ncollection: c\nreferenceRuns: [25]\ndrpQaVersion: v\n"
+        "thresholds:\n  - {metric: medFwhm, population: {arm: b}, higherIsWorse: true, absolute: false,"
+        " warn: 3.0, fail: 3.5, provenance: p}\n"
+    )
+    _, thresholds = readThresholds(path)
+    assert thresholds["method"].tolist() == ["percentile"]
+    assert thresholds["arm"].tolist() == ["b"]
