@@ -10,6 +10,13 @@ Populations are separated by default. Arc moments, calexp trace widths and sky
 frames are different estimators, the b arm behaves differently from the
 others, and flag rates depend on the lamp (rule R7): a percentile of a blend is
 a property of the blend.
+
+A metric with a `MetricSpec.tolerance` also gets a row per finer population
+(`MetricSpec.toleranceBy`: ``medFwhm`` per detector and lamp) whose WARN and
+FAIL are a fixed fraction beyond that population's known-good median
+(``method`` ``tolerance``). The gate prefers them, being more specific, and
+falls back to the percentile rows (``method`` ``percentile``) for an image
+whose finer population has no known-good values.
 """
 
 from collections.abc import Iterable, Sequence
@@ -21,7 +28,7 @@ import pandas as pd
 import yaml
 
 from pfs.drp.qa.metrics.registry import METRIC_SPECS, MetricSpec, specFor
-from pfs.drp.qa.metrics.thresholds import deriveThresholds, verifyKnownBad
+from pfs.drp.qa.metrics.thresholds import deriveThresholds, deriveTolerance, verifyKnownBad
 from pfs.drp.qa.metrics.validationVisits import ValidationVisitSet, matchRows
 
 __all__ = [
@@ -42,6 +49,7 @@ THRESHOLDS_VERSION = 1
 
 #: Columns of a `calibrate` row kept in the thresholds file, besides the population.
 _THRESHOLD_FIELDS = (
+    "method",
     "warn",
     "fail",
     "nGood",
@@ -195,6 +203,11 @@ def calibrate(
 
         ``metric``, ``group`` (e.g. ``"b/arc"``), ``groupBy``
             What was calibrated.
+        ``method``
+            ``percentile``, or ``tolerance`` for a row of a metric's
+            `MetricSpec.toleranceBy` populations (``group`` e.g.
+            ``"b/2/arc/Krypton"``): WARN and FAIL a fixed fraction beyond the
+            population's known-good median.
         the grouping columns
             The population's values.
         ``nGood``, ``nGoodVisits``, ``visitRange``
@@ -206,7 +219,9 @@ def calibrate(
         ``median``, ``robustRms``, ``goodFlaggedWarn``, ``goodFlaggedFail``
             The good distribution, and what the thresholds flag of it.
         ``reliable``, ``failBounded``, ``degenerate``
-            Reasons not to trust the suggestion.
+            Reasons not to trust the suggestion. For a tolerance,
+            ``failLow``/``failHigh`` and ``failBounded`` describe the interval
+            on the median, scaled to FAIL.
         ``nBad``, ``badOk``, ``badSummary``
             The known-bad check: ``badOk`` is True when each known-bad value
             reaches the verdict its entry expects, and NA when no known-bad
@@ -231,24 +246,29 @@ def calibrate(
             raise KeyError(f"{name!r} is not a column of the metrics table")
         spec = specFor(name)
         labelled = labelRows(metrics, visitSet, name)
-        columns = [column for column in (spec.groupBy if groupBy is None else groupBy) if column in labelled]
         values = labelled[name].astype(float)
         labelled = labelled.assign(_value=values.abs() if spec.absolute else values)
-        groups = labelled.groupby(columns, dropna=False, sort=True) if columns else [((), labelled)]
-        for key, subset in groups:
-            key = key if isinstance(key, tuple) else (key,)
-            base = {
-                "metric": name,
-                "group": "/".join(str(value) for value in key) if columns else "all",
-                "groupBy": "/".join(columns),
-                **dict(zip(columns, key, strict=True)),
-            }
-            rows.append(
-                base
-                | _calibrateGroup(
-                    subset, spec, name, base["group"], warnPercentile, failPercentile, derivedOn
+        populations = [("percentile", spec.groupBy if groupBy is None else groupBy)]
+        if spec.tolerance is not None and groupBy is None:
+            populations.append(("tolerance", spec.toleranceBy))
+        for method, by in populations:
+            columns = [column for column in by if column in labelled]
+            groups = labelled.groupby(columns, dropna=False, sort=True) if columns else [((), labelled)]
+            for key, subset in groups:
+                key = key if isinstance(key, tuple) else (key,)
+                base = {
+                    "metric": name,
+                    "group": "/".join(str(value) for value in key) if columns else "all",
+                    "groupBy": "/".join(columns),
+                    "method": method,
+                    **dict(zip(columns, key, strict=True)),
+                }
+                rows.append(
+                    base
+                    | _calibrateGroup(
+                        subset, spec, name, base["group"], method, warnPercentile, failPercentile, derivedOn
+                    )
                 )
-            )
     return pd.DataFrame(rows)
 
 
@@ -257,6 +277,7 @@ def _calibrateGroup(
     spec: MetricSpec,
     name: str,
     group: str,
+    method: str,
     warnPercentile: float,
     failPercentile: float,
     derivedOn: date | None,
@@ -274,6 +295,8 @@ def _calibrateGroup(
         The metric name.
     group : `str`
         The population label.
+    method : `str`
+        ``percentile``, or ``tolerance`` for `MetricSpec.tolerance`.
     warnPercentile, failPercentile : `float`
         Percentiles for WARN and FAIL.
     derivedOn : `datetime.date` or `None`
@@ -300,16 +323,28 @@ def _calibrateGroup(
         row["badSummary"] = "no known-good rows in this population"
         return row
 
-    suggestion = deriveThresholds(
-        good["_value"],
-        metric=f"{name}[{group}]",
-        higherIsWorse=spec.higherIsWorse,
-        warnPercentile=warnPercentile,
-        failPercentile=failPercentile,
-        physicalLimit=spec.physicalLimit,
-        visitRange=row["visitRange"],
-        derivedOn=derivedOn,
-    )
+    if method == "tolerance":
+        suggestion = deriveTolerance(
+            good["_value"],
+            metric=f"{name}[{group}]",
+            warnFraction=spec.tolerance[0],
+            failFraction=spec.tolerance[1],
+            higherIsWorse=spec.higherIsWorse,
+            visitRange=row["visitRange"],
+            derivedOn=derivedOn,
+            units=spec.unitSuffix,
+        )
+    else:
+        suggestion = deriveThresholds(
+            good["_value"],
+            metric=f"{name}[{group}]",
+            higherIsWorse=spec.higherIsWorse,
+            warnPercentile=warnPercentile,
+            failPercentile=failPercentile,
+            physicalLimit=spec.physicalLimit,
+            visitRange=row["visitRange"],
+            derivedOn=derivedOn,
+        )
     row |= {
         "warn": suggestion.warn,
         "fail": suggestion.fail,
@@ -443,10 +478,13 @@ def writeThresholds(
     entries = []
     for _, row in table[table["nGood"] > 0].iterrows():
         columns = [column for column in str(row["groupBy"]).split("/") if column]
+        if row.get("method") == "tolerance":
+            # A trace has no lamp: its species is "", which says nothing obsType doesn't.
+            columns = [column for column in columns if row[column] != ""]
         spec = specFor(row["metric"])
         entry = {
             "metric": row["metric"],
-            "population": {column: _plain(row[column]) for column in columns},
+            "population": {column: _populationValue(row[column]) for column in columns},
             "higherIsWorse": spec.higherIsWorse,
             "absolute": spec.absolute,
         }
@@ -496,8 +534,19 @@ def readThresholds(path: Path | str) -> tuple[dict, pd.DataFrame]:
         | {key: value for key, value in entry.items() if key not in ("metric", "population")}
         for entry in document["thresholds"]
     ]
+    table = pd.DataFrame(rows)
+    # Keep population values as written: a spectrograph named by some entries
+    # only would otherwise read as 2.0, and print so in the gate's reasons.
+    for column in {column for entry in document["thresholds"] for column in entry["population"]}:
+        table[column] = pd.Series([row.get(column) for row in rows], index=table.index, dtype=object)
     metadata = {key: document[key] for key in ("derivedOn", "collection", "referenceRuns", "drpQaVersion")}
-    return metadata, pd.DataFrame(rows)
+    return metadata, table
+
+
+def _populationValue(value):
+    """Return a population value for the file: a spectrograph 2, not the 2.0 a column with nulls holds."""
+    value = _plain(value)
+    return int(value) if isinstance(value, float) and value.is_integer() else value
 
 
 def _plain(value):

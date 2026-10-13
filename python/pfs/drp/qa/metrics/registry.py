@@ -40,6 +40,15 @@ class MetricSpec:
         absent from the data are dropped from the grouping.
     physicalLimit : `float` or `None`
         A physical limit to use for FAIL.
+    tolerance : `tuple` [`float`, `float`] or `None`
+        WARN and FAIL as fractions beyond the median of each `toleranceBy`
+        population's known-good values, in the bad direction. The reference
+        is then the same detector, observed the same way, in the reference
+        run (R1), and a median needs far fewer values than a tail percentile.
+    toleranceBy : `tuple` [`str`]
+        Columns separating the populations of `tolerance`. An image whose
+        population has no known-good values is judged by the `groupBy`
+        percentiles instead.
     units : `str`
         Physical units, for axis labels.
     reference : `str`
@@ -62,6 +71,8 @@ class MetricSpec:
     absolute: bool = False
     groupBy: tuple[str, ...] = ("arm", "obsType")
     physicalLimit: float | None = None
+    tolerance: tuple[float, float] | None = None
+    toleranceBy: tuple[str, ...] = ()
     units: str = ""
     reference: str = ""
     label: str = ""
@@ -126,6 +137,12 @@ _CALIB = (
 #: The metrics with a known treatment, by name. ``pctFlagged`` is split by lamp
 #: (``species``, from ``seqName``) because the line lists differ per lamp;
 #: ``nLines`` by sequence because the line count is a property of the lamp.
+#: ``medFwhm`` is judged against each detector's own width per lamp
+#: (PIPE2D-1942): spectrographs of one arm differ by more than one varies, and
+#: lamps of one arm by more still (b: Argon 2.5 px, Krypton 2.85 px), so a
+#: per-arm percentile sits at the widest one's tail. Run25's known-good values
+#: sit at most 1.4 % above their population's median (3.3 % for Argon), the
+#: SM1 defocus 24-41 %.
 METRIC_SPECS = {
     spec.name: spec
     for spec in (
@@ -136,6 +153,8 @@ METRIC_SPECS = {
                 "The optical design's spot size: a Gaussian-equivalent FWHM from arc-line second "
                 "moments, a cross-dispersion fit to calexp pixels, or the fiberProfiles widths."
             ),
+            tolerance=(0.03, 0.05),
+            toleranceBy=("arm", "spectrograph", "obsType", "species"),
             label="medFWHM",
             valueFormat=".2f",
             unitSuffix="px",
