@@ -2,9 +2,17 @@
 
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
-from pfs.drp.qa.utils.provenance import CALIBRATION_COLUMNS, calibrationsUsed, provenanceInputs
+from pfs.drp.qa.utils.provenance import (
+    CALIBRATION_COLUMNS,
+    PIPELINE_COLUMNS,
+    calibrationsUsed,
+    commonPipeline,
+    pipelineVersions,
+    provenanceInputs,
+)
 
 FITS_HEADER = {
     "LSST BUTLER ID": "a0",
@@ -134,3 +142,47 @@ class TestCalibrationsUsed:
             ["bias", "provenance"],
             ["fiberProfiles", "lookup"],
         ]
+
+
+class TestPipelineVersions:
+    """The pipeline a reduction recorded, as getPfsVersions writes it into a pfsArm header."""
+
+    @pytest.mark.parametrize(
+        "keys",
+        [
+            ("HIERARCH VERSION_DATAMODEL", "HIERARCH VERSION_OBS_PFS", "HIERARCH VERSION_DRP_STELLA"),
+            ("VERSION_DATAMODEL", "VERSION_OBS_PFS", "VERSION_DRP_STELLA"),  # astropy drops HIERARCH
+            ("DATAMODEL", "OBS_PFS", "HIERARCH DRP_STELLA"),  # prefix=""
+            ("version_datamodel", "version_obs_pfs", "version_drp_stella"),
+        ],
+    )
+    def testKeys(self, keys):
+        header = dict(zip(keys, ("w.2026.40", "w.2026.40", "w.2026.41-6-ge56938d2"), strict=True))
+        header |= {"W_VISIT": 133041, "VERSION_OTHER": "x", "DRP_STELLA_EXTRA": "y"}
+        assert pipelineVersions(header) == {
+            "datamodel": "w.2026.40",
+            "obs_pfs": "w.2026.40",
+            "drp_stella": "w.2026.41-6-ge56938d2",
+        }
+
+    def testMissingProductsAreLeftOut(self):
+        assert pipelineVersions({"VERSION_DRP_STELLA": "w.2026.40", "VERSION_OBS_PFS": " "}) == {
+            "drp_stella": "w.2026.40"
+        }
+        assert pipelineVersions({}) == {}
+
+    def testCommonPipeline(self):
+        versions = pd.DataFrame(
+            [{"versionDatamodel": "a", "versionObsPfs": "b", "versionDrpStella": "c"}] * 3
+        )
+        assert commonPipeline(versions) == {"datamodel": "a", "obs_pfs": "b", "drp_stella": "c"}
+        mixed = versions.copy()
+        mixed.loc[1, PIPELINE_COLUMNS["drp_stella"]] = "d"
+        with pytest.raises(ValueError, match="drp_stella c \\(2\\), d \\(1\\)"):
+            commonPipeline(mixed)
+        unknown = versions.copy()
+        unknown.loc[2, PIPELINE_COLUMNS["obs_pfs"]] = None
+        with pytest.raises(ValueError, match="1 of 3 reductions record no obs_pfs"):
+            commonPipeline(unknown)
+        with pytest.raises(ValueError, match="No reductions"):
+            commonPipeline(versions.iloc[:0])

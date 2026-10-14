@@ -23,9 +23,14 @@ A missing (NaN) value, one with no thresholds, or one its `MetricSpec` marks
 as not measured (a FWHM read from ``fiberProfiles``) gets no verdict; an
 infinite one is judged, and fails a higher-is-worse metric. A value at a
 threshold has crossed it.
+
+Thresholds hold for the pipeline that reduced the visits they were derived
+from. Given that pipeline, `gate` marks a verdict on an image reduced with
+another one provisional (`pipelineMismatch`): the difference may be the
+pipeline's, not the instrument's.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from importlib.resources import files
 from pathlib import Path
@@ -36,14 +41,17 @@ import pandas as pd
 
 from pfs.drp.qa.metrics.calibration import addSpecies, readThresholds
 from pfs.drp.qa.metrics.registry import specFor
+from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS, PIPELINE_PRODUCTS
 
 __all__ = [
+    "PROVISIONAL_COLUMNS",
     "STATUS_ORDER",
     "VERDICT_COLUMNS",
     "configThresholds",
     "gate",
     "judge",
     "loadThresholds",
+    "pipelineMismatch",
     "thresholdsPath",
 ]
 
@@ -71,6 +79,9 @@ _FIELDS = frozenset(
 
 #: Columns `gate` returns: the verdict, the metric that decided it, and why.
 VERDICT_COLUMNS = ("qaStatus", "qaDecidedBy", "qaReason")
+
+#: Columns `gate` adds when given the thresholds' pipeline: whether the verdict is provisional, and why.
+PROVISIONAL_COLUMNS = ("qaProvisional", "qaPipeline")
 
 #: Columns identifying an image, copied to `judge`'s output when present.
 _ID_COLUMNS = ("visit", "arm", "spectrograph")
@@ -282,6 +293,7 @@ def gate(
     metrics: pd.DataFrame,
     thresholds: ThresholdsLike | Sequence[ThresholdsLike],
     default: str = "PASS",
+    pipeline: Mapping[str, str] | None = None,
 ) -> pd.DataFrame:
     """Give each image a verdict, and the metric that decided it.
 
@@ -293,6 +305,10 @@ def gate(
         Threshold tables or files, highest priority first.
     default : `str`, optional
         The verdict for an image with no metric judged.
+    pipeline : mapping [`str`, `str`], optional
+        The pipeline the thresholds were derived with, as the thresholds
+        file's ``pipelineVersions`` (empty when it records none). When given,
+        `PROVISIONAL_COLUMNS` are added from `pipelineMismatch`.
 
     Returns
     -------
@@ -306,6 +322,8 @@ def gate(
             ``FAIL``; empty otherwise.
         ``qaReason``
             The reasons of every ``WARN`` and ``FAIL``, joined by ``"; "``.
+        ``qaProvisional``, ``qaPipeline``
+            With ``pipeline``: see `pipelineMismatch`.
     """
     judged = judge(metrics, thresholds)
     status, decidedBy, reason = [default] * len(metrics), [""] * len(metrics), [""] * len(metrics)
@@ -319,9 +337,68 @@ def gate(
         if worst != "PASS":
             decidedBy[row] = verdicts.loc[rank.idxmax(), "metric"]
             reason[row] = "; ".join(verdicts.loc[verdicts["reason"] != "", "reason"])
-    return pd.DataFrame(
+    verdicts = pd.DataFrame(
         {"qaStatus": status, "qaDecidedBy": decidedBy, "qaReason": reason}, index=metrics.index
     )
+    return verdicts if pipeline is None else verdicts.join(pipelineMismatch(metrics, pipeline))
+
+
+def pipelineMismatch(metrics: pd.DataFrame, pipeline: Mapping[str, str]) -> pd.DataFrame:
+    """Say which images were reduced with another pipeline than the thresholds.
+
+    A verdict on such an image is provisional: Run25's n-arm trace widths
+    differ by up to 53 % between two reductions of the same exposures
+    (PIPE2D-1938). So is one where either pipeline is unknown.
+
+    Parameters
+    ----------
+    metrics : `pandas.DataFrame`
+        One row per image, with `pfs.drp.qa.utils.provenance.PIPELINE_COLUMNS`
+        where known (`pfs.drp.qa.metrics.readers.readPipelineVersions`).
+    pipeline : mapping [`str`, `str`]
+        The thresholds' pipeline, version per product; empty when the
+        thresholds record none.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        Indexed like ``metrics``, with `PROVISIONAL_COLUMNS`:
+
+        ``qaProvisional``
+            Whether a product's version differs, or is unknown on either side.
+        ``qaPipeline``
+            Why, e.g. ``drp_stella w.2026.41-6-ge56938d2 (thresholds
+            w.2026.38)``; ``the thresholds record no pipeline``; ``reduction's
+            pipeline unknown``. Empty when not provisional.
+    """
+    if not any(product in pipeline for product in PIPELINE_PRODUCTS):
+        reasons = ["the thresholds record no pipeline"] * len(metrics)
+    else:
+        images = pd.DataFrame(
+            {
+                product: metrics[column].to_numpy(dtype=object) if column in metrics else None
+                for product, column in PIPELINE_COLUMNS.items()
+            },
+            index=range(len(metrics)),
+        )
+        reasons = []
+        for row in images.itertuples(index=False):
+            versions = {
+                product: value
+                for product, value in zip(PIPELINE_PRODUCTS, row, strict=True)
+                if not _isNull(value)
+            }
+            if not versions:
+                reasons.append("reduction's pipeline unknown")
+                continue
+            differs = []
+            for product in PIPELINE_PRODUCTS:
+                mine, theirs = versions.get(product), pipeline.get(product)
+                if mine is None or theirs is None or str(mine) != str(theirs):
+                    differs.append(f"{product} {mine or 'unknown'} (thresholds {theirs or 'unknown'})")
+            reasons.append(", ".join(differs))
+    reason = pd.Series(reasons, index=metrics.index, dtype=object)
+    return pd.DataFrame({"qaProvisional": reason != "", "qaPipeline": reason}, index=metrics.index)
 
 
 def _limit(value: Any) -> float | None:

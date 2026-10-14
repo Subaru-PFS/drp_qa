@@ -13,6 +13,7 @@ from pfs.drp.qa.comparison.report import (
     failedSummary,
     imageVerdicts,
     notJudgedSummary,
+    provisionalSummary,
     recurringSequences,
 )
 
@@ -90,6 +91,46 @@ def testBuildReport(periods, visit, listing):
     assert "run 'run' first" not in page
     assert page.count("<svg") >= 3
     assert "<h2>n-arm darks</h2>" not in page  # no section without lastLit
+    assert "Provisional</b>" not in page  # no pipeline check, no provisional verdicts
+
+
+def testProvisionalVerdictsAreCounted(periods, visit, listing):
+    """Images reduced with another pipeline than the thresholds' are counted apart, by why."""
+    from pfs.drp.qa.metrics.gate import pipelineMismatch
+
+    visits, metrics = _period(periods, visit, listing)
+    pipeline = {"datamodel": "a", "obs_pfs": "b", "drp_stella": "c"}
+    metrics = metrics.assign(versionDatamodel="a", versionObsPfs="b", versionDrpStella="c")
+    metrics.loc[metrics["arm"] == "r", "versionDrpStella"] = "d"
+    metrics = metrics.join(pipelineMismatch(metrics, pipeline))
+    holdings = metrics[["visit", "arm", "spectrograph"]].assign(raw=True, reduced=True, judged=True)
+    judged = judgeImages(metrics, visits, THRESHOLDS)
+    verdicts = imageVerdicts(metrics, judged)
+    summary = provisionalSummary(verdicts)
+    judgedR = verdicts[(verdicts["arm"] == "r") & verdicts["status"].isin(["PASS", "WARN", "FAIL"])]
+    assert summary["qaPipeline"].tolist() == ["drp_stella d (thresholds c)"]
+    assert summary["arms"].tolist() == ["r"]
+    assert summary["images"].sum() == len(judgedR) > 0
+    page = buildReport(
+        ReportInputs(
+            period="run1",
+            version="w.2026.41",
+            collection="u/me/comparison/run1/w.2026.41",
+            readUntil="now",
+            visits=visits,
+            summary=summarize(visits, coverage(visits, holdings)),
+            metrics=metrics,
+            judged=judged,
+            findings=findings(metrics, judged, visits),
+            reference=None,
+        )
+    )
+    assert f"<b>Provisional</b>: {len(judgedR)} of" in page
+    assert "drp_stella d (thresholds c)" in page
+    # Every image reduced with the thresholds' pipeline: nothing provisional.
+    agreed = metrics.assign(versionDrpStella="c")
+    agreed = agreed.drop(columns=["qaProvisional", "qaPipeline"]).join(pipelineMismatch(agreed, pipeline))
+    assert provisionalSummary(imageVerdicts(agreed, judged)).empty
 
 
 def testUnvalidatedAreLabelledApart(periods, visit, listing):

@@ -19,7 +19,7 @@ falls back to the percentile rows (``method`` ``percentile``) for an image
 whose finer population has no known-good values.
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date
 from pathlib import Path
 
@@ -30,6 +30,7 @@ import yaml
 from pfs.drp.qa.metrics.registry import METRIC_SPECS, MetricSpec, specFor
 from pfs.drp.qa.metrics.thresholds import deriveThresholds, deriveTolerance, verifyKnownBad
 from pfs.drp.qa.metrics.validationVisits import ValidationVisitSet, matchRows
+from pfs.drp.qa.utils.provenance import PIPELINE_PRODUCTS
 
 __all__ = [
     "DEFAULT_METRICS",
@@ -47,7 +48,8 @@ __all__ = [
 #: Schema version of the thresholds file written by `writeThresholds`. Version 2
 #: added each entry's ``method``; a reader that predates it would take
 #: ``method`` for a population column, match nothing, and judge nothing, so
-#: such readers must reject the file.
+#: such readers must reject the file. The optional ``pipelineVersions`` needed no
+#: new version: a reader that predates it ignores it and judges as before.
 THRESHOLDS_VERSION = 2
 
 #: Versions `readThresholds` reads. A version-1 entry is a percentile one.
@@ -454,6 +456,7 @@ def writeThresholds(
     referenceRuns: Sequence[int],
     drpQaVersion: str,
     derivedOn: date | None = None,
+    pipelineVersions: Mapping[str, str] | None = None,
 ) -> Path:
     """Write the derived thresholds to a versioned YAML file.
 
@@ -475,6 +478,11 @@ def writeThresholds(
         The drp_qa version that measured them, e.g. ``git describe``.
     derivedOn : `datetime.date`, optional
         Derivation date. Defaults to today.
+    pipelineVersions : mapping [`str`, `str`], optional
+        The pipeline that reduced the visits, as `PIPELINE_PRODUCTS` versions
+        (`pfs.drp.qa.utils.provenance.commonPipeline`). The thresholds hold for
+        it: the gate marks a verdict on a reduction made with another
+        provisional. Omitted when unknown.
 
     Returns
     -------
@@ -502,6 +510,7 @@ def writeThresholds(
         "collection": collection,
         "referenceRuns": [int(run) for run in referenceRuns],
         "drpQaVersion": drpQaVersion,
+        **({"pipelineVersions": _pipeline(pipelineVersions)} if pipelineVersions else {}),
         "thresholds": entries,
     }
     path = Path(path)
@@ -520,7 +529,9 @@ def readThresholds(path: Path | str) -> tuple[dict, pd.DataFrame]:
     Returns
     -------
     metadata : `dict`
-        ``derivedOn``, ``collection``, ``referenceRuns`` and ``drpQaVersion``.
+        ``derivedOn``, ``collection``, ``referenceRuns``, ``drpQaVersion``,
+        and ``pipelineVersions``: the reducing pipeline's version per product,
+        empty when the file records none.
     thresholds : `pandas.DataFrame`
         One row per metric and population: ``metric``, the population's
         columns, ``higherIsWorse``, ``absolute`` and the threshold fields.
@@ -548,7 +559,17 @@ def readThresholds(path: Path | str) -> tuple[dict, pd.DataFrame]:
     for column in {column for entry in document["thresholds"] for column in entry["population"]}:
         table[column] = pd.Series([row.get(column) for row in rows], index=table.index, dtype=object)
     metadata = {key: document[key] for key in ("derivedOn", "collection", "referenceRuns", "drpQaVersion")}
+    metadata["pipelineVersions"] = _pipeline(document.get("pipelineVersions") or {})
     return metadata, table
+
+
+def _pipeline(versions: Mapping[str, str]) -> dict[str, str]:
+    """Return pipeline versions as plain strings, in `PIPELINE_PRODUCTS` order, the others after."""
+    ordered = [
+        *(p for p in PIPELINE_PRODUCTS if p in versions),
+        *(p for p in versions if p not in PIPELINE_PRODUCTS),
+    ]
+    return {product: str(versions[product]) for product in ordered}
 
 
 def _populationValue(value):

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.readers import chooseRun, readMetrics
+from pfs.drp.qa.metrics.readers import chooseRun, readMetrics, readPipelineVersions
 
 
 @dataclass(frozen=True)
@@ -134,3 +134,50 @@ class TestChooseRun:
         """The CLI's error for a missing collection names it; that is not a listing."""
         error = [f"Collection '{self.PREFIX}/001' not found"]
         assert chooseRun(error, self.PREFIX, newRun=True) == f"{self.PREFIX}/001"
+
+
+class StubURI:
+    """Stands in for ``lsst.resources.ResourcePath``: a local file."""
+
+    def __init__(self, path):
+        self.ospath = str(path)
+
+    def as_local(self):
+        from contextlib import nullcontext
+
+        return nullcontext(self)
+
+
+def testReadPipelineVersions():
+    """One query for every visit, each pfsArm's header read once, unrecorded versions null."""
+    headers = {
+        (101, "r", 1): {"VERSION_DATAMODEL": "a", "VERSION_OBS_PFS": "b", "VERSION_DRP_STELLA": "c"},
+        (101, "b", 1): {"VERSION_DRP_STELLA": "c"},
+    }
+    butler = StubButler({key: table(2.7) for key in headers})
+    butler.getURI = lambda ref: (ref.dataId["visit"], ref.dataId["arm"], ref.dataId["spectrograph"])
+    versions = readPipelineVersions(butler, [101, 101], collections=["out"], readHeader=headers.__getitem__)
+    assert [query["datasetType"] for query in butler.queries] == ["pfsArm"]
+    assert butler.queries[0]["find_first"] and butler.queries[0]["collections"] == ["out"]
+    assert versions[["visit", "arm", "spectrograph"]].values.tolist() == [[101, "b", 1], [101, "r", 1]]
+    assert versions["versionDrpStella"].tolist() == ["c", "c"]
+    assert versions["versionObsPfs"].iloc[1] == "b" and pd.isna(versions["versionObsPfs"].iloc[0])
+    assert versions["versionDatamodel"].iloc[1] == "a" and pd.isna(versions["versionDatamodel"].iloc[0])
+    assert readPipelineVersions(butler, []).empty
+
+
+def testReadPipelineVersionsFromFits(tmp_path):
+    """The default reader takes the primary header of the file, HIERARCH keys and all."""
+    fits = pytest.importorskip("astropy.io.fits")
+    path = tmp_path / "pfsArm.fits"
+    header = fits.Header()
+    header["HIERARCH VERSION_DATAMODEL"] = "w.2026.40"
+    header["HIERARCH VERSION_OBS_PFS"] = "w.2026.40"
+    header["HIERARCH VERSION_DRP_STELLA"] = "w.2026.41-6-ge56938d2"
+    fits.HDUList([fits.PrimaryHDU(header=header), fits.ImageHDU()]).writeto(path)
+    butler = StubButler({(101, "r", 1): table(2.7)})
+    butler.getURI = lambda ref: StubURI(path)
+    versions = readPipelineVersions(butler, [101])
+    assert versions[["versionDatamodel", "versionObsPfs", "versionDrpStella"]].values.tolist() == [
+        ["w.2026.40", "w.2026.40", "w.2026.41-6-ge56938d2"]
+    ]

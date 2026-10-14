@@ -453,6 +453,21 @@ verdict is known. The decisions behind the current set:
   +41 %. On Run25 no known-good arc or quartz fails and one warns (135841 m1 Argon); every known-bad one fails.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
+- **Thresholds hold for the pipeline that reduced their visits** (PIPE2D-1938). Two reductions of the same Run25
+  exposures put n-arm quartz widths up to 53 % apart, so a verdict can follow the reduction rather than the
+  instrument. The thresholds file records that pipeline (`pipelineVersions`: datamodel, obs_pfs and drp_stella, as
+  drp_stella's `getPfsVersions` writes them into each `pfsArm` header). Given it, the gate marks a verdict on a
+  reduction made with another pipeline, or an unknown one, provisional (`qaProvisional`, with the reason in
+  `qaPipeline`); comparison mode reads each reduction's versions from its `pfsArm` and counts the provisional
+  verdicts in its report. A file that records no pipeline makes every verdict provisional.
+- **Re-baseline at each summit stack upgrade.** The live gate judges `drpActor`'s reductions, made with the stack
+  deployed at the summit, so a new stack needs thresholds of its own:
+  1. Reduce the reference sets fresh with the new stack:
+     `qaComparison.py run --period run25 --fresh --cadence set` (and the other reference runs).
+  2. Re-derive the thresholds from those reductions with [`docs/qa-thresholds.ipynb`](docs/qa-thresholds.ipynb),
+     which records their pipeline.
+  3. Compare the new thresholds with the old, metric by metric, and explain any that moved.
+  4. Adopt the new file; until then, verdicts on the new stack's reductions are provisional.
 
 The detail:
 

@@ -402,9 +402,11 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     from lsst.daf.butler import Butler
 
     from pfs.drp.qa.comparison.butlerQueries import detectorHoldings
-    from pfs.drp.qa.comparison.findings import findings, judgeImages, taskThresholds
+    from pfs.drp.qa.comparison.findings import findings, judgeImages, taskPipeline, taskThresholds
     from pfs.drp.qa.comparison.report import ReportInputs, buildReport, failedSummary, populations
-    from pfs.drp.qa.metrics.readers import readMetrics
+    from pfs.drp.qa.metrics.gate import pipelineMismatch
+    from pfs.drp.qa.metrics.readers import readMetrics, readPipelineVersions
+    from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS
 
     butler = Butler(args.butler, writeable=False)
     judgedVisits = visits.loc[visits["judged"], "pfs_visit_id"]
@@ -435,8 +437,16 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
 
     # The output's own runs only: the chain also holds earlier versions' verdicts.
     metrics = readMetrics(butler, done, collections=ownRuns(butler, output))
+    # The pipeline of each reduction judged, from the pfsArm made beside its calexp: the output
+    # chain is searched as imageQualityQa searched it for the calexp.
+    print(f"reading the pipeline of {len(metrics)} reductions from their pfsArm headers", flush=True)
+    versions = readPipelineVersions(butler, done, collections=[output])
+    metrics = metrics.drop(columns=list(PIPELINE_COLUMNS.values()), errors="ignore").merge(
+        versions, on=["visit", "arm", "spectrograph"], how="left"
+    )
     metrics.to_parquet(workDir / f"iqQaMetrics-{period.name}.parquet")
     config = butler.get("imageQualityQa_config", collections=[output])
+    metrics = metrics.join(pipelineMismatch(metrics, taskPipeline(config)))
     judged = judgeImages(metrics, visits, taskThresholds(config))
     from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 
