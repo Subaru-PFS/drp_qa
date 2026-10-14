@@ -99,9 +99,32 @@ class TestLabelRows:
 
 class TestCalibrate:
     def testPopulationsAreSeparated(self, table):
-        fwhm = table[table["metric"] == "medFwhm"]
+        fwhm = table[(table["metric"] == "medFwhm") & (table["method"] == "percentile")]
         assert set(fwhm["group"]) == {"b/arc", "r/arc", "b/trace", "r/trace", "m/arc"}
         assert row(table, "medFwhm", "b/arc")["fail"] < 2.8 < row(table, "medFwhm", "b/trace")["warn"]
+
+    def testToleranceIsPerDetectorAndLamp(self, table):
+        """MedFwhm also gets a tolerance row per arm, spectrograph, obsType and lamp; nLines doesn't."""
+        tolerance = table[table["method"] == "tolerance"]
+        assert set(tolerance["metric"]) == {"medFwhm"}
+        assert set(tolerance["group"]) == {
+            "b/1/arc/Neon",
+            "r/1/arc/Neon",
+            "b/1/trace/",
+            "r/1/trace/",
+            "m/1/arc/Neon",
+        }
+        b = row(table, "medFwhm", "b/1/arc/Neon")
+        assert b["warn"] == pytest.approx(b["median"] * 1.03, abs=0.001)
+        assert b["fail"] == pytest.approx(b["median"] * 1.05, abs=0.001)
+        assert b["badOk"] and b["goodFlaggedWarn"] == 0.0
+        assert "WARN 3% and FAIL 5% above the known-good median" in b["provenance"]
+
+    def testPooledCalibrationHasNoTolerance(self):
+        """An explicit grouping overrides both kinds of population."""
+        assert set(calibrate(makeMetrics(), makeVisitSet(), ["medFwhm"], groupBy=[])["method"]) == {
+            "percentile"
+        }
 
     def testSeparationCatchesWhatPoolingMisses(self, table):
         """The bad arc at 3.0 px fails against arcs, and hides among traces when pooled."""
@@ -260,13 +283,57 @@ def testThresholdsFileRoundTrip(tmp_path):
     }
     derived = table[table["nGood"] > 0]
     assert len(thresholds) == len(derived), "populations with no good data are not thresholds"
+    percentile = thresholds["method"] == "percentile"
     b = thresholds[
-        (thresholds["metric"] == "medFwhm") & (thresholds["arm"] == "b") & (thresholds["obsType"] == "arc")
+        percentile
+        & (thresholds["metric"] == "medFwhm")
+        & (thresholds["arm"] == "b")
+        & (thresholds["obsType"] == "arc")
     ]
     expected = row(table, "medFwhm", "b/arc")
     assert b["warn"].item() == expected["warn"] and b["fail"].item() == expected["fail"]
     assert b["provenance"].item() == expected["provenance"]
     assert not thresholds.loc[thresholds["metric"] == "nLines", "higherIsWorse"].any()
+    # Tolerance entries name the spectrograph as written, and a trace no lamp.
+    assert thresholds.loc[~percentile, "spectrograph"].tolist() == [1] * 4, "m/arc has no good data"
+    assert thresholds.loc[percentile, "spectrograph"].isna().all()
+    trace = thresholds[~percentile & (thresholds["obsType"] == "trace")]
+    assert len(trace) == 2 and trace["species"].isna().all()
+
+
+def testToleranceJudgesEachSpectrographByItsOwnWidth(tmp_path):
+    """A broadened narrow spectrograph hides under a per-arm p99, and fails its own tolerance.
+
+    The spectrographs are 6 % apart, and the narrower one broadens by 5.5 %.
+    """
+    from pfs.drp.qa.metrics.calibration import writeThresholds
+    from pfs.drp.qa.metrics.gate import judge
+
+    rng = np.random.default_rng(5)
+    rows = [
+        {"visit": visit, "arm": "r", "spectrograph": spectrograph, "obsType": "trace", "seqName": "Trace"}
+        | {"medFwhm": width + rng.normal(0.0, 0.003)}
+        for visit in TRACE_VISITS
+        for spectrograph, width in ((2, 3.2), (4, 3.4))
+    ]
+    broadened = {"visit": 3000, "arm": "r", "spectrograph": 2, "obsType": "trace", "seqName": "Trace"}
+    metrics = pd.DataFrame([*rows, broadened | {"medFwhm": 3.2 * 1.055}])
+    visitSet = ValidationVisitSet(
+        knownGood=(ValidationVisit(visits=TRACE_VISITS, expect="PASS"),),
+        knownBad=(ValidationVisit(visits=(3000,), expect="FAIL", metric="medFwhm"),),
+    )
+    table = calibrate(metrics, visitSet, ["medFwhm"])
+    path = writeThresholds(table, tmp_path / "t.yaml", "c", [25], "v")
+
+    judged = judge(metrics, path).set_index(["visit", "spectrograph"])
+    good = judged.drop(index=3000, level="visit")
+    assert (good["status"] == "PASS").all()
+    assert good["population"].str.contains("spectrograph=").all()
+    assert judged.loc[(3000, 2), "status"] == "FAIL"
+    assert judged.loc[(3000, 2), "population"] == "arm=r obsType=trace spectrograph=2"
+    # Negative control: the per-arm percentile entries alone pass it.
+    perArm = writeThresholds(table[table["method"] == "percentile"], tmp_path / "arm.yaml", "c", [25], "v")
+    assert judge(metrics, perArm).set_index(["visit", "spectrograph"]).loc[(3000, 2), "status"] == "PASS"
 
 
 def testThresholdsFileVersionIsChecked(tmp_path):
@@ -276,3 +343,29 @@ def testThresholdsFileVersionIsChecked(tmp_path):
     path.write_text("version: 99\nthresholds: []\n")
     with pytest.raises(ValueError, match="thresholds version"):
         readThresholds(path)
+
+
+def testThresholdsFileVersionTwoMarksTheMethod(tmp_path):
+    """Version 2 added ``method``: a version-1 reader rejects the file rather than misread it."""
+    import yaml
+
+    from pfs.drp.qa.metrics.calibration import writeThresholds
+
+    table = calibrate(makeMetrics(), makeVisitSet(), ["medFwhm"])
+    document = yaml.safe_load(writeThresholds(table, tmp_path / "t.yaml", "c", [25], "v").read_text())
+    assert document["version"] == 2
+    assert {entry["method"] for entry in document["thresholds"]} == {"percentile", "tolerance"}
+
+
+def testVersionOneFileReadsAsPercentile(tmp_path):
+    from pfs.drp.qa.metrics.calibration import readThresholds
+
+    path = tmp_path / "t.yaml"
+    path.write_text(
+        "version: 1\nderivedOn: '2026-10-05'\ncollection: c\nreferenceRuns: [25]\ndrpQaVersion: v\n"
+        "thresholds:\n  - {metric: medFwhm, population: {arm: b}, higherIsWorse: true, absolute: false,"
+        " warn: 3.0, fail: 3.5, provenance: p}\n"
+    )
+    _, thresholds = readThresholds(path)
+    assert thresholds["method"].tolist() == ["percentile"]
+    assert thresholds["arm"].tolist() == ["b"]

@@ -74,6 +74,23 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `pfs/drp/qa/metrics/data` with the script that makes it from the PIPE2D-1914 derivation: `medFwhm` (arcs) and
   `nLines`, quartz `nLines` set by hand, twilight `nLines` not judged. A relative
   `thresholdsFile` is looked up there (`gate.thresholdsPath`). Changes verdicts.
+- **`pfs.drp.qa.crossDispersion`** (PIPE2D-1918) — trace width on a calexp, each fiber fitted jointly with its
+  neighbours (`measureImageWidths`), and `profileFwhm`, the half-maximum width of an oversampled fiber profile.
+  FWHM includes the pixel response, as `SdssShape` and `fiberProfiles` widths do. `docs/trace-widths.ipynb`
+  is the comparison behind the choice.
+- **`pfs.drp.qa.utils.provenance`** (PIPE2D-1918) — the calibrations a dataset was made with, read from its
+  Butler provenance rather than looked up again.
+- **Quartz `medFwhm` is judged** (PIPE2D-1918) — `iqQaThresholds-run25.yaml` gains b, r and n quartz entries,
+  derived from the Run25 validation visits rerun with the calexp width (`u/wtg/qa-thresholds/004`); m-arm quartz
+  `medFwhm` is not judged, its derivation being below the sample floor. The gate fixtures now come from that run, and the
+  config regression check keeps the `003` run (`iqQaMetrics-config.parquet`). Changes verdicts.
+- **`medFwhm` is judged per detector and lamp** (PIPE2D-1942) — WARN 3 % and FAIL 5 % above the Run25 known-good
+  median of each arm, spectrograph, `obsType` and lamp (`MetricSpec.tolerance`, `thresholds.deriveTolerance`); the
+  per-arm percentiles judge only an image with no such median. `calibrate` adds these rows (`method` `tolerance`),
+  thresholds files record each entry's `method` (schema version 2; version 1 still reads), and `plotting.plotTolerances` draws them. m-arm quartz is now
+  judged. No Run25 known-good arc or quartz fails. Changes verdicts.
+- **Obstructed Run30 frames are known-bad for `nLines`** (PIPE2D-1942) — 150115, 150116, 150641 and 150642
+  named `pctFlagged`, which is no longer judged; `nLines` is what fails them, and now its known-bad check covers them.
 - **`pctFlagged` is no longer judged** (PIPE2D-1929) — the shipped thresholds file has one entry for it with
   neither WARN nor FAIL, which overrides the `flagRate*Threshold` config fields: their n-arm 15/20 % sits below
   the known-good n-arm Neon sets of Run25 and Run30. Changes verdicts.
@@ -164,6 +181,12 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Fixed
 
+- **`imageQualityQa` measures quartz from the calexp** (PIPE2D-1918) — the calexp trace width used a
+  `profileHalfWidth` 7 aperture, wider than the 6.17 px fiber pitch, so it took neighbouring traces as
+  background, flagged nearly every sample, and every Run25 quartz fell back to `fiberProfiles`. Each fiber is
+  now fitted jointly with its neighbours (`crossDispersion.measureImageWidths`), on every calexp path (trace,
+  arc fallback, FLUXSTD). Changes `medFwhm` on quartz and on those paths.
+
 - **`dmResiduals` import** — `getDescriptionCounts` is now imported from
   `pfs.drp.stella.fitDetectorMap`. The former `pfs.drp.stella.fitDistortedDetectorMap` module no longer
   exists in `drp_stella`, so `DetectorMapResidualsTask` failed to import and the `dmResiduals` pipeline
@@ -191,6 +214,18 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
+- **Comparison mode reuses earlier versions' reductions** (PIPE2D-1918) — by default, a new drp_qa version now
+  reuses the reductions an earlier version's comparison of the period made, as `--fresh` already did, and judges
+  them again; it no longer reduces them a second time. A comparison's own verdicts are read, counted and skipped from
+  the runs it wrote (`butlerQueries.ownRuns`), not from its output chain, which also holds those earlier
+  collections: their verdicts were counted as judged, read into the report and skipped by `pipetask`.
+- **`imageQualityQa` calexp and fallback widths** (PIPE2D-1918) — `iqQaData` gains `fwhmIntrinsic` (without the
+  pixel response) and `snr`, and `fluxErr` is the fit's error, no longer 1. The `fiberProfiles` fallback reads
+  each profile at half maximum, not drp_stella's second moment, which varied 2.3-3.7 px across detectors
+  whose profiles agree; changes `medFwhm` where quartz falls back. `profileYStride` defaults to 100 (was 50);
+  `profileHalfWidth` is deprecated and ignored; `minPeakSN` is now the significance of the fitted trace flux. The joint
+  fit computes each pixel edge's Gaussian integral once, searches only near its first pass's width on the second,
+  and on a science frame fits only the flux standards: about 1.7x faster on a quartz, ~10x on a science frame.
 - **Build and packaging** — `pyproject.toml` is now the single source of build, lint, and test configuration. Ruff
   replaces Black, isort, and Flake8. EUPS `setup -r .` still works via
   `ups/drp_qa.table`, but there is no longer a build step.

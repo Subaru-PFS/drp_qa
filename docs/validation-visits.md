@@ -90,8 +90,8 @@ identified by visit number, with no observer, target or design names.
   scans 140106–140112 and 140115–140121).
 - **Unlit spectrograph (Run27 nightly `ImageQuality` arcs):** exposures noted "No light on
   SM1" or "SM2". The unlit spectrograph's detectors have no lines; `nLines`, `FAIL`.
-- **Obstructed frames (Run30):** taken with the M1 cover or the top screen closed;
-  `pctFlagged`.
+- **Obstructed frames (Run30):** taken with the M1 cover or the top screen closed. Less
+  light reaches the detectors, so fewer lines are found; `nLines`, `FAIL`.
 - **Partial slit illumination (Run30):** only one fiber group lit. Shapes are fine and the
   line count is not; `nLines`, `WARN`.
 - **Off-zenith Helium detectorMap tests (Run30, alt 45–49):** a real flexure offset against
@@ -179,10 +179,10 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 140640 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
 | 140649 | 27 | scienceArc | b, r, n | 1, 2 | ImageQuality | FAIL | `nLines` | No light on SM1 or SM2. (Run27, 1 s arc) |
 | 140651 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
-| 150115 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `pctFlagged` | M1 cover closed. |
-| 150116 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `pctFlagged` | M1 cover closed. |
-| 150641 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `pctFlagged` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
-| 150642 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `pctFlagged` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
+| 150115 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `nLines` | M1 cover closed. |
+| 150116 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `nLines` | M1 cover closed. |
+| 150641 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `nLines` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
+| 150642 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `nLines` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
 | 149217 | 30 | scienceTrace | b, m | 1, 2, 3, 4 | Trace | WARN | `nLines` | Only group 2 was illuminated. |
 | 149398 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 3 was illuminated. |
 | 149881 | 30 | scienceArc | b, m | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 2 was illuminated. |

@@ -9,7 +9,9 @@ import pytest
 
 from pfs.drp.qa.metrics.thresholds import (
     MIN_SAMPLES,
+    MIN_TOLERANCE_SAMPLES,
     deriveThresholds,
+    deriveTolerance,
     formatProvenance,
     quantileInterval,
     resolutionFor,
@@ -249,6 +251,54 @@ class TestDeriveThresholds:
     def testInvalidPercentilesRaise(self, kwargs, message):
         with pytest.raises(ValueError, match=message):
             deriveThresholds([1.0, 2.0], metric="test", **kwargs)
+
+
+class TestDeriveTolerance:
+    def testThresholdsSitTheToleranceAboveTheMedian(self):
+        suggestion = deriveTolerance([3.10, 3.15, 3.20], "w", 0.03, 0.05, derivedOn=date(2026, 10, 13))
+        assert suggestion.median == pytest.approx(3.15)
+        assert suggestion.warnRaw == pytest.approx(3.2445) and suggestion.warn == pytest.approx(3.245)
+        assert suggestion.failRaw == pytest.approx(3.3075) and suggestion.fail == pytest.approx(3.308)
+        assert suggestion.tolerance == (0.03, 0.05)
+        assert suggestion.goodFlaggedWarn == 0.0 and not suggestion.degenerate
+        assert suggestion.provenance == (
+            "Derived 2026-10-13 from the validation visit set (n=3): WARN 3% and FAIL 5% above the "
+            "known-good median, 3.15. MEDIAN UNBOUNDED: n=3 cannot bound the median at 95% confidence."
+        )
+
+    def testAWideToleranceRoundsCoarser(self):
+        """The step is the power of ten below a tenth of the WARN margin, rounded outwards."""
+        assert deriveTolerance([3.0, 3.4, 3.8], "w", 0.03, 0.05).warn == pytest.approx(3.51)
+        assert deriveTolerance([2.0, 2.4, 2.8], "w", 0.03, 0.05).warn == pytest.approx(2.472)
+
+    def testLowerIsWorseSitsBelow(self):
+        suggestion = deriveTolerance([100.0] * 7, "n", 0.03, 0.05, higherIsWorse=False, units=" lines")
+        assert (suggestion.warn, suggestion.fail) == (97.0, 95.0)
+        assert "below the known-good median, 100 lines" in suggestion.provenance
+
+    def testTheMedianIsBoundedFromSixValues(self):
+        """The interval on the median, scaled to FAIL, is open below six values at 95 %."""
+        five = deriveTolerance(np.linspace(3.0, 3.2, 5), "w", 0.03, 0.05)
+        six = deriveTolerance(np.linspace(3.0, 3.2, 6), "w", 0.03, 0.05)
+        assert not five.failBounded and math.isinf(five.failInterval[1])
+        assert six.failBounded and six.failInterval[0] < six.fail < six.failInterval[1]
+
+    def testFewValuesAreUnreliable(self):
+        assert not deriveTolerance([3.1] * (MIN_TOLERANCE_SAMPLES - 1), "w", 0.03, 0.05).reliable
+        assert deriveTolerance([3.1] * MIN_TOLERANCE_SAMPLES, "w", 0.03, 0.05).reliable
+
+    @pytest.mark.parametrize(
+        ("values", "warn", "fail", "message"),
+        [
+            ([np.nan], 0.03, 0.05, "No finite values"),
+            ([-1.0, 0.0], 0.03, 0.05, "not positive"),
+            ([3.0], 0.05, 0.03, "0 < warn < fail"),
+            ([3.0], 0.0, 0.05, "0 < warn < fail"),
+        ],
+    )
+    def testInvalidInputsRaise(self, values, warn, fail, message):
+        with pytest.raises(ValueError, match=message):
+            deriveTolerance(values, "w", warn, fail)
 
 
 class TestVerifyKnownBad:

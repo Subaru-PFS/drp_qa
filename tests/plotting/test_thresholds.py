@@ -3,10 +3,11 @@
 import numpy as np
 import pandas as pd
 import pytest
+from matplotlib.collections import LineCollection, PathCollection
 
 from pfs.drp.qa.metrics.calibration import calibrate, labelRows
 from pfs.drp.qa.metrics.validationVisits import ValidationVisit, ValidationVisitSet
-from pfs.drp.qa.plotting import plotThresholds
+from pfs.drp.qa.plotting import plotThresholds, plotTolerances
 
 
 def arcRow(visit: int, arm: str, fwhm: float) -> dict:
@@ -43,9 +44,34 @@ def panel(fig, group: str):
 
 def testOnePanelPerPopulation(data):
     labelled, table = data
+    assert set(table["method"]) == {"percentile", "tolerance"}
     fig = plotThresholds(labelled, table, "medFwhm", ncols=2)
-    assert len([ax for ax in fig.axes if ax.get_visible()]) == 3
+    assert len([ax for ax in fig.axes if ax.get_visible()]) == 3, "percentile populations only"
     assert len(fig.axes) == 4, "the unused fourth slot is hidden"
+
+
+def testTolerancesShareOneAxisPerArm(data):
+    """One panel per arm and obsType with good data; values as percent from their population's median."""
+    labelled, table = data
+    fig = plotTolerances(labelled, table, "medFwhm", ncols=1, limit=10.0)
+    panels = [ax for ax in fig.axes if ax.get_visible()]
+    assert [ax.get_title(loc="left") for ax in panels] == ["b arc", "r arc"], "m has no good data"
+    b = panels[0]
+    assert [label.get_text() for label in b.get_xticklabels()] == ["1 Neon"]
+    row = table[(table["method"] == "tolerance") & (table["group"] == "b/1/arc/Neon")].iloc[0]
+    bars = [c for c in b.collections if isinstance(c, LineCollection)]
+    heights = sorted(float(segment[0][1]) for bar in bars for segment in bar.get_segments())
+    expected = [100 * (row[level] / row["median"] - 1) for level in ("warn", "fail")]
+    assert heights == pytest.approx(expected, abs=1e-6)
+    points = np.concatenate([c.get_offsets() for c in b.collections if isinstance(c, PathCollection)])
+    assert points[:, 1].max() == pytest.approx(10.0), "the known-bad 3.0 px (+15 %) is drawn at the edge"
+    assert np.abs(points[:, 1]).max() <= 10.0
+
+
+def testTolerancesNeedToleranceRows(data):
+    labelled, table = data
+    with pytest.raises(ValueError, match="No tolerance suggestions"):
+        plotTolerances(labelled, table[table["method"] == "percentile"], "medFwhm")
 
 
 def testPanelShowsThresholdsAndRug(data):

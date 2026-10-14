@@ -81,8 +81,9 @@ the pipeline/config glue to run them.
 - **Metrics (`python/pfs/drp/qa/metrics/`)** — stack-free metric containers
   (`fitStats`: `FitStat`/`FitStats`, the rows of `dmQaResidualStats`), and the threshold
   machinery: `validationVisits` loads `data/validationVisits.yaml` (package data; visits
-  with known verdicts), `thresholds` derives WARN/FAIL from a distribution, `calibration`
-  turns stored `iqQaMetrics` into a table of suggestions, and `readers` reads them from a
+  with known verdicts), `thresholds` derives WARN/FAIL from a distribution (or as a
+  tolerance about its median), `calibration` turns stored `iqQaMetrics` into a table of
+  suggestions, and `readers` reads them from a
   Butler it is given. `registry` declares each metric once (direction, units, reference,
   populations); `gate` is the only gating path, judging metrics rows against a thresholds
   file layered over the task config; `longFormat` holds `iqQaSpeciesMetrics`. Read [`docs/qa-principles.md`](docs/qa-principles.md) (rules R1–R7,
@@ -93,8 +94,11 @@ the pipeline/config glue to run them.
   from the YAML (`python -m pfs.drp.qa.metrics.validationVisits tables`) and checked by a
   test.
 - **Support modules (`python/pfs/drp/qa/`)**:
+  - `crossDispersion.py` — stack-free trace widths: the joint fit `imageQualityQa` runs on the calexp, and
+    `profileFwhm` for `fiberProfiles`; the choice is recorded in `docs/trace-widths.ipynb`
   - `storageClasses.py`, `formatters.py` — custom Butler storage classes / formatters
-  - `utils/` — shared helpers (`math.py`; `plotting.py` re-exports `plotting.palettes`)
+  - `utils/` — shared helpers (`math.py`; `plotting.py` re-exports `plotting.palettes`;
+    `provenance.py` reads which calibrations a dataset was made with from its Butler provenance)
   - `tasks/` — auxiliary task helpers (e.g. `overlapRegionLines.py`)
 - **Command-line tools (`bin.src/`)** — run as `python bin.src/<name>.py`:
   - `fitDetectorMapLogQa.py` — stdlib-only OK/WARN/BAD gate over `fitDetectorMap` logs;

@@ -79,7 +79,11 @@ separately for each population (arm, observation type, lamp), rounded outwards t
 well under the scatter, or `FAIL` at a physical limit. Every known-bad visit must reach
 the verdict it expects, and other runs are compared against the result. Offsets from a
 calibration (`medDxCenter`) are not derived this way: they are near zero in the run the
-calibration came from, so their thresholds are a tolerance.
+calibration came from, so their thresholds are a tolerance. Nor, first, is `medFwhm`: each
+detector and lamp is judged by a tolerance above its own known-good median in the reference
+run (`MetricSpec.tolerance`), since those populations are too small for a tail percentile and
+a per-arm percentile blends spectrographs and lamps (R7); the per-arm percentiles judge only
+what has no median.
 
 ## Metric checklist
 
