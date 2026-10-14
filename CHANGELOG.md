@@ -10,6 +10,15 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Judging on the fibers lit** (PIPE2D-1935) — new `iqQaMetrics` columns `linesPerFiber` (unflagged lamp lines per
+  lit fiber on an arc, unflagged trace centroids per lit fiber on a quartz), `nLitFibers` and `nFibers` (the
+  detector's `GOOD` fibers, and those plus the ones hidden behind a black dot, from the pfsConfig; `litFibers`),
+  and `nTraceRows`. On the arc-line path `pctFlagged` is now taken over the lamp lines of lit fibers, without the
+  trace centroids an arc also records, and the quartz calexp trace width is measured on the lit fibers, so a quartz
+  lighting one fiber group no longer falls back to `fiberProfiles`. Comparison mode judges daily arcs and traces
+  measured this way; rows without `nLitFibers` still skip `nLines` and `pctFlagged` there. 149217 is dropped from
+  the validation set: its pfsConfig lights every fiber.
+
 - **Pipeline-version check** (PIPE2D-1938) — the thresholds file records the pipeline that reduced its visits
   (`pipelineVersions`: datamodel, obs_pfs, drp_stella; optional, so the schema stays at version 2), and
   `gate(..., pipeline=)` adds `qaProvisional` and `qaPipeline`, marking a verdict on a reduction made with another

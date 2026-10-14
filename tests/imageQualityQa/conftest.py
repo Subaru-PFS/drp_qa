@@ -137,8 +137,8 @@ def _standIns() -> dict[str, ModuleType]:
     if _missing("pfs.datamodel"):
         modules["pfs.datamodel"] = _module(
             "pfs.datamodel",
-            FiberStatus=SimpleNamespace(GOOD=1),
-            TargetType=SimpleNamespace(FLUXSTD=3),
+            FiberStatus=SimpleNamespace(GOOD=1, BROKENFIBER=2, BLACKSPOT=4),
+            TargetType=SimpleNamespace(SCIENCE=1, FLUXSTD=3, UNASSIGNED=4, ENGINEERING=5, HOME=9),
             PfsConfig=object,
         )
     if _missing("pfs.drp.stella"):
@@ -209,12 +209,18 @@ def header(seqType: str, seqName: str) -> dict:
 
 
 def traceImage(
-    detectorMap: FakeDetectorMap, sigma: float, height: int = 400, peak: float = 1000.0, seed: int = 1
+    detectorMap: FakeDetectorMap,
+    sigma: float,
+    height: int = 400,
+    peak: float = 1000.0,
+    seed: int = 1,
+    fibers: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Return an image of Gaussian traces of width ``sigma`` with unit noise."""
+    """Return an image of Gaussian traces of width ``sigma`` with unit noise; ``fibers`` lit, or all."""
     width = int(detectorMap.pitch * (len(detectorMap.fiberId) + 2))
     columns = np.arange(width, dtype=float)
-    centers = detectorMap.getXCenter(detectorMap.fiberId, np.zeros(len(detectorMap.fiberId)))
+    lit = detectorMap.fiberId if fibers is None else np.asarray(fibers)
+    centers = detectorMap.getXCenter(lit, np.zeros(len(lit)))
     row = sum(peak * np.exp(-0.5 * ((columns - center) / sigma) ** 2) for center in centers)
     rng = np.random.default_rng(seed)
     return np.tile(row, (height, 1)) + rng.normal(0.0, 1.0, (height, width))
@@ -247,14 +253,23 @@ class FakeFiberProfiles:
 
 
 def arcLines(
-    detectorMap: FakeDetectorMap, numPerFiber: int, fwhm: float = 2.5, flagged: int = 0
+    detectorMap: FakeDetectorMap,
+    numPerFiber: int,
+    fwhm: float = 2.5,
+    flagged: int = 0,
+    fibers: np.ndarray | None = None,
+    description: str | None = None,
 ) -> pd.DataFrame:
-    """Return what ``computeImageQuality`` gives: one row per line, the first ``flagged`` flagged."""
-    fiberId = np.repeat(detectorMap.fiberId, numPerFiber)
-    y = np.tile(np.linspace(10.0, 390.0, numPerFiber), len(detectorMap.fiberId))
+    """Return what ``computeImageQuality`` gives: one row per line, the first ``flagged`` flagged.
+
+    The lines are on ``fibers`` (default: all), and carry ``description`` when given
+    (``"Trace"`` for trace centroids, which have no width).
+    """
+    fiberId = np.repeat(detectorMap.fiberId if fibers is None else np.asarray(fibers), numPerFiber)
+    y = np.tile(np.linspace(10.0, 390.0, numPerFiber), len(fiberId) // max(numPerFiber, 1))
     flag = np.zeros(len(fiberId), dtype=bool)
     flag[:flagged] = True
-    return pd.DataFrame(
+    lines = pd.DataFrame(
         {
             "fiberId": fiberId,
             "x": detectorMap.getXCenter(fiberId, y),
@@ -269,6 +284,33 @@ def arcLines(
             "traceOnly": False,
         }
     )
+    if description is not None:
+        lines["description"] = description
+        if description == "Trace":
+            lines["fwhm"] = np.nan
+    return lines
+
+
+class FakePfsConfig:
+    """The fiber columns of a pfsConfig: ``status`` (default GOOD) and ``targetType`` per fiber."""
+
+    def __init__(self, fiberId, status=None, targetType=None):
+        self.fiberId = np.asarray(fiberId, dtype=np.int32)
+        self.fiberStatus = np.full(len(self.fiberId), 1) if status is None else np.asarray(status)
+        self.targetType = np.full(len(self.fiberId), 9) if targetType is None else np.asarray(targetType)
+
+
+def oneGroup(
+    detectorMap: FakeDetectorMap, group: int = 0, groups: int = 4
+) -> tuple[np.ndarray, FakePfsConfig]:
+    """Return the lit fibers of a design lighting every ``groups``-th fiber, and its pfsConfig.
+
+    The others are hidden as the fiberProfiles group designs hide them: ``fiberStatus``
+    BLACKSPOT, ``targetType`` UNASSIGNED.
+    """
+    fiberId = detectorMap.fiberId
+    lit = (np.arange(len(fiberId)) % groups) == group
+    return fiberId[lit], FakePfsConfig(fiberId, status=np.where(lit, 1, 4), targetType=np.where(lit, 9, 4))
 
 
 @pytest.fixture
@@ -315,5 +357,7 @@ def fakes() -> SimpleNamespace:
         traceImage=traceImage,
         noiseImage=noiseImage,
         arcLines=arcLines,
+        PfsConfig=FakePfsConfig,
+        oneGroup=oneGroup,
         PFS_PITCH=PFS_PITCH,
     )

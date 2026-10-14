@@ -640,14 +640,9 @@ known_bad:
 
   # Partial slit illumination: only one fiber group was lit, so most fibers
   # have no usable measurement. The defect is the count, not the shape.
-  - visit: 149217
-    sequenceType: scienceTrace
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    expect: WARN
-    metric: nLines
-    reason: "Only group 2 was illuminated."
+  # 149217 ("Only group 2 was illuminated") was dropped (PIPE2D-1935): its
+  # pfsConfig lights every fiber (584 GOOD, 1 BLACKSPOT on SM1), as 149883's
+  # does, and its metrics are a full slit's (2.43M trace centroids on b1).
   - visit: 149398
     sequenceType: scienceArc
     arms: [b, r, n]

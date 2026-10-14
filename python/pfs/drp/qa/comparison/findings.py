@@ -10,12 +10,15 @@ Judging is `pfs.drp.qa.metrics.gate.judge`, the gate's own path, with the thresh
 ran with, less two cases it can't judge yet. Telescope focus sweeps change how much light enters
 the fibers, not the spectrograph's line widths, so the flux-dependent metrics (`FLUX_METRICS`)
 are not judged on them. Daily arcs and traces are often taken with one fiber group lit, which
-cuts ``nLines`` to about a quarter and raises ``pctFlagged`` on the b and n arms; neither allows for
-the fibers a design lights yet (PIPE2D-1935), so they aren't judged on them (`DAILY_UNJUDGED`).
+cuts ``nLines`` to about a quarter and raises ``pctFlagged`` on the b and n arms. Since PIPE2D-1935
+the task judges ``linesPerFiber`` and takes ``pctFlagged`` on the lamp lines of lit fibers, which
+allow for it; metrics written before then (no ``nLitFibers``) aren't judged on those
+(`DAILY_UNJUDGED`).
 """
 
 import re
 
+import numpy as np
 import pandas as pd
 
 from pfs.drp.qa.metrics.calibration import readThresholds
@@ -34,9 +37,10 @@ __all__ = [
 ]
 
 #: Metrics that depend on how much light reached the fibers.
-FLUX_METRICS = ("nLines", "pctFlagged")
+FLUX_METRICS = ("nLines", "linesPerFiber", "pctFlagged")
 
-#: Metrics not judged on daily arcs and traces until they allow for the fibers lit (PIPE2D-1935).
+#: Metrics not judged on daily arcs and traces when measured before they allowed for the
+#: fibers lit (PIPE2D-1935): rows without ``nLitFibers``.
 DAILY_UNJUDGED = ("nLines", "pctFlagged")
 
 # The ways an IIC command names a lamp: head='sps iis on=neon ...', iisNeon=30, argon=10.
@@ -170,13 +174,24 @@ def judgeImages(metrics: pd.DataFrame, visits: pd.DataFrame, thresholds) -> pd.D
     `pandas.DataFrame`
         `pfs.drp.qa.metrics.gate.judge`'s table, with the status cleared for
         a `FLUX_METRICS` entry on a focus-sweep visit and a `DAILY_UNJUDGED`
-        entry on a daily arc or trace.
+        entry on a daily arc or trace measured without the fibers lit (no
+        ``nLitFibers``).
     """
     judged = judge(metrics, thresholds)
     sweeps = set(visits.loc[visits["focusSweep"].astype(bool), "pfs_visit_id"])
     daily = set(visits.loc[visits["cadence"] == "daily", "pfs_visit_id"])
+    lit = metrics["nLitFibers"] if "nLitFibers" in metrics.columns else pd.Series(np.nan, index=metrics.index)
+    unlit = metrics.loc[lit.isna(), ["visit", "arm", "spectrograph"]]
+    unlitKeys = set(unlit.itertuples(index=False, name=None))
+    measuredUnlit = pd.Series(
+        [
+            key in unlitKeys
+            for key in judged[["visit", "arm", "spectrograph"]].itertuples(index=False, name=None)
+        ],
+        index=judged.index,
+    )
     skip = judged["visit"].isin(sweeps) & judged["metric"].isin(FLUX_METRICS)
-    skip |= judged["visit"].isin(daily) & judged["metric"].isin(DAILY_UNJUDGED)
+    skip |= judged["visit"].isin(daily) & judged["metric"].isin(DAILY_UNJUDGED) & measuredUnlit
     judged.loc[skip, ["status", "reason"]] = ""
     return judged
 

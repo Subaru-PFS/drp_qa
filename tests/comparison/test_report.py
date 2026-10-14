@@ -15,6 +15,7 @@ from pfs.drp.qa.comparison.report import (
     notJudgedSummary,
     provisionalSummary,
     recurringSequences,
+    whyNotJudged,
 )
 
 THRESHOLDS = pd.DataFrame(
@@ -339,3 +340,14 @@ def testNotJudgedIsToldFromUnknown():
         "no threshold: nLines",  # measured, nothing else explains it: a gap in the reference
     ]
     assert notJudgedSummary(verdicts)["images"].sum() == 6
+
+
+def testDailyNoteOnlyWithoutLitFibers():
+    """A daily image measured on its lit fibers (PIPE2D-1935) has its line count judged."""
+    image = pd.Series({"obsType": "trace", "traceOnly": True, "cadence": "daily", "lamps": "halogen"})
+    assert whyNotJudged(pd.Series({**image, "nLitFibers": 150.0})) == "FWHM from fiberProfiles"
+    # Negative control: measured before the fibers lit were counted, it isn't.
+    assert whyNotJudged(image) == "FWHM from fiberProfiles; nLines not judged on daily"
+    assert whyNotJudged(pd.Series({**image, "nLitFibers": np.nan})) == (
+        "FWHM from fiberProfiles; nLines not judged on daily"
+    )

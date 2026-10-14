@@ -91,7 +91,10 @@ def plotMetricComparison(
         for frame, (label, color, style) in zip((current, reference), styles, strict=True):
             if frame is None:
                 continue
-            values = np.sort(frame.loc[frame["arm"] == arm, metric].astype(float).dropna().to_numpy())
+            if metric not in frame:  # a reference measured before the metric existed
+                values = np.empty(0)
+            else:
+                values = np.sort(frame.loc[frame["arm"] == arm, metric].astype(float).dropna().to_numpy())
             counts.append(f"{values.size} {label}")
             if values.size:
                 fraction = np.arange(1, values.size + 1) / values.size

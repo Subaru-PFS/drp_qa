@@ -193,8 +193,19 @@ width, a Gaussian fitted to the profile understates it by 8–10 %, and drp_stel
   `pctLowSN` (flagged with no flux measured — the fit never got that far) and `pctMeasFail`
   (flagged despite a finite flux — a centroid or photometry failure). The split matters:
   `pctLowSN` is usually lamp physics, `pctMeasFail` usually is not.
-- **`nLines`** — Rows of the `lines` dataset: the lines, and on a quartz the trace centroids, that
-  `fitDetectorMap` found, whichever path measures the FWHM. It tracks what was illuminated.
+- **`nLines`** — Rows of the `lines` dataset, whichever path measures the FWHM: a row for every line of the
+  lamp's list on every `GOOD` fiber, flagged when not measured, and the trace centroids `fitDetectorMap` found,
+  on an arc as on a quartz. Not judged: it follows how many fibers the design lights, and on an arc the trace
+  centroids, whose number follows the illumination and the pipeline rather than the lamp (PIPE2D-1935).
+- **`linesPerFiber`** — The judged count: unflagged lamp lines per lit fiber on an arc, unflagged trace centroids
+  per lit fiber on a quartz (about 4,160, one per detector row); `NaN` on other frames or without a pfsConfig.
+  A design that lights one fiber group (the others parked behind their black dots) is judged like a full slit;
+  an obstructed frame, lit by its design but dim, still fails. On Run30's daily neon, a one-group arc measures
+  the same lines on each lit fiber as a fully lit one.
+- **`nLitFibers`**, **`nFibers`** — The detector's fibers the pfsConfig lights (`fiberStatus` `GOOD`, engineering
+  fibers excepted: the only ones `lines` has rows for), and those it lights or hides behind a black dot
+  (`BLACKSPOT`). `pctFlagged` on the arc-line path is taken over the lamp lines of the lit fibers, and the calexp
+  trace width over the lit fibers. **`nTraceRows`** counts the trace centroids in `lines`.
 - **`traceOnly`** — `True` when FWHM comes from fiber profile calibration widths rather than live measurements; these
   values reflect the calibration epoch, not the current visit, so `medFwhm` is then neither judged nor used to
   derive thresholds, and `pctFlagged` is `NaN`. A quartz falls back to them whenever its calexp gives no usable

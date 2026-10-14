@@ -183,6 +183,11 @@ def testDailyLitFiberMetricsNotJudged(periods, visit, listing):
     assert judged[(10, "nLines")] == "FAIL" and judged[(10, "pctFlagged")] == "FAIL"
     assert describeSetup(visits.set_index("pfs_visit_id").loc[1]).startswith("scienceArc 'Arc: Neon' (daily)")
 
+    # Measured on the fibers lit (PIPE2D-1935), the daily arc is judged like the set.
+    lit = metrics.assign(nLitFibers=150.0)
+    judged = judgeImages(lit, visits, thresholds).set_index(["visit", "metric"])["status"]
+    assert judged[(1, "nLines")] == "FAIL" and judged[(1, "pctFlagged")] == "FAIL"
+
 
 def testExpectedFromTheValidationSet(defocus):
     visits, metrics = defocus
