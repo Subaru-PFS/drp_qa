@@ -301,6 +301,12 @@ def testShippedFileVerdicts(stored):
 
     obstructed = stored["visit"].isin([150115, 150116, 150641, 150642])
     assert (verdicts.loc[obstructed, "qaStatus"] == "FAIL").all()
+    # The validation set records them as known-bad for nLines, the metric that fails them.
+    lines = labelRows(stored, loadValidationVisits(), "nLines")
+    lines = lines[lines["visit"].isin([150115, 150116, 150641, 150642])]
+    assert len(lines) == obstructed.sum() and (lines["validation"] == "bad:FAIL").all()
+    nLines = judged[judged["metric"] == "nLines"].set_index("row")
+    assert (nLines.loc[lines.index, "status"] == "FAIL").all()
     # Run25 quartz of the validation set: the hand-set nLines passes every one.
     run25Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(133040, 135850)
     rows = np.flatnonzero(run25Quartz)
