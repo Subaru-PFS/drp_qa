@@ -13,6 +13,7 @@ from pfs.drp.qa.comparison.plan import (
     outputCollection,
     passes,
     pipetaskCommand,
+    selectCadences,
     summarize,
 )
 
@@ -324,3 +325,29 @@ def testReducePassTakesTheWholeSequence(classified):
     calibration = next(item for item in result if item.name == "calibration")
     assert calibration.visits == (1, 2)  # visit 1 too, so cosmicray combines the sequence
     assert calibration.groups == {1: 1, 2: 1}
+
+
+def testSelectCadences(periods, visit, listing):
+    visits = classifyVisits(
+        listing(
+            *(
+                visit(10 + i, f"2026-01-03 18:0{i}", "scienceArc", sequence=52, cameras="b1")
+                for i in range(3)
+            ),  # set
+            visit(
+                20, "2026-01-03 17:00", "scienceArc", sequence=60, name="Arc: Neon", cameras="b1"
+            ),  # single
+            visit(30, "2026-01-03 20:00", "scienceObject", sequence=70, cameras="b1"),  # sky
+            visit(40, "2026-01-04 15:00", "darks", sequence=80, cameras="b1"),
+        ),
+        periods.values(),
+    )
+    selected = selectCadences(visits, ["set"]).set_index("pfs_visit_id")
+    assert selected.loc[[10, 11, 12], "judged"].all()
+    assert not selected.loc[[20, 30], "judged"].any()  # the single and the sky frame aren't sets
+    assert selected.loc[20, "reason"] == "cadence not selected"
+    assert selected.loc[40, "reason"] == "no method for darks"  # untouched, so the darks timeline keeps it
+    assert selectCadences(visits, []).equals(visits)
+    holdings = _holdings([(v, "b", 1, True, False, False) for v in (10, 11, 12, 20, 30)])
+    result = passes(selected.reset_index(), coverage(selected.reset_index(), holdings))
+    assert [item.visits for item in result] == [(10, 11, 12)]

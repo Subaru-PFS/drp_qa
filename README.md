@@ -561,7 +561,9 @@ python bin.src/qaComparison.py report --period run30 --data-dir ~/Projects/Subar
 ```
 
 `plan` prints the `pipetask` commands as Python lists, for running from a notebook instead; `-j` sets the
-`pipetask` processes (default 8). By default the reductions in `drpActor/reductions` are reused, each made with the
+`pipetask` processes (default 8). `--cadence set` (or `daily`, `single`; repeatable) judges only the arcs and traces
+of those cadences, e.g. the calibration sets that thresholds are derived from; the other visits stay listed as
+`cadence not selected`. By default the reductions in `drpActor/reductions` are reused, each made with the
 pipeline of its day, and so are those an earlier drp_qa version's comparison of the period made beside them, its
 verdicts being judged again; `--fresh` reduces everything
 with the current pipeline instead, so runs are compared on a level field (their calibrations are still each
