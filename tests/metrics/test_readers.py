@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.readers import chooseRun, readMetrics
+from pfs.drp.qa.metrics.readers import chooseRun, readMetrics, readPipelineVersions, readReductionPipelines
 
 
 @dataclass(frozen=True)
@@ -134,3 +134,112 @@ class TestChooseRun:
         """The CLI's error for a missing collection names it; that is not a listing."""
         error = [f"Collection '{self.PREFIX}/001' not found"]
         assert chooseRun(error, self.PREFIX, newRun=True) == f"{self.PREFIX}/001"
+
+
+class StubURI:
+    """Stands in for ``lsst.resources.ResourcePath``: a local file."""
+
+    def __init__(self, path):
+        self.ospath = str(path)
+
+    def as_local(self):
+        from contextlib import nullcontext
+
+        return nullcontext(self)
+
+
+def testReadPipelineVersions():
+    """One query for every visit, each pfsArm's header read once, unrecorded versions null."""
+    headers = {
+        (101, "r", 1): {"VERSION_DATAMODEL": "a", "VERSION_OBS_PFS": "b", "VERSION_DRP_STELLA": "c"},
+        (101, "b", 1): {"VERSION_DRP_STELLA": "c"},
+    }
+    butler = StubButler({key: table(2.7) for key in headers})
+    butler.getURI = lambda ref: (ref.dataId["visit"], ref.dataId["arm"], ref.dataId["spectrograph"])
+    versions = readPipelineVersions(butler, [101, 101], collections=["out"], readHeader=headers.__getitem__)
+    assert [query["datasetType"] for query in butler.queries] == ["pfsArm"]
+    assert butler.queries[0]["find_first"] and butler.queries[0]["collections"] == ["out"]
+    assert versions[["visit", "arm", "spectrograph"]].values.tolist() == [[101, "b", 1], [101, "r", 1]]
+    assert versions["versionDrpStella"].tolist() == ["c", "c"]
+    assert versions["versionObsPfs"].iloc[1] == "b" and pd.isna(versions["versionObsPfs"].iloc[0])
+    assert versions["versionDatamodel"].iloc[1] == "a" and pd.isna(versions["versionDatamodel"].iloc[0])
+    assert readPipelineVersions(butler, []).empty
+
+
+def testReadPipelineVersionsFromFits(tmp_path):
+    """The default reader takes the primary header of the file, HIERARCH keys and all."""
+    fits = pytest.importorskip("astropy.io.fits")
+    path = tmp_path / "pfsArm.fits"
+    header = fits.Header()
+    header["HIERARCH VERSION_DATAMODEL"] = "w.2026.40"
+    header["HIERARCH VERSION_OBS_PFS"] = "w.2026.40"
+    header["HIERARCH VERSION_DRP_STELLA"] = "w.2026.41-6-ge56938d2"
+    fits.HDUList([fits.PrimaryHDU(header=header), fits.ImageHDU()]).writeto(path)
+    butler = StubButler({(101, "r", 1): table(2.7)})
+    butler.getURI = lambda ref: StubURI(path)
+    versions = readPipelineVersions(butler, [101])
+    assert versions[["versionDatamodel", "versionObsPfs", "versionDrpStella"]].values.tolist() == [
+        ["w.2026.40", "w.2026.40", "w.2026.41-6-ge56938d2"]
+    ]
+
+
+class RunButler:
+    """Holds pfsArms in RUN collections; a chain is searched first run first, as find_first does."""
+
+    def __init__(self, runs: dict[str, dict[tuple, str]]):
+        self.runs = runs  # run -> {(visit, arm, spectrograph): drp_stella version}
+        self.queries = []
+
+    def query_datasets(self, datasetType, collections=None, where="", bind=None, **kwargs):
+        self.queries.append(list(collections))
+        found = {}
+        for run in collections:
+            for key in self.runs.get(run, {}):
+                if key[0] in set(bind["visits"]) and key not in found:
+                    found[key] = run
+        return [
+            StubRef(datasetType, {"visit": v, "arm": a, "spectrograph": s}, run)
+            for (v, a, s), run in found.items()
+        ]
+
+    def getURI(self, ref):
+        dataId = ref.dataId
+        return self.runs[ref.run][(dataId["visit"], dataId["arm"], dataId["spectrograph"])]
+
+
+def testReductionPipelinesComeFromTheCalexpRun():
+    """A later reduction of the detector, first in the chain, doesn't stand in for the one judged."""
+    butler = RunButler(
+        {
+            "PFS/new": {(1, "b", 1): "w.2026.41"},  # reduced again after the verdict
+            "PFS/old": {(1, "b", 1): "w.2026.38", (1, "r", 1): "w.2026.38"},
+        }
+    )
+    readHeader = lambda version: {"VERSION_DRP_STELLA": version}  # noqa: E731
+    metrics = pd.DataFrame(
+        {
+            "visit": [1, 1, 1],
+            "arm": ["r", "b", "b"],
+            "spectrograph": 1,
+            "calexpRun": ["PFS/old", "PFS/old", None],
+        },
+        index=[7, 7, 3],
+    )
+    versions = readReductionPipelines(butler, metrics, readHeader=readHeader)
+    assert versions.index.tolist() == [7, 7, 3]
+    assert versions["versionDrpStella"].fillna("").tolist() == ["w.2026.38", "w.2026.38", ""]
+    assert butler.queries == [["PFS/old"]]
+    # The fallback searches a chain, so it finds the latest: only right for a single reduction.
+    fromChain = readReductionPipelines(
+        butler, metrics, fallback=["PFS/new", "PFS/old"], readHeader=readHeader
+    )
+    assert fromChain["versionDrpStella"].tolist() == ["w.2026.38", "w.2026.38", "w.2026.41"]
+    # Metrics written before calexpRun: unknown, and nothing is read.
+    butler.queries.clear()
+    assert (
+        readReductionPipelines(butler, metrics.drop(columns="calexpRun"), readHeader=readHeader)
+        .isna()
+        .all()
+        .all()
+    )
+    assert butler.queries == []

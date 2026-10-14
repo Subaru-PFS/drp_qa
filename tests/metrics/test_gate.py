@@ -12,7 +12,16 @@ import pytest
 import yaml
 
 from pfs.drp.qa.metrics.calibration import labelRows, readThresholds
-from pfs.drp.qa.metrics.gate import configThresholds, gate, judge, loadThresholds, thresholdsPath
+from pfs.drp.qa.metrics.gate import (
+    PROVISIONAL_COLUMNS,
+    VERDICT_COLUMNS,
+    configThresholds,
+    gate,
+    judge,
+    loadThresholds,
+    pipelineMismatch,
+    thresholdsPath,
+)
 from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 
 ROOT = Path(__file__).parents[2]
@@ -351,3 +360,78 @@ def testShippedFileVerdicts(stored):
     # Negative control: the config alone judges them, some badly.
     configOnly = judge(stored, [configThresholds(configDefaults())])
     assert configOnly.loc[configOnly["metric"] == "pctFlagged", "status"].isin(["WARN", "FAIL"]).any()
+
+
+PIPELINE = {"datamodel": "w.2026.40", "obs_pfs": "w.2026.40", "drp_stella": "w.2026.41-6-ge56938d2"}
+
+
+def reductions(*drpStella) -> pd.DataFrame:
+    """Images reduced with PIPELINE but for drp_stella's version (None: not recorded)."""
+    return pd.DataFrame(
+        {
+            "medFwhm": 2.0,
+            "versionDatamodel": [None if v is None else "w.2026.40" for v in drpStella],
+            "versionObsPfs": [None if v is None else "w.2026.40" for v in drpStella],
+            "versionDrpStella": list(drpStella),
+        },
+        index=[10 + i for i in range(len(drpStella))],
+    )
+
+
+def testPipelineMismatch():
+    """Only the image reduced with the thresholds' pipeline gets a firm verdict."""
+    metrics = reductions("w.2026.41-6-ge56938d2", "w.2026.38", None)
+    result = pipelineMismatch(metrics, PIPELINE)
+    assert list(result.columns) == list(PROVISIONAL_COLUMNS)
+    assert result.index.tolist() == metrics.index.tolist()
+    assert result["qaProvisional"].tolist() == [False, True, True]
+    assert result["qaPipeline"].tolist() == [
+        "",
+        "drp_stella w.2026.38 (thresholds w.2026.41-6-ge56938d2)",
+        "reduction's pipeline unknown",
+    ]
+
+
+def testPipelineMismatchWithoutAReference():
+    """Thresholds that record no pipeline, or only part of it, can't vouch for any reduction."""
+    metrics = reductions("w.2026.41-6-ge56938d2")
+    assert pipelineMismatch(metrics, {})["qaPipeline"].tolist() == ["the thresholds record no pipeline"]
+    partial = {key: value for key, value in PIPELINE.items() if key != "obs_pfs"}
+    assert pipelineMismatch(metrics, partial)["qaPipeline"].tolist() == [
+        "obs_pfs w.2026.40 (thresholds unknown)"
+    ]
+    # No version columns at all, as in iqQaMetrics read without its pfsArm.
+    assert pipelineMismatch(metrics[["medFwhm"]], PIPELINE)["qaProvisional"].all()
+
+
+def testGateMarksProvisionalOnlyWhenAsked():
+    thresholds = pd.DataFrame([{"metric": "medFwhm", "warn": 3.0, "fail": 4.0, "higherIsWorse": True}])
+    metrics = reductions("w.2026.41-6-ge56938d2", "w.2026.38")
+    plain = gate(metrics, thresholds)
+    assert list(plain.columns) == list(VERDICT_COLUMNS)
+    checked = gate(metrics, thresholds, pipeline=PIPELINE)
+    assert list(checked.columns) == [*VERDICT_COLUMNS, *PROVISIONAL_COLUMNS]
+    # Provisional qualifies the verdict; it doesn't change it.
+    assert checked["qaStatus"].tolist() == plain["qaStatus"].tolist() == ["PASS", "PASS"]
+    assert checked["qaProvisional"].tolist() == [False, True]
+
+
+def testUnknownIsNotAVersion():
+    """Both sides reading "unknown" is no match."""
+    metrics = reductions("w.2026.41-6-ge56938d2").assign(versionObsPfs="unknown")
+    result = pipelineMismatch(metrics, PIPELINE | {"obs_pfs": "unknown"})
+    assert result["qaPipeline"].tolist() == ["obs_pfs unknown (thresholds unknown)"]
+    assert pipelineMismatch(metrics, dict.fromkeys(PIPELINE, "unknown"))["qaPipeline"].tolist() == [
+        "the thresholds record no pipeline"
+    ]
+
+
+def testGateKeepsOneRowPerImageWithDuplicateLabels():
+    """Rows that share an index label keep their own verdicts and flags, in order."""
+    thresholds = pd.DataFrame([{"metric": "medFwhm", "warn": 3.0, "fail": 4.0, "higherIsWorse": True}])
+    metrics = reductions("w.2026.41-6-ge56938d2", "w.2026.38").assign(medFwhm=[2.0, 5.0])
+    metrics.index = [0, 0]
+    result = gate(metrics, thresholds, pipeline=PIPELINE)
+    assert len(result) == 2
+    assert result["qaStatus"].tolist() == ["PASS", "FAIL"]
+    assert result["qaProvisional"].tolist() == [False, True]

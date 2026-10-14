@@ -12,6 +12,12 @@ certification, or a reduction run with another run's calibrations.
 reads a dataset's metadata from a Butler it is given and returns its
 calibration inputs, falling back to a lookup, marked as such, for any it needs
 that no provenance names.
+
+The pipeline that made a reduction is recorded too, but only in its spectra:
+drp_stella's ``getPfsVersions`` writes the versions of `PIPELINE_PRODUCTS` to
+each ``pfsArm``'s primary header, and the calexp has none. `pipelineVersions`
+parses them from a header, and `commonPipeline` reduces a table of them to the
+one pipeline a set of reductions was made with.
 """
 
 import re
@@ -20,7 +26,16 @@ from typing import Any
 
 import pandas as pd
 
-__all__ = ["CALIBRATION_COLUMNS", "calibrationsUsed", "provenanceInputs"]
+__all__ = [
+    "CALIBRATION_COLUMNS",
+    "PIPELINE_COLUMNS",
+    "PIPELINE_PRODUCTS",
+    "calibrationsUsed",
+    "commonPipeline",
+    "knownVersion",
+    "pipelineVersions",
+    "provenanceInputs",
+]
 
 _INPUT_KEY = re.compile(
     r"^lsst[ .]butler[ .]input[ .](?P<index>\d+)[ .](?P<key>id|run|datasettype)$", re.IGNORECASE
@@ -28,6 +43,20 @@ _INPUT_KEY = re.compile(
 
 #: Columns of the table `calibrationsUsed` returns.
 CALIBRATION_COLUMNS = ("datasetType", "run", "id", "source", "via")
+
+#: The products whose versions make up the reducing pipeline, as ``getPfsVersions`` names them.
+PIPELINE_PRODUCTS = ("datamodel", "obs_pfs", "drp_stella")
+
+#: The column of a metrics table holding each product's version.
+PIPELINE_COLUMNS = {
+    "datamodel": "versionDatamodel",
+    "obs_pfs": "versionObsPfs",
+    "drp_stella": "versionDrpStella",
+}
+
+_VERSION_KEY = re.compile(
+    rf"^(?:hierarch[ .])?(?:version_)?(?P<product>{'|'.join(PIPELINE_PRODUCTS)})$", re.IGNORECASE
+)
 
 
 def provenanceInputs(metadata: Mapping[str, Any]) -> pd.DataFrame:
@@ -104,3 +133,84 @@ def calibrationsUsed(
             )
     table = pd.DataFrame(rows, columns=list(CALIBRATION_COLUMNS))
     return table.drop_duplicates(["datasetType", "id"]).reset_index(drop=True)
+
+
+def knownVersion(value: Any) -> str | None:
+    """Return a product's version, or `None` when it is null, blank or ``unknown``.
+
+    ``unknown`` is what a version reads when it can't be found; two of them
+    agreeing says nothing about the pipeline.
+    """
+    if value is None or (pd.api.types.is_scalar(value) and pd.isna(value)):
+        return None
+    text = str(value).strip()
+    return None if not text or text.lower() == "unknown" else text
+
+
+def pipelineVersions(metadata: Mapping[str, Any]) -> dict[str, str]:
+    """Return the versions of the pipeline a reduction recorded in its header.
+
+    Parameters
+    ----------
+    metadata : mapping
+        A header as a flat mapping, e.g. a ``pfsArm``'s primary header. The
+        keys are ``getPfsVersions``'s: ``VERSION_DRP_STELLA`` (``HIERARCH``
+        in FITS, which may or may not be kept), or ``DRP_STELLA`` with
+        ``prefix=""``; any case.
+
+    Returns
+    -------
+    `dict` [`str`, `str`]
+        Version per product, in `PIPELINE_PRODUCTS` order. A product the
+        header doesn't name, or names as ``unknown``, is missing.
+    """
+    found = {}
+    for key, value in metadata.items():
+        match = _VERSION_KEY.match(str(key).strip())
+        version = knownVersion(value) if match else None
+        if version is not None:
+            found[match["product"].lower()] = version
+    return {product: found[product] for product in PIPELINE_PRODUCTS if product in found}
+
+
+def commonPipeline(versions: pd.DataFrame) -> dict[str, str]:
+    """Return the one pipeline a set of reductions was made with.
+
+    Thresholds hold for the pipeline that reduced the visits they were derived
+    from, so the thresholds file records it; that needs one pipeline.
+
+    Parameters
+    ----------
+    versions : `pandas.DataFrame`
+        One row per reduction, with `PIPELINE_COLUMNS`, e.g. from
+        `pfs.drp.qa.metrics.readers.readPipelineVersions`.
+
+    Returns
+    -------
+    `dict` [`str`, `str`]
+        Version per product, in `PIPELINE_PRODUCTS` order.
+
+    Raises
+    ------
+    ValueError
+        If there are no reductions, or a product's version is unknown (null or
+        ``unknown``) for some or differs between them.
+    """
+    if versions.empty:
+        raise ValueError("No reductions to read the pipeline of")
+    common = {}
+    for product, column in PIPELINE_COLUMNS.items():
+        values = versions[column] if column in versions else pd.Series(None, index=versions.index)
+        values = values.map(knownVersion)
+        if values.isna().any():
+            raise ValueError(
+                f"{int(values.isna().sum())} of {len(values)} reductions record no {product} version"
+            )
+        distinct = sorted(set(values))
+        if len(distinct) > 1:
+            counts = values.value_counts()
+            raise ValueError(
+                f"The reductions were made with {product} {', '.join(f'{v} ({n})' for v, n in counts.items())}"
+            )
+        common[product] = distinct[0]
+    return common

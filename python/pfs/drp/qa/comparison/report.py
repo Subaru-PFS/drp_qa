@@ -40,6 +40,7 @@ __all__ = [
     "notJudgedSummary",
     "populations",
     "problems",
+    "provisionalSummary",
     "recurringSequences",
     "verdictCounts",
     "whyNotJudged",
@@ -302,6 +303,40 @@ def notJudgedSummary(verdicts: pd.DataFrame) -> pd.DataFrame:
     return grouped.reset_index().sort_values("images", ascending=False, ignore_index=True)[columns]
 
 
+def provisionalSummary(verdicts: pd.DataFrame) -> pd.DataFrame:
+    """Count the judged images whose verdicts are provisional, by why.
+
+    Parameters
+    ----------
+    verdicts : `pandas.DataFrame`
+        From `imageVerdicts`, with ``qaProvisional`` and ``qaPipeline``
+        (`pfs.drp.qa.metrics.gate.pipelineMismatch`); none when they're absent.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``qaPipeline`` (why), ``arms``, one column per verdict and ``images``;
+        most images first.
+    """
+    columns = ["qaPipeline", "arms", *STATUS_ORDER, "images"]
+    if "qaProvisional" not in verdicts:
+        return pd.DataFrame(columns=columns)
+    subset = verdicts[
+        verdicts["qaProvisional"].fillna(False).astype(bool) & verdicts["status"].isin(STATUS_ORDER)
+    ]
+    if subset.empty:
+        return pd.DataFrame(columns=columns)
+    counts = subset.pivot_table(
+        index="qaPipeline", columns="status", values="visit", aggfunc="size", fill_value=0
+    )
+    counts = counts.reindex(columns=list(STATUS_ORDER), fill_value=0)
+    counts["images"] = counts.sum(axis=1)
+    arms = subset.groupby("qaPipeline")["arm"].agg(lambda arms: ", ".join(sorted(set(arms))))
+    result = counts.join(arms.rename("arms")).reset_index()
+    result.columns.name = None
+    return result.sort_values("images", ascending=False, ignore_index=True)[columns]
+
+
 def verdictCounts(verdicts: pd.DataFrame) -> pd.DataFrame:
     """Count verdicts by category, sequence type and arm.
 
@@ -554,6 +589,15 @@ def buildReport(inputs: ReportInputs) -> str:
             )
     if not verdicts.empty:
         parts.append(_details("Counts by type and arm", _table(verdictCounts(verdicts))))
+    provisionalImages = provisionalSummary(verdicts)
+    if not provisionalImages.empty:
+        judgedCount = int(verdicts["status"].isin(STATUS_ORDER).sum())
+        parts.append(
+            f"<p class='caption'><b>Provisional</b>: {int(provisionalImages['images'].sum())} of {judgedCount}"
+            " judged images were reduced with another pipeline than the thresholds were derived with, or one"
+            " that is unknown, so a verdict may be the pipeline's rather than the instrument's.</p>"
+        )
+        parts.append(_details("Provisional verdicts by pipeline", _table(provisionalImages)))
     unjudged = notJudgedSummary(verdicts)
     if not unjudged.empty:
         parts.append(

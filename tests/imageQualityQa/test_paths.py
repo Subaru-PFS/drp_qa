@@ -207,3 +207,31 @@ def testDefaultConfigJudgesByTheShippedFile(iqqa):
     assert trace.loc[["b", "r", "n"], "fail"].notna().all() and trace.loc[["m"], ["warn", "fail"]].isna().all(
         axis=None
     )
+
+
+def testRunQuantumRecordsTheCalexpRun(iqqa, monkeypatch):
+    """IqQaMetrics names the RUN of the calexp judged, whose pfsArm records the pipeline."""
+    from types import SimpleNamespace
+
+    config = iqqa.ImageQualityQaConfig()
+    config.thresholdsFile = ""
+    task = iqqa.ImageQualityQaTask(config=config)
+    outputs = SimpleNamespace(iqQaData=pd.DataFrame(), iqQaSpeciesMetrics=pd.DataFrame())
+    monkeypatch.setattr(
+        task,
+        "run",
+        lambda **inputs: SimpleNamespace(**vars(outputs), iqQaMetrics=pd.DataFrame({"medFwhm": [2.0]})),
+    )
+    put = {}
+    butlerQC = SimpleNamespace(get=lambda refs: {}, put=lambda value, ref: put.__setitem__(ref, value))
+    dataId = SimpleNamespace(mapping={"visit": 1, "arm": "r", "spectrograph": 2})
+    outputRefs = SimpleNamespace(iqQaData="data", iqQaMetrics="metrics", iqQaSpeciesMetrics="species")
+    withCalexp = SimpleNamespace(
+        arcLines=SimpleNamespace(dataId=dataId), calexp=SimpleNamespace(run="PFS/r/1")
+    )
+    task.runQuantum(butlerQC, withCalexp, outputRefs)
+    assert put["metrics"]["calexpRun"].tolist() == ["PFS/r/1"]
+    task.runQuantum(
+        butlerQC, SimpleNamespace(arcLines=SimpleNamespace(dataId=dataId), calexp=None), outputRefs
+    )
+    assert put["metrics"]["calexpRun"].isna().all()

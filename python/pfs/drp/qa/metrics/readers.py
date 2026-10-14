@@ -1,4 +1,4 @@
-"""Read stored QA metrics from a Butler, and name the runs that hold them.
+"""Read stored QA metrics from a Butler, the pipeline that made their reductions, and name the runs.
 
 The only code in `pfs.drp.qa.metrics` that touches a Butler. It takes the
 Butler as an argument and never imports one, so the package stays stack-free
@@ -6,11 +6,14 @@ and the reader is tested with a stub.
 """
 
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Mapping
+from typing import Any
 
 import pandas as pd
 
-__all__ = ["chooseRun", "readMetrics"]
+from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS, pipelineVersions
+
+__all__ = ["chooseRun", "readMetrics", "readPipelineVersions", "readReductionPipelines"]
 
 #: Data ID keys copied onto each row when the stored table lacks them.
 _DATA_ID_KEYS = ("visit", "arm", "spectrograph")
@@ -87,6 +90,137 @@ def readMetrics(
     metrics = pd.concat(tables, ignore_index=True)
     sortKeys = [key for key in _DATA_ID_KEYS if key in metrics.columns]
     return metrics.sort_values(sortKeys, ignore_index=True)
+
+
+def readPipelineVersions(
+    butler,
+    visits: Iterable[int],
+    collections: str | Iterable[str] | None = None,
+    datasetType: str = "pfsArm",
+    instrument: str = "PFS",
+    readHeader: Callable[[Any], Mapping[str, Any]] | None = None,
+) -> pd.DataFrame:
+    """Read the pipeline each detector image of some visits was reduced with.
+
+    drp_stella records the versions in the ``pfsArm`` written beside the
+    calexp, not in the calexp. Only the primary header is read, from the file.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        A Butler; read-only is enough.
+    visits : iterable of `int`
+        The visits.
+    collections : `str` or iterable of `str`, optional
+        Collections to search, in order: those the judged calexps were found
+        in, so each ``pfsArm`` is the one made beside its calexp.
+    datasetType : `str`, optional
+        The dataset whose header records the pipeline. Default is ``pfsArm``.
+    instrument : `str`, optional
+        Instrument name. Default is ``PFS``.
+    readHeader : callable, optional
+        Returns a primary header as a mapping, given a dataset's URI; reads
+        the FITS file with astropy by default.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``visit``, ``arm``, ``spectrograph`` and `PIPELINE_COLUMNS`, one row
+        per detector with a dataset, sorted; a version its header doesn't
+        record is null.
+    """
+    columns = [*_DATA_ID_KEYS, *PIPELINE_COLUMNS.values()]
+    visits = tuple(sorted({int(visit) for visit in visits}))
+    if not visits:
+        return pd.DataFrame(columns=columns)
+    refs = butler.query_datasets(
+        datasetType,
+        collections=collections,
+        where="instrument = instrumentName AND visit IN (visits)",
+        bind={"instrumentName": instrument, "visits": visits},
+        find_first=True,
+        limit=None,
+        explain=False,
+    )
+    readHeader = readHeader or _primaryHeader
+    rows = []
+    for ref in refs:
+        versions = pipelineVersions(readHeader(butler.getURI(ref)))
+        row = {key: ref.dataId[key] for key in _DATA_ID_KEYS}
+        rows.append(row | {column: versions.get(product) for product, column in PIPELINE_COLUMNS.items()})
+    return pd.DataFrame(rows, columns=columns).sort_values(list(_DATA_ID_KEYS), ignore_index=True)
+
+
+def readReductionPipelines(
+    butler,
+    metrics: pd.DataFrame,
+    fallback: str | Iterable[str] | None = None,
+    datasetType: str = "pfsArm",
+    instrument: str = "PFS",
+    readHeader: Callable[[Any], Mapping[str, Any]] | None = None,
+) -> pd.DataFrame:
+    """Read the pipeline that made the reduction each metrics row judged.
+
+    Each ``pfsArm`` is read from the RUN of the calexp ``imageQualityQa``
+    judged (``calexpRun``), so it is the one written beside that calexp. A
+    search of a chain could find a later reduction of the same detector.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        A Butler; read-only is enough.
+    metrics : `pandas.DataFrame`
+        ``iqQaMetrics`` rows, with ``visit``, ``arm``, ``spectrograph`` and
+        ``calexpRun`` (null, or absent in metrics written before it, when
+        unknown).
+    fallback : `str` or iterable of `str`, optional
+        Collections to search for a row with no ``calexpRun``. Only right
+        where each detector has one reduction, e.g. a fresh collection. By
+        default such a row's pipeline is unknown.
+    datasetType, instrument, readHeader
+        As for `readPipelineVersions`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        `PIPELINE_COLUMNS`, one row per row of ``metrics`` in its order and
+        with its index; null where unknown.
+    """
+    keys = list(_DATA_ID_KEYS)
+    columns = list(PIPELINE_COLUMNS.values())
+    images = metrics[keys].reset_index(drop=True)
+    if "calexpRun" in metrics:
+        runs = pd.Series(metrics["calexpRun"].to_numpy(dtype=object), index=images.index)
+    else:
+        runs = pd.Series(None, index=images.index, dtype=object)
+    known = runs.notna()
+    groups = [([run], images[known & (runs == run)]) for run in sorted(set(runs[known]))]
+    if fallback:
+        groups.append((fallback, images[~known]))
+    result = pd.DataFrame(None, index=images.index, columns=columns, dtype=object)
+    for collections, subset in groups:
+        if subset.empty:
+            continue
+        versions = readPipelineVersions(
+            butler,
+            subset["visit"],
+            collections=collections,
+            datasetType=datasetType,
+            instrument=instrument,
+            readHeader=readHeader,
+        )
+        found = subset.reset_index().merge(versions, on=keys, how="inner")
+        result.loc[found["index"].to_numpy(), columns] = found[columns].to_numpy(dtype=object)
+    result.index = metrics.index
+    return result
+
+
+def _primaryHeader(uri) -> dict[str, Any]:
+    """Return the primary header of the FITS file at ``uri`` (an `lsst.resources.ResourcePath`)."""
+    from astropy.io import fits
+
+    with uri.as_local() as local:  # a local file is used where it is
+        return dict(fits.getheader(local.ospath, 0))
 
 
 def chooseRun(existing: Iterable[str], prefix: str, newRun: bool, runName: str | None = None) -> str:

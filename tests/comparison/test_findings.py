@@ -196,3 +196,34 @@ def testExpectedFromTheValidationSet(defocus):
     expected = result.set_index(["visit", "spectrograph"])["expected"]
     assert set(expected.loc[(2, 1)]) == {"medFwhm"}  # the known-bad detectors of visit 2
     assert set(expected.drop((2, 1))) == {""}
+
+
+def testTaskPipeline(tmp_path):
+    """The pipeline comes from the task's thresholds file; the shipped Run25 file records none yet."""
+    from types import SimpleNamespace
+
+    import yaml
+
+    from pfs.drp.qa.comparison.findings import taskPipeline
+
+    assert taskPipeline(SimpleNamespace(thresholdsFile="")) == {}
+    assert taskPipeline(SimpleNamespace(thresholdsFile="iqQaThresholds-run25.yaml")) == {}
+    path = tmp_path / "t.yaml"
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "version": 2,
+                "derivedOn": "2026-10-14",
+                "collection": "c",
+                "referenceRuns": [25],
+                "drpQaVersion": "v",
+                "pipelineVersions": {"datamodel": "a", "obs_pfs": "b", "drp_stella": "c"},
+                "thresholds": [],
+            }
+        )
+    )
+    assert taskPipeline(SimpleNamespace(thresholdsFile=str(path))) == {
+        "datamodel": "a",
+        "obs_pfs": "b",
+        "drp_stella": "c",
+    }

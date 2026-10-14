@@ -18,6 +18,7 @@ import re
 
 import pandas as pd
 
+from pfs.drp.qa.metrics.calibration import readThresholds
 from pfs.drp.qa.metrics.gate import STATUS_ORDER, configThresholds, judge, loadThresholds, thresholdsPath
 
 __all__ = [
@@ -28,6 +29,7 @@ __all__ = [
     "findings",
     "judgeImages",
     "lampsOf",
+    "taskPipeline",
     "taskThresholds",
 ]
 
@@ -128,6 +130,27 @@ def taskThresholds(config) -> list[pd.DataFrame]:
     """
     files = [thresholdsPath(config.thresholdsFile)] if config.thresholdsFile else []
     return [*loadThresholds(files), configThresholds(config)]
+
+
+def taskPipeline(config) -> dict[str, str]:
+    """Return the pipeline the thresholds of an ``imageQualityQa`` config were derived with.
+
+    Parameters
+    ----------
+    config : `Any`
+        An ``ImageQualityQaConfig``; duck-typed.
+
+    Returns
+    -------
+    `dict` [`str`, `str`]
+        The thresholds file's ``pipelineVersions``; empty when it records
+        none, or the config names no file (its own thresholds record no
+        origin).
+    """
+    if not config.thresholdsFile:
+        return {}
+    metadata, _ = readThresholds(thresholdsPath(config.thresholdsFile))
+    return metadata["pipelineVersions"]
 
 
 def judgeImages(metrics: pd.DataFrame, visits: pd.DataFrame, thresholds) -> pd.DataFrame:

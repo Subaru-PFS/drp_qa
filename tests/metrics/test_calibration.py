@@ -280,6 +280,7 @@ def testThresholdsFileRoundTrip(tmp_path):
         "collection": "u/someone/qa-thresholds/003",
         "referenceRuns": [25],
         "drpQaVersion": "w.2026.40",
+        "pipelineVersions": {},
     }
     derived = table[table["nGood"] > 0]
     assert len(thresholds) == len(derived), "populations with no good data are not thresholds"
@@ -369,3 +370,23 @@ def testVersionOneFileReadsAsPercentile(tmp_path):
     _, thresholds = readThresholds(path)
     assert thresholds["method"].tolist() == ["percentile"]
     assert thresholds["arm"].tolist() == ["b"]
+
+
+def testThresholdsFileRecordsThePipeline(tmp_path):
+    """The reducing pipeline round-trips, in product order, without a new schema version."""
+    import yaml
+
+    from pfs.drp.qa.metrics.calibration import THRESHOLDS_VERSION, readThresholds, writeThresholds
+
+    table = calibrate(makeMetrics(), makeVisitSet(), ["medFwhm"], derivedOn=date(2026, 10, 5))
+    pipeline = {"drp_stella": "w.2026.41-6-ge56938d2", "datamodel": "w.2026.40", "obs_pfs": "w.2026.40"}
+    path = writeThresholds(table, tmp_path / "t.yaml", "c", [25], "v", pipelineVersions=pipeline)
+    document = yaml.safe_load(path.read_text())
+    assert document["version"] == THRESHOLDS_VERSION == 2
+    assert list(document["pipelineVersions"]) == ["datamodel", "obs_pfs", "drp_stella"]
+    metadata, _ = readThresholds(path)
+    assert metadata["pipelineVersions"] == pipeline
+    # Unknown: the key is left out, and reads back empty.
+    path = writeThresholds(table, tmp_path / "none.yaml", "c", [25], "v")
+    assert "pipelineVersions" not in yaml.safe_load(path.read_text())
+    assert readThresholds(path)[0]["pipelineVersions"] == {}

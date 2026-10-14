@@ -10,6 +10,14 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Pipeline-version check** (PIPE2D-1938) — the thresholds file records the pipeline that reduced its visits
+  (`pipelineVersions`: datamodel, obs_pfs, drp_stella; optional, so the schema stays at version 2), and
+  `gate(..., pipeline=)` adds `qaProvisional` and `qaPipeline`, marking a verdict on a reduction made with another
+  or an unknown pipeline provisional (`pipelineMismatch`). New `iqQaMetrics` column `calexpRun`, the RUN of the
+  calexp judged: `readers.readReductionPipelines` reads the versions from the `pfsArm` in that RUN's header, `utils.provenance.pipelineVersions` parses them and `commonPipeline` checks
+  a set was reduced with one pipeline. Comparison mode's report counts the provisional verdicts; the derivation
+  notebook records the pipeline. README: re-baselining at each summit stack upgrade.
+
 - **`qaComparison.py --cadence`** (PIPE2D-1938) — judge only the arcs and traces of a cadence (`set`, `daily`,
   `single`), e.g. the calibration sets, so a fresh reduction of a run's sets doesn't reduce its daily frames too.
 
