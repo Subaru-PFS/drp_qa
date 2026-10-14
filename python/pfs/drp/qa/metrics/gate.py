@@ -54,6 +54,7 @@ STATUS_ORDER = ("PASS", "WARN", "FAIL")
 _FIELDS = frozenset(
     (
         "metric",
+        "method",
         "higherIsWorse",
         "absolute",
         "warn",

@@ -195,8 +195,14 @@ def testDefaultConfigJudgesByTheShippedFile(iqqa):
     assert len(flags) == 1 and flags[["warn", "fail"]].isna().all(axis=None)  # not judged
     fwhm = shipped[shipped["metric"] == "medFwhm"]
     assert set(fwhm["obsType"]) == {"arc", "trace"}
-    # The m arm's quartz derivation is below the sample floor: its entry judges nothing.
-    trace = fwhm[fwhm["obsType"] == "trace"].set_index("arm")
+    # Each detector's quartz is judged against its own Run25 median (PIPE2D-1942).
+    tolerance = fwhm[(fwhm["method"] == "tolerance") & (fwhm["obsType"] == "trace")]
+    assert set(zip(tolerance["arm"], tolerance["spectrograph"], strict=True)) == {
+        (arm, spectrograph) for arm in "brnm" for spectrograph in (1, 2, 3, 4)
+    }
+    assert tolerance[["warn", "fail"]].notna().all(axis=None)
+    # The per-arm fallback: the m arm's quartz derivation is below the sample floor and judges nothing.
+    trace = fwhm[(fwhm["method"] == "percentile") & (fwhm["obsType"] == "trace")].set_index("arm")
     assert set(trace.index) == {"b", "r", "n", "m"}
     assert trace.loc[["b", "r", "n"], "fail"].notna().all() and trace.loc[["m"], ["warn", "fail"]].isna().all(
         axis=None

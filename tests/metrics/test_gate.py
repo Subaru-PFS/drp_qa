@@ -11,8 +11,9 @@ import pandas as pd
 import pytest
 import yaml
 
-from pfs.drp.qa.metrics.calibration import readThresholds
+from pfs.drp.qa.metrics.calibration import labelRows, readThresholds
 from pfs.drp.qa.metrics.gate import configThresholds, gate, judge, loadThresholds, thresholdsPath
+from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 
 ROOT = Path(__file__).parents[2]
 DATA = Path(__file__).parent / "data"
@@ -293,26 +294,42 @@ def testShippedFileIsTheAdoptedRun25(stored):
 
 
 def testShippedFileVerdicts(stored):
-    """Adopted Run25: obstructed and defocused quartz fail, good Run25 quartz passes; twilight nLines and flags aren't judged."""
+    """Adopted Run25: obstructed and defocused quartz fail, no known-good medFwhm fails; twilight nLines and flags aren't judged."""
     thresholds = [thresholdsPath(configDefaults().thresholdsFile), configThresholds(configDefaults())]
     judged = judge(stored, thresholds)
     verdicts = gate(stored, thresholds, default="UNKNOWN")
 
     obstructed = stored["visit"].isin([150115, 150116, 150641, 150642])
     assert (verdicts.loc[obstructed, "qaStatus"] == "FAIL").all()
+    # The validation set records them as known-bad for nLines, the metric that fails them.
+    lines = labelRows(stored, loadValidationVisits(), "nLines")
+    lines = lines[lines["visit"].isin([150115, 150116, 150641, 150642])]
+    assert len(lines) == obstructed.sum() and (lines["validation"] == "bad:FAIL").all()
+    nLines = judged[judged["metric"] == "nLines"].set_index("row")
+    assert (nLines.loc[lines.index, "status"] == "FAIL").all()
     # Run25 quartz of the validation set: the hand-set nLines passes every one.
     run25Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(133040, 135850)
     rows = np.flatnonzero(run25Quartz)
     quartzLines = judged[(judged["metric"] == "nLines") & judged["row"].isin(rows)]
     assert len(quartzLines) == len(rows) and (quartzLines["status"] == "PASS").all()
-    # Its medFwhm is judged by the file at the rates WARN at p95 and FAIL at p99 give on b, r and n;
-    # the m arm's derivation is below the sample floor, so its entry stops the search and judges nothing.
-    quartzFwhm = judged[(judged["metric"] == "medFwhm") & judged["row"].isin(rows)]
-    onBrn = quartzFwhm["arm"].isin(["b", "r", "n"])
-    assert (quartzFwhm["layer"] == 0).all()
-    assert len(quartzFwhm[~onBrn]) and (quartzFwhm.loc[~onBrn, "status"] == "").all()
-    assert (quartzFwhm.loc[onBrn, "status"] == "PASS").mean() > 0.9
-    assert (quartzFwhm.loc[onBrn, "status"] == "FAIL").mean() < 0.02
+    # medFwhm (PIPE2D-1942): every known-good arc and quartz is judged against its own detector and
+    # lamp's Run25 median, and none fails; every known-bad one with a value fails.
+    labelled = labelRows(stored, loadValidationVisits(), "medFwhm")
+    fwhm = judged[judged["metric"] == "medFwhm"].set_index("row")
+    good = fwhm.loc[labelled.index[labelled["validation"] == "good"]]
+    good = good[good["value"].notna()]
+    assert len(good) == 616 and good["population"].str.contains("spectrograph=").all()
+    assert (good["layer"] == 0).all() and (good["status"] != "FAIL").all()
+    assert good["status"].value_counts().to_dict() == {"PASS": 615, "WARN": 1}  # 135841 m1 Argon, +3.3 %
+    bad = fwhm.loc[labelled.index[labelled["validation"] == "bad:FAIL"]]
+    bad = bad[bad["value"].notna()]
+    assert len(bad) == 87 and (bad["status"] == "FAIL").all()
+    # Negative control: the per-arm entries alone fail known-good arcs and quartz.
+    perArm = readThresholds(thresholdsPath(configDefaults().thresholdsFile))[1]
+    perArm = perArm[perArm["method"] != "tolerance"].drop(columns=["spectrograph", "species"])
+    perArmFwhm = judge(stored, [perArm, configThresholds(configDefaults())]).set_index("row")
+    perArmFwhm = perArmFwhm[perArmFwhm["metric"] == "medFwhm"]
+    assert (perArmFwhm.loc[good.index, "status"] == "FAIL").sum() >= 3
     # SM1 defocused (Run27): every SM1 quartz fails on medFwhm.
     defocused = np.flatnonzero(
         stored["visit"].isin([140032, 140035, *range(140139, 140149)]) & (stored["spectrograph"] == 1)

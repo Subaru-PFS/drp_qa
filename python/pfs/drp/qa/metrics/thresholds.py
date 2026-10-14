@@ -5,7 +5,9 @@ The procedure, documented in ``docs/qa-principles.md``:
 1. run the metric over the ``known_good`` visits with no gating;
 2. take its distribution over the good detectors, one population at a time;
 3. WARN at the 95th percentile and FAIL at the 99th, rounded outwards to a
-   step under a tenth of the good scatter, or FAIL at a physical limit;
+   step under a tenth of the good scatter, or FAIL at a physical limit; or,
+   for a metric judged against its own population's median, WARN and FAIL at
+   a fixed tolerance beyond it (`deriveTolerance`);
 4. check that each ``known_bad`` visit reaches the verdict it expects (`verifyKnownBad`);
 5. record the provenance in the config field's ``doc`` (`formatProvenance`).
 
@@ -24,8 +26,10 @@ from scipy.stats import binom
 
 __all__ = [
     "MIN_SAMPLES",
+    "MIN_TOLERANCE_SAMPLES",
     "ThresholdSuggestion",
     "deriveThresholds",
+    "deriveTolerance",
     "formatProvenance",
     "quantileInterval",
     "resolutionFor",
@@ -42,6 +46,10 @@ DEFAULT_FAIL_PERCENTILE = 99.0
 
 #: Below this many good samples a suggestion is reported but marked unreliable.
 MIN_SAMPLES = 20
+
+#: Below this many good samples a tolerance is reported but marked unreliable:
+#: the median of one or two values is one detector's luck.
+MIN_TOLERANCE_SAMPLES = 3
 
 #: Confidence of the interval reported for the FAIL percentile.
 CONFIDENCE = 0.95
@@ -92,6 +100,10 @@ class ThresholdSuggestion:
         The physical limit used for FAIL, if any.
     provenance : `str`
         The sentence for the config field's ``doc`` (rule R2).
+    tolerance : `tuple` [`float`, `float`] or `None`
+        For `deriveTolerance`, the WARN and FAIL fractions beyond the median.
+        ``warnRaw`` and ``failRaw`` are then the unrounded thresholds, and
+        ``failInterval`` is FAIL over the confidence interval on the median.
     """
 
     metric: str
@@ -111,6 +123,7 @@ class ThresholdSuggestion:
     goodFlaggedFail: float
     physicalLimit: float | None
     provenance: str
+    tolerance: tuple[float, float] | None = None
 
     def __str__(self) -> str:
         """Return a short summary for CLI output."""
@@ -118,14 +131,17 @@ class ThresholdSuggestion:
         lines = [
             f"{self.metric}: warn={self.warn:.4g} fail={self.fail:.4g} "
             f"(raw {self.warnRaw:.4g}/{self.failRaw:.4g}; "
-            f"{CONFIDENCE:.0%} CI on the FAIL percentile [{low:.4g}, {high:.4g}])",
+            f"{CONFIDENCE:.0%} CI on the FAIL {'tolerance' if self.tolerance else 'percentile'} "
+            f"[{low:.4g}, {high:.4g}])",
             f"    good: n={self.numSamples} median={self.median:.4g} robustRms={self.robustRms:.4g}; "
             f"flagged {self.goodFlaggedWarn:.1%} at WARN+, {self.goodFlaggedFail:.1%} at FAIL",
         ]
         if not self.reliable:
-            lines.append(f"    UNRELIABLE: n={self.numSamples} is below the {MIN_SAMPLES}-sample floor")
+            floor = MIN_TOLERANCE_SAMPLES if self.tolerance else MIN_SAMPLES
+            lines.append(f"    UNRELIABLE: n={self.numSamples} is below the {floor}-sample floor")
         if not self.failBounded:
-            lines.append("    FAIL UNBOUNDED: too few samples to bound the FAIL percentile")
+            bounded = "median" if self.tolerance else "FAIL percentile"
+            lines.append(f"    FAIL UNBOUNDED: too few samples to bound the {bounded}")
         if self.degenerate:
             lines.append("    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire")
         return "\n".join(lines)
@@ -390,6 +406,115 @@ def deriveThresholds(
             failBounded=failBounded,
             degenerate=degenerate,
         ),
+    )
+
+
+def deriveTolerance(
+    values: ArrayLike,
+    metric: str,
+    warnFraction: float,
+    failFraction: float,
+    higherIsWorse: bool = True,
+    visitRange: str | None = None,
+    derivedOn: date | None = None,
+    units: str = "",
+) -> ThresholdSuggestion:
+    """Suggest WARN and FAIL thresholds a fixed fraction beyond the known-good median.
+
+    For a metric whose populations are too small for a tail percentile, and
+    whose reference is the same measurement in an earlier run: each detector
+    is judged by how far it has moved from where it was. A percentile of a
+    few values sits at the sample's tail, so it flags known-good values by
+    construction.
+
+    Parameters
+    ----------
+    values : array-like
+        The metric's values over the ``known_good`` visits of one population.
+        Non-finite values are dropped.
+    metric : `str`
+        Name of the metric, used for reporting.
+    warnFraction, failFraction : `float`
+        WARN and FAIL as fractions of the median, e.g. 0.03 and 0.05.
+    higherIsWorse : `bool`, optional
+        Direction of the metric. Default is True.
+    visitRange : `str`, optional
+        The visit range the values came from, recorded in ``provenance``.
+    derivedOn : `datetime.date`, optional
+        Derivation date, recorded in ``provenance``. Defaults to today.
+    units : `str`, optional
+        Suffix for the median in ``provenance``, e.g. ``"px"``.
+
+    Returns
+    -------
+    `ThresholdSuggestion`
+        The thresholds, rounded outwards to a tenth of the WARN margin's
+        power of ten, with ``tolerance`` set. ``failInterval`` is FAIL over the
+        distribution-free interval on the median, open below six values.
+
+    Raises
+    ------
+    ValueError
+        If there are no finite values, the median is not positive, or the
+        fractions are not ``0 < warnFraction < failFraction``.
+    """
+    if not 0.0 < warnFraction < failFraction:
+        raise ValueError(f"Tolerances warn={warnFraction}, fail={failFraction} need 0 < warn < fail")
+    values = np.asarray(values, dtype=float).ravel()
+    good = values[np.isfinite(values)]
+    if good.size == 0:
+        raise ValueError(f"No finite values for metric {metric!r}; nothing to derive a threshold from")
+    median = float(np.median(good))
+    if median <= 0:
+        raise ValueError(
+            f"Median {median} of metric {metric!r} is not positive; a fractional tolerance needs one"
+        )
+
+    outwards = 1 if higherIsWorse else -1
+    step = 10.0 ** math.floor(math.log10(median * warnFraction / 10.0))
+    warnRaw = median * (1 + outwards * warnFraction)
+    failRaw = median * (1 + outwards * failFraction)
+    warn, fail = roundToStep(warnRaw, step, outwards), roundToStep(failRaw, step, outwards)
+    low, high = quantileInterval(good, 0.5)
+    failInterval = (low * (1 + outwards * failFraction), high * (1 + outwards * failFraction))
+    failBounded = math.isfinite(failInterval[1] if higherIsWorse else failInterval[0])
+    q25, q75 = (float(x) for x in np.percentile(good, [25.0, 75.0]))
+    flaggedWarn, flaggedFail = (good >= warn, good >= fail) if higherIsWorse else (good <= warn, good <= fail)
+    reliable = good.size >= MIN_TOLERANCE_SAMPLES
+
+    derivedOn = derivedOn or date.today()
+    source = f"validation visits {visitRange}" if visitRange else "the validation visit set"
+    side = "above" if higherIsWorse else "below"
+    provenance = (
+        f"Derived {derivedOn.isoformat()} from {source} (n={good.size}): WARN {warnFraction:.0%} and "
+        f"FAIL {failFraction:.0%} {side} the known-good median, {median:.4g}{units}."
+    )
+    if not reliable:
+        provenance += f" NOT RELIABLE: n={good.size} is below the {MIN_TOLERANCE_SAMPLES}-sample floor."
+    if not failBounded:
+        provenance += (
+            f" MEDIAN UNBOUNDED: n={good.size} cannot bound the median at {CONFIDENCE:.0%} confidence."
+        )
+
+    return ThresholdSuggestion(
+        metric=metric,
+        warn=warn,
+        fail=fail,
+        warnRaw=warnRaw,
+        failRaw=failRaw,
+        failInterval=failInterval,
+        median=median,
+        robustRms=0.741 * (q75 - q25),
+        numSamples=int(good.size),
+        higherIsWorse=higherIsWorse,
+        reliable=reliable,
+        failBounded=failBounded,
+        degenerate=False,
+        goodFlaggedWarn=float(np.mean(flaggedWarn)),
+        goodFlaggedFail=float(np.mean(flaggedFail)),
+        physicalLimit=None,
+        provenance=provenance,
+        tolerance=(warnFraction, failFraction),
     )
 
 

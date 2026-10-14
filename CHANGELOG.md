@@ -81,6 +81,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   derived from the Run25 validation visits rerun with the calexp width (`u/wtg/qa-thresholds/004`); m-arm quartz
   `medFwhm` is not judged, its derivation being below the sample floor. The gate fixtures now come from that run, and the
   config regression check keeps the `003` run (`iqQaMetrics-config.parquet`). Changes verdicts.
+- **`medFwhm` is judged per detector and lamp** (PIPE2D-1942) — WARN 3 % and FAIL 5 % above the Run25 known-good
+  median of each arm, spectrograph, `obsType` and lamp (`MetricSpec.tolerance`, `thresholds.deriveTolerance`); the
+  per-arm percentiles judge only an image with no such median. `calibrate` adds these rows (`method` `tolerance`),
+  thresholds files record each entry's `method` (schema version 2; version 1 still reads), and `plotting.plotTolerances` draws them. m-arm quartz is now
+  judged. No Run25 known-good arc or quartz fails. Changes verdicts.
+- **Obstructed Run30 frames are known-bad for `nLines`** (PIPE2D-1942) — 150115, 150116, 150641 and 150642
+  named `pctFlagged`, which is no longer judged; `nLines` is what fails them, and now its known-bad check covers them.
 - **`pctFlagged` is no longer judged** (PIPE2D-1929) — the shipped thresholds file has one entry for it with
   neither WARN nor FAIL, which overrides the `flagRate*Threshold` config fields: their n-arm 15/20 % sits below
   the known-good n-arm Neon sets of Run25 and Run30. Changes verdicts.

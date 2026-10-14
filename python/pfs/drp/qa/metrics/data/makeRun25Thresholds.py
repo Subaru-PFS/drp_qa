@@ -5,7 +5,7 @@ validation visits (collection ``u/wtg/qa-thresholds/004``: the reductions of
 ``003`` with ``imageQualityQa`` rerun once the calexp trace width worked,
 PIPE2D-1918), kept in the tests as ``tests/metrics/data/iqQaThresholds-run25.yaml``
 beside the metrics it was derived from. Arc metrics are the same in both runs.
-Adopting it changed four things:
+Adopting it changed five things:
 
 - **pctFlagged is not judged.** Its populations hold 5 visits each, so FAIL
   sits at the sample's maximum, and Run27's known-good n-arm flag rates are 2-5
@@ -18,10 +18,17 @@ Adopting it changed four things:
 - **Quartz nLines is set by hand.** Its derivation was degenerate (WARN = FAIL
   at the sample's minimum): WARN is 0.5 % and FAIL 1 % below the smallest
   known-good Run25 value of the arm, rounded down to 1000.
-- **Quartz medFwhm is judged on b, r and n as derived** (PIPE2D-1918), from the
-  calexp width. The m arm's derivation has 16 known-good values, below the
-  20-sample floor, so m-arm quartz medFwhm is not judged: the config's 3.2 px
-  WARN would flag every known-good one (3.31-3.42 px).
+- **medFwhm is judged per detector and lamp** (PIPE2D-1942): WARN 3 % and FAIL
+  5 % above the Run25 known-good median of its arm, spectrograph, obsType and
+  lamp, adopted as derived. The spectrographs of one arm differ from each
+  other by more than any one of them varies (r quartz: r2 3.27 px, r4 3.39 px,
+  each within 0.03 px), so the per-arm percentiles put each arm's widest
+  spectrograph at FAIL. The per-arm entries stay, judging
+  only an image whose detector and lamp have no Run25 median.
+- **Per-arm quartz medFwhm is judged on b, r and n as derived** (PIPE2D-1918),
+  from the calexp width. The m arm's derivation has 16 known-good values,
+  below the 20-sample floor, so it judges nothing: the config's 3.2 px WARN
+  would flag every known-good one (3.31-3.42 px).
 
 Run from the repository root:
 
@@ -49,6 +56,8 @@ ADOPTED = "2026-10-06"
 FLAGS_UNJUDGED = "2026-10-08"
 #: When quartz medFwhm was adopted.
 TRACE_FWHM_ADOPTED = "2026-10-12"
+#: When medFwhm per detector and lamp was adopted.
+TOLERANCE_ADOPTED = "2026-10-13"
 
 
 def adopt(document: dict, metrics: pd.DataFrame) -> dict:
@@ -77,7 +86,9 @@ def adopt(document: dict, metrics: pd.DataFrame) -> dict:
         population = entry["population"]
         if entry["metric"] == "pctFlagged":
             continue
-        if entry["metric"] == "medFwhm" and population.get("obsType") == "trace":
+        if entry["method"] == "tolerance":
+            entry["provenance"] = f"Adopted {TOLERANCE_ADOPTED} (PIPE2D-1942). {entry['provenance']}"
+        elif entry["metric"] == "medFwhm" and population.get("obsType") == "trace":
             if entry["reliable"]:
                 entry["provenance"] = f"Adopted {TRACE_FWHM_ADOPTED} (PIPE2D-1918). {entry['provenance']}"
             else:
@@ -110,6 +121,7 @@ def adopt(document: dict, metrics: pd.DataFrame) -> dict:
             "population": {},
             "higherIsWorse": True,
             "absolute": False,
+            "method": "percentile",
             "warn": None,
             "fail": None,
             "provenance": (

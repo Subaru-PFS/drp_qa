@@ -586,28 +586,28 @@ known_bad:
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     expect: FAIL
-    metric: pctFlagged
+    metric: nLines
     reason: "M1 cover closed."
   - visit: 150116
     sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     expect: FAIL
-    metric: pctFlagged
+    metric: nLines
     reason: "M1 cover closed."
   - visit: 150641
     sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     expect: FAIL
-    metric: pctFlagged
+    metric: nLines
     reason: "Mirror cover and top screen both closed; noted in the calibration summary as to be ignored."
   - visit: 150642
     sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     expect: FAIL
-    metric: pctFlagged
+    metric: nLines
     reason: "Mirror cover and top screen both closed; noted in the calibration summary as to be ignored."
   # Suspected faults, recorded so that somebody looks at them. Both were
   # noted in the calibration summary in words nobody has yet tied to a number, so
