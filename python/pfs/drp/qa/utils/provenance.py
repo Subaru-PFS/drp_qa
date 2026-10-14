@@ -32,6 +32,7 @@ __all__ = [
     "PIPELINE_PRODUCTS",
     "calibrationsUsed",
     "commonPipeline",
+    "knownVersion",
     "pipelineVersions",
     "provenanceInputs",
 ]
@@ -134,6 +135,18 @@ def calibrationsUsed(
     return table.drop_duplicates(["datasetType", "id"]).reset_index(drop=True)
 
 
+def knownVersion(value: Any) -> str | None:
+    """Return a product's version, or `None` when it is null, blank or ``unknown``.
+
+    ``unknown`` is what a version reads when it can't be found; two of them
+    agreeing says nothing about the pipeline.
+    """
+    if value is None or (pd.api.types.is_scalar(value) and pd.isna(value)):
+        return None
+    text = str(value).strip()
+    return None if not text or text.lower() == "unknown" else text
+
+
 def pipelineVersions(metadata: Mapping[str, Any]) -> dict[str, str]:
     """Return the versions of the pipeline a reduction recorded in its header.
 
@@ -149,13 +162,14 @@ def pipelineVersions(metadata: Mapping[str, Any]) -> dict[str, str]:
     -------
     `dict` [`str`, `str`]
         Version per product, in `PIPELINE_PRODUCTS` order. A product the
-        header doesn't name is missing.
+        header doesn't name, or names as ``unknown``, is missing.
     """
     found = {}
     for key, value in metadata.items():
         match = _VERSION_KEY.match(str(key).strip())
-        if match and value is not None and str(value).strip():
-            found[match["product"].lower()] = str(value).strip()
+        version = knownVersion(value) if match else None
+        if version is not None:
+            found[match["product"].lower()] = version
     return {product: found[product] for product in PIPELINE_PRODUCTS if product in found}
 
 
@@ -179,14 +193,15 @@ def commonPipeline(versions: pd.DataFrame) -> dict[str, str]:
     Raises
     ------
     ValueError
-        If there are no reductions, or a product's version is unknown for some
-        or differs between them.
+        If there are no reductions, or a product's version is unknown (null or
+        ``unknown``) for some or differs between them.
     """
     if versions.empty:
         raise ValueError("No reductions to read the pipeline of")
     common = {}
     for product, column in PIPELINE_COLUMNS.items():
         values = versions[column] if column in versions else pd.Series(None, index=versions.index)
+        values = values.map(knownVersion)
         if values.isna().any():
             raise ValueError(
                 f"{int(values.isna().sum())} of {len(values)} reductions record no {product} version"

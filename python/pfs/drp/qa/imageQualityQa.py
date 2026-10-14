@@ -81,7 +81,8 @@ class ImageQualityQaConnections(
             " ``pctLowSN``, ``pctMeasFail``,"
             " ``nLines`` (rows of ``lines``), ``traceOnly``, ``qaStatus``"
             " (``PASS``, ``WARN``, ``FAIL``, or ``UNKNOWN`` when no metric was"
-            " judged), ``qaDecidedBy``, ``qaReason``."
+            " judged), ``qaDecidedBy``, ``qaReason``, ``calexpRun`` (the RUN"
+            " collection of the calexp judged, null without one)."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -399,6 +400,10 @@ class ImageQualityQaTask(PipelineTask):
             # Unexpected exceptions are left to propagate.
             self.log.error("ImageQualityQaTask failed for %s: %s", dataId, e)
         else:
+            # The RUN of the calexp judged: its pfsArm, written beside it, records the pipeline
+            # that reduced it, which the gate checks against the thresholds' (PIPE2D-1938).
+            calexpRef = getattr(inputRefs, "calexp", None)
+            outputs.iqQaMetrics["calexpRun"] = calexpRef.run if calexpRef is not None else None
             butlerQC.put(outputs.iqQaData, outputRefs.iqQaData)
             butlerQC.put(outputs.iqQaMetrics, outputRefs.iqQaMetrics)
             butlerQC.put(outputs.iqQaSpeciesMetrics, outputRefs.iqQaSpeciesMetrics)

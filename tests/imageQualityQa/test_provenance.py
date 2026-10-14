@@ -166,9 +166,8 @@ class TestPipelineVersions:
         }
 
     def testMissingProductsAreLeftOut(self):
-        assert pipelineVersions({"VERSION_DRP_STELLA": "w.2026.40", "VERSION_OBS_PFS": " "}) == {
-            "drp_stella": "w.2026.40"
-        }
+        header = {"VERSION_DRP_STELLA": "w.2026.40", "VERSION_OBS_PFS": " ", "VERSION_DATAMODEL": "unknown"}
+        assert pipelineVersions(header) == {"drp_stella": "w.2026.40"}
         assert pipelineVersions({}) == {}
 
     def testCommonPipeline(self):
@@ -184,5 +183,9 @@ class TestPipelineVersions:
         unknown.loc[2, PIPELINE_COLUMNS["obs_pfs"]] = None
         with pytest.raises(ValueError, match="1 of 3 reductions record no obs_pfs"):
             commonPipeline(unknown)
+        # "unknown" agreeing with "unknown" says nothing about the pipeline.
+        sentinel = versions.assign(versionDatamodel="unknown")
+        with pytest.raises(ValueError, match="3 of 3 reductions record no datamodel"):
+            commonPipeline(sentinel)
         with pytest.raises(ValueError, match="No reductions"):
             commonPipeline(versions.iloc[:0])

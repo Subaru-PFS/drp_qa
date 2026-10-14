@@ -41,7 +41,7 @@ import pandas as pd
 
 from pfs.drp.qa.metrics.calibration import addSpecies, readThresholds
 from pfs.drp.qa.metrics.registry import specFor
-from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS, PIPELINE_PRODUCTS
+from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS, PIPELINE_PRODUCTS, knownVersion
 
 __all__ = [
     "PROVISIONAL_COLUMNS",
@@ -340,7 +340,12 @@ def gate(
     verdicts = pd.DataFrame(
         {"qaStatus": status, "qaDecidedBy": decidedBy, "qaReason": reason}, index=metrics.index
     )
-    return verdicts if pipeline is None else verdicts.join(pipelineMismatch(metrics, pipeline))
+    if pipeline is not None:
+        # By position: an index join would multiply rows that share a label.
+        mismatch = pipelineMismatch(metrics, pipeline)
+        for column in PROVISIONAL_COLUMNS:
+            verdicts[column] = mismatch[column].to_numpy()
+    return verdicts
 
 
 def pipelineMismatch(metrics: pd.DataFrame, pipeline: Mapping[str, str]) -> pd.DataFrame:
@@ -365,13 +370,15 @@ def pipelineMismatch(metrics: pd.DataFrame, pipeline: Mapping[str, str]) -> pd.D
         Indexed like ``metrics``, with `PROVISIONAL_COLUMNS`:
 
         ``qaProvisional``
-            Whether a product's version differs, or is unknown on either side.
+            Whether a product's version differs, or is unknown (null or
+            ``unknown``) on either side.
         ``qaPipeline``
             Why, e.g. ``drp_stella w.2026.41-6-ge56938d2 (thresholds
             w.2026.38)``; ``the thresholds record no pipeline``; ``reduction's
             pipeline unknown``. Empty when not provisional.
     """
-    if not any(product in pipeline for product in PIPELINE_PRODUCTS):
+    pipeline = {product: knownVersion(pipeline.get(product)) for product in PIPELINE_PRODUCTS}
+    if not any(pipeline.values()):
         reasons = ["the thresholds record no pipeline"] * len(metrics)
     else:
         images = pd.DataFrame(
@@ -383,10 +390,11 @@ def pipelineMismatch(metrics: pd.DataFrame, pipeline: Mapping[str, str]) -> pd.D
         )
         reasons = []
         for row in images.itertuples(index=False):
+            known = (knownVersion(value) for value in row)
             versions = {
-                product: value
-                for product, value in zip(PIPELINE_PRODUCTS, row, strict=True)
-                if not _isNull(value)
+                product: version
+                for product, version in zip(PIPELINE_PRODUCTS, known, strict=True)
+                if version is not None
             }
             if not versions:
                 reasons.append("reduction's pipeline unknown")

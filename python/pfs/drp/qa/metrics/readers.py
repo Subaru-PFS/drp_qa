@@ -13,7 +13,7 @@ import pandas as pd
 
 from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS, pipelineVersions
 
-__all__ = ["chooseRun", "readMetrics", "readPipelineVersions"]
+__all__ = ["chooseRun", "readMetrics", "readPipelineVersions", "readReductionPipelines"]
 
 #: Data ID keys copied onto each row when the stored table lacks them.
 _DATA_ID_KEYS = ("visit", "arm", "spectrograph")
@@ -149,6 +149,70 @@ def readPipelineVersions(
         row = {key: ref.dataId[key] for key in _DATA_ID_KEYS}
         rows.append(row | {column: versions.get(product) for product, column in PIPELINE_COLUMNS.items()})
     return pd.DataFrame(rows, columns=columns).sort_values(list(_DATA_ID_KEYS), ignore_index=True)
+
+
+def readReductionPipelines(
+    butler,
+    metrics: pd.DataFrame,
+    fallback: str | Iterable[str] | None = None,
+    datasetType: str = "pfsArm",
+    instrument: str = "PFS",
+    readHeader: Callable[[Any], Mapping[str, Any]] | None = None,
+) -> pd.DataFrame:
+    """Read the pipeline that made the reduction each metrics row judged.
+
+    Each ``pfsArm`` is read from the RUN of the calexp ``imageQualityQa``
+    judged (``calexpRun``), so it is the one written beside that calexp. A
+    search of a chain could find a later reduction of the same detector.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        A Butler; read-only is enough.
+    metrics : `pandas.DataFrame`
+        ``iqQaMetrics`` rows, with ``visit``, ``arm``, ``spectrograph`` and
+        ``calexpRun`` (null, or absent in metrics written before it, when
+        unknown).
+    fallback : `str` or iterable of `str`, optional
+        Collections to search for a row with no ``calexpRun``. Only right
+        where each detector has one reduction, e.g. a fresh collection. By
+        default such a row's pipeline is unknown.
+    datasetType, instrument, readHeader
+        As for `readPipelineVersions`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        `PIPELINE_COLUMNS`, one row per row of ``metrics`` in its order and
+        with its index; null where unknown.
+    """
+    keys = list(_DATA_ID_KEYS)
+    columns = list(PIPELINE_COLUMNS.values())
+    images = metrics[keys].reset_index(drop=True)
+    if "calexpRun" in metrics:
+        runs = pd.Series(metrics["calexpRun"].to_numpy(dtype=object), index=images.index)
+    else:
+        runs = pd.Series(None, index=images.index, dtype=object)
+    known = runs.notna()
+    groups = [([run], images[known & (runs == run)]) for run in sorted(set(runs[known]))]
+    if fallback:
+        groups.append((fallback, images[~known]))
+    result = pd.DataFrame(None, index=images.index, columns=columns, dtype=object)
+    for collections, subset in groups:
+        if subset.empty:
+            continue
+        versions = readPipelineVersions(
+            butler,
+            subset["visit"],
+            collections=collections,
+            datasetType=datasetType,
+            instrument=instrument,
+            readHeader=readHeader,
+        )
+        found = subset.reset_index().merge(versions, on=keys, how="inner")
+        result.loc[found["index"].to_numpy(), columns] = found[columns].to_numpy(dtype=object)
+    result.index = metrics.index
+    return result
 
 
 def _primaryHeader(uri) -> dict[str, Any]:

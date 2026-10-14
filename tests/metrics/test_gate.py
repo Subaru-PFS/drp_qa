@@ -414,3 +414,24 @@ def testGateMarksProvisionalOnlyWhenAsked():
     # Provisional qualifies the verdict; it doesn't change it.
     assert checked["qaStatus"].tolist() == plain["qaStatus"].tolist() == ["PASS", "PASS"]
     assert checked["qaProvisional"].tolist() == [False, True]
+
+
+def testUnknownIsNotAVersion():
+    """Both sides reading "unknown" is no match."""
+    metrics = reductions("w.2026.41-6-ge56938d2").assign(versionObsPfs="unknown")
+    result = pipelineMismatch(metrics, PIPELINE | {"obs_pfs": "unknown"})
+    assert result["qaPipeline"].tolist() == ["obs_pfs unknown (thresholds unknown)"]
+    assert pipelineMismatch(metrics, dict.fromkeys(PIPELINE, "unknown"))["qaPipeline"].tolist() == [
+        "the thresholds record no pipeline"
+    ]
+
+
+def testGateKeepsOneRowPerImageWithDuplicateLabels():
+    """Rows that share an index label keep their own verdicts and flags, in order."""
+    thresholds = pd.DataFrame([{"metric": "medFwhm", "warn": 3.0, "fail": 4.0, "higherIsWorse": True}])
+    metrics = reductions("w.2026.41-6-ge56938d2", "w.2026.38").assign(medFwhm=[2.0, 5.0])
+    metrics.index = [0, 0]
+    result = gate(metrics, thresholds, pipeline=PIPELINE)
+    assert len(result) == 2
+    assert result["qaStatus"].tolist() == ["PASS", "FAIL"]
+    assert result["qaProvisional"].tolist() == [False, True]

@@ -405,7 +405,7 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     from pfs.drp.qa.comparison.findings import findings, judgeImages, taskPipeline, taskThresholds
     from pfs.drp.qa.comparison.report import ReportInputs, buildReport, failedSummary, populations
     from pfs.drp.qa.metrics.gate import pipelineMismatch
-    from pfs.drp.qa.metrics.readers import readMetrics, readPipelineVersions
+    from pfs.drp.qa.metrics.readers import readMetrics, readReductionPipelines
     from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS
 
     butler = Butler(args.butler, writeable=False)
@@ -437,16 +437,17 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
 
     # The output's own runs only: the chain also holds earlier versions' verdicts.
     metrics = readMetrics(butler, done, collections=ownRuns(butler, output))
-    # The pipeline of each reduction judged, from the pfsArm made beside its calexp: the output
-    # chain is searched as imageQualityQa searched it for the calexp.
+    # The pipeline of each reduction judged, from the pfsArm in its calexp's RUN; unknown for
+    # metrics written before imageQualityQa recorded that RUN, until they are judged again.
     print(f"reading the pipeline of {len(metrics)} reductions from their pfsArm headers", flush=True)
-    versions = readPipelineVersions(butler, done, collections=[output])
-    metrics = metrics.drop(columns=list(PIPELINE_COLUMNS.values()), errors="ignore").merge(
-        versions, on=["visit", "arm", "spectrograph"], how="left"
-    )
+    versions = readReductionPipelines(butler, metrics)
+    metrics = metrics.drop(columns=list(PIPELINE_COLUMNS.values()), errors="ignore").reset_index(drop=True)
+    metrics[list(PIPELINE_COLUMNS.values())] = versions.to_numpy(dtype=object)
     metrics.to_parquet(workDir / f"iqQaMetrics-{period.name}.parquet")
     config = butler.get("imageQualityQa_config", collections=[output])
-    metrics = metrics.join(pipelineMismatch(metrics, taskPipeline(config)))
+    mismatch = pipelineMismatch(metrics, taskPipeline(config))
+    for column in mismatch.columns:
+        metrics[column] = mismatch[column].to_numpy()
     judged = judgeImages(metrics, visits, taskThresholds(config))
     from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 

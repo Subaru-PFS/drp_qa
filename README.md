@@ -303,7 +303,8 @@ does not exist in `drp_stella`, so the permissive thresholds above are the curre
 
 `iqQaMetrics` columns, by group:
 
-- **Identity** — `visit`, `arm`, `spectrograph`, `obsType`, `seqName`
+- **Identity** — `visit`, `arm`, `spectrograph`, `obsType`, `seqName`, `calexpRun` (the RUN collection of the
+  calexp judged, whose `pfsArm` records the reducing pipeline; null without a calexp)
 - **Image quality** — `medFwhm`, `medDxCenter`, `dxCenterRms`, `pctFlagged`, `nLines`,
   `traceOnly`, `qaStatus`, `qaDecidedBy`, `qaReason`
 - **Flag breakdown** (only when `pctFlagged` is finite) — `pctNotVisible`, `pctBlend`,
@@ -458,8 +459,9 @@ verdict is known. The decisions behind the current set:
   instrument. The thresholds file records that pipeline (`pipelineVersions`: datamodel, obs_pfs and drp_stella, as
   drp_stella's `getPfsVersions` writes them into each `pfsArm` header). Given it, the gate marks a verdict on a
   reduction made with another pipeline, or an unknown one, provisional (`qaProvisional`, with the reason in
-  `qaPipeline`); comparison mode reads each reduction's versions from its `pfsArm` and counts the provisional
-  verdicts in its report. A file that records no pipeline makes every verdict provisional.
+  `qaPipeline`); comparison mode reads each reduction's versions from the `pfsArm` in the RUN of the calexp judged
+  (`calexpRun`), so a later reduction of the same detector can't stand in for it, and counts the provisional
+  verdicts in its report. Metrics written before `calexpRun` read as an unknown pipeline until judged again. A file that records no pipeline makes every verdict provisional.
 - **Re-baseline at each summit stack upgrade.** The live gate judges `drpActor`'s reductions, made with the stack
   deployed at the summit, so a new stack needs thresholds of its own:
   1. Reduce the reference sets fresh with the new stack:

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.readers import chooseRun, readMetrics, readPipelineVersions
+from pfs.drp.qa.metrics.readers import chooseRun, readMetrics, readPipelineVersions, readReductionPipelines
 
 
 @dataclass(frozen=True)
@@ -181,3 +181,65 @@ def testReadPipelineVersionsFromFits(tmp_path):
     assert versions[["versionDatamodel", "versionObsPfs", "versionDrpStella"]].values.tolist() == [
         ["w.2026.40", "w.2026.40", "w.2026.41-6-ge56938d2"]
     ]
+
+
+class RunButler:
+    """Holds pfsArms in RUN collections; a chain is searched first run first, as find_first does."""
+
+    def __init__(self, runs: dict[str, dict[tuple, str]]):
+        self.runs = runs  # run -> {(visit, arm, spectrograph): drp_stella version}
+        self.queries = []
+
+    def query_datasets(self, datasetType, collections=None, where="", bind=None, **kwargs):
+        self.queries.append(list(collections))
+        found = {}
+        for run in collections:
+            for key in self.runs.get(run, {}):
+                if key[0] in set(bind["visits"]) and key not in found:
+                    found[key] = run
+        return [
+            StubRef(datasetType, {"visit": v, "arm": a, "spectrograph": s}, run)
+            for (v, a, s), run in found.items()
+        ]
+
+    def getURI(self, ref):
+        dataId = ref.dataId
+        return self.runs[ref.run][(dataId["visit"], dataId["arm"], dataId["spectrograph"])]
+
+
+def testReductionPipelinesComeFromTheCalexpRun():
+    """A later reduction of the detector, first in the chain, doesn't stand in for the one judged."""
+    butler = RunButler(
+        {
+            "PFS/new": {(1, "b", 1): "w.2026.41"},  # reduced again after the verdict
+            "PFS/old": {(1, "b", 1): "w.2026.38", (1, "r", 1): "w.2026.38"},
+        }
+    )
+    readHeader = lambda version: {"VERSION_DRP_STELLA": version}  # noqa: E731
+    metrics = pd.DataFrame(
+        {
+            "visit": [1, 1, 1],
+            "arm": ["r", "b", "b"],
+            "spectrograph": 1,
+            "calexpRun": ["PFS/old", "PFS/old", None],
+        },
+        index=[7, 7, 3],
+    )
+    versions = readReductionPipelines(butler, metrics, readHeader=readHeader)
+    assert versions.index.tolist() == [7, 7, 3]
+    assert versions["versionDrpStella"].fillna("").tolist() == ["w.2026.38", "w.2026.38", ""]
+    assert butler.queries == [["PFS/old"]]
+    # The fallback searches a chain, so it finds the latest: only right for a single reduction.
+    fromChain = readReductionPipelines(
+        butler, metrics, fallback=["PFS/new", "PFS/old"], readHeader=readHeader
+    )
+    assert fromChain["versionDrpStella"].tolist() == ["w.2026.38", "w.2026.38", "w.2026.41"]
+    # Metrics written before calexpRun: unknown, and nothing is read.
+    butler.queries.clear()
+    assert (
+        readReductionPipelines(butler, metrics.drop(columns="calexpRun"), readHeader=readHeader)
+        .isna()
+        .all()
+        .all()
+    )
+    assert butler.queries == []
