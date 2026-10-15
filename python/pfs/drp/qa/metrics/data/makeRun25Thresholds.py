@@ -17,8 +17,9 @@ Adopting it changed five things:
   ``lines``: on an arc mostly trace centroids, whose number follows the
   illumination, and only the fibers a design lights, so an arc lighting one
   fiber group failed it. ``linesPerFiber`` counts unflagged lamp lines (trace
-  centroids on a quartz) per lit fiber, from ``computeLitFiberMetrics.py``'s
-  columns in the validation fixture. It is judged as a tolerance below the
+  centroids on a quartz) per lit fiber, measured in ``u/wtg/qa-thresholds/005``
+  (004's reductions, ``imageQualityQa`` rerun) and merged into the validation
+  fixture. It is judged as a tolerance below the
   Run25 known-good median of each arm and sequence (``seqName``): arcs 25 %/50 %
   (known-good arcs reach 19 % below, on n HgCd; the obstructed ones sit 60-98 %
   below), quartz 2.5 %/5 % (known-good 1.1 %, obstructed 9-55 %). An arm whose

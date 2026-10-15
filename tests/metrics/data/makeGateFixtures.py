@@ -12,10 +12,9 @@ All are engineering and calibration visits.
   verdicts the task made from its config alone, before it read a thresholds
   file: the regression check of ``gate.configThresholds``.
 - ``linesPerFiber``, ``nLitFibers`` and ``nFibers`` in the validation fixture,
-  from ``litFiberMetrics-u_wtg_qa-thresholds_004.parquet``: 004 was measured
-  before ``imageQualityQa`` counted the fibers lit (PIPE2D-1935), so
-  ``computeLitFiberMetrics.py`` beside this computes them from 004's ``lines``
-  and pfsConfig, as the task does.
+  from ``u/wtg/qa-thresholds/005``: 004's reductions with ``imageQualityQa``
+  rerun once it counted the fibers lit (PIPE2D-1935). 004 was measured before,
+  and its other columns are unchanged in 005.
 
     uv run --no-project --with pandas --with pyarrow python makeGateFixtures.py [DIR]
 
@@ -29,6 +28,7 @@ from pathlib import Path
 import pandas as pd
 
 STEM = "u_wtg_qa-thresholds_004"
+LIT_FIBER_STEM = "u_wtg_qa-thresholds_005"
 CONFIG_STEM = "u_wtg_qa-thresholds_003"
 
 #: The columns the gate reads, and the verdict the task stored.
@@ -49,14 +49,16 @@ COLUMNS = [
 
 source = Path(sys.argv[1] if len(sys.argv) > 1 else "~/Projects/Subaru/PFS/data").expanduser()
 here = Path(__file__).parent
-#: The columns the stored metrics lack, from computeLitFiberMetrics.py (PIPE2D-1935).
+#: The columns 004's metrics lack, from 005 (PIPE2D-1935).
 LIT_FIBER_COLUMNS = ["linesPerFiber", "nLitFibers", "nFibers"]
 KEYS = ["visit", "arm", "spectrograph"]
 
 for stem, name in ((STEM, "iqQaMetrics-validation.parquet"), (CONFIG_STEM, "iqQaMetrics-config.parquet")):
     metrics = pd.read_parquet(source / f"iqQaMetrics-{stem}.parquet")[COLUMNS]
     if stem == STEM:
-        litFibers = pd.read_parquet(source / f"litFiberMetrics-{stem}.parquet")[KEYS + LIT_FIBER_COLUMNS]
+        litFibers = pd.read_parquet(source / f"iqQaMetrics-{LIT_FIBER_STEM}.parquet")[
+            KEYS + LIT_FIBER_COLUMNS
+        ]
         metrics = metrics.merge(litFibers, on=KEYS, how="left", validate="one_to_one")
     metrics.sort_values(["visit", "arm", "spectrograph"], ignore_index=True).to_parquet(
         here / name, index=False
