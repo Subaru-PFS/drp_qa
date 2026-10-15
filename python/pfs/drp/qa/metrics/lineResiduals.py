@@ -401,8 +401,10 @@ def _sampleUsedTraces(residuals: pd.DataFrame, maxRows: int) -> np.ndarray:
     rank = traces.groupby("fiberId")["y"].rank(method="first").to_numpy(dtype=int) - 1
     count = traces.groupby("fiberId")["y"].transform("size").to_numpy(dtype=int)
     # Keep the ranks nearest maxRows evenly spaced points, as np.linspace(0, count - 1, maxRows) would.
+    # The point a rank falls nearest, capped at the last: with one point, both ends would round to it.
     step = (count - 1) / max(maxRows - 1, 1)
-    nearest = np.round(np.round(rank / np.where(step > 0, step, 1)) * step)
+    point = np.minimum(np.round(rank / np.where(step > 0, step, 1)), maxRows - 1)
+    nearest = np.round(point * step)
     keep[position] = (count <= maxRows) | (rank == nearest)
     return keep
 
@@ -564,7 +566,8 @@ def residualVerdict(
         `SUMMARY_COLUMNS`. ``fitted`` is false when the visit's fit marked
         no line (`UNFITTED`). ``nSpecies`` and ``nSpeciesMeasured`` count
         species against the calibration. ``qaStatus`` is the worst verdict, or
-        ``UNKNOWN`` when no species has ``minLines`` good lines: not
+        ``UNKNOWN`` when no judged row, against either reference, has
+        ``minLines`` good lines: not
         measurable, never measured but not combinable. ``qaDecidedBy`` is
         ``"<reference> <description> <metric>"``.
     """
@@ -600,7 +603,8 @@ def residualVerdict(
         "qaReason": "",
         "recommendedAction": "INSUFFICIENT_DATA",
     }
-    if measured == 0:
+    # Measurable against either reference: the visit's map can predict lines the calibration cannot.
+    if not (wide["nLines"] >= minLines).any():
         summary["qaReason"] = (
             f"fewer than {minLines} good lines in every species" if len(calib) else "no good lines"
         )

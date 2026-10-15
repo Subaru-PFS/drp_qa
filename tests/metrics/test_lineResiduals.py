@@ -695,3 +695,30 @@ def testLineTableSamplesUsedTraces():
     assert len(whole) == len(offsets) > len(table)
     # The statistics do not depend on it: speciesResiduals reads lineResiduals, not the table.
     assert both(speciesResiduals(offsets, 10)).loc[TRACE, "nLines"] == (lines["description"] == TRACE).sum()
+
+
+@pytest.mark.parametrize("limit", [1, 2, 7])
+def testLineTableSamplingNeverExceedsTheLimit(limit):
+    calib = FakeCalib(numFibers=3)
+    offsets = residuals(makeLines(calib, traceRows=50, lampLines=0), calib)
+    table = lineTable(offsets, DATA_ID, maxTraceRowsPerFiber=limit)
+    perFiber = table.groupby("fiberId").size()
+    assert (perFiber == limit).all()
+    if limit == 1:
+        # As np.linspace(0, n - 1, 1): the lowest row only.
+        assert (table.groupby("fiberId")["y"].min() == offsets["y"].min()).all()
+
+
+def testVisitVerdictStandsWhenTheCalibrationMeasuresNothing():
+    """The calibration predicts none of the fibers; the visit's map judges its RESERVED scatter."""
+    calib, visit = FakeCalib(numFibers=0), FakeCalib()
+    lines, _ = withReserved(makeLines(visit), noise=0.2)
+    _, _, summary, full = measure(lines, calib, thresholds=rmsThresholds(), visit=visit)
+    assert (full.loc[full["reference"] == CALIB, "nLines"] == 0).all()
+    assert summary["nSpeciesMeasured"] == 0  # counts species against the calibration
+    assert summary["qaStatus"] == "FAIL"
+    assert summary["qaDecidedBy"].startswith("visit ")
+    assert summary["recommendedAction"] == "RECALIBRATE"
+    # Negative control: with no lines either way, it is still insufficient data.
+    _, _, empty, _ = measure(lines.assign(flag=True), calib, thresholds=rmsThresholds(), visit=visit)
+    assert (empty["qaStatus"], empty["recommendedAction"]) == ("UNKNOWN", "INSUFFICIENT_DATA")
