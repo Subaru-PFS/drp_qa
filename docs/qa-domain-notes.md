@@ -50,7 +50,11 @@ Returns `(obs_type, is_iis, seq_nam)`:
 - `obs_type`: one of `"arc"`, `"trace"`, `"science"`, `"allsky"` (`W_SEQNAM` starting
   "sky"), `"twilight"` (starting "twilight"), `"dark"` (`scienceDark`), `"unknown"`
 - `is_iis`: `True` when illuminated by the 16 IIS engineering fibers (lamp header names
-  from `getLamps()` end with `"_eng"`, e.g. `"Ar_eng"`)
+  from `getLamps()` end with `"_eng"`, e.g. `"Ar_eng"`). The headers are read without
+  `DATA-TYP`: `getLamps()` answers `{"Quartz"}` for any `FLAT` before reading them, which took
+  Run30's nightly "ImageQuality (Halogen)" IIS quartz (`W_IISQTH`) for a full-slit quartz, so
+  its calexp failed and it fell back to `fiberProfiles` (PIPE2D-1953). Judging IIS frames on
+  their own fibers is PIPE2D-1954.
 - `seq_nam`: raw `W_SEQNAM` string
 
 **IIS vs regular**: IIS frames illuminate only 16 engineering fibers rather than all 600

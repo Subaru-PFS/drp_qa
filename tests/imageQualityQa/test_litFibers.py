@@ -7,6 +7,9 @@ on an arc also holds trace centroids whose number follows the illumination, so
 lit fiber, and ``pctFlagged`` is taken over lamp lines alone.
 """
 
+import sys
+from types import ModuleType
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -154,3 +157,39 @@ def testObstructedQuartzFails(runTask, fakes):
     ).iqQaMetrics.iloc[0]
     assert metrics["linesPerFiber"] == pytest.approx(380 / 3)
     assert metrics["qaStatus"] == "FAIL"
+
+
+def _getLamps(md):
+    """obs_pfs's ``getLamps`` for the headers used here, with its DATA-TYP shortcut."""
+    if (md.get("DATA-TYP") or "").lower().strip() == "flat":
+        return {"Quartz"}
+    menu = {"W_IISQTH": "Quartz_eng", "W_IISNEO": "Ne_eng", "W_AITQTH": "Quartz", "W_AITNEO": "Ne"}
+    return {menu[key] for key in menu if md.get(key, False)}
+
+
+def testIisQuartzIsNotAFullSlit(iqqa, runTask, fakes, monkeypatch):
+    """An IIS quartz, DATA-TYP FLAT, is IIS: sparse, and not judged on the science fibers (PIPE2D-1953)."""
+    monkeypatch.setitem(sys.modules, "lsst.obs.pfs.utils", ModuleType("lsst.obs.pfs.utils"))
+    monkeypatch.setattr(sys.modules["lsst.obs.pfs.utils"], "getLamps", _getLamps, raising=False)
+    iis = {"DATA-TYP": "FLAT", "W_IISQTH": True, **fakes.header("scienceTrace", "ImageQuality (Halogen)")}
+    slit = {"DATA-TYP": "FLAT", "W_AITQTH": True, **fakes.header(*TRACE)}
+    task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
+    assert task._classifyVisit(fakes.Exposure(np.zeros((2, 2)), iis), None)[:2] == ("trace", True)
+    assert task._classifyVisit(fakes.Exposure(np.zeros((2, 2)), slit), None)[:2] == ("trace", False)
+    # Negative control: getLamps on the header as it is takes the IIS quartz for a science-fiber one.
+    assert _getLamps(iis) == {"Quartz"}
+
+    detectorMap = fakes.DetectorMap(numFibers=20)
+    lines = fakes.arcLines(detectorMap, 380, fibers=detectorMap.fiberId[:2], description="Trace")
+    calexp = fakes.Exposure(fakes.noiseImage(detectorMap), iis)
+    thresholds = [lowerIsWorse("linesPerFiber", warn=370, fail=360, seqName="ImageQuality (Halogen)")]
+    metrics = runTask(
+        lines,
+        detectorMap=detectorMap,
+        calexp=calexp,
+        pfsConfig=fakes.PfsConfig(detectorMap.fiberId),
+        fiberProfiles=fakes.FiberProfiles(detectorMap, sigma=1.0),
+        thresholds=thresholds,
+    ).iqQaMetrics.iloc[0]
+    assert np.isnan(metrics["linesPerFiber"]) and not metrics["traceOnly"]
+    assert metrics["qaStatus"] == "UNKNOWN"

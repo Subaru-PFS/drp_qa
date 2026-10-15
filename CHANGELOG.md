@@ -17,7 +17,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   trace centroids an arc also records, and the quartz calexp trace width is measured on the lit fibers, so a quartz
   lighting one fiber group no longer falls back to `fiberProfiles`. Comparison mode judges daily arcs and traces
   measured this way; rows without `nLitFibers` still skip `nLines` and `pctFlagged` there. 149217 is dropped from
-  the validation set: its pfsConfig lights every fiber.
+  the validation set: its pfsConfig lights every fiber. An IIS quartz (`DATA-TYP` `FLAT`, `W_IISQTH`), which
+  `getLamps` reads as a science-fiber quartz (PIPE2D-1953), is now classified IIS and reported sparse, as IIS arcs
+  are, rather than falling back to `fiberProfiles`; judging IIS frames is PIPE2D-1954.
 
 - **Pipeline-version check** (PIPE2D-1938) — the thresholds file records the pipeline that reduced its visits
   (`pipelineVersions`: datamodel, obs_pfs, drp_stella; optional, so the schema stays at version 2), and

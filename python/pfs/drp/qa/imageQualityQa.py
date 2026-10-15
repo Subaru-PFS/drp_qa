@@ -78,6 +78,16 @@ def litFibers(pfsConfig: PfsConfig | None, fiberId: np.ndarray) -> tuple[set[int
     return {int(f) for f in np.asarray(pfsConfig.fiberId)[lit]}, int(possible.sum())
 
 
+class _WithoutDataType:
+    """A header's ``get``, less ``DATA-TYP``, so `getLamps` reads the lamp headers of a flat."""
+
+    def __init__(self, metadata):
+        self.metadata = metadata
+
+    def get(self, key, default=None):
+        return default if key == "DATA-TYP" else self.metadata.get(key, default)
+
+
 class ImageQualityQaConnections(
     PipelineTaskConnections,
     dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -1310,11 +1320,14 @@ class ImageQualityQaTask(PipelineTask):
         # Distinguish IIS (engineering fiber) illumination from regular (all
         # 600 science fibers).  IIS lamp header names end with "_eng"
         # (e.g. "Ar_eng", "Quartz_eng") while regular lamps do not.
+        # getLamps answers {"Quartz"} for any DATA-TYP FLAT before reading the
+        # lamp headers, which hides an IIS quartz (W_IISQTH): the lamp headers
+        # are read without DATA-TYP (PIPE2D-1953).
         is_iis = False
         try:
             from lsst.obs.pfs.utils import getLamps
 
-            lamps = getLamps(metadata)
+            lamps = getLamps(_WithoutDataType(metadata))
             is_iis = any(name.endswith("_eng") for name in lamps)
         except Exception:
             pass  # obs_pfs unavailable or headers missing; assume regular
