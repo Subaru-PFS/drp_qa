@@ -265,6 +265,25 @@ from reserved lines" log line gives a robust RMS too, but over every species at 
 mixing traces and lamp lines (R7). The weighted RMS and softening per species are drp_stella's,
 from the `Stats for <species>` log lines (`iqQaSpeciesMetrics`), over the `USED` lines.
 
+Measured in `u/wtg/qa-thresholds/009` (2026-10-15): the validation visits only, so Run25's
+known-good visits and the fault examples of Runs 27 and 30; no healthy visit of a later run.
+Against the calibration it reproduces 008 exactly. RESERVED robust RMS against the visit's map:
+
+- **Run25 known-good lamp lines and traces**: medians 0.05–0.11 px in x and y per arm; the
+  highest 0.25 px in x, 0.17 px in y on b and m. HgI is the exception in y: n 0.42–0.62 px,
+  r up to 1.12 px (median 0.14). n-arm values predate the pipeline changes that made the n
+  arm reliable (about Run29–30).
+- **Sky lines on twilights** (NaI, OI, OH, O2) reach 1–7 px in y, b3/b4 the worst: the fit
+  fallback above, not the map's scatter. Not judged.
+- **Run27**, used only for its faults: SM1 sits 0.32 px in x (median, up to 0.72 px), the
+  spectrograph defocused in part of the run; against the calibration built later, SM3 sits
+  0.85 px in y (median, up to 5.4 px; 0.88 px in x) and SM2 reaches 3.3 px in y. The metric
+  separates both faults from Run25.
+- **No thresholds yet.** Each arm and species has 5–12 known-good visits, so the 95th and
+  99th percentiles are both the maximum and WARN would sit on FAIL. The plan is a tolerance
+  above each arm and species' known-good median, lamp lines and traces only, checked on later
+  runs' healthy detectors once PIPE2D-1938's reductions are run through `dmLineResiduals`.
+
 ---
 
 ## Arc Lamp Physics and b-arm `pctFlagged` Failures
