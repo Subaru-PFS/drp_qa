@@ -128,7 +128,8 @@ SM1-defocused quartz 140032 and 140139, and the test fixtures in `tests/imageQua
 
 - `medFwhm`: median FWHM in pixels
 - `medDxCenter` / `dxCenterRms`: median and scatter of the spatial offset from
-  `detectorMap_calib`, a flexure diagnostic
+  `detectorMap_calib` (measured minus calibration, as drp_stella's residuals; the opposite sign
+  before PIPE2D-1921), a flexure diagnostic
 - `pctFlagged`: percentage of arc lines flagged by `fitDetectorMap`
 - `nLines`: rows of the `lines` dataset, whichever path measures the FWHM; not judged
 - `linesPerFiber`: unflagged lamp lines (trace centroids on a quartz) per lit fiber, the judged

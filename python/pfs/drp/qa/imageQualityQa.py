@@ -559,14 +559,14 @@ class ImageQualityQaTask(PipelineTask):
         data["peakRatio"] = np.nan
 
         # Flexure diagnostic: offset from static calibration detectorMap.
-        # Positive dxCenter means the calibration prediction is to the right
-        # of the actual measured fiber position.
+        # Measured minus calibration, as drp_stella's residuals (PIPE2D-1921): positive
+        # dxCenter means the fiber sits to the right of the calibration's prediction.
         if detectorMapCalib is not None and "x" in data.columns:
             calibX = detectorMapCalib.getXCenter(
                 np.asarray(data["fiberId"], dtype=np.int32),
                 np.asarray(data["y"], dtype=np.float64),
             )
-            data["dxCenter"] = calibX - data["x"]
+            data["dxCenter"] = data["x"] - calibX
         else:
             data["dxCenter"] = np.nan
 
