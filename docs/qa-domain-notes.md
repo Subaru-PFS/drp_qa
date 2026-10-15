@@ -243,9 +243,10 @@ Measured in the validation run (`u/wtg/qa-thresholds/006`, 2026-10-15):
   `rejectOutliers`' fallback, whose y limit is a percentile over rows that are mostly
   traces with zero y residual; not confirmed.
 - **drp_stella's INFO lines are not in the Butler logs** of these reductions:
-  `pipetask --log-level PFS=INFO` raises no task's logger (`reduceExposure`,
-  `dmDriftMonitor`), so the `reduceExposure_log` holds only the executor's lines, and the
-  fit statistics `imageQualityQa` parses from it are absent. Use `--log-level INFO`.
+  the tasks log as `pfs.<task>`, lowercase, which `--log-level PFS=INFO` misses and a bare
+  `INFO` (which sets only `lsst`) does too. The `reduceExposure_log` and `dmDriftMonitor_log`
+  hold only the executor's lines, and the fit statistics `imageQualityQa` parses are absent.
+  Use `--log-level pfs=INFO`, as drpActor sets it (PIPE2D-1938).
 
 ---
 
