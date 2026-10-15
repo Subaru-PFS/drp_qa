@@ -61,7 +61,9 @@ class TestCheckedInSet:
         assert not visits & {140033, 140034}, "no raw data"
         assert all(entry.spectrographs == (1,) and entry.metric == "medFwhm" for entry in sm1)
         assert visitSet.expectationFor(140130, arm="b", spectrograph=1, seqType="Arc: Neon") == "FAIL"
-        assert visitSet.expectationFor(140130, arm="b", spectrograph=2, seqType="Arc: Neon") is None
+        assert visitSet.expectationFor(140130, arm="b", spectrograph=4, seqType="Arc: Neon") is None
+        # SM2 has a verdict of its own: drift against a later calibration (PIPE2D-1921).
+        assert visitSet.expectationFor(140130, arm="b", spectrograph=2, seqType="Arc: Neon") == "FAIL"
         assert visitSet.expectationFor(140075) is None, "unlogged visits in the range carry no verdict"
 
     def testUnlitSpectrographsAreKnownBad(self):
@@ -81,14 +83,6 @@ class TestCheckedInSet:
         assert len(faults) == 14 and {entry.run for entry in faults} == {27}
         assert {entry.run for entry in visitSet.confirmedBad} == {25, 27, 30}
         assert {entry.run for entry in visitSet.knownGood} == {25}
-
-    def testSingleVisitHeliumTestsNeedNoSeqType(self):
-        """The hand-written summary misspells 150779's sequence; no selector depends on it."""
-        visitSet = loadValidationVisits()
-        for visit in (150779, 150782):
-            (entry,) = visitSet.find(visit, arm="b", spectrograph=1)
-            assert entry.seqType is None
-            assert entry.metric == "medDxCenter"
 
     def testKnownGoodIsPopulated(self):
         """The Run25 stable set; thresholds cannot be derived without it."""
@@ -176,13 +170,11 @@ class TestRun30KnownBad:
         for visit in (149217, 149398, 149881, 150367, 150413):
             assert visitSet.expectationFor(visit, arm="b", spectrograph=1) is None
 
-    def testFlexureCaseIsAttributedToTheCalibComparison(self):
-        """Phase 2's reference case: a real offset against detectorMap_calib."""
+    def testHeliumFlexureTestsCarryNoVerdict(self):
+        """Removed (PIPE2D-1921): their offsets from detectorMap_calib are well under the drift WARN."""
         visitSet = loadValidationVisits()
-        flexure = [e for e in visitSet.knownBad if e.visits[0] in (150779, 150782)]
-        assert len(flexure) == 2
-        assert all(entry.metric == "medDxCenter" for entry in flexure)
-        assert all(entry.expect == "WARN" for entry in flexure)
+        for visit in (150779, 150782):
+            assert visitSet.expectationFor(visit, arm="b", spectrograph=1) is None
 
 
 class TestUnconfirmedVerdicts:
@@ -192,19 +184,20 @@ class TestUnconfirmedVerdicts:
         """They are real visits; hiding them defeats the point of recording them."""
         visitSet = loadValidationVisits()
         suspect = {entry.visits[0] for entry in visitSet.knownBad if entry.unconfirmed}
-        assert suspect == {149883, 150661}
+        # 133532, 135830, 134334: Run25 SM3's y offset from its calibration (PIPE2D-1921).
+        assert suspect == {149883, 150661, 133532, 135830, 134334}
 
     def testConfirmedBadExcludesThem(self):
         """A guess must not decide whether a threshold separates the bad data."""
         visitSet = loadValidationVisits()
-        assert len(visitSet.confirmedBad) == len(visitSet.knownBad) - 2
+        assert len(visitSet.confirmedBad) == len(visitSet.knownBad) - 5
         assert all(not entry.unconfirmed for entry in visitSet.confirmedBad)
 
     def testTheyStillCarryAVerdictAndAReason(self):
         """Unconfirmed means "not established", not "unspecified"."""
         for entry in loadValidationVisits().knownBad:
             if entry.unconfirmed:
-                assert entry.expect == "FAIL"
+                assert entry.expect in ("WARN", "FAIL")
                 assert entry.reason
 
     def testConfirmedEntriesDefaultToConfirmed(self, writeYaml):

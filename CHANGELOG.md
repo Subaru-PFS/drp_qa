@@ -10,6 +10,25 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Detector-map drift monitoring** (PIPE2D-1921) — new task `dmDriftMonitor` (`drpQA.yaml`), per detector, against
+  `detectorMap_calib` rather than the visit's own `detectorMap`. Per line species of `lines`: `medianDeltaX` and
+  `robustRmsDeltaX` from trace centroids (measured minus calibration), `medianDeltaY` and `robustRmsDeltaY` from lamp
+  lines, `nLines` and `linesPerFiber`, over the lines the visit's detectorMap fit marked `DETECTORMAP_USED` or
+  `DETECTORMAP_RESERVED` (`statusType` `BOTH`, judged) and over each alone (diagnostics), in long format
+  (`dmDriftMetrics`, with each metric's verdict and the visit's `cameraSet`, e.g. `brn`, `bm`); a detector whose fit marked
+  no line is measured over all its good lines (`UNFITTED`, `fitted` false), being reduced against the calibration
+  unadjusted; and one row per detector (`dmDriftSummary`): `qaStatus`, `recommendedAction` (`NOMINAL`,
+  `APPLY_SHIFT`, `RECALIBRATE`, `INSUFFICIENT_DATA`) and the calibration used (`calibId`, `calibRun`, its creation
+  date and input visits). `readers.readCalibValidity` looks up its validity range. The action follows the metric:
+  a median offset at WARN (1 px) is `APPLY_SHIFT`, at FAIL (2 px, short of drp_stella's 3 px line-search radius)
+  `RECALIBRATE`; robust RMS, judged only where a thresholds file names it, and any crossing on `UNFITTED` lines are
+  `RECALIBRATE`. Run25 SM3 after its calibration block sits 1.4 px off in y: unconfirmed in the validation set for
+  `medianDeltaY`; Run27 before 140477, reduced against a calibration built later, is known-bad (SM3 `medianDeltaX`
+  WARN, SM2 `medianDeltaY` FAIL) in place of the missing stale-calibration case. Findings from the validation run
+  are in `docs/qa-domain-notes.md`. The off-zenith Helium tests (150779, 150782) leave the validation set: their
+  expected flexure WARN does not hold.
+  Logic in the stack-free `metrics.drift`.
+
 - **Judging on the fibers lit** (PIPE2D-1935) — new `iqQaMetrics` columns `linesPerFiber` (unflagged lamp lines per
   lit fiber on an arc, unflagged trace centroids per lit fiber on a quartz), `nLitFibers` and `nFibers` (the
   detector's `GOOD` fibers, and those plus the ones hidden behind a black dot, from the pfsConfig; `litFibers`),
@@ -237,6 +256,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   This needs matplotlib 3.10, now the minimum in `pyproject.toml` (PIPE2D-1916).
 
 ### Changed
+
+- **`dxCenter` is measured minus calibration** (PIPE2D-1921), the sign of drp_stella's residuals and of the drift
+  metrics, in `iqQaData` and `crossDispersion`; `medDxCenter` changes sign with it. Verdicts are unchanged (judged on
+  `|medDxCenter|`), but `iqQaMetrics` stored before this change, the validation fixtures among them, hold the opposite
+  sign.
 
 - **Comparison mode reuses earlier versions' reductions** (PIPE2D-1918) — by default, a new drp_qa version now
   reuses the reductions an earlier version's comparison of the period made, as `--fresh` already did, and judges

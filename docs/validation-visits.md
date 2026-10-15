@@ -98,14 +98,22 @@ identified by visit number, with no observer, target or design names.
 - **Partial slit illumination (Run30)** is no longer known-bad (PIPE2D-1935): with one fiber
   group lit, each lit fiber measures the lines a full slit's does, and `linesPerFiber`
   passes it. `tests/metrics/test_gate.py` checks 149398, 149881, 150367 and 150413 pass.
-- **Off-zenith Helium detectorMap tests (Run30, alt 45–49):** a real flexure offset against
-  a zenith-derived `detectorMap_calib`; `medDxCenter`, `WARN` (provisional). They are the
-  reference case for drift monitoring (PIPE2D-1921). On the n arm `reduceExposure` fails on
-  these Helium arcs, so n has no metrics.
+- **Off-zenith Helium detectorMap tests (Run30, 150779 and 150782, alt 45–49)** were listed
+  as the flexure case, `WARN` provisionally, and are removed: against `detectorMap_calib`
+  they sit within 0.2 px in y and −0.33 to −0.51 px in x on b, as b read with m does at the
+  zenith (PIPE2D-1921). On the n arm `reduceExposure` fails on Helium (PIPE2D-1960).
+- **Run27 against a later calibration (PIPE2D-1921):** the Run27 `detectorMap_calib` was
+  built from 140502–140526, after these visits. Up to 140148, SM3 sits +1.15 px off in x
+  (`medianDeltaX`, `WARN`) and SM2 −3.15 px off in y on b and r (`medianDeltaY`, `FAIL`);
+  from 140477 on, neither is. The reference case for a calibration from another epoch.
+- **Run25 SM3 after its calibration block (unconfirmed):** every Run25 visit after
+  133055 sits off `detectorMap_calib` in y, by the same pixels in every arm of a
+  spectrograph (n with the opposite sign): SM1 0.45, SM2 0.65, SM3 1.40, SM4 0.70 px
+  (PIPE2D-1921). The adjustment absorbs it, so they stay known-good, but SM3 reaches the
+  1.0 px `medianDeltaY` WARN. Unconfirmed until the cause is known.
 
 ### Gaps
 
-- A visit reduced against a stale `detectorMap_calib` (for PIPE2D-1921).
 - A saturated frame (for PIPE2D-1922's saturation metric).
 - m-arm traces: only the short block B and C sequences exist, below the sample floor.
 
@@ -178,6 +186,15 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 140130–140132 | 27 | scienceArc | b, r, n | 1 | Arc: Neon | FAIL | `medFwhm` | SM1 defocused (Run27). 5 s, az 336. |
 | 140133–140135 | 27 | scienceArc | b, r, n | 1 | Arc: Krypton | FAIL | `medFwhm` | SM1 defocused (Run27). 70 s, az 336. |
 | 140136–140138 | 27 | scienceArc | b, r, n | 1 | Arc: HgCd | FAIL | `medFwhm` | SM1 defocused (Run27). 45 s, az 336. |
+| 139971 | 27 | scienceArc | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
+| 140005–140006 | 27 | scienceArc | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
+| 140124–140138 | 27 | scienceArc | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
+| 140032 | 27 | scienceTrace | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
+| 140035 | 27 | scienceTrace | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
+| 140139–140148 | 27 | scienceTrace | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
+| 139971 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
+| 140005–140006 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
+| 140124–140138 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
 | 139971 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `nLines` | SM1 lamp didn't turn on. (Run27, 1 s arc) |
 | 140477 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `nLines` | No light on SM1. (Run27, 1 s arc) |
 | 140640 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
@@ -187,8 +204,6 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 150116 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | M1 cover closed. |
 | 150641 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
 | 150642 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
-| 150779 | 30 | scienceArc | b, m, n | 1, 2, 3, 4 | any | WARN | `medDxCenter` | DetectorMap test pre-exposure (Helium). Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib. |
-| 150782 | 30 | scienceArc | b, m, n | 1, 2, 3, 4 | any | WARN | `medDxCenter` | DetectorMap test post-exposure (Helium). Alt 49, az 53, insrot 5; flexure against a zenith-derived detectorMap_calib. |
 
 ### Unconfirmed
 
@@ -196,12 +211,14 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 |---|---|---|---|---|---|---|---|---|
 | 150661 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | Trace | FAIL |  | Noted "Mirror cover open, but screen is wrong position" in the calibration summary. Probably a failure; neither the verdict nor the metric that should catch it has been established. |
 | 149883 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | FAIL |  | Noted "Home" in the calibration summary, a note whose meaning is not settled. Other visits carry the same tag. Recorded so its metrics can be compared against the Run25 set; probably a failure, but unestablished. |
+| 133532–135850 | 25 | scienceTrace | all | 3 | Trace | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
+| 135830–135848 | 25 | scienceArc | all | 3 | any | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
+| 134334–135279 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
 
 ### Placeholders
 
 | Visits | Run | Type | Arms | Spectrographs | Sequence | Expect | Metric | Reason |
 |---|---|---|---|---|---|---|---|---|
-| *to find* |  |  | all | all | any | WARN | `medDxCenter` | Reduced against a stale detectorMap_calib; bulk spatial offset. |
 | *to find* |  |  | all | all | any | FAIL | `pctSaturatedPixels` | Saturated exposure; peak pixels flagged SAT. |
 <!-- END GENERATED: validationVisits tables -->
 

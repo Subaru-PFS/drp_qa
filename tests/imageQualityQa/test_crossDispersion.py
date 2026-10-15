@@ -344,13 +344,15 @@ class TestImageWidths:
         np.testing.assert_allclose(subset.sort_values("fiberId")["fwhm"], expected, rtol=0.01)
 
     @pytest.mark.parametrize("shift", [-0.4, 0.3])
-    def testDxCenterIsCalibMinusMeasured(self, shift):
-        """Traces displaced by +shift from the calib prediction give dxCenter = -shift."""
+    def testDxCenterIsMeasuredMinusCalib(self, shift):
+        """Traces displaced by +shift from the calib prediction give dxCenter = +shift, as drp_stella's residuals."""
         image, variance, bad, xCenters, fiberIds = traceImage(nRows=1, shift=shift)
         table = measureImageWidths(
             image, variance, bad, [0], fiberIds, xCenters, np.ones_like(xCenters), calibXCenters=xCenters
         )
-        assert table["dxCenter"].median() == pytest.approx(-shift, abs=0.02)
+        assert table["dxCenter"].median() == pytest.approx(shift, abs=0.02)
+        # Negative control: not calibration minus measured, the sign before PIPE2D-1921.
+        assert not np.isclose(table["dxCenter"].median(), -shift, atol=0.02)
 
     def testDxCenterIsNanWithoutACalib(self):
         image, variance, bad, xCenters, fiberIds = traceImage(nRows=1)

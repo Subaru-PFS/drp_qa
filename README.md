@@ -177,8 +177,8 @@ width, a Gaussian fitted to the profile understates it by 8–10 %, and drp_stel
 - **`medFwhm`** — Median FWHM in pixels across all good measurements for the detector quantum. Reflects the
   cross-dispersion width of the fiber PSF. Typical good values (Run25) are 2.5–3.2 px on arcs and 3.1–3.4 px on quartz;
   values above 3.5 px indicate a focus or alignment problem (SM1 defocused in Run27 read 4.1–4.5 px on quartz).
-- **`medDxCenter`** / **`dxCenterRms`** — Median and scatter of the spatial offset between the static calibration
-  detectorMap and the measured fiber positions, in pixels. This is a flexure diagnostic: a large `|medDxCenter|` means
+- **`medDxCenter`** / **`dxCenterRms`** — Median and scatter of the spatial offset of the measured fiber positions
+  from the static calibration detectorMap (measured minus calibration, as drp_stella's residuals), in pixels. This is a flexure diagnostic: a large `|medDxCenter|` means
   the whole detector has shifted relative to the calibration, while a large `dxCenterRms` at small median suggests a
   distortion rather than a bulk shift. `NaN` when no `detectorMap_calib` is available.
 - **`pctFlagged`** — Percentage of arc lines flagged by `fitDetectorMap` (below S/N threshold or otherwise rejected).

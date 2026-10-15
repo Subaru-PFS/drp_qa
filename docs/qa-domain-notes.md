@@ -128,7 +128,8 @@ SM1-defocused quartz 140032 and 140139, and the test fixtures in `tests/imageQua
 
 - `medFwhm`: median FWHM in pixels
 - `medDxCenter` / `dxCenterRms`: median and scatter of the spatial offset from
-  `detectorMap_calib`, a flexure diagnostic
+  `detectorMap_calib` (measured minus calibration, as drp_stella's residuals; the opposite sign
+  before PIPE2D-1921), a flexure diagnostic
 - `pctFlagged`: percentage of arc lines flagged by `fitDetectorMap`
 - `nLines`: rows of the `lines` dataset, whichever path measures the FWHM; not judged
 - `linesPerFiber`: unflagged lamp lines (trace centroids on a quartz) per lit fiber, the judged
@@ -195,6 +196,57 @@ multi-page `dmQaCombinedResidualPlot` via `make_report`, whose pages are drawn b
 
 The task writes **data only**. Plotting lives in `plotting/iqQa.py` and is driven after the
 fact by `bin.src/plotIqQaTimeSeries.py`; there is no `iqQaPlot` dataset.
+
+### Detector-map drift against `detectorMap_calib` (PIPE2D-1921)
+
+`dmDriftMonitor` measures `lines` against the calibration before the visit's adjustment
+(measured minus calibration, as drp_stella's residuals). What the numbers mean:
+
+- **A median offset is mostly harmless.** `adjustDetectorMap` fits a first-order correction
+  per visit and absorbs a shift. It matters when it nears the 3 px radius within which
+  drp_stella finds lines (`centroidLines.peakSearch`, `centroidTraces.searchRadius`): lines
+  are then lost or matched to a neighbour. Hence WARN 1 px, FAIL 2 px.
+- **Scatter about the median is what a shift cannot fix**, but against the calibration it
+  also holds the linear change the adjustment absorbs. Known-good robust RMS (Run25, the
+  calibration's own visits excluded): x 0.18–0.22 px at p99; y 0.08–0.13 px on lamp
+  lines, more on sky lines (NaI 0.32 px).
+- **The calibration's own input visits read zero** by construction; exclude them from any
+  derivation.
+
+Measured in the validation run (`u/wtg/qa-thresholds/006`, 2026-10-15):
+
+- **Run25 after its calibration block** (from 133532): lines sit off in y by the same
+  pixels in every arm of a spectrograph, n with the opposite sign: SM1 0.45, SM2 0.65,
+  SM3 1.40, SM4 0.70 px. SM1 is also +0.25 px in x. Constant from 133532 to 135850, so a
+  step after the calibration block, cause unknown; the r arm drifts a further 0.3–0.4 px
+  within twilight sequences.
+- **Run27 against its calibration** (built from 140502–140526, after these visits): SM3
+  +1.15 px in x on every arm; SM2 −3.15 px in y on b and r, at the search radius; SM3
+  −1.75 to +3.6 px in y. Cause unknown.
+- **b read with m** sits −0.47 px in x, read with r +0.08 px (PIPE2D-1927).
+- **Off-zenith flexure is small**: the Helium detectorMap tests at alt 45–49 (150779,
+  150782) sit within 0.2 px in y on b and m, and b −0.33 to −0.51 px in x, the camera-set
+  offset of b read with m; at most about 0.1 px of flexure, far under the 1 px WARN.
+- **b-arm Argon arcs are never adjusted**: too few lamp lines, so no line is marked
+  `USED` or `RESERVED`, and they are reduced against the calibration as it is
+  (`UNFITTED`). Their offsets go into the reduction uncorrected: Run25 b3 Argon after the
+  calibration block carries the SM3 y offset (1.13 px, WARN); on the calibration's own
+  visits they read +0.22 px (`u/wtg/qa-thresholds/008`).
+- **A robust RMS near 2.2 px is noise**: lines spread uniformly over drp_stella's ±3 px
+  search window give 0.741 × 3 = 2.22 px. Known-good lamp lines sit at 0.05–0.25 px.
+  Never-adjusted b-Argon species reach it (a few real Argon lines in noise; their median is
+  still stable), and so does Run27 SM3 against its calibration (1.5–4.8 px, medians from
+  −3.5 to +3.6 px): there the change is more than a shift and the median means little.
+  Run27 SM2 is the opposite case: −3.15 px at 0.1 px scatter, a clean shift.
+- **Twilight b3/b4** (134886, 135278, 135279): the fit kept all ~2 million trace rows and
+  used none of 1,300–2,300 sky lines; only the reserved tenth survive. The signature of
+  `rejectOutliers`' fallback, whose y limit is a percentile over rows that are mostly
+  traces with zero y residual; not confirmed.
+- **drp_stella's INFO lines are not in the Butler logs** of these reductions:
+  the tasks log as `pfs.<task>`, lowercase, which `--log-level PFS=INFO` misses and a bare
+  `INFO` (which sets only `lsst`) does too. The `reduceExposure_log` and `dmDriftMonitor_log`
+  hold only the executor's lines, and the fit statistics `imageQualityQa` parses are absent.
+  Use `--log-level pfs=INFO`, as drpActor sets it (PIPE2D-1938).
 
 ---
 

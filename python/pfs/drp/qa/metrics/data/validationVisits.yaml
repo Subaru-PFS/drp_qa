@@ -515,15 +515,70 @@ known_bad:
     metric: medFwhm
     reason: "SM1 defocused (Run27). 45 s, az 336."
 
-  # TODO(PIPE2D-1921): find a visit reduced against an out-of-date
-  # detectorMap_calib. This is the reference case for the PIPE2D-1921 drift
-  # metrics: large drift against a stale calib must be attributed to the calib,
-  # not to the instrument.
-  - placeholder: true
-    visit: null
+  # Run27 against its own detectorMap_calib, built from 140502-140526, after these
+  # visits: the reference case for a calibration from another epoch (PIPE2D-1921).
+  # Every visit up to 140148 is offset, and from 140477 on none is, so the
+  # instrument changed between the two; the SM1 defocus noted above is in the same
+  # interval. SM3 is +1.15 px in x on every arm; SM2 -3.15 px in y on b and r,
+  # beyond the 2 px FAIL. SM3 in y (-1.75 to +3.6 px) varies too much to expect one
+  # verdict, and is not listed.
+  - visit: 139971
+    sequenceType: scienceArc
+    spectrographs: [3]
     expect: WARN
-    metric: medDxCenter
-    reason: "Reduced against a stale detectorMap_calib; bulk spatial offset."
+    metric: medianDeltaX
+    reason: "Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x."
+  - visitRange: [140005, 140006]
+    sequenceType: scienceArc
+    spectrographs: [3]
+    expect: WARN
+    metric: medianDeltaX
+    reason: "Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x."
+  - visitRange: [140124, 140138]
+    sequenceType: scienceArc
+    spectrographs: [3]
+    expect: WARN
+    metric: medianDeltaX
+    reason: "Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x."
+  - visit: 140032
+    sequenceType: scienceTrace
+    spectrographs: [3]
+    expect: WARN
+    metric: medianDeltaX
+    reason: "Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x."
+  - visit: 140035
+    sequenceType: scienceTrace
+    spectrographs: [3]
+    expect: WARN
+    metric: medianDeltaX
+    reason: "Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x."
+  - visitRange: [140139, 140148]
+    sequenceType: scienceTrace
+    spectrographs: [3]
+    expect: WARN
+    metric: medianDeltaX
+    reason: "Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x."
+  - visit: 139971
+    sequenceType: scienceArc
+    arms: [b, r]
+    spectrographs: [2]
+    expect: FAIL
+    metric: medianDeltaY
+    reason: "Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius."
+  - visitRange: [140005, 140006]
+    sequenceType: scienceArc
+    arms: [b, r]
+    spectrographs: [2]
+    expect: FAIL
+    metric: medianDeltaY
+    reason: "Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius."
+  - visitRange: [140124, 140138]
+    sequenceType: scienceArc
+    arms: [b, r]
+    spectrographs: [2]
+    expect: FAIL
+    metric: medianDeltaY
+    reason: "Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius."
 
   # TODO(PIPE2D-1922): find a saturated frame if one exists in the archive.
   # This is the reference case for the real-saturation metric of PIPE2D-1922.
@@ -650,24 +705,38 @@ known_bad:
   # was illuminated", has a pfsConfig lighting every fiber and a full slit's
   # metrics.
 
-  # Off-zenith Helium DetectorMap tests bracketing a science exposure, at
-  # altitude 45-49 and insrot 5-9 rather than at the zenith the calibration
-  # was taken at. This is the flexure reference case: a real offset against
-  # detectorMap_calib, which is what the PIPE2D-1921 drift metrics must detect and
-  # attribute correctly. WARN rather than FAIL is provisional. On the n arm,
-  # reduceExposure fails on these Helium arcs ("need at least one array to
-  # concatenate"), so n has no metrics; the arm stays listed so the gap shows.
-  - visit: 150779
-    sequenceType: scienceArc
-    arms: [b, m, n]
-    spectrographs: [1, 2, 3, 4]
+  # Run25 after its calibration block (133025-133055): every later visit sits off
+  # detectorMap_calib in y by the same pixels in each arm of a spectrograph, n with
+  # the opposite sign (SM1 0.45, SM2 0.65, SM3 1.40, SM4 0.70 px; PIPE2D-1921,
+  # u/wtg/qa-thresholds/006). The adjustment absorbs it, so the reductions are
+  # good, but SM3's medianDeltaY reaches the 1.0 px WARN. Unconfirmed until the
+  # cause is known: reported, not judged, and known-good for every other metric.
+  - visitRange: [133532, 135850]
+    sequenceType: scienceTrace
+    spectrographs: [3]
+    seqType: "Trace"
     expect: WARN
-    metric: medDxCenter
-    reason: "DetectorMap test pre-exposure (Helium). Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib."
-  - visit: 150782
+    metric: medianDeltaY
+    unconfirmed: true
+    reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
+  - visitRange: [135830, 135848]
     sequenceType: scienceArc
-    arms: [b, m, n]
-    spectrographs: [1, 2, 3, 4]
+    spectrographs: [3]
     expect: WARN
-    metric: medDxCenter
-    reason: "DetectorMap test post-exposure (Helium). Alt 49, az 53, insrot 5; flexure against a zenith-derived detectorMap_calib."
+    metric: medianDeltaY
+    unconfirmed: true
+    reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
+  - visitRange: [134334, 135279]
+    sequenceType: scienceObject
+    spectrographs: [3]
+    seqType: "Twilight sky"
+    expect: WARN
+    metric: medianDeltaY
+    unconfirmed: true
+    reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
+
+  # The off-zenith Helium detectorMap tests (150779, 150782; alt 45-49) were listed
+  # here as the flexure case, WARN provisionally. Measured against detectorMap_calib
+  # (PIPE2D-1921), b sits -0.33 to -0.51 px in x, as b read with m does at the
+  # zenith, and every arm within 0.2 px in y: any flexure is well under the 1 px
+  # WARN, so the verdict does not hold and they were removed.

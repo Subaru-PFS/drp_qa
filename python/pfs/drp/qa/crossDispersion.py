@@ -468,7 +468,7 @@ def measureImageWidths(
         Detector-map x-center and wavelength of each fiber on each row.
     calibXCenters : array-like, shape (nRows, nFibers), optional
         x-center predicted by the static calibration detector map. When given,
-        ``dxCenter`` is that prediction minus the measured centroid.
+        ``dxCenter`` is the measured centroid minus that prediction, as drp_stella's residuals.
     select : collection of `int`, optional
         Fiber IDs to report. `None` reports every fiber.
     minPeakSN : `float`, optional
@@ -501,7 +501,7 @@ def measureImageWidths(
         result = measureRow(image[ii], bad[ii], variance[ii], xCenters[ii], minPeakSN=minPeakSN, fit=report)
         keep = report & np.isfinite(xCenters[ii]) & np.isfinite(wavelengths[ii])
         n = int(keep.sum())
-        dxCenter = calib[ii][keep] - result["centroid"][keep] if calib is not None else np.full(n, np.nan)
+        dxCenter = result["centroid"][keep] - calib[ii][keep] if calib is not None else np.full(n, np.nan)
         frames.append(
             pd.DataFrame(
                 {
