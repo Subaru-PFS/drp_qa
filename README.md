@@ -199,7 +199,8 @@ width, a Gaussian fitted to the profile understates it by 8–10 %, and drp_stel
   centroids, whose number follows the illumination and the pipeline rather than the lamp (PIPE2D-1935).
 - **`linesPerFiber`** — The judged count: unflagged lamp lines per lit fiber on an arc, unflagged trace centroids
   per lit fiber on a quartz (about 4,160, one per detector row); `NaN` on other frames or without a pfsConfig.
-  A design that lights one fiber group (the others parked behind their black dots) is judged like a full slit;
+  A design that lights one fiber group (a *shaka* exposure: every fourth cobra, the others parked behind their black
+  dots; see `docs/qa-domain-notes.md`) is judged like a full slit;
   an obstructed frame, lit by its design but dim, still fails. On Run30's daily neon, a one-group arc measures
   the same lines on each lit fiber as a fully lit one.
 - **`nLitFibers`**, **`nFibers`** — The detector's fibers the pfsConfig lights (`fiberStatus` `GOOD`, engineering

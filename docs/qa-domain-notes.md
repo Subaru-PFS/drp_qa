@@ -137,7 +137,7 @@ SM1-defocused quartz 140032 and 140139, and the test fixtures in `tests/imageQua
   fiber, flagged when not measured, and trace centroids (`description == "Trace"`), on an arc
   as on a quartz: 55-88 % of an arc's rows. A fiber a design hides (`fiberStatus` BLACKSPOT)
   has none. Trace centroids per fiber follow the illumination (b1: 691 on a Run25 neon set,
-  609 fully lit and 473 one group lit in Run30), lamp lines per lit fiber do not.
+  609 fully lit and 473 on a shaka exposure in Run30), lamp lines per lit fiber do not.
 - `traceOnly`: True when falling back to fiber-profile widths; `medFwhm` is then not judged
 - `obsType` / `seqName`: visit classification and raw `W_SEQNAM`
 - `qaStatus`: `"PASS"`, `"WARN"`, or `"FAIL"` — the worst of the FWHM, flag-rate, and
@@ -149,6 +149,33 @@ Additional columns are added dynamically: a per-status-bit flag breakdown
 and `reduceExposure_log` connections are present — ISR, cosmic-ray, and `fitDetectorMap`
 statistics (`fitChi2`, `fitXRms`, `fitYRms`, `fitReserved*`, per-fiber arrays; the
 per-species values go to `iqQaSpeciesMetrics`).
+
+### Shaka exposures: one fiber group lit (PIPE2D-1935)
+
+A *shaka* exposure is taken on a fiber-group design (`fiberProfiles` groups) that lights about
+a quarter of the fibers. Group *n* lights every fourth cobra counted along the slit: number the
+cobras in fiber order through all four spectrographs from 0, skipping engineering fibers and empty
+holes, and group *n* is those whose number is *n* − 1 modulo 4. It is exact on Run30's daily neon
+arcs 150413, 149881, 149398 and 150367 (groups 1-4: 585-589 cobras each, none off the phase);
+it is not `cobraId` modulo 4. The design drives its group home; the other cobras stay parked on
+their black dots, not commanded, recorded as `fiberStatus` BLACKSPOT.
+
+Spectrograph 1, holes 1-100 (opdb `pfs_config_fiber`):
+
+```
+150413  1    E●x··●···●···●···●···●c··●···●···●···●···●·_E··●···●···●···●···●···●···●···●···●···ccc·●··_E_·●···●·
+149881  2    E·x○··●···●··○●···●···c···●···●···●···●···●_E···●···●···●···●···●···●···●···●···●··ccc··●·_E_··●···●
+149398  3    E·x●···●···●···●···●··c●···●···●···●···●···_E●···●···●···●···●···●···●···●···●···●·ccc···●_E_···●···
+150367  4    E·x·●···●···●···●···●·c·●···●···●···●···●··_E·●···●···●···●···●···●···●···●···●···●ccc●···_E_●···●··
+149883  all  E●x●●●●●●●●●●●●●●●●●●●c●●●●●●●●●●●●●●●●●●●●_E●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●ccc●●●●_E_●●●●●●●
+```
+
+`●` lit, driven home (`GOOD`); `·` hidden behind its dot (`BLACKSPOT`); `○` lit, cobra not moved
+(`GOOD`, no nominal position); `c` broken cobra; `x` broken fiber; `E` engineering fiber;
+`_` empty hole. Engineering fibers, empty holes and broken cobras on the phase widen the gap
+between lit fibers to 5-8; the unmoved `GOOD` cobras (14-40 per visit, nearly all off the phase)
+narrow it to 1-3. Those are lit, measuring as many lamp lines as the driven ones, which is why
+`litFibers` counts every `GOOD` fiber and not only those with a nominal position.
 
 ### DM residual metrics
 
