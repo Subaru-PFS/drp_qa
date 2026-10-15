@@ -141,27 +141,35 @@ class DmDriftMonitorConfig(PipelineTaskConfig, pipelineConnections=DmDriftMonito
         dtype=float,
         default=1.0,
         doc=(
-            "|medianDeltaX| (pixels) of a trace species at or above which it is WARN. Provisional:"
-            " imageQualityQa's dxCenterWarnThreshold, origin unrecorded. NaN to disable."
+            "|medianDeltaX| (pixels) of a trace species at or above which it is WARN (APPLY_SHIFT): the"
+            " calibration no longer matches, though the visit's adjustment absorbs a shift. A third of the"
+            " 3 px capture radius (FAIL); above Run25's known-good offsets, which reach 0.57 px (b read with"
+            " m) and 0.33 px otherwise (PIPE2D-1921, u/wtg/qa-thresholds/006). NaN to disable."
         ),
     )
     xFailThreshold = Field(
         dtype=float,
         default=2.0,
         doc=(
-            "|medianDeltaX| (pixels) of a trace species at or above which it is FAIL. Provisional:"
-            " imageQualityQa's dxCenterFailThreshold, origin unrecorded. NaN to disable."
+            "|medianDeltaX| (pixels) at or above which it is FAIL (RECALIBRATE). A physical limit: drp_stella"
+            " finds lines within 3 px of the calibration's prediction (centroidLines.peakSearch,"
+            " centroidTraces.searchRadius); 2 px leaves room for the scatter (known-good robust RMS up to"
+            " 0.22 px) and the line width. NaN to disable."
         ),
     )
     yWarnThreshold = Field(
         dtype=float,
-        default=np.nan,
-        doc="|medianDeltaY| (pixels) of a lamp species at or above which it is WARN. NaN: not judged.",
+        default=1.0,
+        doc=(
+            "|medianDeltaY| (pixels) of a lamp species at or above which it is WARN (APPLY_SHIFT); as"
+            " xWarnThreshold. Run25 after its calibration block sits up to 1.5 px off in y on SM3, so those"
+            " visits WARN; the validation set records them as unconfirmed (PIPE2D-1921). NaN to disable."
+        ),
     )
     yFailThreshold = Field(
         dtype=float,
-        default=np.nan,
-        doc="|medianDeltaY| (pixels) of a lamp species at or above which it is FAIL. NaN: not judged.",
+        default=2.0,
+        doc="|medianDeltaY| (pixels) at or above which it is FAIL (RECALIBRATE); as xFailThreshold.",
     )
 
 

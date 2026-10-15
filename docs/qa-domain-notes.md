@@ -197,6 +197,45 @@ multi-page `dmQaCombinedResidualPlot` via `make_report`, whose pages are drawn b
 The task writes **data only**. Plotting lives in `plotting/iqQa.py` and is driven after the
 fact by `bin.src/plotIqQaTimeSeries.py`; there is no `iqQaPlot` dataset.
 
+### Detector-map drift against `detectorMap_calib` (PIPE2D-1921)
+
+`dmDriftMonitor` measures `lines` against the calibration before the visit's adjustment
+(measured minus calibration, as drp_stella's residuals). What the numbers mean:
+
+- **A median offset is mostly harmless.** `adjustDetectorMap` fits a first-order correction
+  per visit and absorbs a shift. It matters when it nears the 3 px radius within which
+  drp_stella finds lines (`centroidLines.peakSearch`, `centroidTraces.searchRadius`): lines
+  are then lost or matched to a neighbour. Hence WARN 1 px, FAIL 2 px.
+- **Scatter about the median is what a shift cannot fix**, but against the calibration it
+  also holds the linear change the adjustment absorbs. Known-good robust RMS (Run25, the
+  calibration's own visits excluded): x 0.18–0.22 px at p99; y 0.08–0.13 px on lamp
+  lines, more on sky lines (NaI 0.32 px).
+- **The calibration's own input visits read zero** by construction; exclude them from any
+  derivation.
+
+Measured in the validation run (`u/wtg/qa-thresholds/006`, 2026-10-15):
+
+- **Run25 after its calibration block** (from 133532): lines sit off in y by the same
+  pixels in every arm of a spectrograph, n with the opposite sign: SM1 0.45, SM2 0.65,
+  SM3 1.40, SM4 0.70 px. SM1 is also +0.25 px in x. Constant from 133532 to 135850, so a
+  step after the calibration block, cause unknown; the r arm drifts a further 0.3–0.4 px
+  within twilight sequences.
+- **Run27 against its calibration** (built from 140502–140526, after these visits): SM3
+  +1.15 px in x on every arm; SM2 −3.15 px in y on b and r, at the search radius; SM3
+  −1.75 to +3.6 px in y. Cause unknown.
+- **b read with m** sits −0.47 px in x, read with r +0.08 px (PIPE2D-1927).
+- **b-arm Argon arcs are never adjusted**: too few lamp lines, so no line is marked
+  `USED` or `RESERVED`, and they are reduced against the calibration as it is
+  (`UNFITTED`).
+- **Twilight b3/b4** (134886, 135278, 135279): the fit kept all ~2 million trace rows and
+  used none of 1,300–2,300 sky lines; only the reserved tenth survive. The signature of
+  `rejectOutliers`' fallback, whose y limit is a percentile over rows that are mostly
+  traces with zero y residual; not confirmed.
+- **drp_stella's INFO lines are not in the Butler logs** of these reductions:
+  `pipetask --log-level PFS=INFO` raises no task's logger (`reduceExposure`,
+  `dmDriftMonitor`), so the `reduceExposure_log` holds only the executor's lines, and the
+  fit statistics `imageQualityQa` parses from it are absent. Use `--log-level INFO`.
+
 ---
 
 ## Arc Lamp Physics and b-arm `pctFlagged` Failures

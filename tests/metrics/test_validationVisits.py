@@ -192,19 +192,20 @@ class TestUnconfirmedVerdicts:
         """They are real visits; hiding them defeats the point of recording them."""
         visitSet = loadValidationVisits()
         suspect = {entry.visits[0] for entry in visitSet.knownBad if entry.unconfirmed}
-        assert suspect == {149883, 150661}
+        # 133532, 135830, 134334: Run25 SM3's y offset from its calibration (PIPE2D-1921).
+        assert suspect == {149883, 150661, 133532, 135830, 134334}
 
     def testConfirmedBadExcludesThem(self):
         """A guess must not decide whether a threshold separates the bad data."""
         visitSet = loadValidationVisits()
-        assert len(visitSet.confirmedBad) == len(visitSet.knownBad) - 2
+        assert len(visitSet.confirmedBad) == len(visitSet.knownBad) - 5
         assert all(not entry.unconfirmed for entry in visitSet.confirmedBad)
 
     def testTheyStillCarryAVerdictAndAReason(self):
         """Unconfirmed means "not established", not "unspecified"."""
         for entry in loadValidationVisits().knownBad:
             if entry.unconfirmed:
-                assert entry.expect == "FAIL"
+                assert entry.expect in ("WARN", "FAIL")
                 assert entry.reason
 
     def testConfirmedEntriesDefaultToConfirmed(self, writeYaml):

@@ -19,8 +19,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   no line is measured over all its good lines (`UNFITTED`, `fitted` false), being reduced against the calibration
   unadjusted; and one row per detector (`dmDriftSummary`): `qaStatus`, `recommendedAction` (`NOMINAL`,
   `APPLY_SHIFT`, `RECALIBRATE`, `INSUFFICIENT_DATA`) and the calibration used (`calibId`, `calibRun`, its creation
-  date and input visits). `readers.readCalibValidity` looks up its validity range. Thresholds are provisional:
-  `|medianDeltaX|` 1.0/2.0 px (imageQualityQa's `dxCenter` thresholds, origin unrecorded), `medianDeltaY` not judged.
+  date and input visits). `readers.readCalibValidity` looks up its validity range. The action follows the metric:
+  a median offset at WARN (1 px) is `APPLY_SHIFT`, at FAIL (2 px, short of drp_stella's 3 px line-search radius)
+  `RECALIBRATE`; robust RMS, judged only where a thresholds file names it, and any crossing on `UNFITTED` lines are
+  `RECALIBRATE`. Run25 SM3 after its calibration block sits 1.4 px off in y: unconfirmed in the validation set for
+  `medianDeltaY`. Findings from the validation run are in `docs/qa-domain-notes.md`.
   Logic in the stack-free `metrics.drift`.
 
 - **Judging on the fibers lit** (PIPE2D-1935) — new `iqQaMetrics` columns `linesPerFiber` (unflagged lamp lines per

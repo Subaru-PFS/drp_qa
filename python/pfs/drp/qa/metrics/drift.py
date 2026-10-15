@@ -95,14 +95,22 @@ DRIFT_METRICS = {
 #: The counts reported for every species.
 _COUNT_METRICS = ("nLines", "linesPerFiber")
 
-#: The operator's action for each detector verdict. `driftVerdict` also gives
-#: ``UNJUDGED``: lines were measured, but no threshold applies (thresholds disabled).
-RECOMMENDED_ACTIONS = {
-    "PASS": "NOMINAL",
-    "WARN": "APPLY_SHIFT",
-    "FAIL": "RECALIBRATE",
-    "UNKNOWN": "INSUFFICIENT_DATA",
-}
+#: The operator's actions, least to most severe (`recommendedAction`). A
+#: detector takes the most severe of its crossed metrics' actions:
+#:
+#: - a median offset at WARN: ``APPLY_SHIFT``. The calibration no longer matches,
+#:   but the visit's first-order detectorMap adjustment absorbs a shift;
+#: - a median offset at FAIL: ``RECALIBRATE``. The offset nears the 3 px radius
+#:   within which drp_stella finds lines (``centroidLines.peakSearch``,
+#:   ``centroidTraces.searchRadius``), so the adjustment cannot be trusted;
+#: - a robust RMS at WARN or FAIL: ``RECALIBRATE``. Scatter is change a shift
+#:   cannot absorb;
+#: - any crossing on ``UNFITTED`` lines: ``RECALIBRATE``. No adjustment was
+#:   applied, so the offset is in the reduced data.
+#:
+#: ``INSUFFICIENT_DATA`` when nothing was measurable; `driftVerdict` also gives
+#: ``UNJUDGED`` when lines were measured but no threshold applies.
+RECOMMENDED_ACTIONS = ("NOMINAL", "APPLY_SHIFT", "RECALIBRATE")
 
 #: Columns of ``dmDriftMetrics``, in order, with their dtypes: one row per
 #: detector, species, ``statusType`` and metric, with the metric's verdict
@@ -332,7 +340,8 @@ def driftThresholds(
     One entry each for ``medianDeltaX`` and ``medianDeltaY``, judged on their
     absolute value, with no population: they match every detector and
     species, beneath any thresholds file. A NaN threshold is not applied; a
-    metric with both NaN is not judged.
+    metric with both NaN is not judged. The robust RMS has no config entry:
+    it is judged only where a thresholds file names it.
     """
     rows = []
     for metric, warn, fail, name in (
@@ -407,7 +416,7 @@ def driftVerdict(
         "qaStatus": "UNKNOWN",
         "qaDecidedBy": "",
         "qaReason": "",
-        "recommendedAction": RECOMMENDED_ACTIONS["UNKNOWN"],
+        "recommendedAction": "INSUFFICIENT_DATA",
     }
     if measured == 0:
         if len(species):
@@ -423,7 +432,9 @@ def driftVerdict(
     rank = verdicts["status"].map(STATUS_ORDER.index)
     worst = STATUS_ORDER[int(rank.max())]
     summary["qaStatus"] = worst
-    summary["recommendedAction"] = RECOMMENDED_ACTIONS[worst]
+    summary["recommendedAction"] = max(
+        (_action(row) for row in verdicts.itertuples()), key=RECOMMENDED_ACTIONS.index
+    )
     if worst != "PASS":
         decider = verdicts.loc[rank.idxmax()]
         summary["qaDecidedBy"] = f"{decider['description']} {decider['metric']}"
@@ -432,6 +443,15 @@ def driftVerdict(
             f"{d}: {r}" for d, r in zip(crossed["description"], crossed["reason"], strict=True)
         )
     return judged, summary
+
+
+def _action(verdict: Any) -> str:
+    """Return the `RECOMMENDED_ACTIONS` entry for one judged metric (a `judge` row)."""
+    if verdict.status == "PASS":
+        return "NOMINAL"
+    if verdict.statusType == UNFITTED or not verdict.metric.startswith("median"):
+        return "RECALIBRATE"
+    return "APPLY_SHIFT" if verdict.status == "WARN" else "RECALIBRATE"
 
 
 def longDrift(

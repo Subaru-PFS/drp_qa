@@ -23,6 +23,7 @@ from pfs.drp.qa.metrics.drift import (
     robustRms,
     speciesDrift,
 )
+from pfs.drp.qa.metrics.gate import judge
 from pfs.drp.qa.metrics.registry import specFor
 
 DATA_ID = {"visit": 1, "arm": "b", "spectrograph": 2}
@@ -375,3 +376,81 @@ def testNaNPredictionsAreLeftOut():
     # Negative control: the calibration does predict NaN for some of these lines.
     xCenter = calib.getXCenter(lines["fiberId"].to_numpy(), lines["y"].to_numpy())
     assert np.isnan(xCenter[(lines["description"] == TRACE).to_numpy()]).any()
+
+
+@pytest.mark.parametrize(
+    "dx, rms, expected",
+    [
+        (0.12, None, ("WARN", "APPLY_SHIFT")),  # a shift the adjustment absorbs
+        (0.2, None, ("FAIL", "RECALIBRATE")),  # beyond what it can be trusted with
+        (0.0, 0.05, ("WARN", "RECALIBRATE")),  # scatter: a shift cannot fix it
+    ],
+)
+def testActionFollowsTheMetric(dx, rms, expected):
+    calib = FakeCalib()
+    tables = [driftThresholds(0.1, 0.15, NAN, NAN)]
+    if rms is not None:
+        tables.insert(
+            0,
+            pd.DataFrame(
+                {
+                    "metric": ["robustRmsDeltaX"],
+                    "warn": [rms],
+                    "fail": [1.0],
+                    "higherIsWorse": [True],
+                    "absolute": [False],
+                    "provenance": ["test"],
+                }
+            ),
+        )
+    _, _, summary, _ = measure(makeLines(calib, dx=dx, noise=0.1), calib, thresholds=tables)
+    assert (summary["qaStatus"], summary["recommendedAction"]) == expected
+
+
+def testUnfittedCrossingIsRecalibrate():
+    calib = FakeCalib()
+    lines = makeLines(calib, dx=0.12)
+    _, _, unfitted, _ = measure(lines.assign(status=0), calib)
+    assert (unfitted["qaStatus"], unfitted["recommendedAction"]) == ("WARN", "RECALIBRATE")
+    # Negative control: the same offset, adjusted by the visit's fit, only needs a shift.
+    _, _, fitted, _ = measure(lines, calib)
+    assert (fitted["qaStatus"], fitted["recommendedAction"]) == ("WARN", "APPLY_SHIFT")
+
+
+def testValidationVerdicts():
+    """The shipped config on the validation run (u/wtg/qa-thresholds/006): no known-good is flagged.
+
+    The calibration's own input visits are known-good too, and sit at zero by construction.
+    """
+    from pathlib import Path
+
+    from pfs.drp.qa.metrics.calibration import UNCONFIRMED, labelRows
+    from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
+
+    rows = pd.read_parquet(Path(__file__).parent / "data" / "dmDriftMetrics-validation.parquet")
+    rows = rows[rows["nLines"] >= 10].reset_index(drop=True)
+    config = driftThresholds(1.0, 2.0, 1.0, 2.0)
+    judged = judge(rows, config).set_index(["row", "metric"])
+    visitSet = loadValidationVisits()
+    for metric in ("medianDeltaX", "medianDeltaY"):
+        labelled = labelRows(rows, visitSet, metric)
+        status = judged.xs(metric, level="metric")["status"]
+        good = status.loc[labelled.index[labelled["validation"] == "good"]]
+        assert len(good[good != ""]) > 300 and (good[good != ""] == "PASS").all(), metric
+        unconfirmed = status.loc[labelled.index[labelled["validation"] == UNCONFIRMED]]
+        if metric == "medianDeltaY":
+            # Run25 SM3 after its calibration block: most reach WARN, none FAIL.
+            unconfirmed = unconfirmed[unconfirmed != ""]
+            assert len(unconfirmed) > 50 and (unconfirmed == "WARN").mean() > 0.8
+            assert not (unconfirmed == "FAIL").any()
+    # Run27 SM3 (not in the validation set): about 1.15 px in x against its calibration, WARN.
+    sm3 = rows.index[rows["visit"].between(139870, 140871) & (rows["spectrograph"] == 3)]
+    sm3x = judged.xs("medianDeltaX", level="metric")["status"].loc[sm3]
+    assert (sm3x[sm3x != ""] == "WARN").mean() > 0.8
+    # Negative control: the rebuild plan's 0.15 px FAIL would fail known-good Run25 traces.
+    strict = judge(rows, driftThresholds(0.1, 0.15, NAN, NAN)).set_index(["row", "metric"])
+    labelled = labelRows(rows, visitSet, "medianDeltaX")
+    strictGood = strict.xs("medianDeltaX", level="metric")["status"].loc[
+        labelled.index[labelled["validation"] == "good"]
+    ]
+    assert (strictGood == "FAIL").sum() > 50

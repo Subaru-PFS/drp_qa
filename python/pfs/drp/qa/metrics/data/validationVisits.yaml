@@ -650,6 +650,36 @@ known_bad:
   # was illuminated", has a pfsConfig lighting every fiber and a full slit's
   # metrics.
 
+  # Run25 after its calibration block (133025-133055): every later visit sits off
+  # detectorMap_calib in y by the same pixels in each arm of a spectrograph, n with
+  # the opposite sign (SM1 0.45, SM2 0.65, SM3 1.40, SM4 0.70 px; PIPE2D-1921,
+  # u/wtg/qa-thresholds/006). The adjustment absorbs it, so the reductions are
+  # good, but SM3's medianDeltaY reaches the 1.0 px WARN. Unconfirmed until the
+  # cause is known: reported, not judged, and known-good for every other metric.
+  - visitRange: [133532, 135850]
+    sequenceType: scienceTrace
+    spectrographs: [3]
+    seqType: "Trace"
+    expect: WARN
+    metric: medianDeltaY
+    unconfirmed: true
+    reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
+  - visitRange: [135830, 135848]
+    sequenceType: scienceArc
+    spectrographs: [3]
+    expect: WARN
+    metric: medianDeltaY
+    unconfirmed: true
+    reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
+  - visitRange: [134334, 135279]
+    sequenceType: scienceObject
+    spectrographs: [3]
+    seqType: "Twilight sky"
+    expect: WARN
+    metric: medianDeltaY
+    unconfirmed: true
+    reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
+
   # Off-zenith Helium DetectorMap tests bracketing a science exposure, at
   # altitude 45-49 and insrot 5-9 rather than at the zenith the calibration
   # was taken at. This is the flexure reference case: a real offset against
