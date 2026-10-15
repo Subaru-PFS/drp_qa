@@ -20,6 +20,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   the validation set: its pfsConfig lights every fiber. An IIS quartz (`DATA-TYP` `FLAT`, `W_IISQTH`), which
   `getLamps` reads as a science-fiber quartz (PIPE2D-1953), is now classified IIS and reported sparse, as IIS arcs
   are, rather than falling back to `fiberProfiles`; judging IIS frames is PIPE2D-1954.
+  `iqQaThresholds-run25.yaml` judges `linesPerFiber` in place of `nLines`: 25 %/50 % (arcs) and 2.5 %/5 % (quartz)
+  below each arm and sequence's Run25 known-good median, b Argon not judged (`makeRun25Thresholds.py`). The Run30
+  one-group arcs (149398, 149881, 150367, 150413) are no longer known-bad and pass; the obstructed frames are
+  known-bad for `linesPerFiber`. The validation fixture gains `linesPerFiber`, `nLitFibers` and `nFibers`,
+  computed from `u/wtg/qa-thresholds/004` by `tests/metrics/data/computeLitFiberMetrics.py`.
 
 - **Pipeline-version check** (PIPE2D-1938) — the thresholds file records the pipeline that reduced its visits
   (`pipelineVersions`: datamodel, obs_pfs, drp_stella; optional, so the schema stays at version 2), and

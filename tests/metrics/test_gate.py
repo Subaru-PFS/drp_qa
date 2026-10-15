@@ -303,24 +303,37 @@ def testShippedFileIsTheAdoptedRun25(stored):
 
 
 def testShippedFileVerdicts(stored):
-    """Adopted Run25: obstructed and defocused quartz fail, no known-good medFwhm fails; twilight nLines and flags aren't judged."""
+    """Adopted Run25: obstructed frames and defocused quartz fail, one-group arcs pass, no known-good fails; flags aren't judged."""
     thresholds = [thresholdsPath(configDefaults().thresholdsFile), configThresholds(configDefaults())]
     judged = judge(stored, thresholds)
     verdicts = gate(stored, thresholds, default="UNKNOWN")
 
     obstructed = stored["visit"].isin([150115, 150116, 150641, 150642])
     assert (verdicts.loc[obstructed, "qaStatus"] == "FAIL").all()
-    # The validation set records them as known-bad for nLines, the metric that fails them.
-    lines = labelRows(stored, loadValidationVisits(), "nLines")
-    lines = lines[lines["visit"].isin([150115, 150116, 150641, 150642])]
-    assert len(lines) == obstructed.sum() and (lines["validation"] == "bad:FAIL").all()
-    nLines = judged[judged["metric"] == "nLines"].set_index("row")
-    assert (nLines.loc[lines.index, "status"] == "FAIL").all()
-    # Run25 quartz of the validation set: the hand-set nLines passes every one.
+    # The validation set records them as known-bad for linesPerFiber, the metric that fails them
+    # (PIPE2D-1935): each lit fiber measures fewer lines.
+    lines = labelRows(stored, loadValidationVisits(), "linesPerFiber")
+    perFiber = judged[judged["metric"] == "linesPerFiber"].set_index("row")
+    obstructedLines = lines[lines["visit"].isin([150115, 150116, 150641, 150642])]
+    assert len(obstructedLines) == obstructed.sum() and (obstructedLines["validation"] == "bad:FAIL").all()
+    assert (perFiber.loc[obstructedLines.index, "status"] == "FAIL").all()
+    # Every known-good arc and quartz passes it, but b Argon, under a line per fiber, isn't judged.
+    goodLines = perFiber.loc[lines.index[lines["validation"] == "good"]]
+    goodLines = goodLines[goodLines["value"].notna()]
+    argon = stored.loc[goodLines.index, "seqName"].eq("Arc: Argon") & stored.loc[goodLines.index, "arm"].eq(
+        "b"
+    )
+    assert (goodLines.loc[~argon, "status"] == "PASS").all() and (goodLines.loc[argon, "status"] == "").all()
     run25Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(133040, 135850)
-    rows = np.flatnonzero(run25Quartz)
-    quartzLines = judged[(judged["metric"] == "nLines") & judged["row"].isin(rows)]
-    assert len(quartzLines) == len(rows) and (quartzLines["status"] == "PASS").all()
+    assert (perFiber.loc[np.flatnonzero(run25Quartz), "status"] == "PASS").all()
+    # One fiber group lit (Run30 daily neon): each lit fiber measures a full slit's lines, so they pass.
+    oneGroup = np.flatnonzero(stored["visit"].isin([149398, 149881, 150367, 150413]))
+    assert len(oneGroup) == 44 and (perFiber.loc[oneGroup, "status"] == "PASS").all()
+    # Negative control: the derived nLines entries, counting rows of lines, fail or warn them.
+    derivedLines = readThresholds(RUN25)[1]
+    derivedLines = derivedLines[derivedLines["metric"] == "nLines"]
+    rowsJudged = judge(stored.iloc[oneGroup], [derivedLines])
+    assert rowsJudged["status"].isin(["WARN", "FAIL"]).mean() > 0.9
     # medFwhm (PIPE2D-1942): every known-good arc and quartz is judged against its own detector and
     # lamp's Run25 median, and none fails; every known-bad one with a value fails.
     labelled = labelRows(stored, loadValidationVisits(), "medFwhm")
@@ -349,11 +362,10 @@ def testShippedFileVerdicts(stored):
     derived = gate(stored, [RUN25, configThresholds(configDefaults())])
     assert (derived.loc[run25Quartz, "qaStatus"] == "FAIL").any()
 
-    twilight = judged[
-        (judged["metric"] == "nLines")
-        & judged["row"].isin(np.flatnonzero(stored["seqName"] == "Twilight sky"))
-    ]
-    assert len(twilight) and (twilight["status"] == "").all() and (twilight["layer"] == 0).all()
+    # nLines is no longer judged (PIPE2D-1935), nor is a twilight frame's count.
+    assert "nLines" not in set(judged["metric"])
+    twilight = perFiber.loc[np.flatnonzero(stored["seqName"] == "Twilight sky")]
+    assert len(twilight) and (twilight["status"] == "").all()
     # pctFlagged is not judged at all: the shipped file's entry stops the search before the config.
     flags = judged[judged["metric"] == "pctFlagged"]
     assert len(flags) and (flags["layer"] == 0).all() and (flags["status"] == "").all()

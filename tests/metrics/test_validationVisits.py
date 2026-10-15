@@ -164,12 +164,17 @@ class TestRun30KnownBad:
         assert visitSet.expectationFor(150115, arm="b", spectrograph=1) == "FAIL"
         assert visitSet.expectationFor(150641, arm="b", spectrograph=1) == "FAIL"
 
-    def testPartialIlluminationWarnsOnTheLineCount(self):
-        """The defect is how many fibers were measured, not their shape."""
+    def testObstructedFramesFailOnLinesPerFiber(self):
+        """Each lit fiber measures fewer lines (PIPE2D-1935)."""
         visitSet = loadValidationVisits()
-        (entry,) = [e for e in visitSet.knownBad if 149398 in e.visits]
-        assert entry.expect == "WARN"
-        assert entry.metric == "nLines"
+        entries = [e for e in visitSet.knownBad if set(e.visits) & {150115, 150116, 150641, 150642}]
+        assert len(entries) == 4 and all(entry.metric == "linesPerFiber" for entry in entries)
+
+    def testPartialIlluminationIsNotKnownBad(self):
+        """One fiber group lit is judged on its lit fibers, which pass (PIPE2D-1935)."""
+        visitSet = loadValidationVisits()
+        for visit in (149217, 149398, 149881, 150367, 150413):
+            assert visitSet.expectationFor(visit, arm="b", spectrograph=1) is None
 
     def testFlexureCaseIsAttributedToTheCalibComparison(self):
         """Phase 2's reference case: a real offset against detectorMap_calib."""

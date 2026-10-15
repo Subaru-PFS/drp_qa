@@ -118,7 +118,8 @@ SM1-defocused quartz 140032 and 140139, and the test fixtures in `tests/imageQua
 - **Which calibration a reduction used** is in the calexp's provenance; Run27 was reduced with
   Run26 `fiberProfiles` and Run29's for 150116. `pfs.drp.qa.utils.provenance` reads it.
 - **Obstructed quartz** (150116, M1 cover closed): joint-fit usable fraction drops to 3 % (b),
-  52 % (r) and 25 % (n), so b and n fall back to the calibration; `nLines` catches it.
+  52 % (r) and 25 % (n), so b and n fall back to the calibration; `linesPerFiber` catches it
+  (9-56 % below the known-good median).
 - **`lines` on a quartz** holds about 2.4 M trace centroids: 0.8-1.1 s and about 400 MB to read.
 
 ### Output metrics
@@ -129,7 +130,14 @@ SM1-defocused quartz 140032 and 140139, and the test fixtures in `tests/imageQua
 - `medDxCenter` / `dxCenterRms`: median and scatter of the spatial offset from
   `detectorMap_calib`, a flexure diagnostic
 - `pctFlagged`: percentage of arc lines flagged by `fitDetectorMap`
-- `nLines`: rows of the `lines` dataset, whichever path measures the FWHM
+- `nLines`: rows of the `lines` dataset, whichever path measures the FWHM; not judged
+- `linesPerFiber`: unflagged lamp lines (trace centroids on a quartz) per lit fiber, the judged
+  count; `nLitFibers` / `nFibers`: the detector's `GOOD` fibers, and those plus the hidden ones
+- **What `lines` holds** (PIPE2D-1935): a row for every line of the lamp's list on every `GOOD`
+  fiber, flagged when not measured, and trace centroids (`description == "Trace"`), on an arc
+  as on a quartz: 55-88 % of an arc's rows. A fiber a design hides (`fiberStatus` BLACKSPOT)
+  has none. Trace centroids per fiber follow the illumination (b1: 691 on a Run25 neon set,
+  609 fully lit and 473 one group lit in Run30), lamp lines per lit fiber do not.
 - `traceOnly`: True when falling back to fiber-profile widths; `medFwhm` is then not judged
 - `obsType` / `seqName`: visit classification and raw `W_SEQNAM`
 - `qaStatus`: `"PASS"`, `"WARN"`, or `"FAIL"` — the worst of the FWHM, flag-rate, and

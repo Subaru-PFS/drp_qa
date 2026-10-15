@@ -13,11 +13,17 @@ Adopting it changed five things:
   config's fallback (n 15/20 %) is no better: Run25's known-good n-arm Neon
   sets flag 34 % and Run30's 26-35 % (comparison mode, PIPE2D-1929). One entry
   with neither WARN nor FAIL stops the search, so the config isn't used either.
-- **Twilight nLines is not judged.** On a twilight frame the count follows the
-  sky brightness, not the instrument.
-- **Quartz nLines is set by hand.** Its derivation was degenerate (WARN = FAIL
-  at the sample's minimum): WARN is 0.5 % and FAIL 1 % below the smallest
-  known-good Run25 value of the arm, rounded down to 1000.
+- **linesPerFiber replaces nLines** (PIPE2D-1935). ``nLines`` counts rows of
+  ``lines``: on an arc mostly trace centroids, whose number follows the
+  illumination, and only the fibers a design lights, so an arc lighting one
+  fiber group failed it. ``linesPerFiber`` counts unflagged lamp lines (trace
+  centroids on a quartz) per lit fiber, from ``computeLitFiberMetrics.py``'s
+  columns in the validation fixture. It is judged as a tolerance below the
+  Run25 known-good median of each arm and sequence (``seqName``): arcs 25 %/50 %
+  (known-good arcs reach 19 % below, on n HgCd; the obstructed ones sit 60-98 %
+  below), quartz 2.5 %/5 % (known-good 1.1 %, obstructed 9-55 %). An arm whose
+  lamp gives under ``MIN_LINES_PER_FIBER`` lines per fiber (b Argon) is not
+  judged. Twilight is not measured.
 - **medFwhm is judged per detector and lamp** (PIPE2D-1942): WARN 3 % and FAIL
   5 % above the Run25 known-good median of its arm, spectrograph, obsType and
   lamp, adopted as derived. The spectrographs of one arm differ from each
@@ -35,13 +41,14 @@ Run from the repository root:
     PYTHONPATH=python python python/pfs/drp/qa/metrics/data/makeRun25Thresholds.py
 """
 
-import math
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
 import yaml
 
 from pfs.drp.qa.metrics.calibration import GOOD, labelRows
+from pfs.drp.qa.metrics.thresholds import deriveTolerance
 from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 
 ROOT = Path(__file__).parents[6]
@@ -49,9 +56,12 @@ SOURCE = ROOT / "tests" / "metrics" / "data" / "iqQaThresholds-run25.yaml"
 METRICS = ROOT / "tests" / "metrics" / "data" / "iqQaMetrics-validation.parquet"
 OUTPUT = Path(__file__).parent / "iqQaThresholds-run25.yaml"
 
-#: Fractions below the smallest known-good value for quartz nLines WARN and FAIL.
-TRACE_MARGINS = (0.005, 0.01)
-ADOPTED = "2026-10-06"
+#: WARN and FAIL as fractions below the known-good median of linesPerFiber, by obsType.
+LINES_PER_FIBER_MARGINS = {"arc": (0.25, 0.5), "trace": (0.025, 0.05)}
+#: Below this known-good median (lines per lit fiber), a lamp's count on an arm is not judged.
+MIN_LINES_PER_FIBER = 5.0
+#: When linesPerFiber was adopted.
+LINES_PER_FIBER_ADOPTED = "2026-10-14"
 #: When pctFlagged stopped being judged.
 FLAGS_UNJUDGED = "2026-10-08"
 #: When quartz medFwhm was adopted.
@@ -75,16 +85,11 @@ def adopt(document: dict, metrics: pd.DataFrame) -> dict:
     `dict`
         The adopted thresholds file, as YAML.
     """
-    labelled = labelRows(metrics, loadValidationVisits(), "nLines")
-    good = labelled[(labelled["validation"] == GOOD) & (labelled["seqName"] == "Trace")]
-    smallest = good.groupby("arm")["nLines"].min()
-
     entries = []
     for entry in document["thresholds"]:
         entry = dict(entry)
-        seqName = entry["population"].get("seqName")
         population = entry["population"]
-        if entry["metric"] == "pctFlagged":
+        if entry["metric"] in ("pctFlagged", "nLines"):
             continue
         if entry["method"] == "tolerance":
             entry["provenance"] = f"Adopted {TOLERANCE_ADOPTED} (PIPE2D-1942). {entry['provenance']}"
@@ -99,22 +104,8 @@ def adopt(document: dict, metrics: pd.DataFrame) -> dict:
                     "medFwhm WARN would flag every known-good value. Derived values were: "
                     f"{entry['provenance']}"
                 )
-        if entry["metric"] == "nLines" and seqName == "Twilight sky":
-            entry |= {"warn": None, "fail": None, "degenerate": False}
-            entry["provenance"] = (
-                f"Not judged (adopted {ADOPTED}, PIPE2D-1917): on a twilight frame nLines follows the sky "
-                f"brightness, not the instrument. Derived values were: {entry['provenance']}"
-            )
-        elif entry["metric"] == "nLines" and seqName == "Trace":
-            minimum = int(smallest[entry["population"]["arm"]])
-            warn, fail = (1000 * math.floor(minimum * (1 - margin) / 1000) for margin in TRACE_MARGINS)
-            entry |= {"warn": float(warn), "fail": float(fail), "degenerate": False}
-            entry["provenance"] = (
-                f"Set by hand {ADOPTED} (PIPE2D-1917): the derivation from visits {entry['visitRange']} "
-                f"(n={entry['nGood']}) was degenerate, WARN = FAIL at the sample minimum. WARN 0.5 % and "
-                f"FAIL 1 % below the smallest known-good value, {minimum}."
-            )
         entries.append(entry)
+    entries.extend(linesPerFiberEntries(metrics))
     entries.append(
         {
             "metric": "pctFlagged",
@@ -132,6 +123,65 @@ def adopt(document: dict, metrics: pd.DataFrame) -> dict:
         }
     )
     return {key: value for key, value in document.items() if key != "thresholds"} | {"thresholds": entries}
+
+
+def linesPerFiberEntries(metrics: pd.DataFrame) -> list[dict]:
+    """Return the linesPerFiber entries: a tolerance below each arm and sequence's known-good median.
+
+    Parameters
+    ----------
+    metrics : `pandas.DataFrame`
+        The validation visits' ``iqQaMetrics``, with ``linesPerFiber``.
+
+    Returns
+    -------
+    `list` [`dict`]
+        One entry per arm and ``seqName`` of the known-good arcs and quartz.
+    """
+    labelled = labelRows(metrics, loadValidationVisits(), "linesPerFiber")
+    good = labelled[
+        (labelled["validation"] == GOOD)
+        & labelled["obsType"].isin(list(LINES_PER_FIBER_MARGINS))
+        & labelled["linesPerFiber"].notna()
+    ]
+    entries = []
+    for (arm, seqName), group in good.groupby(["arm", "seqName"], sort=True):
+        warnFraction, failFraction = LINES_PER_FIBER_MARGINS[group["obsType"].iloc[0]]
+        visitRange = f"{group['visit'].min()}-{group['visit'].max()}"
+        suggestion = deriveTolerance(
+            group["linesPerFiber"],
+            metric=f"linesPerFiber[{arm}/{seqName}]",
+            warnFraction=warnFraction,
+            failFraction=failFraction,
+            higherIsWorse=False,
+            visitRange=visitRange,
+            derivedOn=date.fromisoformat(LINES_PER_FIBER_ADOPTED),
+        )
+        entry = {
+            "metric": "linesPerFiber",
+            "population": {"arm": arm, "seqName": seqName},
+            "higherIsWorse": False,
+            "absolute": False,
+            "method": "tolerance",
+            "warn": float(suggestion.warn),
+            "fail": float(suggestion.fail),
+            "nGood": int(suggestion.numSamples),
+            "nGoodVisits": int(group["visit"].nunique()),
+            "visitRange": visitRange,
+            "reliable": bool(suggestion.reliable),
+            "failBounded": bool(suggestion.failBounded),
+            "degenerate": False,
+            "provenance": f"Adopted {LINES_PER_FIBER_ADOPTED} (PIPE2D-1935). {suggestion.provenance}",
+        }
+        if suggestion.median < MIN_LINES_PER_FIBER:
+            entry |= {"warn": None, "fail": None}
+            entry["provenance"] = (
+                f"Not judged ({LINES_PER_FIBER_ADOPTED}, PIPE2D-1935): the lamp gives a median of "
+                f"{suggestion.median:.2g} lines per lit fiber on this arm, too few to tell a loss of light "
+                f"from chance. Derived values were: {suggestion.provenance}"
+            )
+        entries.append(entry)
+    return entries
 
 
 def main() -> None:

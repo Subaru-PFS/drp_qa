@@ -535,7 +535,9 @@ known_bad:
 
   # Run27 nightly ImageQuality arcs where one spectrograph's lamp gave no light,
   # as noted in the run's calibration summary. That spectrograph's detectors have no lines; QA must not pass
-  # them.
+  # them. No threshold judges them: their pfsConfig has no GOOD science fiber,
+  # so linesPerFiber is not measured (PIPE2D-1935). If they are IIS frames, as
+  # Run30's nightly ImageQuality are, they belong to PIPE2D-1954.
   - visit: 139971
     sequenceType: scienceArc
     arms: [b, r, n]
@@ -580,34 +582,36 @@ known_bad:
   # ---- Run30 -------------------------------------------------------------
   # Frames taken with the light path obstructed. These are mis-taken frames
   # rather than instrument faults, but they must not pass: a QA gate that
-  # greenlights a frame shot through a closed cover is not a gate.
+  # greenlights a frame shot through a closed cover is not a gate. Their lit
+  # fibers measure a quarter of the lamp lines and nine tenths of the trace
+  # centroids a lit fiber should (linesPerFiber, PIPE2D-1935).
   - visit: 150115
     sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "M1 cover closed."
   - visit: 150116
     sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "M1 cover closed."
   - visit: 150641
     sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "Mirror cover and top screen both closed; noted in the calibration summary as to be ignored."
   - visit: 150642
     sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "Mirror cover and top screen both closed; noted in the calibration summary as to be ignored."
   # Suspected faults, recorded so that somebody looks at them. Both were
   # noted in the calibration summary in words nobody has yet tied to a number, so
@@ -638,43 +642,13 @@ known_bad:
       visits carry the same tag. Recorded so its metrics can be compared against
       the Run25 set; probably a failure, but unestablished.
 
-  # Partial slit illumination: only one fiber group was lit, so most fibers
-  # have no usable measurement. The defect is the count, not the shape.
-  # 149217 ("Only group 2 was illuminated") was dropped (PIPE2D-1935): its
-  # pfsConfig lights every fiber (584 GOOD, 1 BLACKSPOT on SM1), as 149883's
-  # does, and its metrics are a full slit's (2.43M trace centroids on b1).
-  - visit: 149398
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    expect: WARN
-    metric: nLines
-    reason: "Only group 3 was illuminated."
-  - visit: 149881
-    sequenceType: scienceArc
-    arms: [b, m]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    expect: WARN
-    metric: nLines
-    reason: "Only group 2 was illuminated."
-  - visit: 150367
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    expect: WARN
-    metric: nLines
-    reason: "Only group 4 was illuminated."
-  - visit: 150413
-    sequenceType: scienceArc
-    arms: [b, r, n]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Arc: Neon"
-    expect: WARN
-    metric: nLines
-    reason: "Only group 1 was illuminated."
+  # Partial slit illumination (149398, 149881, 150367, 150413: one fiber group
+  # lit) is no longer known-bad (PIPE2D-1935). Their lit fibers measure what a
+  # full slit's do, and linesPerFiber, judged per lit fiber, passes them; only
+  # the raw nLines was short. They are not known_good either, being Run30's:
+  # test_gate checks that they pass. 149217, recorded with them as "Only group 2
+  # was illuminated", has a pfsConfig lighting every fiber and a full slit's
+  # metrics.
 
   # Off-zenith Helium DetectorMap tests bracketing a science exposure, at
   # altitude 45-49 and insrot 5-9 rather than at the zenith the calibration

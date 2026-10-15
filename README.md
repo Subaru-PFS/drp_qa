@@ -237,8 +237,11 @@ The default, `iqQaThresholds-run25.yaml`, holds the thresholds derived from the 
 - `medFwhm` per arm, judging only an image whose detector and lamp have no Run25 median: arcs b 2.872/2.89,
   r 2.987/2.993, n 3.05/3.1, m 3.18/3.21 px; quartz b 3.192/3.198, r 3.39/3.391, n 3.257/3.26 px, and m not judged
   (16 known-good values, below the 20-sample floor).
-- `nLines` per arm and sequence (`seqName`), lower is worse. On quartz it is set by hand, 0.5 %/1 % below the
-  smallest known-good Run25 count, as the derivation was degenerate; on twilight it is not judged.
+- `linesPerFiber` per arm and sequence (`seqName`), lower is worse (PIPE2D-1935): a tolerance below the Run25
+  known-good median, 25 %/50 % on arcs and 2.5 %/5 % on quartz. Known-good arcs reach 19 % below their median
+  (n HgCd) and quartz 1.1 %; the obstructed Run30 frames sit 60–98 % below on arcs and 9–56 % on quartz. b Argon,
+  under a line per lit fiber, is not judged. `nLines` is not judged: it counts rows, mostly trace centroids on an
+  arc, on only the fibers a design lights. Its Run25 thresholds also failed some known-good Run25 arcs.
 - `pctFlagged` is not judged: one entry with neither WARN nor FAIL, which also overrides the config fields. Run25's
   derivation had 5 visits per population, and the config's n-arm 15/20 % sits below the known-good n-arm Neon sets
   of Run25 (34 %) and Run30 (26–35 %), as comparison mode showed (PIPE2D-1929). It stays unjudged until there is a
@@ -453,7 +456,7 @@ verdict is known. The decisions behind the current set:
   against Run25's thresholds; Run30 is the first. Run27 is not a fair comparison: no
   calibrations were made from it, and its n-arm flag rates sit 2–5 points above Run25's.
 - **`imageQualityQa` judges by the adopted Run25 file** (`iqQaThresholds-run25.yaml`): `medFwhm` on arcs and
-  quartz, and `nLines`. Flag rates (`pctFlagged`) are not judged until there is a valid reference; quartz `medFwhm` is
+  quartz, and `linesPerFiber`. Flag rates (`pctFlagged`) are not judged until there is a valid reference; quartz `medFwhm` is
   measured from the calexp width (PIPE2D-1918); twilight is not measured. Details under
   [Pass/Warn/Fail Thresholds](#passwarnfail-thresholds).
 - **`medFwhm` is judged against each detector's own Run25 width, per lamp** (PIPE2D-1942): WARN 3 % and FAIL 5 %
@@ -569,11 +572,13 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
   traces; one-visit sequences of its sequence group (`group_id`) belong to it. Another one-visit sequence is *daily* when
   its name recurs on 4 or more nights (from Run28, a neon arc and a trace, and IIS frames, each day, for drift), and a
   one-off *single* otherwise (positioner scans, bootstrap exposures), judged like a set. All are
-  judged against the thresholds derived from Run25's sets, but `nLines` and `pctFlagged` aren't judged on daily ones:
-  they are often taken with one fiber group lit, which neither allows for yet (PIPE2D-1935).
+  judged against the thresholds derived from Run25's sets. Daily ones are often taken with one fiber group lit:
+  `linesPerFiber` and `pctFlagged` are taken on the lit fibers, so they are judged like sets; metrics measured before
+  that (no `nLitFibers`) skip `nLines` and `pctFlagged` on them (PIPE2D-1935). Run30's nightly `ImageQuality` frames are
+  IIS, reported sparse until PIPE2D-1954.
 - **Sky visits are labelled** from the telescope status: a *focus sweep* (10 or more focus offsets spanning at least
   0.5 mm on one field in one night) changes how much light enters the fibers but not the line widths, so its
-  `nLines` and `pctFlagged` aren't judged; *dithered* visits are marked.
+  `nLines`, `linesPerFiber` and `pctFlagged` aren't judged; *dithered* visits are marked.
 - **Findings are written from the data.** Each `WARN` or `FAIL` image gets the metrics that crossed, how far the
   problem spreads (detector, arm, spectrograph, most of the visit, the whole sequence), the setup and the opdb's
   notes beside it. Notes never decide a verdict.

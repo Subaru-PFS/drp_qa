@@ -392,8 +392,9 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " visits (collection u/wtg/qa-thresholds/004), as adopted in PIPE2D-1917,"
             " PIPE2D-1918 and PIPE2D-1942 by ``makeRun25Thresholds.py`` beside it: medFwhm"
             " 3/5 % above each detector and lamp's Run25 median, per-arm medFwhm where there"
-            " is none, nLines per population, no pctFlagged, and quartz nLines set by hand;"
-            " each entry carries its provenance."
+            " is none, linesPerFiber 25/50 % (arcs) and 2.5/5 % (quartz) below each arm and"
+            " sequence's Run25 median (PIPE2D-1935), and no pctFlagged; each entry carries"
+            " its provenance."
         ),
     )
     dxCenterWarnThreshold = Field(

@@ -89,11 +89,15 @@ identified by visit number, with no observer, target or design names.
   `sky1540+3500` frames, and visits the summary does not list (among them the raster
   scans 140106–140112 and 140115–140121).
 - **Unlit spectrograph (Run27 nightly `ImageQuality` arcs):** exposures noted "No light on
-  SM1" or "SM2". The unlit spectrograph's detectors have no lines; `nLines`, `FAIL`.
+  SM1" or "SM2". The unlit spectrograph's detectors have no lines; `nLines`, `FAIL`. No
+  threshold judges them: their pfsConfig has no `GOOD` science fiber, so `linesPerFiber` is not
+  measured (PIPE2D-1935); if they are IIS frames, they belong to PIPE2D-1954.
 - **Obstructed frames (Run30):** taken with the M1 cover or the top screen closed. Less
-  light reaches the detectors, so fewer lines are found; `nLines`, `FAIL`.
-- **Partial slit illumination (Run30):** only one fiber group lit. Shapes are fine and the
-  line count is not; `nLines`, `WARN`.
+  light reaches the detectors, so each lit fiber measures fewer lines (a quarter of the lamp
+  lines on an arc, nine tenths of the trace centroids on a quartz); `linesPerFiber`, `FAIL`.
+- **Partial slit illumination (Run30)** is no longer known-bad (PIPE2D-1935): with one fiber
+  group lit, each lit fiber measures the lines a full slit's does, and `linesPerFiber`
+  passes it. `tests/metrics/test_gate.py` checks 149398, 149881, 150367 and 150413 pass.
 - **Off-zenith Helium detectorMap tests (Run30, alt 45–49):** a real flexure offset against
   a zenith-derived `detectorMap_calib`; `medDxCenter`, `WARN` (provisional). They are the
   reference case for drift monitoring (PIPE2D-1921). On the n arm `reduceExposure` fails on
@@ -179,14 +183,10 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 140640 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
 | 140649 | 27 | scienceArc | b, r, n | 1, 2 | ImageQuality | FAIL | `nLines` | No light on SM1 or SM2. (Run27, 1 s arc) |
 | 140651 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
-| 150115 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `nLines` | M1 cover closed. |
-| 150116 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `nLines` | M1 cover closed. |
-| 150641 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `nLines` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
-| 150642 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `nLines` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
-| 149398 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 3 was illuminated. |
-| 149881 | 30 | scienceArc | b, m | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 2 was illuminated. |
-| 150367 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 4 was illuminated. |
-| 150413 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | WARN | `nLines` | Only group 1 was illuminated. |
+| 150115 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | M1 cover closed. |
+| 150116 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | M1 cover closed. |
+| 150641 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
+| 150642 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
 | 150779 | 30 | scienceArc | b, m, n | 1, 2, 3, 4 | any | WARN | `medDxCenter` | DetectorMap test pre-exposure (Helium). Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib. |
 | 150782 | 30 | scienceArc | b, m, n | 1, 2, 3, 4 | any | WARN | `medDxCenter` | DetectorMap test post-exposure (Helium). Alt 49, az 53, insrot 5; flexure against a zenith-derived detectorMap_calib. |
 
