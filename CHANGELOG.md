@@ -262,6 +262,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
+- **`iqQaSpeciesMetrics` holds the softening, and traces** (PIPE2D-1956) — per species, `fitXSoften` and
+  `fitYSoften` beside `fitXRms` and `fitYRms`, read from the same `Stats for <species>` lines of the
+  `reduceExposure` log, and a `Trace` species. `longFormat.speciesStats` still returns the lamp species' RMS pair.
+
 - **`dxCenter` is measured minus calibration** (PIPE2D-1921), the sign of drp_stella's residuals and of the drift
   metrics, in `iqQaData` and `crossDispersion`; `medDxCenter` changes sign with it. Verdicts are unchanged (judged on
   `|medDxCenter|`), but `iqQaMetrics` stored before this change, the validation fixtures among them, hold the opposite
