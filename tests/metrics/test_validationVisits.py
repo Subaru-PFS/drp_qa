@@ -84,14 +84,6 @@ class TestCheckedInSet:
         assert {entry.run for entry in visitSet.confirmedBad} == {25, 27, 30}
         assert {entry.run for entry in visitSet.knownGood} == {25}
 
-    def testSingleVisitHeliumTestsNeedNoSeqType(self):
-        """The hand-written summary misspells 150779's sequence; no selector depends on it."""
-        visitSet = loadValidationVisits()
-        for visit in (150779, 150782):
-            (entry,) = visitSet.find(visit, arm="b", spectrograph=1)
-            assert entry.seqType is None
-            assert entry.metric == "medDxCenter"
-
     def testKnownGoodIsPopulated(self):
         """The Run25 stable set; thresholds cannot be derived without it."""
         visitSet = loadValidationVisits()
@@ -178,13 +170,11 @@ class TestRun30KnownBad:
         for visit in (149217, 149398, 149881, 150367, 150413):
             assert visitSet.expectationFor(visit, arm="b", spectrograph=1) is None
 
-    def testFlexureCaseIsAttributedToTheCalibComparison(self):
-        """Phase 2's reference case: a real offset against detectorMap_calib."""
+    def testHeliumFlexureTestsCarryNoVerdict(self):
+        """Removed (PIPE2D-1921): their offsets from detectorMap_calib are well under the drift WARN."""
         visitSet = loadValidationVisits()
-        flexure = [e for e in visitSet.knownBad if e.visits[0] in (150779, 150782)]
-        assert len(flexure) == 2
-        assert all(entry.metric == "medDxCenter" for entry in flexure)
-        assert all(entry.expect == "WARN" for entry in flexure)
+        for visit in (150779, 150782):
+            assert visitSet.expectationFor(visit, arm="b", spectrograph=1) is None
 
 
 class TestUnconfirmedVerdicts:

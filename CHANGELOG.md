@@ -25,7 +25,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `RECALIBRATE`. Run25 SM3 after its calibration block sits 1.4 px off in y: unconfirmed in the validation set for
   `medianDeltaY`; Run27 before 140477, reduced against a calibration built later, is known-bad (SM3 `medianDeltaX`
   WARN, SM2 `medianDeltaY` FAIL) in place of the missing stale-calibration case. Findings from the validation run
-  are in `docs/qa-domain-notes.md`.
+  are in `docs/qa-domain-notes.md`. The off-zenith Helium tests (150779, 150782) leave the validation set: their
+  expected flexure WARN does not hold.
   Logic in the stack-free `metrics.drift`.
 
 - **Judging on the fibers lit** (PIPE2D-1935) — new `iqQaMetrics` columns `linesPerFiber` (unflagged lamp lines per

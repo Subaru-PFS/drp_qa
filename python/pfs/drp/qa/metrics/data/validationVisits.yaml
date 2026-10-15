@@ -735,24 +735,8 @@ known_bad:
     unconfirmed: true
     reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
 
-  # Off-zenith Helium DetectorMap tests bracketing a science exposure, at
-  # altitude 45-49 and insrot 5-9 rather than at the zenith the calibration
-  # was taken at. This is the flexure reference case: a real offset against
-  # detectorMap_calib, which is what the PIPE2D-1921 drift metrics must detect and
-  # attribute correctly. WARN rather than FAIL is provisional. On the n arm,
-  # reduceExposure fails on these Helium arcs ("need at least one array to
-  # concatenate"), so n has no metrics; the arm stays listed so the gap shows.
-  - visit: 150779
-    sequenceType: scienceArc
-    arms: [b, m, n]
-    spectrographs: [1, 2, 3, 4]
-    expect: WARN
-    metric: medDxCenter
-    reason: "DetectorMap test pre-exposure (Helium). Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib."
-  - visit: 150782
-    sequenceType: scienceArc
-    arms: [b, m, n]
-    spectrographs: [1, 2, 3, 4]
-    expect: WARN
-    metric: medDxCenter
-    reason: "DetectorMap test post-exposure (Helium). Alt 49, az 53, insrot 5; flexure against a zenith-derived detectorMap_calib."
+  # The off-zenith Helium detectorMap tests (150779, 150782; alt 45-49) were listed
+  # here as the flexure case, WARN provisionally. Measured against detectorMap_calib
+  # (PIPE2D-1921), b sits -0.33 to -0.51 px in x, as b read with m does at the
+  # zenith, and every arm within 0.2 px in y: any flexure is well under the 1 px
+  # WARN, so the verdict does not hold and they were removed.

@@ -98,10 +98,10 @@ identified by visit number, with no observer, target or design names.
 - **Partial slit illumination (Run30)** is no longer known-bad (PIPE2D-1935): with one fiber
   group lit, each lit fiber measures the lines a full slit's does, and `linesPerFiber`
   passes it. `tests/metrics/test_gate.py` checks 149398, 149881, 150367 and 150413 pass.
-- **Off-zenith Helium detectorMap tests (Run30, alt 45–49):** a real flexure offset against
-  a zenith-derived `detectorMap_calib`; `medDxCenter`, `WARN` (provisional). They are the
-  reference case for drift monitoring (PIPE2D-1921). On the n arm `reduceExposure` fails on
-  these Helium arcs, so n has no metrics.
+- **Off-zenith Helium detectorMap tests (Run30, 150779 and 150782, alt 45–49)** were listed
+  as the flexure case, `WARN` provisionally, and are removed: against `detectorMap_calib`
+  they sit within 0.2 px in y and −0.33 to −0.51 px in x on b, as b read with m does at the
+  zenith (PIPE2D-1921). On the n arm `reduceExposure` fails on Helium (PIPE2D-1960).
 - **Run27 against a later calibration (PIPE2D-1921):** the Run27 `detectorMap_calib` was
   built from 140502–140526, after these visits. Up to 140148, SM3 sits +1.15 px off in x
   (`medianDeltaX`, `WARN`) and SM2 −3.15 px off in y on b and r (`medianDeltaY`, `FAIL`);
@@ -204,8 +204,6 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 150116 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | M1 cover closed. |
 | 150641 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
 | 150642 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
-| 150779 | 30 | scienceArc | b, m, n | 1, 2, 3, 4 | any | WARN | `medDxCenter` | DetectorMap test pre-exposure (Helium). Alt 45, az 54, insrot 9; flexure against a zenith-derived detectorMap_calib. |
-| 150782 | 30 | scienceArc | b, m, n | 1, 2, 3, 4 | any | WARN | `medDxCenter` | DetectorMap test post-exposure (Helium). Alt 49, az 53, insrot 5; flexure against a zenith-derived detectorMap_calib. |
 
 ### Unconfirmed
 

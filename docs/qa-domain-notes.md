@@ -224,6 +224,9 @@ Measured in the validation run (`u/wtg/qa-thresholds/006`, 2026-10-15):
   +1.15 px in x on every arm; SM2 −3.15 px in y on b and r, at the search radius; SM3
   −1.75 to +3.6 px in y. Cause unknown.
 - **b read with m** sits −0.47 px in x, read with r +0.08 px (PIPE2D-1927).
+- **Off-zenith flexure is small**: the Helium detectorMap tests at alt 45–49 (150779,
+  150782) sit within 0.2 px in y on b and m, and b −0.33 to −0.51 px in x, the camera-set
+  offset of b read with m; at most about 0.1 px of flexure, far under the 1 px WARN.
 - **b-arm Argon arcs are never adjusted**: too few lamp lines, so no line is marked
   `USED` or `RESERVED`, and they are reduced against the calibration as it is
   (`UNFITTED`). Their offsets go into the reduction uncorrected: Run25 b3 Argon after the
