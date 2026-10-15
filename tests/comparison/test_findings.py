@@ -13,6 +13,7 @@ from pfs.drp.qa.comparison.findings import (
     judgeImages,
     lampsOf,
 )
+from pfs.drp.qa.metrics.gate import judge
 
 THRESHOLDS = pd.DataFrame(
     {
@@ -183,6 +184,11 @@ def testDailyLitFiberMetricsNotJudged(periods, visit, listing):
     assert judged[(10, "nLines")] == "FAIL" and judged[(10, "pctFlagged")] == "FAIL"
     assert describeSetup(visits.set_index("pfs_visit_id").loc[1]).startswith("scienceArc 'Arc: Neon' (daily)")
 
+    # Measured on the fibers lit (PIPE2D-1935), the daily arc is judged like the set.
+    lit = metrics.assign(nLitFibers=150.0)
+    judged = judgeImages(lit, visits, thresholds).set_index(["visit", "metric"])["status"]
+    assert judged[(1, "nLines")] == "FAIL" and judged[(1, "pctFlagged")] == "FAIL"
+
 
 def testExpectedFromTheValidationSet(defocus):
     visits, metrics = defocus
@@ -227,3 +233,16 @@ def testTaskPipeline(tmp_path):
         "obs_pfs": "b",
         "drp_stella": "c",
     }
+
+
+def testMetricsPredatingAThresholdAreUnjudged(defocus):
+    """Images measured before linesPerFiber existed get no verdict on it, not a KeyError (PIPE2D-1935)."""
+    visits, metrics = defocus
+    metrics = metrics.assign(medFwhm=2.3).drop(columns=["linesPerFiber"], errors="ignore")
+    thresholds = THRESHOLDS.assign(metric=["medFwhm", "linesPerFiber"])
+    judged = judgeImages(metrics, visits, thresholds)
+    assert (judged.loc[judged["metric"] == "linesPerFiber", "status"] == "").all()
+    assert (judged.loc[judged["metric"] == "medFwhm", "status"] == "PASS").all()
+    # Negative control: the gate's own judge refuses a metric that isn't a column.
+    with pytest.raises(KeyError, match="linesPerFiber"):
+        judge(metrics, thresholds)

@@ -39,7 +39,53 @@ from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
 from pfs.drp.stella.utils.stability import addTraceLambdaToArclines
 
-__all__ = ["ImageQualityQaTask"]
+__all__ = ["ImageQualityQaTask", "litFibers"]
+
+
+def litFibers(pfsConfig: PfsConfig | None, fiberId: np.ndarray) -> tuple[set[int] | None, int | None]:
+    """Return the fibers of a detector that the pfsConfig lights, and how many it could.
+
+    A design lights one fiber group by parking the others' cobras behind their black
+    dots, recording them as ``fiberStatus`` ``BLACKSPOT`` (with ``targetType``
+    ``UNASSIGNED``, not ``BLACKSPOT``). drp_stella measures lines and traces only on
+    ``GOOD`` fibers, so ``lines`` has rows for those alone. A ``GOOD`` fiber without a
+    nominal position (an unassigned cobra) is lit too, and counts: leaving it out would
+    let an obstructed frame on such a design pass (PIPE2D-1935).
+
+    Parameters
+    ----------
+    pfsConfig : `pfs.datamodel.PfsConfig` or `None`
+        Fiber configuration of the visit.
+    fiberId : `numpy.ndarray` of `int`
+        The detector's fibers (``detectorMap.fiberId``).
+
+    Returns
+    -------
+    lit : `set` [`int`] or `None`
+        The detector's ``GOOD`` fibers, engineering fibers excepted; `None`
+        without a pfsConfig.
+    possible : `int` or `None`
+        How many of the detector's fibers the design could light: the lit ones
+        and those it hides behind a black dot. `None` without a pfsConfig.
+    """
+    if pfsConfig is None:
+        return None, None
+    status = np.asarray(pfsConfig.fiberStatus)
+    onDetector = np.isin(np.asarray(pfsConfig.fiberId), np.asarray(fiberId))
+    onDetector &= np.asarray(pfsConfig.targetType) != TargetType.ENGINEERING
+    lit = onDetector & (status == FiberStatus.GOOD)
+    possible = lit | (onDetector & (status == FiberStatus.BLACKSPOT))
+    return {int(f) for f in np.asarray(pfsConfig.fiberId)[lit]}, int(possible.sum())
+
+
+class _WithoutDataType:
+    """A header's ``get``, less ``DATA-TYP``, so `getLamps` reads the lamp headers of a flat."""
+
+    def __init__(self, metadata):
+        self.metadata = metadata
+
+    def get(self, key, default=None):
+        return default if key == "DATA-TYP" else self.metadata.get(key, default)
 
 
 class ImageQualityQaConnections(
@@ -79,7 +125,11 @@ class ImageQualityQaConnections(
             " Columns: ``visit``, ``arm``, ``spectrograph``, ``medFwhm``,"
             " ``medDxCenter``, ``dxCenterRms``, ``pctFlagged``,"
             " ``pctLowSN``, ``pctMeasFail``,"
-            " ``nLines`` (rows of ``lines``), ``traceOnly``, ``qaStatus``"
+            " ``nLines`` (rows of ``lines``), ``linesPerFiber`` (unflagged lamp"
+            " lines, or on a quartz trace centroids, per lit fiber), ``nLitFibers``"
+            " and ``nFibers`` (the detector's fibers the pfsConfig lights, and"
+            " those it lights or hides behind a black dot), ``nTraceRows`` (trace"
+            " centroids in ``lines``), ``traceOnly``, ``qaStatus``"
             " (``PASS``, ``WARN``, ``FAIL``, or ``UNKNOWN`` when no metric was"
             " judged), ``qaDecidedBy``, ``qaReason``, ``calexpRun`` (the RUN"
             " collection of the calexp judged, null without one)."
@@ -148,7 +198,9 @@ class ImageQualityQaConnections(
             "Fiber configuration for this visit.  When provided alongside"
             " ``calexp``, only fibers with ``targetType=FLUXSTD`` and"
             " ``fiberStatus=GOOD`` are used for calexp-based FWHM measurement,"
-            " avoiding contamination from dark sky fibers."
+            " avoiding contamination from dark sky fibers. On arcs and quartz it"
+            " says which fibers are lit (`litFibers`): ``linesPerFiber``,"
+            " ``pctFlagged`` and the calexp trace width are taken on those."
         ),
         storageClass="PfsConfig",
         dimensions=("instrument", "visit"),
@@ -340,8 +392,9 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " visits (collection u/wtg/qa-thresholds/004), as adopted in PIPE2D-1917,"
             " PIPE2D-1918 and PIPE2D-1942 by ``makeRun25Thresholds.py`` beside it: medFwhm"
             " 3/5 % above each detector and lamp's Run25 median, per-arm medFwhm where there"
-            " is none, nLines per population, no pctFlagged, and quartz nLines set by hand;"
-            " each entry carries its provenance."
+            " is none, linesPerFiber 25/50 % (arcs) and 2.5/5 % (quartz) below each arm and"
+            " sequence's Run25 median (PIPE2D-1935), and no pctFlagged; each entry carries"
+            " its provenance."
         ),
     )
     dxCenterWarnThreshold = Field(
@@ -481,7 +534,8 @@ class ImageQualityQaTask(PipelineTask):
             offset from static calibration detectorMap, in pixels).
         iqQaMetrics : `pandas.DataFrame`
             Single-row summary with ``medFwhm``, ``medDxCenter``,
-            ``dxCenterRms``, ``pctFlagged``, ``nLines``, ``traceOnly``,
+            ``dxCenterRms``, ``pctFlagged``, ``nLines``, ``linesPerFiber``,
+            ``nLitFibers``, ``nFibers``, ``nTraceRows``, ``traceOnly``,
             ``obsType``, ``seqName``, ``qaStatus``, ``qaDecidedBy``,
             ``qaReason``, ``visit``, ``arm``, ``spectrograph``.  The verdict
             is `pfs.drp.qa.metrics.gate.gate` with ``self.thresholds``;
@@ -521,11 +575,34 @@ class ImageQualityQaTask(PipelineTask):
         if "status" in data.columns:
             good_arc &= data["status"] == 0
         n_good_arc = int(good_arc.sum())
-        # nLines counts the rows of ``lines`` (lines and, on a quartz frame,
-        # trace centroids found by fitDetectorMap), whichever path measures the
-        # FWHM: it is a measure of what was illuminated, and the only metric
-        # that sees an obstructed quartz.
+        # nLines counts the rows of ``lines`` (lines and trace centroids found by
+        # fitDetectorMap), whichever path measures the FWHM. linesPerFiber is the
+        # judged count (PIPE2D-1935): the measurements per lit fiber of what the
+        # frame is for, lamp lines on an arc and trace centroids on a quartz. Per
+        # lit fiber, so that a design lighting one fiber group is judged like a full
+        # slit; without the trace centroids an arc also records, whose number
+        # follows the illumination and the pipeline rather than the lamp.
         n_lines = len(data)
+        lit_fibers, n_fibers = litFibers(pfsConfig, detectorMap.fiberId)
+        n_lit_fibers = len(lit_fibers) if lit_fibers is not None else None
+        if "description" in data.columns:
+            is_trace_row = (data["description"] == "Trace").to_numpy()
+        else:
+            is_trace_row = np.zeros(len(data), dtype=bool)
+        on_lit = (
+            data["fiberId"].isin(lit_fibers).to_numpy()
+            if lit_fibers is not None
+            else np.ones(len(data), bool)
+        )
+        # Lamp-line rows on lit fibers: what pctFlagged is computed over on the arc-line path.
+        lamp_line_rows = ~is_trace_row & on_lit
+        lines_per_fiber = np.nan
+        if n_lit_fibers and not is_iis and obs_type in ("arc", "trace"):
+            counted = is_trace_row if obs_type == "trace" else ~is_trace_row
+            if obs_type == "trace" and "description" not in data.columns:
+                counted = np.ones(len(data), dtype=bool)  # no descriptions: every row is a centroid
+            unflagged = ~data["flag"].to_numpy(dtype=bool)
+            lines_per_fiber = float((counted & on_lit & unflagged).sum()) / n_lit_fibers
 
         dense_data = False
         using_fluxstd_filter = False
@@ -553,7 +630,9 @@ class ImageQualityQaTask(PipelineTask):
                     n_good_arc,
                     self.config.minGoodLines,
                 )
-                calexp_data = self._buildImageWidthData(calexp, detectorMap, detectorMapCalib)
+                calexp_data = self._buildImageWidthData(
+                    calexp, detectorMap, detectorMapCalib, fiberIds=lit_fibers
+                )
                 n_good_calexp = int((calexp_data["fwhm"].notna() & ~calexp_data["flag"]).sum())
                 calexp_good_frac = n_good_calexp / max(len(calexp_data), 1)
                 if n_good_calexp > 0 and (1.0 - calexp_good_frac) < self.config.maxCalexpFlagRate:
@@ -608,7 +687,12 @@ class ImageQualityQaTask(PipelineTask):
                     "Regular trace/quartz %s: measuring FWHM from calexp.",
                     dataId,
                 )
-                calexp_data = self._buildImageWidthData(calexp, detectorMap, detectorMapCalib)
+                # Only the lit fibers are sampled: on a design lighting one fiber
+                # group, the dark ones would otherwise make most samples flagged
+                # and the calexp unusable (maxCalexpFlagRate).
+                calexp_data = self._buildImageWidthData(
+                    calexp, detectorMap, detectorMapCalib, fiberIds=lit_fibers
+                )
                 n_good_calexp = int((calexp_data["fwhm"].notna() & ~calexp_data["flag"]).sum())
                 calexp_good_frac = n_good_calexp / max(len(calexp_data), 1)
                 if n_good_calexp > 0 and (1.0 - calexp_good_frac) < self.config.maxCalexpFlagRate:
@@ -897,10 +981,16 @@ class ImageQualityQaTask(PipelineTask):
             pct_flagged = np.nan
             flagBreakdown = {}
         else:
-            nTotal = max(len(data), 1)
-            pct_flagged = 100.0 * data["flag"].sum() / nTotal
+            # On the arc-line path, the lamp lines on lit fibers: the trace centroids
+            # an arc also records are almost never flagged, and how many there are
+            # follows the illumination, so counting them made pctFlagged depend on
+            # the fibers lit rather than on the lines (PIPE2D-1935). The calexp
+            # samples are of lit fibers already.
+            flagData = data if dense_data else data[lamp_line_rows]
+            nTotal = max(len(flagData), 1)
+            pct_flagged = 100.0 * flagData["flag"].sum() / nTotal
             flagBreakdown = self._computeFlagBreakdown(
-                data,
+                flagData,
                 nTotal,
                 isArcLinePath=not dense_data,
             )
@@ -920,6 +1010,10 @@ class ImageQualityQaTask(PipelineTask):
             "dxCenterRms": [dxCenterRms],
             "pctFlagged": [pct_flagged],
             "nLines": [n_lines],
+            "linesPerFiber": [lines_per_fiber],
+            "nLitFibers": [n_lit_fibers if n_lit_fibers is not None else np.nan],
+            "nFibers": [n_fibers if n_fibers is not None else np.nan],
+            "nTraceRows": [int(is_trace_row.sum())],
             "traceOnly": [trace_only],
             "obsType": [obs_type],
             "seqName": [seq_nam],
@@ -1227,11 +1321,14 @@ class ImageQualityQaTask(PipelineTask):
         # Distinguish IIS (engineering fiber) illumination from regular (all
         # 600 science fibers).  IIS lamp header names end with "_eng"
         # (e.g. "Ar_eng", "Quartz_eng") while regular lamps do not.
+        # getLamps answers {"Quartz"} for any DATA-TYP FLAT before reading the
+        # lamp headers, which hides an IIS quartz (W_IISQTH): the lamp headers
+        # are read without DATA-TYP (PIPE2D-1953).
         is_iis = False
         try:
             from lsst.obs.pfs.utils import getLamps
 
-            lamps = getLamps(metadata)
+            lamps = getLamps(_WithoutDataType(metadata))
             is_iis = any(name.endswith("_eng") for name in lamps)
         except Exception:
             pass  # obs_pfs unavailable or headers missing; assume regular
@@ -1361,8 +1458,9 @@ class ImageQualityQaTask(PipelineTask):
             center) is recorded for each sample as a flexure diagnostic.
         fiberIds : `set` or `None`, optional
             If provided, only these fibers are reported (e.g. FLUXSTD fibers
-            from ``pfsConfig``). Every fiber is still fitted, because a
-            fiber's fit depends on its neighbours.
+            from ``pfsConfig``, or the fibers it lights, `litFibers`). Every
+            fiber is still fitted, because a fiber's fit depends on its
+            neighbours.
 
         Returns
         -------

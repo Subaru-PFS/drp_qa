@@ -136,7 +136,10 @@ _CALIB = (
 
 #: The metrics with a known treatment, by name. ``pctFlagged`` is split by lamp
 #: (``species``, from ``seqName``) because the line lists differ per lamp;
-#: ``nLines`` by sequence because the line count is a property of the lamp.
+#: ``nLines`` and ``linesPerFiber`` by sequence because the line count is a
+#: property of the lamp. ``linesPerFiber`` is the one judged: per lit fiber, so a
+#: design lighting one fiber group is judged like a full slit, and without the
+#: trace centroids an arc also records (PIPE2D-1935).
 #: ``medFwhm`` is judged against each detector's own width per lamp
 #: (PIPE2D-1942): the spectrographs of one arm differ from each other by more
 #: than any one of them varies, and the lamps of one arm differ even more (b:
@@ -186,6 +189,17 @@ METRIC_SPECS = {
             units="lines",
             reference="The line list of the lamp.",
             valueFormat=".0f",
+        ),
+        MetricSpec(
+            "linesPerFiber",
+            higherIsWorse=False,
+            groupBy=("arm", "seqName"),
+            units="lines per lit fiber",
+            reference=(
+                "The line list of the lamp, on the fibers the pfsConfig lights; on a quartz, the "
+                "detector rows a trace is found on."
+            ),
+            valueFormat=".1f",
         ),
         MetricSpec(
             "fitXRms",

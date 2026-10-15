@@ -50,7 +50,11 @@ Returns `(obs_type, is_iis, seq_nam)`:
 - `obs_type`: one of `"arc"`, `"trace"`, `"science"`, `"allsky"` (`W_SEQNAM` starting
   "sky"), `"twilight"` (starting "twilight"), `"dark"` (`scienceDark`), `"unknown"`
 - `is_iis`: `True` when illuminated by the 16 IIS engineering fibers (lamp header names
-  from `getLamps()` end with `"_eng"`, e.g. `"Ar_eng"`)
+  from `getLamps()` end with `"_eng"`, e.g. `"Ar_eng"`). The headers are read without
+  `DATA-TYP`: `getLamps()` answers `{"Quartz"}` for any `FLAT` before reading them, which took
+  Run30's nightly "ImageQuality (Halogen)" IIS quartz (`W_IISQTH`) for a full-slit quartz, so
+  its calexp failed and it fell back to `fiberProfiles` (PIPE2D-1953). Judging IIS frames on
+  their own fibers is PIPE2D-1954.
 - `seq_nam`: raw `W_SEQNAM` string
 
 **IIS vs regular**: IIS frames illuminate only 16 engineering fibers rather than all 600
@@ -114,7 +118,8 @@ SM1-defocused quartz 140032 and 140139, and the test fixtures in `tests/imageQua
 - **Which calibration a reduction used** is in the calexp's provenance; Run27 was reduced with
   Run26 `fiberProfiles` and Run29's for 150116. `pfs.drp.qa.utils.provenance` reads it.
 - **Obstructed quartz** (150116, M1 cover closed): joint-fit usable fraction drops to 3 % (b),
-  52 % (r) and 25 % (n), so b and n fall back to the calibration; `nLines` catches it.
+  52 % (r) and 25 % (n), so b and n fall back to the calibration; `linesPerFiber` catches it
+  (9-56 % below the known-good median).
 - **`lines` on a quartz** holds about 2.4 M trace centroids: 0.8-1.1 s and about 400 MB to read.
 
 ### Output metrics
@@ -125,7 +130,14 @@ SM1-defocused quartz 140032 and 140139, and the test fixtures in `tests/imageQua
 - `medDxCenter` / `dxCenterRms`: median and scatter of the spatial offset from
   `detectorMap_calib`, a flexure diagnostic
 - `pctFlagged`: percentage of arc lines flagged by `fitDetectorMap`
-- `nLines`: rows of the `lines` dataset, whichever path measures the FWHM
+- `nLines`: rows of the `lines` dataset, whichever path measures the FWHM; not judged
+- `linesPerFiber`: unflagged lamp lines (trace centroids on a quartz) per lit fiber, the judged
+  count; `nLitFibers` / `nFibers`: the detector's `GOOD` fibers, and those plus the hidden ones
+- **What `lines` holds** (PIPE2D-1935): a row for every line of the lamp's list on every `GOOD`
+  fiber, flagged when not measured, and trace centroids (`description == "Trace"`), on an arc
+  as on a quartz: 55-88 % of an arc's rows. A fiber a design hides (`fiberStatus` BLACKSPOT)
+  has none. Trace centroids per fiber follow the illumination (b1: 691 on a Run25 neon set,
+  609 fully lit and 473 on a shaka exposure in Run30), lamp lines per lit fiber do not.
 - `traceOnly`: True when falling back to fiber-profile widths; `medFwhm` is then not judged
 - `obsType` / `seqName`: visit classification and raw `W_SEQNAM`
 - `qaStatus`: `"PASS"`, `"WARN"`, or `"FAIL"` — the worst of the FWHM, flag-rate, and
@@ -137,6 +149,33 @@ Additional columns are added dynamically: a per-status-bit flag breakdown
 and `reduceExposure_log` connections are present — ISR, cosmic-ray, and `fitDetectorMap`
 statistics (`fitChi2`, `fitXRms`, `fitYRms`, `fitReserved*`, per-fiber arrays; the
 per-species values go to `iqQaSpeciesMetrics`).
+
+### Shaka exposures: one fiber group lit (PIPE2D-1935)
+
+A *shaka* exposure is taken on a fiber-group design that lights about a quarter of the fibers:
+in the opdb, `pfs_design.design_name` `cobraHome-MOD4_group<n>` (`cobraHome` lights them all).
+Group *n* lights every fourth cobra counted along the slit: number the cobras in fiber order through all four spectrographs from 0, skipping engineering fibers and empty
+holes, and group *n* is those whose number is *n* − 1 modulo 4. It is exact on Run30's daily neon
+arcs 150413, 149881, 149398 and 150367 (groups 1-4: 585-589 cobras each, none off the phase);
+it is not `cobraId` modulo 4. The design drives its group home; the other cobras stay parked on
+their black dots, not commanded, recorded as `fiberStatus` BLACKSPOT.
+
+Spectrograph 1, holes 1-100 (opdb `pfs_config_fiber`):
+
+```
+150413  1    E●x··●···●···●···●···●c··●···●···●···●···●·_E··●···●···●···●···●···●···●···●···●···ccc·●··_E_·●···●·
+149881  2    E·x○··●···●··○●···●···c···●···●···●···●···●_E···●···●···●···●···●···●···●···●···●··ccc··●·_E_··●···●
+149398  3    E·x●···●···●···●···●··c●···●···●···●···●···_E●···●···●···●···●···●···●···●···●···●·ccc···●_E_···●···
+150367  4    E·x·●···●···●···●···●·c·●···●···●···●···●··_E·●···●···●···●···●···●···●···●···●···●ccc●···_E_●···●··
+149883  all  E●x●●●●●●●●●●●●●●●●●●●c●●●●●●●●●●●●●●●●●●●●_E●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●●ccc●●●●_E_●●●●●●●
+```
+
+`●` lit, driven home (`GOOD`); `·` hidden behind its dot (`BLACKSPOT`); `○` lit, cobra not moved
+(`GOOD`, no nominal position); `c` broken cobra; `x` broken fiber; `E` engineering fiber;
+`_` empty hole. Engineering fibers, empty holes and broken cobras on the phase widen the gap
+between lit fibers to 5-8; the unmoved `GOOD` cobras (14-40 per visit, nearly all off the phase)
+narrow it to 1-3. Those are lit, measuring as many lamp lines as the driven ones, which is why
+`litFibers` counts every `GOOD` fiber and not only those with a nominal position.
 
 ### DM residual metrics
 

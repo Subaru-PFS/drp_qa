@@ -57,7 +57,7 @@ PROVISIONAL_ARMS = {"n": "PIPE2D-1938"}
 NOTHING_MEASURED = "nothing measured"
 
 #: The metrics compared with the reference, in order.
-COMPARED_METRICS = ("medFwhm", "medDxCenter", "pctFlagged", "nLines")
+COMPARED_METRICS = ("medFwhm", "medDxCenter", "pctFlagged", "linesPerFiber", "nLines")
 
 #: Nights a calibration sequence must recur on to be shown as a series.
 MIN_RECURRING_NIGHTS = 4
@@ -261,7 +261,9 @@ def whyNotJudged(image: pd.Series) -> str:
         measured``.
     """
     obsType = image.get("obsType")
-    daily = "; nLines not judged on daily" if image.get("cadence") == "daily" else ""
+    # Only metrics measured without the fibers lit (no nLitFibers) skip them (PIPE2D-1935).
+    unlitDaily = image.get("cadence") == "daily" and pd.isna(image.get("nLitFibers"))
+    daily = "; nLines not judged on daily" if unlitDaily else ""
     if obsType == "unknown":
         return f"no method for {image.get('sequence_type')}"
     if obsType == "twilight":
@@ -736,9 +738,10 @@ validated thresholds. Biases, darks and test exposures aren't measured.</li>
 <li><b>Problems</b> group the images that warn or fail by metric, arm, setup and extent: <i>detector</i>, an arm on
 every spectrograph, a whole spectrograph (<i>SMn</i>), <i>most of the visit</i>, and <i>whole sequence</i> when every
 visit of the sequence shares it. Problems the validation set records as known-bad are folded away as expected.</li>
-<li>Not judged: flux-dependent metrics on telescope focus sweeps, and <code>nLines</code> and <code>pctFlagged</code>
-on daily arcs and traces, which are often taken with one fiber group lit (PIPE2D-1935). A verdict here can therefore
-be milder than the stored one.</li>
+<li>Not judged: flux-dependent metrics on telescope focus sweeps. Daily arcs and traces, often taken with one fiber
+group lit, are judged on the fibers lit (<code>linesPerFiber</code>); measured before that was possible (no
+<code>nLitFibers</code>), their <code>nLines</code> and <code>pctFlagged</code> aren't judged (PIPE2D-1935). A verdict
+here can therefore be milder than the stored one.</li>
 <li><b>Nights</b> are named by their evening: a night runs from noon to noon HST, so an exposure taken after
 midnight carries the previous day's date.</li>
 <li><b>Sets, daily and singles</b>: a calibration set is several exposures per lamp, with any one-visit sequences
