@@ -205,6 +205,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Fixed
 
+- **Task logs at INFO** (PIPE2D-1938) — `docs/qa-thresholds.ipynb` and comparison mode's fresh reductions ran
+  `pipetask --log-level PFS=INFO`, which reaches no task's logger: the tasks log under their own names
+  (`reduceExposure`), so their INFO lines, the fit statistics `imageQualityQa` parses among them, were missing
+  from the stored logs. They now run with `--log-level INFO`.
+
 - **`imageQualityQa` measures quartz from the calexp** (PIPE2D-1918) — the calexp trace width used a
   `profileHalfWidth` 7 aperture, wider than the 6.17 px fiber pitch, so it took neighbouring traces as
   background, flagged nearly every sample, and every Run25 quartz fell back to `fiberProfiles`. Each fiber is

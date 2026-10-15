@@ -177,7 +177,9 @@ def testPipetaskCommand():
         cosmicrayConfigFile="/tmp/cr.py",
         jobs=4,
     )
-    assert command[:7] == ["pipetask", "--long-log", "--log-level", "PFS=INFO", "run", "-j", "4"]
+    assert command[:7] == ["pipetask", "--long-log", "--log-level", "INFO", "run", "-j", "4"]
+    # Negative control: PFS=INFO leaves the tasks' INFO lines out of their stored logs.
+    assert "PFS=INFO" not in command
     joined = " ".join(command)
     assert "-i drpActor/reductions,PFS/defaults" in joined
     assert "--skip-existing-in drpActor/reductions" in joined
