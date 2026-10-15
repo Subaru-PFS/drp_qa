@@ -152,9 +152,9 @@ per-species values go to `iqQaSpeciesMetrics`).
 
 ### Shaka exposures: one fiber group lit (PIPE2D-1935)
 
-A *shaka* exposure is taken on a fiber-group design (`fiberProfiles` groups) that lights about
-a quarter of the fibers. Group *n* lights every fourth cobra counted along the slit: number the
-cobras in fiber order through all four spectrographs from 0, skipping engineering fibers and empty
+A *shaka* exposure is taken on a fiber-group design that lights about a quarter of the fibers:
+in the opdb, `pfs_design.design_name` `cobraHome-MOD4_group<n>` (`cobraHome` lights them all).
+Group *n* lights every fourth cobra counted along the slit: number the cobras in fiber order through all four spectrographs from 0, skipping engineering fibers and empty
 holes, and group *n* is those whose number is *n* − 1 modulo 4. It is exact on Run30's daily neon
 arcs 150413, 149881, 149398 and 150367 (groups 1-4: 585-589 cobras each, none off the phase);
 it is not `cobraId` modulo 4. The design drives its group home; the other cobras stay parked on
