@@ -193,3 +193,21 @@ def testIisQuartzIsNotAFullSlit(iqqa, runTask, fakes, monkeypatch):
     ).iqQaMetrics.iloc[0]
     assert np.isnan(metrics["linesPerFiber"]) and not metrics["traceOnly"]
     assert metrics["qaStatus"] == "UNKNOWN"
+
+
+def testQuartzWithNoTracesFoundCountsNone(runTask, fakes):
+    """A quartz whose lines hold no trace centroid, only catalogue rows, measures zero per lit fiber."""
+    detectorMap = fakes.DetectorMap(numFibers=20)
+    calexp = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*TRACE))
+    lines = fakes.arcLines(detectorMap, 380, description="NeI")  # described, but no "Trace" rows
+    thresholds = [lowerIsWorse("linesPerFiber", warn=370, fail=360, seqName="Trace")]
+    metrics = runTask(
+        lines,
+        detectorMap=detectorMap,
+        calexp=calexp,
+        pfsConfig=fakes.PfsConfig(detectorMap.fiberId),
+        thresholds=thresholds,
+    ).iqQaMetrics.iloc[0]
+    assert metrics["linesPerFiber"] == 0 and metrics["qaStatus"] == "FAIL"
+    # Negative control: counting every row, as for a table without descriptions, would pass it.
+    assert (~lines["flag"]).sum() / 20 > 370

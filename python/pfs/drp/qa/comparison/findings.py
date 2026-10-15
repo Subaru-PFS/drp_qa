@@ -177,7 +177,12 @@ def judgeImages(metrics: pd.DataFrame, visits: pd.DataFrame, thresholds) -> pd.D
         entry on a daily arc or trace measured without the fibers lit (no
         ``nLitFibers``).
     """
-    judged = judge(metrics, thresholds)
+    # A metric the thresholds name that these images predate (linesPerFiber, PIPE2D-1935) is
+    # unmeasured, not missing: judged as NaN, it gets no verdict rather than stopping the report.
+    tables = loadThresholds(thresholds)
+    names = {name for table in tables for name in table["metric"]}
+    metrics = metrics.assign(**dict.fromkeys(sorted(names - set(metrics.columns)), np.nan))
+    judged = judge(metrics, tables)
     sweeps = set(visits.loc[visits["focusSweep"].astype(bool), "pfs_visit_id"])
     daily = set(visits.loc[visits["cadence"] == "daily", "pfs_visit_id"])
     lit = metrics["nLitFibers"] if "nLitFibers" in metrics.columns else pd.Series(np.nan, index=metrics.index)

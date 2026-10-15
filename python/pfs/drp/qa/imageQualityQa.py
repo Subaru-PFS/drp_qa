@@ -599,8 +599,8 @@ class ImageQualityQaTask(PipelineTask):
         lines_per_fiber = np.nan
         if n_lit_fibers and not is_iis and obs_type in ("arc", "trace"):
             counted = is_trace_row if obs_type == "trace" else ~is_trace_row
-            if obs_type == "trace" and not is_trace_row.any():
-                counted = np.ones(len(data), dtype=bool)  # a table without descriptions
+            if obs_type == "trace" and "description" not in data.columns:
+                counted = np.ones(len(data), dtype=bool)  # no descriptions: every row is a centroid
             unflagged = ~data["flag"].to_numpy(dtype=bool)
             lines_per_fiber = float((counted & on_lit & unflagged).sum()) / n_lit_fibers
 
