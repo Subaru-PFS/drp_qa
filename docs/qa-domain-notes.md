@@ -226,7 +226,15 @@ Measured in the validation run (`u/wtg/qa-thresholds/006`, 2026-10-15):
 - **b read with m** sits −0.47 px in x, read with r +0.08 px (PIPE2D-1927).
 - **b-arm Argon arcs are never adjusted**: too few lamp lines, so no line is marked
   `USED` or `RESERVED`, and they are reduced against the calibration as it is
-  (`UNFITTED`).
+  (`UNFITTED`). Their offsets go into the reduction uncorrected: Run25 b3 Argon after the
+  calibration block carries the SM3 y offset (1.13 px, WARN); on the calibration's own
+  visits they read +0.22 px (`u/wtg/qa-thresholds/008`).
+- **A robust RMS near 2.2 px is noise**: lines spread uniformly over drp_stella's ±3 px
+  search window give 0.741 × 3 = 2.22 px. Known-good lamp lines sit at 0.05–0.25 px.
+  Never-adjusted b-Argon species reach it (a few real Argon lines in noise; their median is
+  still stable), and so does Run27 SM3 against its calibration (1.5–4.8 px, medians from
+  −3.5 to +3.6 px): there the change is more than a shift and the median means little.
+  Run27 SM2 is the opposite case: −3.15 px at 0.1 px scatter, a clean shift.
 - **Twilight b3/b4** (134886, 135278, 135279): the fit kept all ~2 million trace rows and
   used none of 1,300–2,300 sky lines; only the reserved tenth survive. The signature of
   `rejectOutliers`' fallback, whose y limit is a percentile over rows that are mostly

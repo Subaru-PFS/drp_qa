@@ -1,7 +1,7 @@
 """Make ``dmDriftMetrics-validation.parquet``, the drift test fixture (PIPE2D-1921).
 
 The judged rows of ``dmDriftMetrics`` (``statusType`` ``BOTH`` or ``UNFITTED``)
-for the validation visits, from ``u/wtg/qa-thresholds/006`` (005's reductions
+for the validation visits, from ``u/wtg/qa-thresholds/008`` (005's reductions
 with ``dmDriftMonitor`` run), one row per detector and species, with the
 calibration's input visits from ``dmDriftSummary`` and the sequence from
 ``iqQaMetrics-validation.parquet``. All are engineering and calibration visits.
@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 
-STEM = "u_wtg_qa-thresholds_006"
+STEM = "u_wtg_qa-thresholds_008"
 KEYS = ["visit", "arm", "spectrograph"]
 METRICS = ["nLines", "linesPerFiber", "medianDeltaX", "robustRmsDeltaX", "medianDeltaY", "robustRmsDeltaY"]
 
