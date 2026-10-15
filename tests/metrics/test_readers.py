@@ -1,11 +1,18 @@
 """Tests for reading stored metrics from a Butler, against a stub."""
 
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.readers import chooseRun, readMetrics, readPipelineVersions, readReductionPipelines
+from pfs.drp.qa.metrics.readers import (
+    chooseRun,
+    readCalibValidity,
+    readMetrics,
+    readPipelineVersions,
+    readReductionPipelines,
+)
 
 
 @dataclass(frozen=True)
@@ -243,3 +250,57 @@ def testReductionPipelinesComeFromTheCalexpRun():
         .all()
     )
     assert butler.queries == []
+
+
+class StubTime:
+    def __init__(self, isot: str):
+        self.tai = SimpleNamespace(isot=isot)
+
+
+class StubRegistry:
+    """Answers ``queryDatasetAssociations`` from a list of associations."""
+
+    def __init__(self, associations):
+        self.associations = associations
+        self.queries = []
+
+    def queryDatasetAssociations(self, datasetType, collections=None, flattenChains=False):
+        self.queries.append((datasetType, collections, flattenChains))
+        return iter(self.associations)
+
+
+def association(calibId, collection, begin, end):
+    timespan = (
+        None
+        if begin == "run"
+        else SimpleNamespace(begin=begin and StubTime(begin), end=end and StubTime(end))
+    )
+    return SimpleNamespace(ref=SimpleNamespace(id=calibId), collection=collection, timespan=timespan)
+
+
+def testReadCalibValidity():
+    registry = StubRegistry(
+        [
+            association("a", "PFS/calib", "2026-01-01T00:00:00.000", "2026-06-01T00:00:00.000"),
+            association("a", "PFS/calib/old", "2025-01-01T00:00:00.000", None),
+            association("b", "PFS/calib", "2026-06-01T00:00:00.000", None),
+            association("a", "PFS/calib/run", "run", None),  # a RUN collection: no timespan
+        ]
+    )
+    validity = readCalibValidity(SimpleNamespace(registry=registry), ["a"], "PFS/calib")
+    assert validity.to_dict("records") == [
+        {
+            "calibId": "a",
+            "collection": "PFS/calib/old",
+            "validFrom": "2025-01-01T00:00:00.000",
+            "validTo": None,
+        },
+        {
+            "calibId": "a",
+            "collection": "PFS/calib",
+            "validFrom": "2026-01-01T00:00:00.000",
+            "validTo": "2026-06-01T00:00:00.000",
+        },
+    ]
+    assert registry.queries == [("detectorMap_calib", "PFS/calib", True)]
+    assert readCalibValidity(SimpleNamespace(registry=registry), [], "PFS/calib").empty

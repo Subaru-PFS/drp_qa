@@ -201,6 +201,21 @@ METRIC_SPECS = {
             ),
             valueFormat=".1f",
         ),
+        # dmDriftMetrics (PIPE2D-1921): per line species, against detectorMap_calib. x from
+        # trace centroids, y from lamp lines; b-arm offsets depend on the camera set (PIPE2D-1927).
+        *(
+            MetricSpec(
+                name,
+                absolute=name.startswith("median"),
+                groupBy=("arm", "description", "cameraSet"),
+                units="pixels",
+                reference=_CALIB,
+                label=f"|{name}|" if name.startswith("median") else "",
+                valueFormat=".3f",
+                unitSuffix="px",
+            )
+            for name in ("medianDeltaX", "robustRmsDeltaX", "medianDeltaY", "robustRmsDeltaY")
+        ),
         MetricSpec(
             "fitXRms",
             groupBy=("arm", "description"),

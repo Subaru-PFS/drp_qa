@@ -10,6 +10,17 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Detector-map drift monitoring** (PIPE2D-1921) — new task `dmDriftMonitor` (`drpQA.yaml`), per detector, against
+  `detectorMap_calib` rather than the visit's own `detectorMap`. Per line species of `lines`: `medianDeltaX` and
+  `robustRmsDeltaX` from trace centroids (measured minus calibration), `medianDeltaY` and `robustRmsDeltaY` from lamp
+  lines, `nLines` and `linesPerFiber`, over the lines the visit's detectorMap fit marked `DETECTORMAP_USED` or
+  `DETECTORMAP_RESERVED` (`statusType` `BOTH`, judged) and over each alone (diagnostics), in long format
+  (`dmDriftMetrics`, with each metric's verdict and the visit's `cameraSet`, e.g. `brn`, `bm`); and one row per detector (`dmDriftSummary`): `qaStatus`, `recommendedAction` (`NOMINAL`,
+  `APPLY_SHIFT`, `RECALIBRATE`, `INSUFFICIENT_DATA`) and the calibration used (`calibId`, `calibRun`, its creation
+  date and input visits). `readers.readCalibValidity` looks up its validity range. Thresholds are provisional:
+  `|medianDeltaX|` 1.0/2.0 px (imageQualityQa's `dxCenter` thresholds, origin unrecorded), `medianDeltaY` not judged.
+  Logic in the stack-free `metrics.drift`.
+
 - **Judging on the fibers lit** (PIPE2D-1935) — new `iqQaMetrics` columns `linesPerFiber` (unflagged lamp lines per
   lit fiber on an arc, unflagged trace centroids per lit fiber on a quartz), `nLitFibers` and `nFibers` (the
   detector's `GOOD` fibers, and those plus the ones hidden behind a black dot, from the pfsConfig; `litFibers`),
@@ -237,6 +248,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   This needs matplotlib 3.10, now the minimum in `pyproject.toml` (PIPE2D-1916).
 
 ### Changed
+
+- **`dxCenter` is measured minus calibration** (PIPE2D-1921), the sign of drp_stella's residuals and of the drift
+  metrics, in `iqQaData` and `crossDispersion`; `medDxCenter` changes sign with it. Verdicts are unchanged (judged on
+  `|medDxCenter|`), but `iqQaMetrics` stored before this change, the validation fixtures among them, hold the opposite
+  sign.
 
 - **Comparison mode reuses earlier versions' reductions** (PIPE2D-1918) — by default, a new drp_qa version now
   reuses the reductions an earlier version's comparison of the period made, as `--fresh` already did, and judges

@@ -34,9 +34,9 @@ the pipeline/config glue to run them.
 ### Key components
 
 - **QA pipeline (`pipelines/drpQA.yaml`)** — defines the sequence of QA tasks. It
-  currently registers **five** task labels, and only these run under `pipetask`:
+  currently registers **six** task labels, and only these run under `pipetask`:
   `dmResiduals`, `dmCombinedResiduals`, `extractionQa`, `extractionQaCombined`,
-  `imageQualityQa`.
+  `imageQualityQa`, `dmDriftMonitor`.
 - **Threshold pipeline (`pipelines/qaThresholds.yaml`)** — drp_stella's `reduceExposure`
   (less `mergeArms`) plus `imageQualityQa`, so `docs/qa-thresholds.ipynb` reduces the
   validation visits from raw data. The notebook applies `drpActor`'s per-sequence-type config.
@@ -46,6 +46,8 @@ the pipeline/config glue to run them.
     and cross-visit combined)
   - `extractionQa.py`, `extractionQaCombined.py` — fiber extraction quality
     (per-detector, and combined per `(instrument, visit, arm)`)
+  - `dmDriftMonitor.py` — per-species drift of `lines` against `detectorMap_calib`; the
+    measurement and verdict are stack-free in `metrics/drift.py`
 - **QA modules *not* wired into `drpQA.yaml`** — these exist as `PipelineTask`s or CLIs
   but must be run via their own pipeline/entry point:
   - `skySubtractionQa.py` — sky subtraction accuracy (`SkyArmSubtractionTask`,
@@ -453,6 +455,10 @@ drpQA.yaml#dmResiduals               dims: (instrument, visit, arm, spectrograph
 drpQA.yaml#dmCombinedResiduals       dims: (instrument,)   [multiple=True inputs]
     ← reads: detectorMap, dmQaResidualData, dmQaResidualStats
     → writes: dmQaDetectorStats, dmQaCombinedResidualPlot
+
+drpQA.yaml#dmDriftMonitor            dims: (instrument, visit, arm, spectrograph)
+    ← reads: lines, detectorMap_calib (calibration), pfsConfig (optional)
+    → writes: dmDriftMetrics (long format), dmDriftSummary (one row)
 
 drpQA.yaml#extractionQa              → extQaStats, extQaImage, extQaImage_pickle
 drpQA.yaml#extractionQaCombined      ← extQaImage_pickle (multiple)

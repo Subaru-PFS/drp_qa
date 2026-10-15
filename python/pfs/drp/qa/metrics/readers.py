@@ -13,7 +13,7 @@ import pandas as pd
 
 from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS, pipelineVersions
 
-__all__ = ["chooseRun", "readMetrics", "readPipelineVersions", "readReductionPipelines"]
+__all__ = ["chooseRun", "readCalibValidity", "readMetrics", "readPipelineVersions", "readReductionPipelines"]
 
 #: Data ID keys copied onto each row when the stored table lacks them.
 _DATA_ID_KEYS = ("visit", "arm", "spectrograph")
@@ -149,6 +149,67 @@ def readPipelineVersions(
         row = {key: ref.dataId[key] for key in _DATA_ID_KEYS}
         rows.append(row | {column: versions.get(product) for product, column in PIPELINE_COLUMNS.items()})
     return pd.DataFrame(rows, columns=columns).sort_values(list(_DATA_ID_KEYS), ignore_index=True)
+
+
+def readCalibValidity(
+    butler,
+    calibIds: Iterable[str],
+    collections: str | Iterable[str],
+    datasetType: str = "detectorMap_calib",
+) -> pd.DataFrame:
+    """Read the validity ranges of some calibrations, by dataset ID.
+
+    A quantum cannot read the registry, so ``dmDriftSummary`` records the
+    ``calibId`` it was reduced against; this looks up when that calibration
+    is certified for. A large drift against a calibration certified long
+    before the visit is a calibration problem, not an instrument one.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        A Butler; read-only is enough.
+    calibIds : iterable of `str`
+        Dataset IDs (``dmDriftSummary.calibId``).
+    collections : `str` or iterable of `str`
+        Calibration collections, or chains of them, to search.
+    datasetType : `str`, optional
+        Default is ``detectorMap_calib``.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``calibId``, ``collection``, ``validFrom`` and ``validTo`` (ISO TAI;
+        null when unbounded), one row per certification of a requested
+        calibration, sorted; a calibration certified in none of
+        ``collections`` has no row.
+    """
+    columns = ["calibId", "collection", "validFrom", "validTo"]
+    wanted = {str(calibId) for calibId in calibIds}
+    rows = []
+    if wanted:
+        for association in butler.registry.queryDatasetAssociations(
+            datasetType, collections=collections, flattenChains=True
+        ):
+            calibId = str(association.ref.id)
+            timespan = association.timespan
+            if calibId not in wanted or timespan is None:
+                continue
+            rows.append(
+                {
+                    "calibId": calibId,
+                    "collection": association.collection,
+                    "validFrom": _isoTime(timespan.begin),
+                    "validTo": _isoTime(timespan.end),
+                }
+            )
+    # dtype object, so an unbounded end stays None rather than NaN.
+    frame = pd.DataFrame(rows, columns=columns, dtype=object)
+    return frame.sort_values(["calibId", "validFrom"], ignore_index=True)
+
+
+def _isoTime(time) -> str | None:
+    """Return an `astropy.time.Time` as ISO TAI, or `None` for an unbounded end."""
+    return None if time is None else time.tai.isot
 
 
 def readReductionPipelines(
