@@ -13,6 +13,7 @@ from pfs.drp.qa.metrics.drift import (
     RESERVED,
     STATUS_TYPES,
     TRACE,
+    UNFITTED,
     USED,
     cameraSet,
     driftOffsets,
@@ -77,7 +78,7 @@ def makeLines(
 
 def both(species: pd.DataFrame) -> pd.DataFrame:
     """Return the judged rows of `speciesDrift`, indexed by species."""
-    return species[species["statusType"] == BOTH].set_index("description")
+    return species[species["statusType"].isin((BOTH, UNFITTED))].set_index("description")
 
 
 def measure(lines, calib, minLines=10, litFibers=None, thresholds=None, camera=None):
@@ -86,8 +87,7 @@ def measure(lines, calib, minLines=10, litFibers=None, thresholds=None, camera=N
     species = speciesDrift(offsets, minLines, litFibers)
     if thresholds is None:
         thresholds = driftThresholds(0.1, 0.15, 0.1, 0.15)
-    numUnfitted = int((offsets["statusType"] == "").sum())
-    judged, summary = driftVerdict(species, DATA_ID, thresholds, minLines, camera, numUnfitted=numUnfitted)
+    judged, summary = driftVerdict(species, DATA_ID, thresholds, minLines, camera)
     return both(species), judged, summary, species
 
 
@@ -145,6 +145,7 @@ def testNoLinesIsInsufficientData():
     assert summary["qaStatus"] == "UNKNOWN"
     assert summary["recommendedAction"] == "INSUFFICIENT_DATA"
     assert summary["qaReason"] == "no good lines"
+    assert summary["fitted"]
 
 
 def testTraceOnlyFillsXAndDecides():
@@ -330,12 +331,22 @@ def testLinesTheFitDidNotMarkAreLeftOut():
     assert marked["qaStatus"] == "FAIL"
 
 
-def testNoFitIsInsufficientData():
+def testUnfittedIsMeasuredOnEveryGoodLine():
     calib = FakeCalib()
-    _, _, summary, _ = measure(makeLines(calib).assign(status=0), calib)
-    assert summary["qaStatus"] == "UNKNOWN"
-    assert summary["recommendedAction"] == "INSUFFICIENT_DATA"
-    assert "no line marked DETECTORMAP_USED or DETECTORMAP_RESERVED" in summary["qaReason"]
+    lines = makeLines(calib, dx=0.2)
+    species, judged, summary, full = measure(lines.assign(status=0), calib)
+    assert set(full["statusType"]) == {UNFITTED}
+    assert species.loc[TRACE, "nLines"] == (lines["description"] == TRACE).sum()
+    assert species.loc[TRACE, "medianDeltaX"] == pytest.approx(0.2)
+    assert set(judged["statusType"]) == {UNFITTED}
+    assert summary["qaStatus"] == "FAIL"
+    assert not summary["fitted"]
+    long = longDrift(full, judged, DATA_ID)
+    assert long.loc[long["metric"] == "medianDeltaX", "status"].tolist() == ["FAIL"]
+    # Negative control: the same lines marked by a fit are measured as BOTH, USED and RESERVED.
+    _, _, marked, markedFull = measure(lines, calib)
+    assert marked["fitted"]
+    assert UNFITTED not in set(markedFull["statusType"])
 
 
 class EdgeCalib(FakeCalib):

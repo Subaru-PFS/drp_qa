@@ -28,6 +28,7 @@ from pfs.datamodel import PfsConfig
 from pfs.drp.qa.imageQualityQa import litFibers
 from pfs.drp.qa.metrics.drift import (
     BOTH,
+    UNFITTED,
     cameraSet,
     driftOffsets,
     driftThresholds,
@@ -81,7 +82,8 @@ class DmDriftMonitorConnections(
             "Drift against detectorMap_calib in long format, one row per line species and metric:"
             " ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``description``, ``statusType``"
             " (``BOTH``, judged, over the lines the visit's detectorMap fit marked USED or RESERVED;"
-            " ``USED`` and ``RESERVED`` alone, diagnostics), ``metric``"
+            " ``USED`` and ``RESERVED`` alone, diagnostics; ``UNFITTED``, judged, over every good line"
+            " when the fit marked none), ``metric``"
             " (``nLines``, ``linesPerFiber``; ``medianDeltaX``, ``robustRmsDeltaX`` for trace"
             " centroids; ``medianDeltaY``, ``robustRmsDeltaY`` for lamp lines), ``value``,"
             " ``status`` (the metric's verdict, empty when not judged)."
@@ -93,7 +95,9 @@ class DmDriftMonitorConnections(
     dmDriftSummary = OutputConnection(
         name="dmDriftSummary",
         doc=(
-            "One row per detector: ``visit``, ``arm``, ``spectrograph``, ``cameraSet``,"
+            "One row per detector: ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``fitted``"
+            " (false when the visit's detectorMap fit marked no line, so it is reduced against the"
+            " calibration unadjusted),"
             " ``nSpecies``, ``nSpeciesMeasured``, ``qaStatus`` (``UNKNOWN`` when no species"
             " has ``minLines`` good lines), ``qaDecidedBy``, ``qaReason``, ``recommendedAction``"
             " (``NOMINAL``, ``APPLY_SHIFT``, ``RECALIBRATE``, ``INSUFFICIENT_DATA``), and the"
@@ -234,10 +238,7 @@ class DmDriftMonitorTask(PipelineTask):
         lit, _ = litFibers(pfsConfig, np.asarray(detectorMapCalib.fiberId))
         species = speciesDrift(offsets, self.config.minLines, lit)
         camera = cameraSet(pfsConfig, dataId.get("arm"))
-        numUnfitted = int((offsets["statusType"] == "").sum())
-        judged, verdict = driftVerdict(
-            species, dataId, self.thresholds, self.config.minLines, camera, numUnfitted=numUnfitted
-        )
+        judged, verdict = driftVerdict(species, dataId, self.thresholds, self.config.minLines, camera)
 
         summary = {key: dataId.get(key) for key in ("visit", "arm", "spectrograph")}
         summary |= {"cameraSet": camera} | verdict | _calibProvenance(detectorMapCalib)
@@ -251,7 +252,7 @@ class DmDriftMonitorTask(PipelineTask):
                 f"{row.description} dx={row.medianDeltaX:+.3f}"
                 if row.description == "Trace"
                 else f"{row.description} dy={row.medianDeltaY:+.3f}"
-                for row in species[species["statusType"] == BOTH].itertuples()
+                for row in species[species["statusType"].isin((BOTH, UNFITTED))].itertuples()
             )
             or "no lines",
             verdict["qaReason"] or "nominal",

@@ -28,6 +28,11 @@ Neither set was fitted to the calibration, so against it both measure the
 drift; a difference between them is a selection effect of the visit's fit, kept
 as a diagnostic, as ``dmResiduals`` keeps the two apart.
 
+When the visit's fit marked no line at all, it did not run or failed, and the
+visit is reduced against the calibration unadjusted: the drift is then the
+error the reduction carries. Each species is measured once, over all its good
+lines (``UNFITTED``), and judged, and the summary's ``fitted`` is false.
+
 Stack-free: the calibration is duck-typed (``fiberId``, ``getXCenter``,
 ``findPoint``), so it is tested with a fake.
 """
@@ -50,6 +55,7 @@ __all__ = [
     "STATUS_TYPES",
     "SUMMARY_COLUMNS",
     "TRACE",
+    "UNFITTED",
     "USED",
     "cameraSet",
     "driftOffsets",
@@ -73,6 +79,10 @@ _USED_BIT, _RESERVED_BIT = 0x20, 0x40
 #: held back, and both together, the set that is judged.
 USED, RESERVED, BOTH = "USED", "RESERVED", "BOTH"
 STATUS_TYPES = (BOTH, USED, RESERVED)
+#: ``statusType`` of every good line of a detector whose fit marked none.
+UNFITTED = "UNFITTED"
+#: The ``statusType`` values that are judged.
+_JUDGED = (BOTH, UNFITTED)
 
 #: The drift statistics, with the component each comes from.
 DRIFT_METRICS = {
@@ -111,6 +121,7 @@ DRIFT_COLUMNS = {
 
 #: Columns of ``dmDriftSummary`` set by `driftVerdict`.
 SUMMARY_COLUMNS = (
+    "fitted",
     "nSpecies",
     "nSpeciesMeasured",
     "qaStatus",
@@ -253,7 +264,8 @@ def speciesDrift(offsets: pd.DataFrame, minLines: int, litFibers: set[int] | Non
     Parameters
     ----------
     offsets : `pandas.DataFrame`
-        `driftOffsets`; lines with no ``statusType`` are left out.
+        `driftOffsets`. Lines with no ``statusType`` are left out, unless
+        no line has one (`UNFITTED`).
     minLines : `int`
         Fewest lines a species needs, in each set, for its statistics; below
         it they are NaN (not measured).
@@ -268,11 +280,13 @@ def speciesDrift(offsets: pd.DataFrame, minLines: int, litFibers: set[int] | Non
         order), species sorted: ``description``, ``statusType``, ``nLines``,
         ``linesPerFiber`` (lines on lit fibers, per lit fiber), and the
         `DRIFT_METRICS`, NaN for the component the species does not measure.
-        A species is listed when it has a ``USED`` or ``RESERVED`` line.
+        A species is listed when it has a ``USED`` or ``RESERVED`` line; when
+        no line has either, every species is listed once, as `UNFITTED`.
     """
     rows = []
     fitted = offsets[offsets["statusType"].isin((USED, RESERVED))]
-    for (description, statusType), group in _statusSets(fitted):
+    sets = _unfittedSets(offsets) if fitted.empty else _statusSets(fitted)
+    for (description, statusType), group in sets:
         nLines = len(group)
         row = {
             "description": description,
@@ -294,6 +308,12 @@ def speciesDrift(offsets: pd.DataFrame, minLines: int, litFibers: set[int] | Non
         rows.append(row)
     columns = ["description", "statusType", *_COUNT_METRICS, *DRIFT_METRICS]
     return pd.DataFrame(rows, columns=columns).astype({"nLines": "int64"})
+
+
+def _unfittedSets(offsets: pd.DataFrame):
+    """Yield ``((description, UNFITTED), lines)`` for each species, over all its good lines."""
+    for description, group in offsets.groupby("description", sort=True):
+        yield (description, UNFITTED), group
 
 
 def _statusSets(fitted: pd.DataFrame):
@@ -338,9 +358,8 @@ def driftVerdict(
     thresholds: pd.DataFrame | Sequence[pd.DataFrame],
     minLines: int,
     camera: str | None = None,
-    numUnfitted: int = 0,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Judge each species' drift, over its ``BOTH`` lines, and the detector.
+    """Judge each species' drift, over its ``BOTH`` (or ``UNFITTED``) lines, and the detector.
 
     Parameters
     ----------
@@ -356,22 +375,20 @@ def driftVerdict(
         As given to `speciesDrift`; for the reason string.
     camera : `str`, optional
         `cameraSet`.
-    numUnfitted : `int`, optional
-        Good lines the visit's fit neither used nor reserved; for the reason
-        string when no species could be measured.
 
     Returns
     -------
     judged : `pandas.DataFrame`
-        `pfs.drp.qa.metrics.gate.judge` of each species' ``BOTH`` row, with
+        `pfs.drp.qa.metrics.gate.judge` of each species' judged row, with
         ``description`` and ``statusType``.
     summary : `dict`
-        `SUMMARY_COLUMNS`. ``qaStatus`` is the worst species verdict, or
+        `SUMMARY_COLUMNS`. ``fitted`` is false when the visit's fit marked
+        no line (`UNFITTED`). ``qaStatus`` is the worst species verdict, or
         ``UNKNOWN`` when no species has ``minLines`` good lines: not
         measurable, never measured but not combinable. ``qaDecidedBy`` is
         ``"<description> <metric>"``.
     """
-    species = species[species["statusType"] == BOTH]
+    species = species[species["statusType"].isin(_JUDGED)]
     wide = species.assign(
         visit=dataId["visit"],
         arm=dataId["arm"],
@@ -384,6 +401,7 @@ def driftVerdict(
     judged["statusType"] = wide["statusType"].to_numpy()[rows]
     measured = int((species["nLines"] >= minLines).sum())
     summary: dict[str, Any] = {
+        "fitted": not (species["statusType"] == UNFITTED).any(),
         "nSpecies": len(species),
         "nSpeciesMeasured": measured,
         "qaStatus": "UNKNOWN",
@@ -394,11 +412,6 @@ def driftVerdict(
     if measured == 0:
         if len(species):
             summary["qaReason"] = f"fewer than {minLines} good lines in every species"
-        elif numUnfitted:
-            summary["qaReason"] = (
-                f"no line marked DETECTORMAP_USED or DETECTORMAP_RESERVED ({numUnfitted} good lines):"
-                " the visit's detectorMap fit did not run or failed"
-            )
         else:
             summary["qaReason"] = "no good lines"
         return judged, summary
@@ -429,7 +442,7 @@ def longDrift(
     Each species and ``statusType`` has rows for ``nLines``, ``linesPerFiber``
     and the statistics of the component it measures (x for trace centroids, y
     for lamp lines), NaN when it has too few lines; none for the other
-    component. Only ``BOTH`` rows carry a verdict.
+    component. Only ``BOTH`` and ``UNFITTED`` rows carry a verdict.
 
     Parameters
     ----------

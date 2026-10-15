@@ -15,7 +15,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `robustRmsDeltaX` from trace centroids (measured minus calibration), `medianDeltaY` and `robustRmsDeltaY` from lamp
   lines, `nLines` and `linesPerFiber`, over the lines the visit's detectorMap fit marked `DETECTORMAP_USED` or
   `DETECTORMAP_RESERVED` (`statusType` `BOTH`, judged) and over each alone (diagnostics), in long format
-  (`dmDriftMetrics`, with each metric's verdict and the visit's `cameraSet`, e.g. `brn`, `bm`); and one row per detector (`dmDriftSummary`): `qaStatus`, `recommendedAction` (`NOMINAL`,
+  (`dmDriftMetrics`, with each metric's verdict and the visit's `cameraSet`, e.g. `brn`, `bm`); a detector whose fit marked
+  no line is measured over all its good lines (`UNFITTED`, `fitted` false), being reduced against the calibration
+  unadjusted; and one row per detector (`dmDriftSummary`): `qaStatus`, `recommendedAction` (`NOMINAL`,
   `APPLY_SHIFT`, `RECALIBRATE`, `INSUFFICIENT_DATA`) and the calibration used (`calibId`, `calibRun`, its creation
   date and input visits). `readers.readCalibValidity` looks up its validity range. Thresholds are provisional:
   `|medianDeltaX|` 1.0/2.0 px (imageQualityQa's `dxCenter` thresholds, origin unrecorded), `medianDeltaY` not judged.
