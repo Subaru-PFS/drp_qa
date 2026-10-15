@@ -1,4 +1,7 @@
-"""Tests for detector-map drift against the calibration (dmDriftMonitor, PIPE2D-1921)."""
+"""Tests for line residuals against the calibration and the visit's detectorMap (dmLineResiduals).
+
+Drift against the calibration is PIPE2D-1921; the visit reference, PIPE2D-1956.
+"""
 
 from types import SimpleNamespace
 
@@ -6,24 +9,28 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.drift import (
+from pfs.drp.qa.metrics.gate import judge
+from pfs.drp.qa.metrics.lineResiduals import (
     BAD_STATUS,
     BOTH,
-    DRIFT_COLUMNS,
+    CALIB,
+    LINE_COLUMNS,
     RESERVED,
+    RESIDUAL_COLUMNS,
     STATUS_TYPES,
     TRACE,
     UNFITTED,
     USED,
+    VISIT,
     cameraSet,
-    driftOffsets,
-    driftThresholds,
-    driftVerdict,
-    longDrift,
+    lineResiduals,
+    lineTable,
+    longResiduals,
+    residualThresholds,
+    residualVerdict,
     robustRms,
-    speciesDrift,
+    speciesResiduals,
 )
-from pfs.drp.qa.metrics.gate import judge
 from pfs.drp.qa.metrics.registry import specFor
 
 DATA_ID = {"visit": 1, "arm": "b", "spectrograph": 2}
@@ -77,19 +84,49 @@ def makeLines(
     return frame
 
 
-def both(species: pd.DataFrame) -> pd.DataFrame:
-    """Return the judged rows of `speciesDrift`, indexed by species."""
-    return species[species["statusType"].isin((BOTH, UNFITTED))].set_index("description")
+class ShiftedMap(FakeCalib):
+    """`FakeCalib` moved by ``(dx, dy)``: a visit's detectorMap adjusted away from the calibration."""
+
+    def __init__(self, dx: float = 0.0, dy: float = 0.0, numFibers: int = 20):
+        super().__init__(numFibers)
+        self.dx, self.dy = dx, dy
+
+    def getXCenter(self, fiberId, y):
+        return super().getXCenter(fiberId, y) + self.dx
+
+    def findPoint(self, fiberId, wavelength):
+        return super().findPoint(fiberId, wavelength) + np.array([self.dx, self.dy])
 
 
-def measure(lines, calib, minLines=10, litFibers=None, thresholds=None, camera=None):
+def residuals(lines, calib, visit=None, **kwargs):
+    """Return `lineResiduals` against ``calib`` and ``visit`` (``calib`` when not given)."""
+    return lineResiduals(lines, {CALIB: calib, VISIT: calib if visit is None else visit}, **kwargs)
+
+
+def speciesOf(lines, calib, minLines=10, litFibers=None, visit=None):
+    """Return `speciesResiduals` of ``lines``."""
+    return speciesResiduals(residuals(lines, calib, visit), minLines, litFibers)
+
+
+def both(species: pd.DataFrame, reference: str = CALIB) -> pd.DataFrame:
+    """Return the ``BOTH`` (or ``UNFITTED``) rows of `speciesResiduals` against ``reference``, by species."""
+    rows = species[(species["reference"] == reference) & species["statusType"].isin((BOTH, UNFITTED))]
+    return rows.set_index("description")
+
+
+def reserved(species: pd.DataFrame, reference: str = VISIT) -> pd.DataFrame:
+    """Return the ``RESERVED`` rows of `speciesResiduals` against ``reference``, by species."""
+    rows = species[(species["reference"] == reference) & (species["statusType"] == RESERVED)]
+    return rows.set_index("description")
+
+
+def measure(lines, calib, minLines=10, litFibers=None, thresholds=None, camera=None, visit=None):
     """Return ``(both(species), judged, summary, species)`` for ``lines``."""
-    offsets = driftOffsets(lines, calib)
-    species = speciesDrift(offsets, minLines, litFibers)
+    full = speciesOf(lines, calib, minLines, litFibers, visit)
     if thresholds is None:
-        thresholds = driftThresholds(0.1, 0.15, 0.1, 0.15)
-    judged, summary = driftVerdict(species, DATA_ID, thresholds, minLines, camera)
-    return both(species), judged, summary, species
+        thresholds = residualThresholds(0.1, 0.15, 0.1, 0.15)
+    judged, summary = residualVerdict(full, DATA_ID, thresholds, minLines, camera)
+    return both(full), judged, summary, full
 
 
 def testZeroOffsetPasses():
@@ -110,7 +147,7 @@ def testInjectedShiftIsRecoveredAndFails():
     assert species.loc[TRACE, "robustRmsDeltaX"] == pytest.approx(0.02, rel=0.25)
     assert summary["qaStatus"] == "FAIL"
     assert summary["recommendedAction"] == "RECALIBRATE"
-    assert summary["qaDecidedBy"] == f"{TRACE} medianDeltaX"
+    assert summary["qaDecidedBy"] == f"calib {TRACE} medianDeltaX"
     assert "fail threshold 0.15px" in summary["qaReason"]
     # Negative control: the offset is measured minus calibration, not calibration minus measured
     # (imageQualityQa's dxCenter): a +0.2 px shift does not read as -0.2 px.
@@ -123,7 +160,7 @@ def testInjectedYShiftIsRecovered():
     assert species.loc["NeI", "medianDeltaY"] == pytest.approx(-0.12)
     assert summary["qaStatus"] == "WARN"
     assert summary["recommendedAction"] == "APPLY_SHIFT"
-    assert summary["qaDecidedBy"] == "NeI medianDeltaY"
+    assert summary["qaDecidedBy"] == "calib NeI medianDeltaY"
     # Negative control: the sign is kept; only the gate takes the absolute value.
     assert species.loc["NeI", "medianDeltaY"] < 0
 
@@ -158,7 +195,7 @@ def testTraceOnlyFillsXAndDecides():
     assert np.isnan(species.loc[TRACE, "medianDeltaY"])
     assert np.isnan(species.loc[TRACE, "robustRmsDeltaY"])
     assert summary["qaStatus"] == "PASS"
-    long = longDrift(full, judged, DATA_ID)
+    long = longResiduals(full, judged, DATA_ID)
     assert set(long["metric"]) == {"nLines", "linesPerFiber", "medianDeltaX", "robustRmsDeltaX"}
 
 
@@ -180,7 +217,7 @@ def testSpeciesAreNotBlended():
     species, _, summary, _ = measure(pd.concat([neon, mercury]), calib)
     assert species.loc["NeI", "medianDeltaY"] == pytest.approx(0.12)
     assert species.loc["HgI", "medianDeltaY"] == pytest.approx(0.0)
-    assert summary["qaDecidedBy"] == "NeI medianDeltaY"
+    assert summary["qaDecidedBy"] == "calib NeI medianDeltaY"
 
 
 def testBadLinesAreExcluded():
@@ -188,33 +225,31 @@ def testBadLinesAreExcluded():
     lines = makeLines(calib, lampLines=0)
     bad = lines.iloc[:10].assign(x=lines["x"].iloc[:10] + 50.0)
     flagged = bad.assign(flag=True)
-    blended = bad.assign(status=0x2)
+    blended = bad.assign(status=0x2 | USED_BIT)  # marked by the fit, but a blend
     offFiber = bad.assign(fiberId=99)  # not in the calibration: getXCenter would raise
     notFinite = bad.assign(x=np.nan)
-    offsets = driftOffsets(pd.concat([lines, flagged, blended, offFiber, notFinite]), calib)
+    offsets = residuals(pd.concat([lines, flagged, blended, offFiber, notFinite]), calib)
     assert len(offsets) == len(lines)
-    assert offsets["dx"].abs().max() == pytest.approx(0.0)
+    assert offsets["dxCalib"].abs().max() == pytest.approx(0.0)
     # Negative control: without the status mask, the blended lines get in.
-    unmasked = driftOffsets(pd.concat([lines, blended]), calib, badStatus=0)
+    unmasked = residuals(pd.concat([lines, blended]), calib, badStatus=0)
     assert len(unmasked) > len(lines)
     assert BAD_STATUS & 0x2
 
 
 def testLinesPerFiberIsPerLitFiber():
     calib = FakeCalib()
-    full = both(speciesDrift(driftOffsets(makeLines(calib), calib), 10, set(calib.fiberId.tolist())))
+    full = both(speciesOf(makeLines(calib), calib, 10, set(calib.fiberId.tolist())))
     group = calib.fiberId[::4]
-    shaka = both(speciesDrift(driftOffsets(makeLines(calib, fibers=group), calib), 10, set(group.tolist())))
+    shaka = both(speciesOf(makeLines(calib, fibers=group), calib, 10, set(group.tolist())))
     assert shaka["linesPerFiber"].tolist() == full["linesPerFiber"].tolist() == [5.0, 20.0]
     assert shaka["nLines"].tolist() == [len(group) * 5, len(group) * 20]
     # Negative control: counted per fiber of the detector, one group reads as sparse.
-    sparse = both(
-        speciesDrift(driftOffsets(makeLines(calib, fibers=group), calib), 10, set(calib.fiberId.tolist()))
-    )
+    sparse = both(speciesOf(makeLines(calib, fibers=group), calib, 10, set(calib.fiberId.tolist())))
     assert (sparse["linesPerFiber"] < full["linesPerFiber"]).all()
     # Without a pfsConfig, or with no fiber lit, there is no per-fiber count.
-    assert speciesDrift(driftOffsets(makeLines(calib), calib), 10, None)["linesPerFiber"].isna().all()
-    assert speciesDrift(driftOffsets(makeLines(calib), calib), 10, set())["linesPerFiber"].isna().all()
+    assert speciesOf(makeLines(calib), calib, 10, None)["linesPerFiber"].isna().all()
+    assert speciesOf(makeLines(calib), calib, 10, set())["linesPerFiber"].isna().all()
 
 
 def testThresholdsByPopulation():
@@ -232,7 +267,7 @@ def testThresholdsByPopulation():
             "provenance": ["test"],
         }
     )
-    tables = [file, driftThresholds(0.1, 0.15, NAN, NAN)]
+    tables = [file, residualThresholds(0.1, 0.15, NAN, NAN)]
     _, judged, withM, _ = measure(lines, calib, thresholds=tables, camera="bmn")
     assert withM["qaStatus"] == "PASS"
     assert judged.loc[judged["metric"] == "medianDeltaX", "population"].iloc[0] == "arm=b cameraSet=bmn"
@@ -244,7 +279,7 @@ def testThresholdsByPopulation():
 def testMeasuredButUnthresholdedIsUnjudged():
     calib = FakeCalib()
     lines = makeLines(calib, traceRows=0, dy=5.0)
-    _, _, summary, _ = measure(lines, calib, thresholds=driftThresholds(1.0, 2.0, NAN, NAN))
+    _, _, summary, _ = measure(lines, calib, thresholds=residualThresholds(1.0, 2.0, NAN, NAN))
     assert summary["qaStatus"] == "UNKNOWN"
     assert summary["recommendedAction"] == "UNJUDGED"
     assert summary["nSpeciesMeasured"] == 1
@@ -253,19 +288,28 @@ def testMeasuredButUnthresholdedIsUnjudged():
 def testLongFormat():
     calib = FakeCalib()
     _, judged, _, full = measure(makeLines(calib, dx=0.2), calib, camera="brn")
-    long = longDrift(full, judged, DATA_ID, "brn")
-    assert list(long.columns) == list(DRIFT_COLUMNS)
-    assert long.dtypes.astype(str).tolist() == list(DRIFT_COLUMNS.values())
-    trace = long[(long["description"] == TRACE) & (long["statusType"] == BOTH)].set_index("metric")
+    long = longResiduals(full, judged, DATA_ID, "brn")
+    assert list(long.columns) == list(RESIDUAL_COLUMNS)
+    assert long.dtypes.astype(str).tolist() == list(RESIDUAL_COLUMNS.values())
+    trace = long[(long["description"] == TRACE) & (long["statusType"] == BOTH)]
+    trace = trace[trace["reference"] == CALIB].set_index("metric")
     assert trace.loc["medianDeltaX", "status"] == "FAIL"
     assert trace.loc["nLines", "status"] == ""
     assert (long["cameraSet"] == "brn").all()
     lamp = long[long["description"] == "NeI"]
-    assert set(lamp["metric"]) == {"nLines", "linesPerFiber", "medianDeltaY", "robustRmsDeltaY"}
+    assert set(lamp["metric"]) == {
+        "nLines",
+        "linesPerFiber",
+        "medianDeltaX",
+        "robustRmsDeltaX",
+        "medianDeltaY",
+        "robustRmsDeltaY",
+    }
+    assert list(long["reference"].unique()) == [CALIB, VISIT]
     assert (long.loc[long["statusType"] != BOTH, "status"] == "").all()
     assert list(long["statusType"].unique()) == list(STATUS_TYPES)
-    empty = longDrift(full.iloc[:0], judged.iloc[:0], DATA_ID)
-    assert list(empty.columns) == list(DRIFT_COLUMNS) and empty.empty
+    empty = longResiduals(full.iloc[:0], judged.iloc[:0], DATA_ID)
+    assert list(empty.columns) == list(RESIDUAL_COLUMNS) and empty.empty
 
 
 def testRobustRms():
@@ -297,6 +341,9 @@ def testRegistry():
         assert specFor(name).absolute
         assert "cameraSet" in specFor(name).groupBy
     assert not specFor("robustRmsDeltaX").absolute
+    # Thresholds are derived per reference and line set: the two references are different populations.
+    for name in ("medianDeltaX", "robustRmsDeltaX", "medianDeltaY", "robustRmsDeltaY"):
+        assert {"reference", "statusType"} <= set(specFor(name).groupBy)
 
 
 def testUsedAndReservedAreKeptApart():
@@ -306,7 +353,7 @@ def testUsedAndReservedAreKeptApart():
     lines.loc[reserved, "status"] = RESERVED_BIT
     lines.loc[reserved, "x"] += 0.3
     _, judged, summary, full = measure(lines, calib)
-    trace = full[full["description"] == TRACE].set_index("statusType")
+    trace = full[(full["description"] == TRACE) & (full["reference"] == CALIB)].set_index("statusType")
     assert list(trace.index) == list(STATUS_TYPES)
     assert trace.loc[USED, "nLines"] == (~reserved).sum()
     assert trace.loc[RESERVED, "nLines"] == reserved.sum()
@@ -314,7 +361,7 @@ def testUsedAndReservedAreKeptApart():
     assert trace.loc[USED, "medianDeltaX"] == pytest.approx(0.0)
     assert trace.loc[RESERVED, "medianDeltaX"] == pytest.approx(0.3)
     # Only the union is judged: one verdict per species.
-    assert set(judged["statusType"]) == {BOTH}
+    assert set(judged.loc[judged["reference"] == CALIB, "statusType"]) == {BOTH}
     assert summary["qaStatus"] == "PASS"
     # Negative control: judged on the RESERVED lines alone, it would fail.
     assert abs(trace.loc[RESERVED, "medianDeltaX"]) > 0.15
@@ -340,10 +387,12 @@ def testUnfittedIsMeasuredOnEveryGoodLine():
     assert species.loc[TRACE, "nLines"] == (lines["description"] == TRACE).sum()
     assert species.loc[TRACE, "medianDeltaX"] == pytest.approx(0.2)
     assert set(judged["statusType"]) == {UNFITTED}
+    assert set(judged["reference"]) == {CALIB}
     assert summary["qaStatus"] == "FAIL"
     assert not summary["fitted"]
-    long = longDrift(full, judged, DATA_ID)
-    assert long.loc[long["metric"] == "medianDeltaX", "status"].tolist() == ["FAIL"]
+    long = longResiduals(full, judged, DATA_ID)
+    traceX = long[(long["metric"] == "medianDeltaX") & (long["description"] == TRACE)]
+    assert traceX.set_index("reference")["status"].to_dict() == {CALIB: "FAIL", VISIT: ""}
     # Negative control: the same lines marked by a fit are measured as BOTH, USED and RESERVED.
     _, _, marked, markedFull = measure(lines, calib)
     assert marked["fitted"]
@@ -365,9 +414,10 @@ class EdgeCalib(FakeCalib):
 def testNaNPredictionsAreLeftOut():
     calib = EdgeCalib()
     lines = makeLines(FakeCalib(), dx=0.05, dy=0.05)
-    offsets = driftOffsets(lines, calib)
-    assert np.isfinite(offsets.loc[offsets["description"] == TRACE, "dx"]).all()
-    assert np.isfinite(offsets.loc[offsets["description"] == "NeI", "dy"]).all()
+    offsets = lineResiduals(lines, {CALIB: calib})
+    assert np.isfinite(offsets.loc[offsets["description"] == TRACE, "dxCalib"]).all()
+    assert np.isfinite(offsets.loc[offsets["description"] == "NeI", "dyCalib"]).all()
+    assert offsets[["dxVisit", "dyVisit"]].isna().all().all()
     species, _, summary, _ = measure(lines, calib)
     assert species.loc[TRACE, "medianDeltaX"] == pytest.approx(0.05)
     assert species.loc["NeI", "medianDeltaY"] == pytest.approx(0.05)
@@ -388,7 +438,7 @@ def testNaNPredictionsAreLeftOut():
 )
 def testActionFollowsTheMetric(dx, rms, expected):
     calib = FakeCalib()
-    tables = [driftThresholds(0.1, 0.15, NAN, NAN)]
+    tables = [residualThresholds(0.1, 0.15, NAN, NAN)]
     if rms is not None:
         tables.insert(
             0,
@@ -428,8 +478,9 @@ def testValidationVerdicts():
     from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 
     rows = pd.read_parquet(Path(__file__).parent / "data" / "dmDriftMetrics-validation.parquet")
-    rows = rows[rows["nLines"] >= 10].reset_index(drop=True)
-    config = driftThresholds(1.0, 2.0, 1.0, 2.0)
+    # The fixture holds dmDriftMonitor's rows (PIPE2D-1921), all against the calibration.
+    rows = rows[rows["nLines"] >= 10].assign(reference=CALIB).reset_index(drop=True)
+    config = residualThresholds(1.0, 2.0, 1.0, 2.0)
     judged = judge(rows, config).set_index(["row", "metric"])
     visitSet = loadValidationVisits()
     for metric in ("medianDeltaX", "medianDeltaY"):
@@ -457,9 +508,168 @@ def testValidationVerdicts():
     laterX = judged.xs("medianDeltaX", level="metric")["status"].loc[later]
     assert (laterX[laterX != ""] == "PASS").all()
     # Negative control: the rebuild plan's 0.15 px FAIL would fail known-good Run25 traces.
-    strict = judge(rows, driftThresholds(0.1, 0.15, NAN, NAN)).set_index(["row", "metric"])
+    strict = judge(rows, residualThresholds(0.1, 0.15, NAN, NAN)).set_index(["row", "metric"])
     labelled = labelRows(rows, visitSet, "medianDeltaX")
     strictGood = strict.xs("medianDeltaX", level="metric")["status"].loc[
         labelled.index[labelled["validation"] == "good"]
     ]
     assert (strictGood == "FAIL").sum() > 50
+
+
+def rmsThresholds(warn: float = 0.05, fail: float = 0.1) -> pd.DataFrame:
+    """Return the config's thresholds with the RESERVED robust RMS judged in x and y."""
+    return residualThresholds(1.0, 2.0, 1.0, 2.0, warn, fail, warn, fail)
+
+
+def withReserved(lines: pd.DataFrame, noise: float = 0.0, seed: int = 3) -> tuple[pd.DataFrame, np.ndarray]:
+    """Mark every fifth line RESERVED, scattering those by ``noise`` px in x and y."""
+    lines = lines.copy()
+    marked = np.arange(len(lines)) % 5 == 0
+    rng = np.random.default_rng(seed)
+    lines.loc[marked, "status"] = RESERVED_BIT
+    lines.loc[marked, "x"] += rng.normal(0.0, noise, marked.sum())
+    isLamp = (lines["description"] != TRACE).to_numpy()
+    lines.loc[marked & isLamp, "y"] += rng.normal(0.0, noise, (marked & isLamp).sum())
+    return lines, marked
+
+
+def testEachReferenceIsMeasured():
+    """An adjusted map 0.5 px from the calibration: the lines sit on it, 0.5 px from the calibration."""
+    calib, visit = FakeCalib(), ShiftedMap(dx=0.5, dy=-0.3)
+    lines = makeLines(calib, dx=0.5, dy=-0.3)
+    full = speciesOf(lines, calib, visit=visit)
+    againstCalib, againstVisit = both(full, CALIB), both(full, VISIT)
+    assert againstCalib.loc[TRACE, "medianDeltaX"] == pytest.approx(0.5)
+    assert againstCalib.loc["NeI", "medianDeltaY"] == pytest.approx(-0.3)
+    assert againstVisit.loc[TRACE, "medianDeltaX"] == pytest.approx(0.0)
+    assert againstVisit.loc["NeI", "medianDeltaY"] == pytest.approx(0.0)
+    # Negative control: the references are not swapped.
+    assert not np.isclose(againstVisit.loc[TRACE, "medianDeltaX"], 0.5)
+    offsets = residuals(lines, calib, visit)
+    assert offsets["dxCalib"].to_numpy() == pytest.approx(offsets["dxVisit"].to_numpy() + 0.5)
+
+
+def testReservedScatterAgainstTheVisitIsJudged():
+    calib = FakeCalib()
+    lines, _ = withReserved(makeLines(calib), noise=0.2)
+    _, judged, summary, full = measure(lines, calib, thresholds=rmsThresholds())
+    rows = reserved(full)
+    assert rows.loc[TRACE, "robustRmsDeltaX"] == pytest.approx(0.2, rel=0.3)
+    assert rows.loc["NeI", "robustRmsDeltaY"] == pytest.approx(0.2, rel=0.3)
+    assert summary["qaStatus"] == "FAIL"
+    assert summary["recommendedAction"] == "RECALIBRATE"
+    assert summary["qaDecidedBy"].startswith("visit ")
+    assert "visit Trace: robustRmsDeltaX=" in summary["qaReason"]
+    visitRows = judged[judged["reference"] == VISIT]
+    assert set(visitRows["statusType"]) == {RESERVED}
+    assert set(visitRows.loc[visitRows["status"] != "", "metric"]) == {"robustRmsDeltaX", "robustRmsDeltaY"}
+    # Negative control: the same scatter on lines the fit used is not judged; it is the fit's residual.
+    used = lines.assign(status=USED_BIT)
+    _, _, onUsed, _ = measure(used, calib, thresholds=rmsThresholds())
+    assert onUsed["qaStatus"] == "PASS"
+
+
+def testReservedScatterIsNotJudgedByDefault():
+    """The config's RMS thresholds are NaN until derived from the validation set."""
+    calib = FakeCalib()
+    lines, _ = withReserved(makeLines(calib), noise=0.5)
+    _, judged, summary, _ = measure(lines, calib, thresholds=residualThresholds(1.0, 2.0, 1.0, 2.0))
+    assert (judged.loc[judged["reference"] == VISIT, "status"] == "").all()
+    assert summary["qaStatus"] == "PASS"
+    # Negative control: given thresholds, the same lines fail.
+    _, _, judgedSummary, _ = measure(lines, calib, thresholds=rmsThresholds())
+    assert judgedSummary["qaStatus"] == "FAIL"
+
+
+def testVisitMediansAreNotJudged():
+    """Only the RESERVED robust RMS is judged against the visit, whatever a thresholds file names."""
+    calib, visit = FakeCalib(), ShiftedMap(dx=-5.0)
+    lines, _ = withReserved(makeLines(calib))
+    file = pd.DataFrame(
+        {
+            "metric": ["medianDeltaX"],
+            "warn": [0.1],
+            "fail": [0.15],
+            "higherIsWorse": [True],
+            "absolute": [True],
+            "provenance": ["test: names no reference"],
+        }
+    )
+    _, judged, summary, full = measure(lines, calib, thresholds=[file], visit=visit)
+    assert reserved(full).loc[TRACE, "medianDeltaX"] == pytest.approx(5.0)
+    assert summary["qaStatus"] == "PASS"
+    medians = judged[(judged["reference"] == VISIT) & (judged["metric"] == "medianDeltaX")]
+    assert (medians["status"] == "").all()
+    # Negative control: the same entry judges the calibration's offsets.
+    _, _, shifted, _ = measure(makeLines(calib, dx=5.0), calib, thresholds=[file], visit=visit)
+    assert shifted["qaStatus"] == "FAIL"
+    assert shifted["qaDecidedBy"].startswith("calib ")
+
+
+def testLampXIsMeasuredButNotJudgedByTheConfig():
+    calib = FakeCalib()
+    lines = makeLines(calib)
+    isLamp = lines["description"] != TRACE
+    lines.loc[isLamp, "x"] += 0.5
+    species, judged, summary, _ = measure(lines, calib)
+    assert species.loc["NeI", "medianDeltaX"] == pytest.approx(0.5)
+    assert species.loc[TRACE, "medianDeltaX"] == pytest.approx(0.0)
+    assert summary["qaStatus"] == "PASS"
+    lampX = judged[(judged["description"] == "NeI") & (judged["metric"] == "medianDeltaX")]
+    assert (lampX["status"] == "").all()
+    # Negative control: a thresholds entry naming lamp lines judges it.
+    file = pd.DataFrame(
+        {
+            "metric": ["medianDeltaX"],
+            "reference": [CALIB],
+            "description": ["NeI"],
+            "warn": [0.1],
+            "fail": [0.15],
+            "higherIsWorse": [True],
+            "absolute": [True],
+            "provenance": ["test"],
+        }
+    )
+    _, _, judgedLamp, _ = measure(lines, calib, thresholds=[file, residualThresholds(0.1, 0.15, 0.1, 0.15)])
+    assert judgedLamp["qaStatus"] == "FAIL"
+    assert judgedLamp["qaDecidedBy"] == "calib NeI medianDeltaX"
+
+
+def testTracesAreKeptOnArcs():
+    """Unlike dmResiduals, trace centroids are measured alongside lamp lines."""
+    calib = FakeCalib()
+    species, _, summary, _ = measure(makeLines(calib, dx=0.12), calib)
+    assert set(species.index) == {TRACE, "NeI"}
+    assert summary["qaDecidedBy"] == f"calib {TRACE} medianDeltaX"
+    # Negative control: without the traces, the shift is not seen.
+    lampsOnly = makeLines(calib, traceRows=0, dx=0.12)
+    _, _, noTraces, _ = measure(lampsOnly, calib)
+    assert noTraces["qaStatus"] == "PASS"
+
+
+def testAFiberTheVisitMapLacksIsMeasuredAgainstTheCalibration():
+    calib, visit = FakeCalib(), FakeCalib(numFibers=10)
+    lines = makeLines(calib)
+    offsets = residuals(lines, calib, visit)
+    assert len(offsets) == len(lines)
+    outside = offsets["fiberId"] > 10
+    assert offsets.loc[outside, "dxVisit"].isna().all()
+    assert np.isfinite(offsets.loc[outside, "dxCalib"]).all()
+    full = speciesOf(lines, calib, visit=visit)
+    assert both(full, VISIT).loc[TRACE, "nLines"] == both(full, CALIB).loc[TRACE, "nLines"] / 2
+
+
+def testLineTable():
+    calib = FakeCalib()
+    lines, marked = withReserved(makeLines(calib).assign(xErr=0.01, yErr=0.02))
+    rejected = makeLines(calib).iloc[:5].assign(status=0)  # not marked by the fit: not stored
+    table = lineTable(residuals(pd.concat([lines, rejected]), calib), DATA_ID)
+    assert list(table.columns) == list(LINE_COLUMNS)
+    assert table.dtypes.astype(str).tolist() == list(LINE_COLUMNS.values())
+    assert len(table) == len(lines)
+    assert (table["statusType"] == RESERVED).sum() == marked.sum()
+    assert (table["visit"] == DATA_ID["visit"]).all() and (table["arm"] == "b").all()
+    assert table.loc[table["description"] == TRACE, ["dyCalib", "dyVisit"]].isna().all().all()
+    assert (table["xErr"] == 0.01).all()
+    empty = lineTable(residuals(lines.assign(flag=True), calib), DATA_ID)
+    assert empty.empty and list(empty.columns) == list(LINE_COLUMNS)

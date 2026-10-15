@@ -159,7 +159,7 @@ def readCalibValidity(
 ) -> pd.DataFrame:
     """Read the validity ranges of some calibrations, by dataset ID.
 
-    A quantum cannot read the registry, so ``dmDriftSummary`` records the
+    A quantum cannot read the registry, so ``dmLineResidualSummary`` records the
     ``calibId`` it was reduced against; this looks up when that calibration
     is certified for. A large drift against a calibration certified long
     before the visit is a calibration problem, not an instrument one.
@@ -169,7 +169,7 @@ def readCalibValidity(
     butler : `lsst.daf.butler.Butler`
         A Butler; read-only is enough.
     calibIds : iterable of `str`
-        Dataset IDs (``dmDriftSummary.calibId``).
+        Dataset IDs (``dmLineResidualSummary.calibId``).
     collections : `str` or iterable of `str`
         Calibration collections, or chains of them, to search.
     datasetType : `str`, optional

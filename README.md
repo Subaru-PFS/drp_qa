@@ -78,13 +78,52 @@ See [documentation](https://pipelines.lsst.io/modules/lsst.pipe.base/creating-a-
 
 Also see the example notebook [`examples/QA Pipelines.ipynb`](examples/QA%20Pipelines.ipynb).
 
-`drpQA.yaml` currently wires up `dmResiduals`, `dmCombinedResiduals`,
+`drpQA.yaml` currently wires up `dmLineResiduals`, `dmResiduals`, `dmCombinedResiduals`,
 `extractionQa`, `extractionQaCombined`, and `imageQualityQa`. The remaining tasks below are implemented and importable
 but are not registered in the pipeline; run them by referencing their task class directly.
 
 ### Tasks
 
+#### `dmLineResiduals`
+
+Per detector, measures every line of `lines` against two references (`reference`): `detectorMap_calib` (`calib`), the
+calibration the visit is reduced against, whose offset is drift; and the visit's own `detectorMap` (`visit`), adjusted
+to these lines, whose `RESERVED` lines test how well it predicts lines it was not fitted to, as it must on a science
+frame. The lines are those the visit's detectorMap fit marked `DETECTORMAP_USED` or `DETECTORMAP_RESERVED`, less
+`BAD` ones, with no other selection or clipping; trace centroids are kept on arcs. When the fit marked none, every
+good line is measured, as `UNFITTED`. Trace centroids measure x, lamp lines x and y, measured minus reference.
+
+Per reference, line species and line set (`statusType`: `BOTH`, `USED`, `RESERVED`, or `UNFITTED`): the median and
+robust RMS of the x and y residuals, `nLines` and `linesPerFiber`. Judged: against `calib`, over `BOTH` (or
+`UNFITTED`) lines, the median x offset of traces and median y offset of lamp lines (WARN 1 px, `APPLY_SHIFT`; FAIL 2
+px, `RECALIBRATE`); against `visit`, the robust RMS of `RESERVED` lines (`RECALIBRATE`), not judged until thresholds
+are derived from the validation set (PIPE2D-1956). The weighted RMS and the softening are drp_stella's, in
+`iqQaMetrics` and `iqQaSpeciesMetrics`, not recomputed. Logic in the stack-free `pfs.drp.qa.metrics.lineResiduals`.
+No plot is drawn as the task runs: plot `dmLineResidualData` afterwards.
+
+##### Options
+
+- `minLines`: fewest lines a species needs to be measured. Default `10`.
+- `lineFlags`: `ReferenceLineStatus` names that exclude a line. Default `["BAD"]`.
+- `thresholdsFile`: a thresholds file judged before the fields below; entries may name `reference`, `statusType`,
+  `arm`, `spectrograph`, `description` and `cameraSet`.
+- `xWarnThreshold`, `xFailThreshold`, `yWarnThreshold`, `yFailThreshold`: on the median offsets from the
+  calibration, in pixels. Defaults `1.0`, `2.0`, `1.0`, `2.0`.
+- `xRmsWarnThreshold`, `xRmsFailThreshold`, `yRmsWarnThreshold`, `yRmsFailThreshold`: on the robust RMS of
+  `RESERVED` lines against the visit's detectorMap, in pixels. Default NaN: not judged.
+
+##### Outputs
+
+| DataSet Type            | Dimensions                             | Description                                                                                                       |
+|-------------------------|----------------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| `dmLineResidualMetrics` | `instrument, visit, arm, spectrograph` | Long format: one row per reference, species, `statusType` and metric, with the metric's verdict.                  |
+| `dmLineResidualSummary` | `instrument, visit, arm, spectrograph` | One row: `qaStatus`, `qaDecidedBy`, `qaReason`, `recommendedAction`, `fitted`, and the calibration used.          |
+| `dmLineResidualData`    | `instrument, visit, arm, spectrograph` | One row per line measured, with `dxCalib`, `dyCalib`, `dxVisit`, `dyVisit`.                                       |
+
 #### `dmResiduals`
+
+**Deprecated** (PIPE2D-1956): replaced by `dmLineResiduals`. Both run through the next observing run, for comparison;
+then it is removed.
 
 Measures the residuals in the spatial and wavelength directions between the detector map and the arcline centroids. The
 residuals are measured for each visit.
@@ -105,6 +144,8 @@ residuals are measured for each visit.
 | `dmQaResidualPlot`  | `instrument, visit, arm, spectrograph` | 1D and 2D plots of the residual between the detectormap and the arclines for a given visit. |
 
 #### `dmCombinedResiduals`
+
+**Deprecated** with `dmResiduals` (PIPE2D-1956).
 
 Determines the aggregate statistics for all detectors across all given visits.
 
@@ -467,6 +508,11 @@ verdict is known. The decisions behind the current set:
   requirement: Run25's known-good values sit at most 1.4 % above their median (3.3 % for Argon arcs, whose b, r and m
   widths scatter most), healthy detectors moved −3 to +4 % between Run25 and Run30, and the SM1 defocus reads +24 to
   +41 %. On Run25 no known-good arc or quartz fails and one warns (135841 m1 Argon); every known-bad one fails.
+- **`dmLineResiduals` judges drift by tolerance, scatter not yet** (PIPE2D-1921, PIPE2D-1956). The median offsets
+  from `detectorMap_calib` are judged at WARN 1 px and FAIL 2 px, a physical limit short of drp_stella's 3 px
+  line-search radius: offsets from a calibration sit near zero in the run it came from, so no percentile applies. The
+  robust RMS of `RESERVED` lines against the visit's own detectorMap is stored and not judged until thresholds are
+  derived from Run25's known-good visits; until then `dmResiduals` runs beside it for comparison.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
 - **Thresholds hold for the pipeline that reduced their visits** (PIPE2D-1938). Two reductions of the same Run25

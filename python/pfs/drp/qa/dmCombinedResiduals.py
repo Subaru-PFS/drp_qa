@@ -1,4 +1,5 @@
 import itertools
+import warnings
 from collections.abc import Iterable
 
 import pandas as pd
@@ -108,10 +109,23 @@ class DetectorMapCombinedResidualsConfig(
 
 
 class DetectorMapCombinedResidualsTask(PipelineTask):
-    """Task for QA of detectorMap."""
+    """Task for QA of detectorMap.
+
+    Deprecated with ``dmResiduals`` (PIPE2D-1956): ``dmLineResiduals`` stores
+    per-line residuals (``dmLineResidualData``) to plot from afterwards.
+    """
 
     ConfigClass = DetectorMapCombinedResidualsConfig
     _DefaultName = "dmCombinedResiduals"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        warnings.warn(
+            "dmCombinedResiduals is deprecated and will be removed once compared with dmLineResiduals over the next"
+            " observing run (PIPE2D-1956): use dmLineResiduals.",
+            FutureWarning,
+            stacklevel=2,
+        )
 
     def runQuantum(
         self,

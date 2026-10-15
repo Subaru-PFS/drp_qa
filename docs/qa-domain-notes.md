@@ -180,6 +180,11 @@ narrow it to 1-3. Those are lit, measuring as many lamp lines as the driven ones
 
 ### DM residual metrics
 
+`dmResiduals` is deprecated (PIPE2D-1956) in favour of `dmLineResiduals`, below; both run
+through the next observing run so the two can be compared. `dmResiduals` re-selects lines
+with its own copy of drp_stella's rules, sigma-clips them, and drops trace centroids on arcs,
+so its statistics are not those of the lines the fit used.
+
 `dmResiduals` writes `dmQaResidualData`, `dmQaResidualStats` and `dmQaResidualPlot`.
 `get_fit_stats` builds `dmQaResidualStats` **per `(status_type, description)`** — that
 is, separately for `RESERVED` and `USED` lines of each species — via the `FitStats` /
@@ -197,10 +202,12 @@ multi-page `dmQaCombinedResidualPlot` via `make_report`, whose pages are drawn b
 The task writes **data only**. Plotting lives in `plotting/iqQa.py` and is driven after the
 fact by `bin.src/plotIqQaTimeSeries.py`; there is no `iqQaPlot` dataset.
 
-### Detector-map drift against `detectorMap_calib` (PIPE2D-1921)
+### Line residuals: drift against `detectorMap_calib` (PIPE2D-1921)
 
-`dmDriftMonitor` measures `lines` against the calibration before the visit's adjustment
-(measured minus calibration, as drp_stella's residuals). What the numbers mean:
+`dmLineResiduals` (named `dmDriftMonitor` until PIPE2D-1956) measures `lines` against the
+calibration before the visit's adjustment (measured minus calibration, as drp_stella's
+residuals), and against the visit's adjusted detectorMap (below). What the calibration
+offsets mean:
 
 - **A median offset is mostly harmless.** `adjustDetectorMap` fits a first-order correction
   per visit and absorbs a shift. It matters when it nears the 3 px radius within which
@@ -244,9 +251,19 @@ Measured in the validation run (`u/wtg/qa-thresholds/006`, 2026-10-15):
   traces with zero y residual; not confirmed.
 - **drp_stella's INFO lines are not in the Butler logs** of these reductions:
   the tasks log as `pfs.<task>`, lowercase, which `--log-level PFS=INFO` misses and a bare
-  `INFO` (which sets only `lsst`) does too. The `reduceExposure_log` and `dmDriftMonitor_log`
+  `INFO` (which sets only `lsst`) does too. The `reduceExposure_log` and `dmDriftMonitor_log` (now `dmLineResiduals_log`)
   hold only the executor's lines, and the fit statistics `imageQualityQa` parses are absent.
   Use `--log-level pfs=INFO`, as drpActor sets it (PIPE2D-1938).
+
+### Line residuals against the visit's detectorMap (PIPE2D-1956)
+
+Against the visit's own `detectorMap`, which `reduceExposure` adjusted to these lines, the
+`USED` lines are the fit's residuals and the `RESERVED` lines, held back at random, test the
+adjusted map on lines it was not fitted to: what a science frame, extracted with that map,
+relies on. Their robust RMS per species is the judged metric; drp_stella's own "Fit quality
+from reserved lines" log line gives a robust RMS too, but over every species at once, x
+mixing traces and lamp lines (R7). The weighted RMS and softening per species are drp_stella's,
+from the `Stats for <species>` log lines (`iqQaSpeciesMetrics`), over the `USED` lines.
 
 ---
 

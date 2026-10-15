@@ -134,6 +134,11 @@ _CALIB = (
     "out-of-date calibration is a calibration problem, not an instrument one."
 )
 
+_LINE_REFERENCES = (
+    "Per the ``reference`` column: detectorMap_calib (``calib``), as above; or the visit's own "
+    "detectorMap (``visit``), adjusted to these lines, whose RESERVED lines it was not fitted to."
+)
+
 #: The metrics with a known treatment, by name. ``pctFlagged`` is split by lamp
 #: (``species``, from ``seqName``) because the line lists differ per lamp;
 #: ``nLines`` and ``linesPerFiber`` by sequence because the line count is a
@@ -201,15 +206,16 @@ METRIC_SPECS = {
             ),
             valueFormat=".1f",
         ),
-        # dmDriftMetrics (PIPE2D-1921): per line species, against detectorMap_calib. x from
-        # trace centroids, y from lamp lines; b-arm offsets depend on the camera set (PIPE2D-1927).
+        # dmLineResidualMetrics (PIPE2D-1921, PIPE2D-1956): per line species and line set, against
+        # each reference (the ``reference`` column). x from every species, y from lamp lines; b-arm
+        # offsets from the calibration depend on the camera set (PIPE2D-1927).
         *(
             MetricSpec(
                 name,
                 absolute=name.startswith("median"),
-                groupBy=("arm", "description", "cameraSet"),
+                groupBy=("reference", "statusType", "arm", "description", "cameraSet"),
                 units="pixels",
-                reference=_CALIB,
+                reference=_LINE_REFERENCES,
                 label=f"|{name}|" if name.startswith("median") else "",
                 valueFormat=".3f",
                 unitSuffix="px",

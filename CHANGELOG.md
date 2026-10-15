@@ -10,24 +10,31 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
-- **Detector-map drift monitoring** (PIPE2D-1921) — new task `dmDriftMonitor` (`drpQA.yaml`), per detector, against
-  `detectorMap_calib` rather than the visit's own `detectorMap`. Per line species of `lines`: `medianDeltaX` and
-  `robustRmsDeltaX` from trace centroids (measured minus calibration), `medianDeltaY` and `robustRmsDeltaY` from lamp
-  lines, `nLines` and `linesPerFiber`, over the lines the visit's detectorMap fit marked `DETECTORMAP_USED` or
-  `DETECTORMAP_RESERVED` (`statusType` `BOTH`, judged) and over each alone (diagnostics), in long format
-  (`dmDriftMetrics`, with each metric's verdict and the visit's `cameraSet`, e.g. `brn`, `bm`); a detector whose fit marked
-  no line is measured over all its good lines (`UNFITTED`, `fitted` false), being reduced against the calibration
-  unadjusted; and one row per detector (`dmDriftSummary`): `qaStatus`, `recommendedAction` (`NOMINAL`,
-  `APPLY_SHIFT`, `RECALIBRATE`, `INSUFFICIENT_DATA`) and the calibration used (`calibId`, `calibRun`, its creation
-  date and input visits). `readers.readCalibValidity` looks up its validity range. The action follows the metric:
-  a median offset at WARN (1 px) is `APPLY_SHIFT`, at FAIL (2 px, short of drp_stella's 3 px line-search radius)
-  `RECALIBRATE`; robust RMS, judged only where a thresholds file names it, and any crossing on `UNFITTED` lines are
-  `RECALIBRATE`. Run25 SM3 after its calibration block sits 1.4 px off in y: unconfirmed in the validation set for
-  `medianDeltaY`; Run27 before 140477, reduced against a calibration built later, is known-bad (SM3 `medianDeltaX`
-  WARN, SM2 `medianDeltaY` FAIL) in place of the missing stale-calibration case. Findings from the validation run
-  are in `docs/qa-domain-notes.md`. The off-zenith Helium tests (150779, 150782) leave the validation set: their
-  expected flexure WARN does not hold.
-  Logic in the stack-free `metrics.drift`.
+- **Detector-map line residuals** (PIPE2D-1921, PIPE2D-1956) — new task `dmLineResiduals` (`drpQA.yaml`), per
+  detector, measuring every line of `lines` against two references (`reference`): `detectorMap_calib` (`calib`),
+  the drift, and the visit's own adjusted `detectorMap` (`visit`), whose `RESERVED` lines test how well it predicts
+  lines it was not fitted to. Over the lines the visit's detectorMap fit marked `DETECTORMAP_USED` or
+  `DETECTORMAP_RESERVED`, less `BAD` ones, with no re-selection or clipping and with trace centroids kept on arcs: per
+  reference, line species and line set (`statusType` `BOTH`, `USED`, `RESERVED`), `medianDeltaX` and
+  `robustRmsDeltaX` (trace centroids and lamp lines), `medianDeltaY` and `robustRmsDeltaY` (lamp lines), measured
+  minus reference, `nLines` and `linesPerFiber`, in long format (`dmLineResidualMetrics`, with each metric's verdict
+  and the visit's `cameraSet`, e.g. `brn`, `bm`); a detector whose fit marked no line is measured over all its good
+  lines (`UNFITTED`, `fitted` false), being reduced against the calibration unadjusted. One row per detector
+  (`dmLineResidualSummary`): `qaStatus`, `recommendedAction` (`NOMINAL`, `APPLY_SHIFT`, `RECALIBRATE`,
+  `INSUFFICIENT_DATA`, `UNJUDGED`) and the calibration used (`calibId`, `calibRun`, its creation date and input
+  visits); `readers.readCalibValidity` looks up its validity range. One row per line (`dmLineResidualData`), with its
+  residuals against both references, for plots drawn afterwards; none is drawn as the task runs. Judged: against
+  `calib`, over `BOTH` (or `UNFITTED`) lines, the median x offset of traces and median y offset of lamp lines; a
+  median at WARN (1 px) is `APPLY_SHIFT`, at FAIL (2 px, short of drp_stella's 3 px line-search radius)
+  `RECALIBRATE`; lamp lines' x offset is judged only where a thresholds file names it. Against `visit`, the robust
+  RMS of `RESERVED` lines (`xRmsWarnThreshold` and the like, `RECALIBRATE`), NaN and so not judged until derived
+  from the validation set. A robust RMS against the calibration, judged only where a thresholds file names it, and
+  any crossing on `UNFITTED` lines are `RECALIBRATE`. Run25 SM3 after its calibration block sits 1.4 px off in y:
+  unconfirmed in the validation set for `medianDeltaY`; Run27 before 140477, reduced against a calibration built
+  later, is known-bad (SM3 `medianDeltaX` WARN, SM2 `medianDeltaY` FAIL) in place of the missing stale-calibration
+  case. Findings from the validation run are in `docs/qa-domain-notes.md`. The off-zenith Helium tests (150779,
+  150782) leave the validation set: their expected flexure WARN does not hold.
+  Logic in the stack-free `metrics.lineResiduals`.
 
 - **Judging on the fibers lit** (PIPE2D-1935) — new `iqQaMetrics` columns `linesPerFiber` (unflagged lamp lines per
   lit fiber on an arc, unflagged trace centroids per lit fiber on a quartz), `nLitFibers` and `nFibers` (the
@@ -315,6 +322,12 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   off, into the valid ones: on the tests' all-sky exposure (148258) the valid matches' x scatter went from 19.7 to
   89.4 µm, where it now falls to 15.9 µm (`testRealDataSmoothValidMatches`). `estimateGuideErrors` and
   `fitDriftRate` already gave it only valid matches (PIPE2D-1899).
+
+### Deprecated
+
+- **`dmResiduals` and `dmCombinedResiduals`** (PIPE2D-1956) — replaced by `dmLineResiduals`; they warn
+  (`FutureWarning`) when constructed. Both run through the next observing run, so their statistics can be compared
+  with `dmLineResiduals`' verdicts; then they are removed.
 
 ### Removed
 
