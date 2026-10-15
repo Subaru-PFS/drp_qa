@@ -102,6 +102,10 @@ identified by visit number, with no observer, target or design names.
   a zenith-derived `detectorMap_calib`; `medDxCenter`, `WARN` (provisional). They are the
   reference case for drift monitoring (PIPE2D-1921). On the n arm `reduceExposure` fails on
   these Helium arcs, so n has no metrics.
+- **Run27 against a later calibration (PIPE2D-1921):** the Run27 `detectorMap_calib` was
+  built from 140502–140526, after these visits. Up to 140148, SM3 sits +1.15 px off in x
+  (`medianDeltaX`, `WARN`) and SM2 −3.15 px off in y on b and r (`medianDeltaY`, `FAIL`);
+  from 140477 on, neither is. The reference case for a calibration from another epoch.
 - **Run25 SM3 after its calibration block (unconfirmed):** every Run25 visit after
   133055 sits off `detectorMap_calib` in y, by the same pixels in every arm of a
   spectrograph (n with the opposite sign): SM1 0.45, SM2 0.65, SM3 1.40, SM4 0.70 px
@@ -110,7 +114,6 @@ identified by visit number, with no observer, target or design names.
 
 ### Gaps
 
-- A visit reduced against a stale `detectorMap_calib` (for PIPE2D-1921).
 - A saturated frame (for PIPE2D-1922's saturation metric).
 - m-arm traces: only the short block B and C sequences exist, below the sample floor.
 
@@ -183,6 +186,15 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 140130–140132 | 27 | scienceArc | b, r, n | 1 | Arc: Neon | FAIL | `medFwhm` | SM1 defocused (Run27). 5 s, az 336. |
 | 140133–140135 | 27 | scienceArc | b, r, n | 1 | Arc: Krypton | FAIL | `medFwhm` | SM1 defocused (Run27). 70 s, az 336. |
 | 140136–140138 | 27 | scienceArc | b, r, n | 1 | Arc: HgCd | FAIL | `medFwhm` | SM1 defocused (Run27). 45 s, az 336. |
+| 139971 | 27 | scienceArc | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
+| 140005–140006 | 27 | scienceArc | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
+| 140124–140138 | 27 | scienceArc | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
+| 140032 | 27 | scienceTrace | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
+| 140035 | 27 | scienceTrace | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
+| 140139–140148 | 27 | scienceTrace | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
+| 139971 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
+| 140005–140006 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
+| 140124–140138 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
 | 139971 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `nLines` | SM1 lamp didn't turn on. (Run27, 1 s arc) |
 | 140477 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `nLines` | No light on SM1. (Run27, 1 s arc) |
 | 140640 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
@@ -209,7 +221,6 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 
 | Visits | Run | Type | Arms | Spectrographs | Sequence | Expect | Metric | Reason |
 |---|---|---|---|---|---|---|---|---|
-| *to find* |  |  | all | all | any | WARN | `medDxCenter` | Reduced against a stale detectorMap_calib; bulk spatial offset. |
 | *to find* |  |  | all | all | any | FAIL | `pctSaturatedPixels` | Saturated exposure; peak pixels flagged SAT. |
 <!-- END GENERATED: validationVisits tables -->
 

@@ -23,7 +23,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   a median offset at WARN (1 px) is `APPLY_SHIFT`, at FAIL (2 px, short of drp_stella's 3 px line-search radius)
   `RECALIBRATE`; robust RMS, judged only where a thresholds file names it, and any crossing on `UNFITTED` lines are
   `RECALIBRATE`. Run25 SM3 after its calibration block sits 1.4 px off in y: unconfirmed in the validation set for
-  `medianDeltaY`. Findings from the validation run are in `docs/qa-domain-notes.md`.
+  `medianDeltaY`; Run27 before 140477, reduced against a calibration built later, is known-bad (SM3 `medianDeltaX`
+  WARN, SM2 `medianDeltaY` FAIL) in place of the missing stale-calibration case. Findings from the validation run
+  are in `docs/qa-domain-notes.md`.
   Logic in the stack-free `metrics.drift`.
 
 - **Judging on the fibers lit** (PIPE2D-1935) — new `iqQaMetrics` columns `linesPerFiber` (unflagged lamp lines per

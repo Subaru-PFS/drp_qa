@@ -443,10 +443,19 @@ def testValidationVerdicts():
             unconfirmed = unconfirmed[unconfirmed != ""]
             assert len(unconfirmed) > 50 and (unconfirmed == "WARN").mean() > 0.8
             assert not (unconfirmed == "FAIL").any()
-    # Run27 SM3 (not in the validation set): about 1.15 px in x against its calibration, WARN.
-    sm3 = rows.index[rows["visit"].between(139870, 140871) & (rows["spectrograph"] == 3)]
-    sm3x = judged.xs("medianDeltaX", level="metric")["status"].loc[sm3]
-    assert (sm3x[sm3x != ""] == "WARN").mean() > 0.8
+    # Run27 against a calibration built later: every known-bad row reaches its verdict
+    # (SM3 +1.15 px in x, WARN; SM2 -3.15 px in y, FAIL), and the visits after the change pass.
+    for metric, expect, count in (("medianDeltaX", "WARN", 80), ("medianDeltaY", "FAIL", 30)):
+        labelled = labelRows(rows, visitSet, metric)
+        status = judged.xs(metric, level="metric")["status"]
+        bad = status.loc[labelled.index[labelled["validation"] == f"bad:{expect}"]]
+        bad = bad[bad != ""]
+        assert len(bad) > count and (bad == expect).all(), metric
+    later = rows.index[
+        rows["visit"].isin([140477, 140640, 140649, 140651]) & rows["spectrograph"].isin([2, 3])
+    ]
+    laterX = judged.xs("medianDeltaX", level="metric")["status"].loc[later]
+    assert (laterX[laterX != ""] == "PASS").all()
     # Negative control: the rebuild plan's 0.15 px FAIL would fail known-good Run25 traces.
     strict = judge(rows, driftThresholds(0.1, 0.15, NAN, NAN)).set_index(["row", "metric"])
     labelled = labelRows(rows, visitSet, "medianDeltaX")

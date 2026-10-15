@@ -61,7 +61,9 @@ class TestCheckedInSet:
         assert not visits & {140033, 140034}, "no raw data"
         assert all(entry.spectrographs == (1,) and entry.metric == "medFwhm" for entry in sm1)
         assert visitSet.expectationFor(140130, arm="b", spectrograph=1, seqType="Arc: Neon") == "FAIL"
-        assert visitSet.expectationFor(140130, arm="b", spectrograph=2, seqType="Arc: Neon") is None
+        assert visitSet.expectationFor(140130, arm="b", spectrograph=4, seqType="Arc: Neon") is None
+        # SM2 has a verdict of its own: drift against a later calibration (PIPE2D-1921).
+        assert visitSet.expectationFor(140130, arm="b", spectrograph=2, seqType="Arc: Neon") == "FAIL"
         assert visitSet.expectationFor(140075) is None, "unlogged visits in the range carry no verdict"
 
     def testUnlitSpectrographsAreKnownBad(self):
