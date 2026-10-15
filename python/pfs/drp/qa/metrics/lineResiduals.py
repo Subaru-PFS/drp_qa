@@ -357,8 +357,15 @@ def _residuals(
     return dx, dy
 
 
-def lineTable(residuals: pd.DataFrame, dataId: Mapping[str, Any]) -> pd.DataFrame:
+def lineTable(
+    residuals: pd.DataFrame, dataId: Mapping[str, Any], maxTraceRowsPerFiber: int = 0
+) -> pd.DataFrame:
     """Return ``dmLineResidualData``: `lineResiduals` with the detector, in `LINE_COLUMNS`.
+
+    A fit can keep millions of trace rows (twilight b3/b4 kept about 2
+    million), so the trace centroids a fit used may be sampled. Lamp lines,
+    and lines held back (``RESERVED``) or ``UNFITTED``, are always kept whole:
+    only the stored table is sampled, never the statistics.
 
     Parameters
     ----------
@@ -366,14 +373,38 @@ def lineTable(residuals: pd.DataFrame, dataId: Mapping[str, Any]) -> pd.DataFram
         `lineResiduals`.
     dataId : mapping
         ``visit``, ``arm``, ``spectrograph``.
+    maxTraceRowsPerFiber : `int`, optional
+        Most ``USED`` trace rows kept per fiber, evenly spaced in y; 0 keeps
+        them all.
 
     Returns
     -------
     `pandas.DataFrame`
-        `LINE_COLUMNS`; empty, with the same columns, when there are no lines.
+        `LINE_COLUMNS`, in the order of ``residuals``; empty, with the same
+        columns, when there are no lines.
     """
+    if maxTraceRowsPerFiber > 0:
+        residuals = residuals[_sampleUsedTraces(residuals, maxTraceRowsPerFiber)]
     frame = residuals.assign(visit=dataId["visit"], arm=dataId["arm"], spectrograph=dataId["spectrograph"])
     return frame.reindex(columns=list(LINE_COLUMNS)).astype(LINE_COLUMNS)
+
+
+def _sampleUsedTraces(residuals: pd.DataFrame, maxRows: int) -> np.ndarray:
+    """Return which rows to keep: ``USED`` trace rows, at most ``maxRows`` per fiber evenly in y, and all others."""
+    keep = np.ones(len(residuals), dtype=bool)
+    used = ((residuals["description"] == TRACE) & (residuals["statusType"] == USED)).to_numpy()
+    if not used.any():
+        return keep
+    traces = residuals[used]
+    position = np.flatnonzero(used)
+    # Each row's rank in y within its fiber, and its fiber's row count.
+    rank = traces.groupby("fiberId")["y"].rank(method="first").to_numpy(dtype=int) - 1
+    count = traces.groupby("fiberId")["y"].transform("size").to_numpy(dtype=int)
+    # Keep the ranks nearest maxRows evenly spaced points, as np.linspace(0, count - 1, maxRows) would.
+    step = (count - 1) / max(maxRows - 1, 1)
+    nearest = np.round(np.round(rank / np.where(step > 0, step, 1)) * step)
+    keep[position] = (count <= maxRows) | (rank == nearest)
+    return keep
 
 
 def speciesResiduals(

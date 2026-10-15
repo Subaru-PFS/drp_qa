@@ -105,6 +105,8 @@ No plot is drawn as the task runs: plot `dmLineResidualData` afterwards.
 
 - `minLines`: fewest lines a species needs to be measured. Default `10`.
 - `lineFlags`: `ReferenceLineStatus` names that exclude a line. Default `["BAD"]`.
+- `maxTraceRowsPerFiber`: most `USED` trace rows per fiber stored in `dmLineResidualData`, evenly spaced in y; `0`
+  for all. Default `100`. Lamp and `RESERVED` lines are always stored; the statistics use every line.
 - `thresholdsFile`: a thresholds file judged before the fields below; entries may name `reference`, `statusType`,
   `arm`, `spectrograph`, `description` and `cameraSet`.
 - `xWarnThreshold`, `xFailThreshold`, `yWarnThreshold`, `yFailThreshold`: on the median offsets from the
@@ -118,7 +120,7 @@ No plot is drawn as the task runs: plot `dmLineResidualData` afterwards.
 |-------------------------|----------------------------------------|-------------------------------------------------------------------------------------------------------------------|
 | `dmLineResidualMetrics` | `instrument, visit, arm, spectrograph` | Long format: one row per reference, species, `statusType` and metric, with the metric's verdict.                  |
 | `dmLineResidualSummary` | `instrument, visit, arm, spectrograph` | One row: `qaStatus`, `qaDecidedBy`, `qaReason`, `recommendedAction`, `fitted`, and the calibration used.          |
-| `dmLineResidualData`    | `instrument, visit, arm, spectrograph` | One row per line measured, with `dxCalib`, `dyCalib`, `dxVisit`, `dyVisit`.                                       |
+| `dmLineResidualData`    | `instrument, visit, arm, spectrograph` | One row per line measured (`USED` traces sampled), with `dxCalib`, `dyCalib`, `dxVisit`, `dyVisit`.              |
 
 #### `dmResiduals`
 

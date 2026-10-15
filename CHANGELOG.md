@@ -23,7 +23,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   (`dmLineResidualSummary`): `qaStatus`, `recommendedAction` (`NOMINAL`, `APPLY_SHIFT`, `RECALIBRATE`,
   `INSUFFICIENT_DATA`, `UNJUDGED`) and the calibration used (`calibId`, `calibRun`, its creation date and input
   visits); `readers.readCalibValidity` looks up its validity range. One row per line (`dmLineResidualData`), with its
-  residuals against both references, for plots drawn afterwards; none is drawn as the task runs. Judged: against
+  residuals against both references, for plots drawn afterwards; none is drawn as the task runs. `USED` trace rows
+  are sampled there to `maxTraceRowsPerFiber` (100) per fiber, since a fit can keep millions. Judged: against
   `calib`, over `BOTH` (or `UNFITTED`) lines, the median x offset of traces and median y offset of lamp lines; a
   median at WARN (1 px) is `APPLY_SHIFT`, at FAIL (2 px, short of drp_stella's 3 px line-search radius)
   `RECALIBRATE`; lamp lines' x offset is judged only where a thresholds file names it. Against `visit`, the robust

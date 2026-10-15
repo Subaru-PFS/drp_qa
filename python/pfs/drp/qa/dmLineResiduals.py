@@ -125,7 +125,8 @@ class DmLineResidualsConnections(
     dmLineResidualData = OutputConnection(
         name="dmLineResidualData",
         doc=(
-            "One row per line measured, for plots drawn later (pfs.drp.qa.plotting): ``visit``, ``arm``,"
+            "One row per line measured (USED trace rows sampled: maxTraceRowsPerFiber), for plots drawn"
+            " later (pfs.drp.qa.plotting): ``visit``, ``arm``,"
             " ``spectrograph``, ``fiberId``, ``wavelength``, ``x``, ``y``, ``xErr``, ``yErr``,"
             " ``description``, ``statusType``, and the residual against each reference, measured minus"
             " reference: ``dxCalib``, ``dyCalib``, ``dxVisit``, ``dyVisit`` (``dy`` NaN for traces)."
@@ -151,6 +152,15 @@ class DmLineResidualsConfig(PipelineTaskConfig, pipelineConnections=DmLineResidu
         dtype=str,
         default=["BAD"],
         doc="ReferenceLineStatus names that exclude a line, as fitDetectorMap's lineFlags.",
+    )
+    maxTraceRowsPerFiber = Field(
+        dtype=int,
+        default=100,
+        doc=(
+            "Most USED trace rows per fiber stored in dmLineResidualData, evenly spaced in y; 0 for all."
+            " Lamp lines and RESERVED lines are always stored, and the statistics use every line: a fit can"
+            " keep millions of trace rows (twilight b3/b4 kept about 2 million)."
+        ),
     )
     thresholdsFile = Field(
         dtype=str,
@@ -322,7 +332,7 @@ class DmLineResidualsTask(PipelineTask):
         return Struct(
             dmLineResidualMetrics=longResiduals(species, judged, dataId, camera),
             dmLineResidualSummary=pd.DataFrame([summary]),
-            dmLineResidualData=lineTable(residuals, dataId),
+            dmLineResidualData=lineTable(residuals, dataId, self.config.maxTraceRowsPerFiber),
         )
 
 

@@ -673,3 +673,25 @@ def testLineTable():
     assert (table["xErr"] == 0.01).all()
     empty = lineTable(residuals(lines.assign(flag=True), calib), DATA_ID)
     assert empty.empty and list(empty.columns) == list(LINE_COLUMNS)
+
+
+def testLineTableSamplesUsedTraces():
+    calib = FakeCalib()
+    lines, marked = withReserved(makeLines(calib, traceRows=200))
+    offsets = residuals(lines, calib)
+    table = lineTable(offsets, DATA_ID, maxTraceRowsPerFiber=10)
+    usedTraces = table[(table["description"] == TRACE) & (table["statusType"] == USED)]
+    assert usedTraces.groupby("fiberId").size().max() <= 10
+    assert usedTraces.groupby("fiberId").size().min() >= 9
+    # Spread over the detector, not the first rows: the lowest and highest y of each fiber are kept.
+    first = offsets[(offsets["description"] == TRACE) & (offsets["statusType"] == USED)]
+    assert set(usedTraces.groupby("fiberId")["y"].max()) == set(first.groupby("fiberId")["y"].max())
+    assert set(usedTraces.groupby("fiberId")["y"].min()) == set(first.groupby("fiberId")["y"].min())
+    # Lamp lines and RESERVED lines are all kept.
+    assert (table["statusType"] == RESERVED).sum() == marked.sum()
+    assert (table["description"] == "NeI").sum() == (lines["description"] == "NeI").sum()
+    # Negative control: with no limit, every USED trace row is stored.
+    whole = lineTable(offsets, DATA_ID)
+    assert len(whole) == len(offsets) > len(table)
+    # The statistics do not depend on it: speciesResiduals reads lineResiduals, not the table.
+    assert both(speciesResiduals(offsets, 10)).loc[TRACE, "nLines"] == (lines["description"] == TRACE).sum()
