@@ -336,3 +336,31 @@ def testNoFitIsInsufficientData():
     assert summary["qaStatus"] == "UNKNOWN"
     assert summary["recommendedAction"] == "INSUFFICIENT_DATA"
     assert "no line marked DETECTORMAP_USED or DETECTORMAP_RESERVED" in summary["qaReason"]
+
+
+class EdgeCalib(FakeCalib):
+    """A calibration that predicts nothing off the detector: NaN beyond 3000 px, as ``findPoint`` does."""
+
+    def getXCenter(self, fiberId, y):
+        return np.where(np.asarray(y, dtype=float) > 3000.0, np.nan, super().getXCenter(fiberId, y))
+
+    def findPoint(self, fiberId, wavelength):
+        points = super().findPoint(fiberId, wavelength)
+        points[points[:, 1] > 3000.0] = np.nan
+        return points
+
+
+def testNaNPredictionsAreLeftOut():
+    calib = EdgeCalib()
+    lines = makeLines(FakeCalib(), dx=0.05, dy=0.05)
+    offsets = driftOffsets(lines, calib)
+    assert np.isfinite(offsets.loc[offsets["description"] == TRACE, "dx"]).all()
+    assert np.isfinite(offsets.loc[offsets["description"] == "NeI", "dy"]).all()
+    species, _, summary, _ = measure(lines, calib)
+    assert species.loc[TRACE, "medianDeltaX"] == pytest.approx(0.05)
+    assert species.loc["NeI", "medianDeltaY"] == pytest.approx(0.05)
+    assert species.loc[TRACE, "nLines"] < (lines["description"] == TRACE).sum()
+    assert summary["nSpeciesMeasured"] == 2
+    # Negative control: the calibration does predict NaN for some of these lines.
+    xCenter = calib.getXCenter(lines["fiberId"].to_numpy(), lines["y"].to_numpy())
+    assert np.isnan(xCenter[(lines["description"] == TRACE).to_numpy()]).any()

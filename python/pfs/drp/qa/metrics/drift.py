@@ -192,7 +192,8 @@ def driftOffsets(lines: pd.DataFrame, calib: Any, badStatus: int = BAD_STATUS) -
     -------
     `pandas.DataFrame`
         One row per good line (unflagged, no ``badStatus`` bit, finite
-        position, on a fiber of the calibration): ``fiberId``,
+        position, on a fiber of the calibration, and a finite calibration
+        prediction: ``findPoint`` gives NaN off the detector): ``fiberId``,
         ``description``, ``statusType`` (``USED``, ``RESERVED``, or empty
         when the visit's fit did neither: such a line is not measured),
         ``dx`` (trace centroids; NaN for lamp lines) and ``dy`` (lamp
@@ -231,6 +232,8 @@ def driftOffsets(lines: pd.DataFrame, calib: Any, badStatus: int = BAD_STATUS) -
             dtype=float,
         )
         dy[lamps] = y[lamps] - points[:, 1]
+    # A NaN prediction would make its species' median NaN while still counting as a line.
+    good &= np.where(isTrace, np.isfinite(dx), np.isfinite(dy))
     # USED wins over RESERVED, as in dmResiduals; a fit never sets both.
     statusType = np.where(status & _USED_BIT, USED, np.where(status & _RESERVED_BIT, RESERVED, ""))
     return pd.DataFrame(
