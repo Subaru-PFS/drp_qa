@@ -430,7 +430,10 @@ def pipetaskCommand(
     `list` [`str`]
         The command, one argument per element.
     """
-    command = ["pipetask", "--long-log", "--log-level", "PFS=INFO", "run", "-j", str(jobs)]
+    # The tasks log as pfs.<task>, lowercase, as drpActor sets them (CliLog.setLogLevels): PFS=INFO
+    # misses them, and a bare INFO sets only lsst. The fit statistics imageQualityQa reads from
+    # the stored reduceExposure_log are INFO lines (PIPE2D-1938).
+    command = ["pipetask", "--long-log", "--log-level", "pfs=INFO", "run", "-j", str(jobs)]
     # A judge-only pass runs one task, so the reduction's overrides would name labels it lacks.
     subset = f"{pipeline}#imageQualityQa" if item.judgeOnly else pipeline
     command += ["-b", butler, "-p", subset, "-i", ",".join(inputs), "-o", output]
