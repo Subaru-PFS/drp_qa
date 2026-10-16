@@ -8,6 +8,7 @@ one, and leaves its inputs alone. The other tests check the fixes to
 drp_stella's plots, each with a negative control.
 """
 
+import io
 import warnings
 
 import numpy as np
@@ -874,6 +875,77 @@ def testPlotFocusAgActorMedians(focusSweep):
         byCamera[f"guide_delta_z{cid + 1}"][byCamera.agc_camera_id == cid].notna().sum() for cid in range(6)
     )
     assert nShown == nValues > 5 * sum(len(line.get_xdata()) for line in medians)
+
+
+def testPlotFocusFwhmLoneMedians(focusSweep):
+    """A half's FWHM median with nothing to join is drawn as a point, so it stays visible."""
+    oneExposure = focusSweep[focusSweep.agc_exposure_id == focusSweep.agc_exposure_id.min()]
+    plot = plotFocus(oneExposure, plotBy="agc_exposure_id", showOnlyMedian=True, fig=Figure())
+    medians = [line for line in fwhmPanel(plot).lines if line.get_color() in ("red", "green")]
+    assert len(medians) == 2
+    for line in medians:
+        assert len(line.get_xdata()) == 1 and line.get_marker() == "o"
+
+    # Negative control: medians at several x are joined, without markers.
+    joined = plotFocus(focusSweep, showOnlyMedian=True, fig=Figure())
+    for line in fwhmPanel(joined).lines:
+        if line.get_color() in ("red", "green"):
+            assert len(line.get_xdata()) > 1 and line.get_marker() == "None"
+
+
+def testPlotFocusLegendNamesEveryCamera(focusSweep):
+    """The focus-error legend names every camera, striking out those with no data.
+
+    A disabled or broken camera should show as missing, not vanish from the legend.
+    """
+    data = focusSweep[focusSweep.agc_camera_id != 2]
+    plot = plotFocus(data, showFWHM=False, showPfiFocusPosition=True, fig=Figure())
+
+    for ax in plot.axes[:, 0]:
+        texts = {text.get_text(): text for text in ax.get_legend().get_texts()}
+        assert list(texts) == [f"AG{cid + 1}" for cid in range(6)] + ["PFI"]
+        withData = {line.get_label() for line in ax.lines if line.get_label().startswith("AG")}
+        assert "AG3" not in withData and len(withData) >= 3
+        for label, text in texts.items():
+            if label.startswith("AG") and label not in withData:
+                assert text.get_path_effects() and text.get_alpha() == 0.5
+            else:
+                # Negative control: the cameras with data, and the PFI line, are drawn plainly.
+                assert not text.get_path_effects() and text.get_alpha() is None
+
+    plot.fig.savefig(io.BytesIO(), format="png")  # renders through Agg, drawing the strike-through
+
+
+@pytest.mark.parametrize("connectMedian", [True, False])
+def testPlotFocusFwhmHalfMedians(focusSweep, connectMedian):
+    """Each half's FWHM medians are joined whatever ``connectMedian``, as drp_stella did.
+
+    ics_pfsPlotActor's focus sweep sets ``connectMedian=False`` and shows these lines; drawn as
+    points they vanish into the stars'. ``connectMedian`` still applies to the focus errors.
+    """
+    plot = plotFocus(focusSweep, showMedian=True, connectMedian=connectMedian, fig=Figure())
+    data = plot.data
+    medians = {line.get_color(): line for line in fwhmPanel(plot).lines if len(line.get_xdata()) > 2}
+    assert set(medians) == {"red", "green"}
+
+    expected = {}
+    for color, isLeft in [("red", True), ("green", False)]:
+        half = data[data.left == isLeft]
+        expected[color] = half.fwhm_arcsec.groupby(half.focus_position_mm.round(3).to_numpy()).median()
+        assert medians[color].get_linestyle() == "-"
+        np.testing.assert_allclose(medians[color].get_xdata(), expected[color].index)
+        np.testing.assert_allclose(medians[color].get_ydata(), expected[color])
+
+    focusMedians = [
+        line
+        for line in plot.axes[0, 0].lines
+        if line.get_label().startswith("_") and len(line.get_xdata()) > 2
+    ]
+    assert focusMedians
+    assert all((line.get_linestyle() == "-") == connectMedian for line in focusMedians)
+
+    # Negative control: the left halves' line isn't the right halves' medians.
+    assert not np.allclose(medians["red"].get_ydata(), expected["green"])
 
 
 @pytest.mark.parametrize("connectMedian", [True, False])

@@ -37,7 +37,10 @@ from matplotlib.colorbar import Colorbar
 from matplotlib.figure import Figure, SubFigure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Arc, Circle, Ellipse, RegularPolygon
+from matplotlib.path import Path
+from matplotlib.patheffects import AbstractPathEffect
 from matplotlib.ticker import MaxNLocator, ScalarFormatter
+from matplotlib.transforms import IdentityTransform
 
 from pfs.drp.qa.guiders import analysis
 from pfs.drp.qa.guiders.analysis import (
@@ -238,6 +241,48 @@ def _cameraLegend(ax: Axes, agcCameraIds: Iterable[int], **kwargs) -> None:
     ]
     if handles:
         ax.legend(handles=handles, **kwargs)
+
+
+class _StrikeThrough(AbstractPathEffect):
+    """Draw text with a line through its middle, wherever the layout puts it."""
+
+    def draw_path(self, renderer, gc, tpath, affine, rgbFace=None):
+        renderer.draw_path(gc, tpath, affine, rgbFace)
+        extents = tpath.get_extents(affine)
+        y = 0.5 * (extents.y0 + extents.y1)
+        line = renderer.new_gc()
+        line.copy_properties(gc)
+        line.set_linewidth(1)
+        renderer.draw_path(line, Path([[extents.x0, y], [extents.x1, y]]), IdentityTransform())
+        line.restore()
+
+
+def _focusCameraLegend(ax: Axes, agcCameraIds: Iterable[int], **kwargs) -> None:
+    """Name every camera in a focus-error panel's legend, striking out those with no data in it.
+
+    A camera can be disabled or broken, and the reader should see that it is missing rather than not
+    listed. Other labelled artists (the PFI focus line) follow the cameras.
+    """
+    handles, labels = ax.get_legend_handles_labels()
+    drawn = {label for label in labels if label.startswith("AG")}
+    cameras = [
+        Line2D(
+            [],
+            [],
+            marker="o",
+            ls="",
+            color=_CAMERA_COLORS[cid],
+            label=f"AG{cid + 1}",
+            alpha=1 if f"AG{cid + 1}" in drawn else 0.3,
+        )
+        for cid in agcCameraIds
+    ]
+    others = [handle for handle, label in zip(handles, labels, strict=True) if not label.startswith("AG")]
+    legend = ax.legend(handles=cameras + others, **kwargs)
+    for text in legend.get_texts():
+        if text.get_text().startswith("AG") and text.get_text() not in drawn:
+            text.set_alpha(0.5)
+            text.set_path_effects([_StrikeThrough()])
 
 
 def _markerAndAlpha(
@@ -1906,7 +1951,9 @@ def plotFocus(
     agcData : `pandas.DataFrame`
         AG data, from `pfs.drp.qa.guiders.queries.readAgcData`.
     agcCameraIds : iterable of `int`
-        The cameras to plot (0-5; AG1 is 0).
+        The cameras to plot (0-5; AG1 is 0). With ``colorBy="camera"``, the
+        focus-error panels' legend names each of them, greyed and struck
+        out where the panel has no data for it.
     plotBy : `str`
         The x axis: ``focus`` (M2_OFF3, or M2_POS3), ``agc_exposure_id``,
         ``altitude`` or ``insrot``.
@@ -1927,13 +1974,15 @@ def plotFocus(
     showMedian : `bool`
         Join the medians of the focus errors at each x, the AG actor's and
         the stars' (each camera's, or in black with ``colorBy`` other than
-        ``camera``), and of the stars' FWHM (each half's; with
-        ``showCameraId``, each camera's and half's in each AG exposure, in
-        the halves' symbols, joined if ``connectMedian``).
+        ``camera``), and of the stars' FWHM (each half's, always joined, as
+        drp_stella did; with ``showCameraId``, each camera's and half's in
+        each AG exposure, in the halves' symbols, joined if
+        ``connectMedian``).
     showOnlyMedian : `bool`
         Plot only those medians.
     connectMedian : `bool`
-        Draw the medians at each x as lines, rather than points.
+        Draw the focus errors' medians, and with ``showCameraId`` the FWHM
+        medians, as lines rather than points.
     showCameraId : `bool`
         Colour the FWHM by camera, with the halves of the detectors as
         markers.
@@ -2135,12 +2184,13 @@ def plotFocus(
                     ax.set_ylabel("FWHM (arcsec)")
                 continue
 
-            if colorBy == "camera" and not plotPerCamera and ax.get_legend_handles_labels()[0]:
-                ax.legend(ncols=6, fontsize="small")
             ax.axhline(0, color="black", alpha=0.5)
             if showPfiFocusPosition:
                 pfiFocus_um = 0 if row == "agActor" else mmToUm(FOCUS_PISTON_OFFSET_MM)
                 ax.axhline(pfiFocus_um, color="red", label="PFI")
+            if colorBy == "camera" and not plotPerCamera:
+                _focusCameraLegend(ax, agcCameraIds, ncols=7 if showPfiFocusPosition else 6, fontsize="small")
+            elif showPfiFocusPosition:
                 ax.legend(ncols=7)
             if yLimits_um is not None:
                 ax.set_ylim(yLimits_um)
@@ -2268,10 +2318,12 @@ def _plotFwhm(
                         color=_CAMERA_COLORS[cid],
                     )
         else:
+            # Joined whatever connectMedian, as drp_stella did: as points they vanish into the stars'.
+            # A lone median has nothing to join, so it is drawn as a point.
             for isLeft, color in [(True, "red"), (False, "green")]:
                 half = stars[stars.left == isLeft]
                 xm, ym = _medianByX(half[what], half.fwhm_arcsec, resolution)
-                artists += ax.plot(xm, ym, "-" if connectMedian else "o", color=color)
+                artists += ax.plot(xm, ym, "-" if len(xm) > 1 else "o", color=color)
 
     handles = []
     if showCameraId:
