@@ -180,6 +180,11 @@ narrow it to 1-3. Those are lit, measuring as many lamp lines as the driven ones
 
 ### DM residual metrics
 
+`dmResiduals` is deprecated (PIPE2D-1956) in favour of `dmLineResiduals`, below; both run
+through the next observing run so the two can be compared. `dmResiduals` re-selects lines
+with its own copy of drp_stella's rules, sigma-clips them, and drops trace centroids on arcs,
+so its statistics are not those of the lines the fit used.
+
 `dmResiduals` writes `dmQaResidualData`, `dmQaResidualStats` and `dmQaResidualPlot`.
 `get_fit_stats` builds `dmQaResidualStats` **per `(status_type, description)`** — that
 is, separately for `RESERVED` and `USED` lines of each species — via the `FitStats` /
@@ -197,10 +202,12 @@ multi-page `dmQaCombinedResidualPlot` via `make_report`, whose pages are drawn b
 The task writes **data only**. Plotting lives in `plotting/iqQa.py` and is driven after the
 fact by `bin.src/plotIqQaTimeSeries.py`; there is no `iqQaPlot` dataset.
 
-### Detector-map drift against `detectorMap_calib` (PIPE2D-1921)
+### Line residuals: drift against `detectorMap_calib` (PIPE2D-1921)
 
-`dmDriftMonitor` measures `lines` against the calibration before the visit's adjustment
-(measured minus calibration, as drp_stella's residuals). What the numbers mean:
+`dmLineResiduals` (named `dmDriftMonitor` until PIPE2D-1956) measures `lines` against the
+calibration before the visit's adjustment (measured minus calibration, as drp_stella's
+residuals), and against the visit's adjusted detectorMap (below). What the calibration
+offsets mean:
 
 - **A median offset is mostly harmless.** `adjustDetectorMap` fits a first-order correction
   per visit and absorbs a shift. It matters when it nears the 3 px radius within which
@@ -244,9 +251,38 @@ Measured in the validation run (`u/wtg/qa-thresholds/006`, 2026-10-15):
   traces with zero y residual; not confirmed.
 - **drp_stella's INFO lines are not in the Butler logs** of these reductions:
   the tasks log as `pfs.<task>`, lowercase, which `--log-level PFS=INFO` misses and a bare
-  `INFO` (which sets only `lsst`) does too. The `reduceExposure_log` and `dmDriftMonitor_log`
+  `INFO` (which sets only `lsst`) does too. The `reduceExposure_log` and `dmDriftMonitor_log` (now `dmLineResiduals_log`)
   hold only the executor's lines, and the fit statistics `imageQualityQa` parses are absent.
   Use `--log-level pfs=INFO`, as drpActor sets it (PIPE2D-1938).
+
+### Line residuals against the visit's detectorMap (PIPE2D-1956)
+
+Against the visit's own `detectorMap`, which `reduceExposure` adjusted to these lines, the
+`USED` lines are the fit's residuals and the `RESERVED` lines, held back at random, test the
+adjusted map on lines it was not fitted to: what a science frame, extracted with that map,
+relies on. Their robust RMS per species is the judged metric; drp_stella's own "Fit quality
+from reserved lines" log line gives a robust RMS too, but over every species at once, x
+mixing traces and lamp lines (R7). The weighted RMS and softening per species are drp_stella's,
+from the `Stats for <species>` log lines (`iqQaSpeciesMetrics`), over the `USED` lines.
+
+Measured in `u/wtg/qa-thresholds/009` (2026-10-15): the validation visits only, so Run25's
+known-good visits and the fault examples of Runs 27 and 30; no healthy visit of a later run.
+Against the calibration it reproduces 008 exactly. RESERVED robust RMS against the visit's map:
+
+- **Run25 known-good lamp lines and traces**: medians 0.05–0.11 px in x and y per arm; the
+  highest 0.25 px in x, 0.17 px in y on b and m. HgI is the exception in y: n 0.42–0.62 px,
+  r up to 1.12 px (median 0.14). n-arm values predate the pipeline changes that made the n
+  arm reliable (about Run29–30).
+- **Sky lines on twilights** (NaI, OI, OH, O2) reach 1–7 px in y, b3/b4 the worst: the fit
+  fallback above, not the map's scatter. Not judged.
+- **Run27**, used only for its faults: SM1 sits 0.32 px in x (median, up to 0.72 px), the
+  spectrograph defocused in part of the run; against the calibration built later, SM3 sits
+  0.85 px in y (median, up to 5.4 px; 0.88 px in x) and SM2 reaches 3.3 px in y. The metric
+  separates both faults from Run25.
+- **No thresholds yet.** Each arm and species has 5–12 known-good visits, so the 95th and
+  99th percentiles are both the maximum and WARN would sit on FAIL. The plan is a tolerance
+  above each arm and species' known-good median, lamp lines and traces only, checked on later
+  runs' healthy detectors once PIPE2D-1938's reductions are run through `dmLineResiduals`.
 
 ---
 

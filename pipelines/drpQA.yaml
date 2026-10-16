@@ -10,5 +10,5 @@ tasks:
     class: pfs.drp.qa.extractionQaCombined.ExtractionQaCombinedTask
   imageQualityQa:
     class: pfs.drp.qa.imageQualityQa.ImageQualityQaTask
-  dmDriftMonitor:
-    class: pfs.drp.qa.dmDriftMonitor.DmDriftMonitorTask
+  dmLineResiduals:
+    class: pfs.drp.qa.dmLineResiduals.DmLineResidualsTask

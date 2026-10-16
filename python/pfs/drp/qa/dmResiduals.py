@@ -117,10 +117,25 @@ class DetectorMapResidualsConfig(PipelineTaskConfig, pipelineConnections=Detecto
 
 
 class DetectorMapResidualsTask(PipelineTask):
-    """Task for QA of detectorMap."""
+    """Task for QA of detectorMap.
+
+    Deprecated (PIPE2D-1956): ``dmLineResiduals`` measures the same lines
+    against the visit's detectorMap and ``detectorMap_calib``, without
+    re-selecting or clipping them. Both run through the next observing run;
+    then this is removed.
+    """
 
     ConfigClass = DetectorMapResidualsConfig
     _DefaultName = "dmResiduals"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        warnings.warn(
+            "dmResiduals is deprecated and will be removed once compared with dmLineResiduals over the next"
+            " observing run (PIPE2D-1956): use dmLineResiduals.",
+            FutureWarning,
+            stacklevel=2,
+        )
 
     def runQuantum(
         self,

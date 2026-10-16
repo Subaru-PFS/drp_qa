@@ -36,18 +36,19 @@ the pipeline/config glue to run them.
 - **QA pipeline (`pipelines/drpQA.yaml`)** — defines the sequence of QA tasks. It
   currently registers **six** task labels, and only these run under `pipetask`:
   `dmResiduals`, `dmCombinedResiduals`, `extractionQa`, `extractionQaCombined`,
-  `imageQualityQa`, `dmDriftMonitor`.
+  `imageQualityQa`, `dmLineResiduals`.
 - **Threshold pipeline (`pipelines/qaThresholds.yaml`)** — drp_stella's `reduceExposure`
   (less `mergeArms`) plus `imageQualityQa`, so `docs/qa-thresholds.ipynb` reduces the
   validation visits from raw data. The notebook applies `drpActor`'s per-sequence-type config.
 - **Tasks in the pipeline (`python/pfs/drp/qa/`)**:
   - `imageQualityQa.py` — image quality (FWHM, flag rates); plots in `plotting/iqQa.py`
   - `dmResiduals.py`, `dmCombinedResiduals.py` — detector map residuals (per-detector
-    and cross-visit combined)
+    and cross-visit combined); deprecated by `dmLineResiduals` (PIPE2D-1956)
   - `extractionQa.py`, `extractionQaCombined.py` — fiber extraction quality
     (per-detector, and combined per `(instrument, visit, arm)`)
-  - `dmDriftMonitor.py` — per-species drift of `lines` against `detectorMap_calib`; the
-    measurement and verdict are stack-free in `metrics/drift.py`
+  - `dmLineResiduals.py` — per-species residuals of `lines` against `detectorMap_calib`
+    (drift) and the visit's `detectorMap` (scatter on `RESERVED` lines); the measurement
+    and verdict are stack-free in `metrics/lineResiduals.py`
 - **QA modules *not* wired into `drpQA.yaml`** — these exist as `PipelineTask`s or CLIs
   but must be run via their own pipeline/entry point:
   - `skySubtractionQa.py` — sky subtraction accuracy (`SkyArmSubtractionTask`,
@@ -110,6 +111,8 @@ the pipeline/config glue to run them.
   - `plotIqQaTimeSeries.py` — cross-visit `iqQaMetrics` time series via `plotting/iqQa.py`
   - `fiberNormsQa.py` — entry point for `fiberNormsQa.main`
   - `qaComparison.py` — entry point for `pfs.drp.qa.comparison.cli.main` (comparison mode)
+  - `exportMetrics.py` — per-detector QA tables (`iqQaMetrics`, `dmLineResidualMetrics`, ...) from a
+    collection to parquet, with progress, via `metrics.readers.exportMetrics`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),
   which contains the core reduction logic and C++ primitives, and on `pfs_utils`. Both
   are `setupRequired` in `ups/drp_qa.table`; `pfs-utils` is also a hard `pyproject.toml`
@@ -456,9 +459,10 @@ drpQA.yaml#dmCombinedResiduals       dims: (instrument,)   [multiple=True inputs
     ← reads: detectorMap, dmQaResidualData, dmQaResidualStats
     → writes: dmQaDetectorStats, dmQaCombinedResidualPlot
 
-drpQA.yaml#dmDriftMonitor            dims: (instrument, visit, arm, spectrograph)
-    ← reads: lines, detectorMap_calib (calibration), pfsConfig (optional)
-    → writes: dmDriftMetrics (long format), dmDriftSummary (one row)
+drpQA.yaml#dmLineResiduals           dims: (instrument, visit, arm, spectrograph)
+    ← reads: lines, detectorMap, detectorMap_calib (calibration), pfsConfig (optional)
+    → writes: dmLineResidualMetrics (long format), dmLineResidualSummary (one row),
+              dmLineResidualData (one row per line)
 
 drpQA.yaml#extractionQa              → extQaStats, extQaImage, extQaImage_pickle
 drpQA.yaml#extractionQaCombined      ← extQaImage_pickle (multiple)

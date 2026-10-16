@@ -1,5 +1,9 @@
 """Make ``dmDriftMetrics-validation.parquet``, the drift test fixture (PIPE2D-1921).
 
+It predates ``dmLineResiduals`` (PIPE2D-1956), which was ``dmDriftMonitor`` then, and holds
+only rows against the calibration: the test adds ``reference``. It is remade from the new
+task's ``dmLineResidualMetrics`` once that has run over the validation visits.
+
 The judged rows of ``dmDriftMetrics`` (``statusType`` ``BOTH`` or ``UNFITTED``)
 for the validation visits, from ``u/wtg/qa-thresholds/008`` (005's reductions
 with ``dmDriftMonitor`` run), one row per detector and species, with the
@@ -8,8 +12,11 @@ calibration's input visits from ``dmDriftSummary`` and the sequence from
 
     uv run --no-project --with pandas --with pyarrow python makeDriftFixture.py [DIR]
 
-``DIR`` holds the files ``reports/PIPE2D-1921/exportDrift.py`` wrote; default
-``~/Projects/Subaru/PFS/reports/PIPE2D-1921``.
+``DIR`` holds the files ``bin.src/exportMetrics.py`` wrote, run where the Butler is::
+
+    python bin.src/exportMetrics.py -c u/wtg/qa-thresholds/008 -t dmDriftSummary dmDriftMetrics -o DIR
+
+default ``~/Projects/Subaru/PFS/reports/PIPE2D-1921``.
 """
 
 import sys

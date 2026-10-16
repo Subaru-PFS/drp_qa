@@ -34,7 +34,7 @@ from lsst.pipe.base.connectionTypes import (
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
 from pfs.drp.qa.crossDispersion import measureImageWidths, profileFwhm
 from pfs.drp.qa.metrics.gate import configThresholds, gate, loadThresholds, thresholdsPath
-from pfs.drp.qa.metrics.longFormat import speciesFrame
+from pfs.drp.qa.metrics.longFormat import parseSpeciesStats, speciesFrame
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
 from pfs.drp.stella.utils.stability import addTraceLambdaToArclines
@@ -143,7 +143,8 @@ class ImageQualityQaConnections(
         doc=(
             "Per-species detectorMap fit statistics from the reduceExposure log, in long"
             " format: ``visit``, ``arm``, ``spectrograph``, ``description`` (line"
-            " species), ``metric`` (``fitXRms``, ``fitYRms``), ``value``."
+            " species, ``Trace`` included), ``metric`` (``fitXRms``, ``fitYRms``: weighted RMS;"
+            " ``fitXSoften``, ``fitYSoften``: the softening that brings chi^2/dof to 1), ``value``."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -1133,7 +1134,7 @@ class ImageQualityQaTask(PipelineTask):
             "fitReservedNLines": 0,
             "fitTraceXRms": float("nan"),
             "fitTraceYRms": float("nan"),
-            "speciesStats": {},  # species -> (x_rms, y_rms)
+            "speciesStats": {},  # species -> (xRms, yRms, xSoften, ySoften); see longFormat
             "fiberIds": [],
             "fiberXRms": [],
             "fiberYRms": [],
@@ -1155,9 +1156,6 @@ class ImageQualityQaTask(PipelineTask):
         re_fit_lines = re.compile(r"Final fit:.*from (\d+)/(\d+) lines")
         re_reserved_fit = re.compile(
             r"Fit quality from reserved lines:\s*chi2=(\S+)\s+xRMS=(\S+)\s+yRMS=(\S+)(?:\s+\([^\)]+\))?\s+xSoften=(\S+)\s+ySoften=(\S+)\s+from\s+(\d+)\s+lines"
-        )
-        re_species_stats = re.compile(
-            r"Stats for (\w+): " + armSpec + r"chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+)"
         )
         re_fiber = re.compile(
             r"Stats for fiberId=(\d+): "
@@ -1220,19 +1218,12 @@ class ImageQualityQaTask(PipelineTask):
                         metrics["fitReservedNLines"] = int(m.group(6))
                     except ValueError:
                         pass
-                m = re_species_stats.search(line)
-                if m:
-                    sp = m.group(1)
-                    try:
-                        x_rms = float(m.group(2))
-                        y_rms = float(m.group(3))
-                        if sp == "Trace":
-                            metrics["fitTraceXRms"] = x_rms
-                            metrics["fitTraceYRms"] = y_rms
-                        else:
-                            metrics["speciesStats"][sp] = (x_rms, y_rms)
-                    except ValueError:
-                        pass
+                parsed = parseSpeciesStats(line)
+                if parsed is not None:
+                    sp, values = parsed
+                    metrics["speciesStats"][sp] = values
+                    if sp == "Trace":
+                        metrics["fitTraceXRms"], metrics["fitTraceYRms"] = values[:2]
                 m = re_fiber.search(line)
                 if m:
                     try:
