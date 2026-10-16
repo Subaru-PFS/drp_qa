@@ -2319,10 +2319,11 @@ def _plotFwhm(
                     )
         else:
             # Joined whatever connectMedian, as drp_stella did: as points they vanish into the stars'.
+            # A lone median has nothing to join, so it is drawn as a point.
             for isLeft, color in [(True, "red"), (False, "green")]:
                 half = stars[stars.left == isLeft]
                 xm, ym = _medianByX(half[what], half.fwhm_arcsec, resolution)
-                artists += ax.plot(xm, ym, "-", color=color)
+                artists += ax.plot(xm, ym, "-" if len(xm) > 1 else "o", color=color)
 
     handles = []
     if showCameraId:

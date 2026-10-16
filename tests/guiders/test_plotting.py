@@ -8,6 +8,7 @@ one, and leaves its inputs alone. The other tests check the fixes to
 drp_stella's plots, each with a negative control.
 """
 
+import io
 import warnings
 
 import numpy as np
@@ -876,6 +877,22 @@ def testPlotFocusAgActorMedians(focusSweep):
     assert nShown == nValues > 5 * sum(len(line.get_xdata()) for line in medians)
 
 
+def testPlotFocusFwhmLoneMedians(focusSweep):
+    """A half's FWHM median with nothing to join is drawn as a point, so it stays visible."""
+    oneExposure = focusSweep[focusSweep.agc_exposure_id == focusSweep.agc_exposure_id.min()]
+    plot = plotFocus(oneExposure, plotBy="agc_exposure_id", showOnlyMedian=True, fig=Figure())
+    medians = [line for line in fwhmPanel(plot).lines if line.get_color() in ("red", "green")]
+    assert len(medians) == 2
+    for line in medians:
+        assert len(line.get_xdata()) == 1 and line.get_marker() == "o"
+
+    # Negative control: medians at several x are joined, without markers.
+    joined = plotFocus(focusSweep, showOnlyMedian=True, fig=Figure())
+    for line in fwhmPanel(joined).lines:
+        if line.get_color() in ("red", "green"):
+            assert len(line.get_xdata()) > 1 and line.get_marker() == "None"
+
+
 def testPlotFocusLegendNamesEveryCamera(focusSweep):
     """The focus-error legend names every camera, striking out those with no data.
 
@@ -896,7 +913,7 @@ def testPlotFocusLegendNamesEveryCamera(focusSweep):
                 # Negative control: the cameras with data, and the PFI line, are drawn plainly.
                 assert not text.get_path_effects() and text.get_alpha() is None
 
-    plot.fig.canvas.draw()  # the strike-through draws
+    plot.fig.savefig(io.BytesIO(), format="png")  # renders through Agg, drawing the strike-through
 
 
 @pytest.mark.parametrize("connectMedian", [True, False])
