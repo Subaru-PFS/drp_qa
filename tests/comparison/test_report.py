@@ -95,6 +95,55 @@ def testBuildReport(periods, visit, listing):
     assert "Provisional</b>" not in page  # no pipeline check, no provisional verdicts
 
 
+def testLineResidualSection(periods, visit, listing):
+    from pfs.drp.qa.comparison.residuals import residualFindings
+
+    visits, metrics = _period(periods, visit, listing)
+    holdings = metrics[["visit", "arm", "spectrograph"]].assign(raw=True, reduced=True, judged=True)
+    judged = judgeImages(metrics, visits, THRESHOLDS)
+    common = {
+        "period": "run1",
+        "version": "w.2026.41",
+        "collection": "u/me/comparison/run1/w.2026.41",
+        "readUntil": "now",
+        "visits": visits,
+        "summary": summarize(visits, coverage(visits, holdings)),
+        "metrics": metrics,
+        "judged": judged,
+        "findings": findings(metrics, judged, visits),
+    }
+    keys = ["visit", "arm", "spectrograph"]
+    summary = metrics[keys].assign(cameraSet="br", qaStatus="PASS", recommendedAction="NOMINAL")
+    bad = (summary["visit"] == 11) & (summary["arm"] == "b") & (summary["spectrograph"] == 2)
+    summary.loc[bad, ["qaStatus", "recommendedAction"]] = ["WARN", "APPLY_SHIFT"]
+    columns = [*keys, "reference", "description", "statusType", "metric", "value", "status"]
+    residualMetrics = pd.DataFrame(
+        [
+            (11, "b", 2, "calib", "Trace", "BOTH", "medianDeltaX", 1.3, "WARN"),
+            *[
+                (v, a, sm, "visit", "NeI", "RESERVED", "robustRmsDeltaX", 0.05, "")
+                for v, a, sm in metrics[keys].itertuples(index=False)
+            ],
+        ],
+        columns=columns,
+    ).assign(cameraSet="br")
+    found = residualFindings(residualMetrics, summary, visits)
+    page = buildReport(
+        ReportInputs(
+            **common, residualSummary=summary, residualMetrics=residualMetrics, residualFindings=found
+        )
+    )
+    assert "<h2>Line residuals</h2>" in page and "Line residuals: worst verdict per night" in page
+    assert "calib Trace medianDeltaX" in page and "APPLY_SHIFT" in page
+    assert "Scatter of the lines held back" in page and "median run1" in page
+    assert "have no line residuals" not in page
+    # One judged image without a summary row is counted; without the task's output the section says so.
+    page = buildReport(ReportInputs(**common, residualSummary=summary.iloc[1:], residualFindings=found))
+    assert "1 gated images have no line residuals" in page
+    page = buildReport(ReportInputs(**common))
+    assert "No <code>dmLineResiduals</code> output" in page
+
+
 def testProvisionalVerdictsAreCounted(periods, visit, listing):
     """Images reduced with another pipeline than the thresholds' are counted apart, by why."""
     from pfs.drp.qa.metrics.gate import pipelineMismatch

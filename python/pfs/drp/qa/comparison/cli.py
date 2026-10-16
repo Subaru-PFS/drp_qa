@@ -221,6 +221,7 @@ RESULT_NEUTRAL_PATHS = (
             "plan.py",
             "queries.py",
             "report.py",
+            "residuals.py",
             "runs.py",
         )
     ),
@@ -404,6 +405,7 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     from pfs.drp.qa.comparison.butlerQueries import detectorHoldings
     from pfs.drp.qa.comparison.findings import findings, judgeImages, taskPipeline, taskThresholds
     from pfs.drp.qa.comparison.report import ReportInputs, buildReport, failedSummary, populations
+    from pfs.drp.qa.comparison.residuals import residualFindings
     from pfs.drp.qa.metrics.gate import pipelineMismatch
     from pfs.drp.qa.metrics.readers import readMetrics, readReductionPipelines
     from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS
@@ -453,26 +455,33 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
 
     found = findings(metrics, judged, visits, frames["notes"], visitSet=loadValidationVisits())
     found.to_csv(workDir / f"findings-{period.name}.csv", index=False)
+    residualSummary, residualMetrics = _readResiduals(butler, done, ownRuns(butler, output))
+    residualFound = None
+    if residualSummary is not None:
+        residualSummary.to_parquet(workDir / f"dmLineResidualSummary-{period.name}.parquet")
+        residualMetrics.to_parquet(workDir / f"dmLineResidualMetrics-{period.name}.parquet")
+        residualFound = residualFindings(residualMetrics, residualSummary, visits, frames["notes"])
+        residualFound.to_csv(workDir / f"lineResidualFindings-{period.name}.csv", index=False)
     from pfs.drp.qa.comparison.persistence import armTimeline, lastLitBefore
 
     lastLit = lastLitBefore(visits)
     lastLit.to_csv(workDir / f"darksLastLit-{period.name}.csv", index=False)
 
-    reference = None
+    reference, referenceResiduals = None, None
     if args.reference and args.reference != period.name:
         referencePeriod = periods[args.reference]
         referenceVersion = args.reference_version or version
-        cache = (
-            dataDir
-            / referencePeriod.run
-            / "qa"
-            / referenceVersion
-            / args.variant
-            / f"iqQaMetrics-{referencePeriod.name}.parquet"
-        )
+        referenceDir = dataDir / referencePeriod.run / "qa" / referenceVersion / args.variant
+        cache = referenceDir / f"iqQaMetrics-{referencePeriod.name}.parquet"
         if cache.exists():
             referenceVisits, _, _ = _classified(referencePeriod, periods, dataDir)
             reference = populations(pd.read_parquet(cache), referenceVisits)
+            residualCache = referenceDir / f"dmLineResidualMetrics-{referencePeriod.name}.parquet"
+            if residualCache.exists():
+                # The reference's gated images only: the scatter table compares like with like.
+                gatedVisits = referenceVisits.loc[referenceVisits["validated"].astype(bool), "pfs_visit_id"]
+                referenceResiduals = pd.read_parquet(residualCache)
+                referenceResiduals = referenceResiduals[referenceResiduals["visit"].isin(gatedVisits)]
         else:
             print(f"No {args.reference} metrics at {cache}: report {args.reference} first", file=sys.stderr)
 
@@ -492,12 +501,35 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
             lastLit=lastLit,
             timeline=armTimeline(visits),
             failed=failedSummary(detectors, failed),
+            residualSummary=residualSummary,
+            residualMetrics=residualMetrics,
+            residualFindings=residualFound,
+            referenceResiduals=referenceResiduals,
         )
     )
     path = workDir / f"report-{period.name}.html"
     path.write_text(page)
     print(f"report: {path}")
     return 0
+
+
+def _readResiduals(butler, visits, collections: Sequence[str]):
+    """Return the ``dmLineResidualSummary`` and ``dmLineResidualMetrics`` rows of some visits.
+
+    `None` for both when the collections hold none: a collection judged
+    before ``dmLineResiduals`` joined the thresholds pipeline (PIPE2D-1956).
+    """
+    from pfs.drp.qa.metrics.readers import readMetrics
+
+    try:
+        summary = readMetrics(butler, visits, "dmLineResidualSummary", collections=collections)
+    except LookupError:
+        print(
+            "no dmLineResiduals output: judged before the task joined the pipeline (PIPE2D-1956)",
+            file=sys.stderr,
+        )
+        return None, None
+    return summary, readMetrics(butler, visits, "dmLineResidualMetrics", collections=collections)
 
 
 def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path) -> int:

@@ -3,7 +3,8 @@ description: >-
   deriving QA thresholds (docs/qa-thresholds.ipynb), and the visits of a run in comparison
   mode (bin.src/qaComparison.py), which reuses drpActor's reductions where they exist. The
   reduction is drp_stella's reduceExposure, as drpActor runs it; the caller applies drpActor's
-  per-sequence-type config overrides.
+  per-sequence-type config overrides. The QA is imageQualityQa, the gate, and dmLineResiduals,
+  the line residuals against detectorMap_calib and the visit's detectorMap (PIPE2D-1956).
 instrument: lsst.obs.pfs.PrimeFocusSpectrograph
 imports:
   - location: $DRP_STELLA_DIR/pipelines/reduceExposure.yaml
@@ -12,3 +13,4 @@ imports:
   - location: $DRP_QA_DIR/pipelines/drpQA.yaml
     include:
       - imageQualityQa
+      - dmLineResiduals

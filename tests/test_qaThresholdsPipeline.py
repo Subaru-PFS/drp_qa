@@ -18,14 +18,16 @@ def importedLabels(text: str, key: str) -> list[str]:
     return labels
 
 
-def testImportsImageQualityQaWithoutMergeArms():
+def testImportsTheQaTasksWithoutMergeArms():
     text = (PIPELINES / "qaThresholds.yaml").read_text()
     assert "$DRP_STELLA_DIR/pipelines/reduceExposure.yaml" in text
     assert "$DRP_QA_DIR/pipelines/drpQA.yaml" in text
-    assert importedLabels(text, "include") == ["imageQualityQa"]
+    # The same labels as comparison mode's judge-only pass (tests/comparison/test_plan.py checks).
+    assert importedLabels(text, "include") == ["imageQualityQa", "dmLineResiduals"]
     assert importedLabels(text, "exclude") == ["mergeArms"]
 
 
-def testIncludedLabelIsInDrpQa():
+def testIncludedLabelsAreInDrpQa():
     drpQa = (PIPELINES / "drpQA.yaml").read_text()
-    assert re.search(r"^  imageQualityQa:$", drpQa, flags=re.MULTILINE)
+    for label in ("imageQualityQa", "dmLineResiduals"):
+        assert re.search(rf"^  {label}:$", drpQa, flags=re.MULTILINE), label

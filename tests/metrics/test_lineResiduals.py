@@ -30,6 +30,7 @@ from pfs.drp.qa.metrics.lineResiduals import (
     residualVerdict,
     robustRms,
     speciesResiduals,
+    wideResiduals,
 )
 from pfs.drp.qa.metrics.registry import specFor
 
@@ -478,8 +479,10 @@ def testValidationVerdicts():
     from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 
     rows = pd.read_parquet(Path(__file__).parent / "data" / "dmDriftMetrics-validation.parquet")
-    # The fixture holds dmDriftMonitor's rows (PIPE2D-1921), all against the calibration.
-    rows = rows[rows["nLines"] >= 10].assign(reference=CALIB).reset_index(drop=True)
+    # The 008 fixture holds dmDriftMonitor's rows (PIPE2D-1921), all against the calibration.
+    if "reference" not in rows:
+        rows = rows.assign(reference=CALIB)
+    rows = rows[(rows["nLines"] >= 10) & (rows["reference"] == CALIB)].reset_index(drop=True)
     config = residualThresholds(1.0, 2.0, 1.0, 2.0)
     judged = judge(rows, config).set_index(["row", "metric"])
     visitSet = loadValidationVisits()
@@ -722,3 +725,89 @@ def testVisitVerdictStandsWhenTheCalibrationMeasuresNothing():
     # Negative control: with no lines either way, it is still insufficient data.
     _, _, empty, _ = measure(lines.assign(flag=True), calib, thresholds=rmsThresholds(), visit=visit)
     assert (empty["qaStatus"], empty["recommendedAction"]) == ("UNKNOWN", "INSUFFICIENT_DATA")
+
+
+def _longRows(visit, arm, spectrograph, cameraSet, reference, description, statusType, values):
+    """Return ``dmLineResidualMetrics`` rows of one species."""
+    return [
+        {
+            "visit": visit,
+            "arm": arm,
+            "spectrograph": spectrograph,
+            "cameraSet": cameraSet,
+            "reference": reference,
+            "description": description,
+            "statusType": statusType,
+            "metric": metric,
+            "value": value,
+            "status": "",
+        }
+        for metric, value in values.items()
+    ]
+
+
+def testWideResiduals():
+    neon = {
+        "nLines": 100,
+        "linesPerFiber": 2.0,
+        "medianDeltaX": 0.1,
+        "robustRmsDeltaX": 0.05,
+        "medianDeltaY": 0.2,
+        "robustRmsDeltaY": 0.06,
+    }
+    rows = [
+        *_longRows(10, "b", 1, "brn", CALIB, "NeI", BOTH, neon),
+        *_longRows(
+            10,
+            "b",
+            1,
+            "brn",
+            CALIB,
+            TRACE,
+            BOTH,
+            {"nLines": 1000, "linesPerFiber": 20.0, "medianDeltaX": -0.1},
+        ),
+        *_longRows(10, "b", 1, "brn", VISIT, "NeI", RESERVED, neon | {"robustRmsDeltaY": 0.07}),
+        *_longRows(11, "b", 1, None, CALIB, "NeI", UNFITTED, neon),  # no pfsConfig: null camera set
+        *_longRows(12, "b", 1, "brn", CALIB, "NeI", BOTH, neon),
+    ]
+    metrics = pd.DataFrame(rows).astype(RESIDUAL_COLUMNS)
+    summary = pd.DataFrame(
+        {
+            "visit": [10, 11, 12],
+            "arm": "b",
+            "spectrograph": 1,
+            "calibId": "c",
+            "calibFirstVisit": 11,
+            "calibLastVisit": 12,
+        }
+    )
+    kinds = pd.DataFrame(
+        {"visit": [10, 11, 12], "arm": "b", "spectrograph": 1, "obsType": "arc", "seqName": "Arc: Neon"}
+    )
+
+    drift = wideResiduals(metrics, CALIB, (BOTH, UNFITTED), summary, kinds)
+    assert list(drift.columns[:7]) == [
+        "visit",
+        "arm",
+        "spectrograph",
+        "cameraSet",
+        "reference",
+        "description",
+        "statusType",
+    ]
+    assert len(drift) == 4  # 10 NeI, 10 Trace, 11 NeI, 12 NeI
+    trace = drift[(drift["visit"] == 10) & (drift["description"] == TRACE)].iloc[0]
+    assert trace["medianDeltaX"] == -0.1 and np.isnan(trace["medianDeltaY"])  # a trace measures x only
+    assert (drift["seqName"] == "Arc: Neon").all() and (drift["calibFirstVisit"] == 11).all()
+    assert drift.loc[drift["visit"] == 11, "cameraSet"].isna().all()  # kept, not dropped as a null key
+    assert sorted(drift["visit"].unique()) == [10, 11, 12]
+    # The calibration's own inputs, 11-12, are left out on request; 10, outside the range, stays.
+    own = wideResiduals(metrics, CALIB, (BOTH, UNFITTED), summary, kinds, excludeCalibInputs=True)
+    assert sorted(own["visit"].unique()) == [10]
+    scatter = wideResiduals(metrics, VISIT, (RESERVED,))
+    assert len(scatter) == 1 and scatter.iloc[0]["robustRmsDeltaY"] == 0.07
+    assert "calibId" not in scatter and "seqName" not in scatter
+    assert wideResiduals(metrics, VISIT, (BOTH,)).empty
+    with pytest.raises(ValueError, match="summary"):
+        wideResiduals(metrics, CALIB, (BOTH,), excludeCalibInputs=True)

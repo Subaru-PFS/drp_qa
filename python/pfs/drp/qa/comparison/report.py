@@ -18,6 +18,7 @@ import pandas as pd
 
 from pfs.drp.qa.comparison.findings import lampsOf
 from pfs.drp.qa.comparison.persistence import darkSequences, gapSummary
+from pfs.drp.qa.comparison.residuals import residualProblems, scatterTable
 from pfs.drp.qa.metrics.gate import STATUS_ORDER
 from pfs.drp.qa.plotting.comparison import (
     plotArmTimeline,
@@ -98,6 +99,14 @@ class ReportInputs:
         From `pfs.drp.qa.comparison.persistence.armTimeline`.
     failed : `pandas.DataFrame`, optional
         From `failedSummary`.
+    residualSummary, residualMetrics : `pandas.DataFrame`, optional
+        ``dmLineResidualSummary`` and ``dmLineResidualMetrics`` rows of the
+        period's judged images (PIPE2D-1956); `None` when the collection has
+        none.
+    residualFindings : `pandas.DataFrame`, optional
+        From `pfs.drp.qa.comparison.residuals.residualFindings`.
+    referenceResiduals : `pandas.DataFrame`, optional
+        The reference run's ``dmLineResidualMetrics`` rows, of its gated images.
     """
 
     period: str
@@ -114,6 +123,10 @@ class ReportInputs:
     lastLit: pd.DataFrame | None = None
     timeline: pd.DataFrame | None = None
     failed: pd.DataFrame | None = None
+    residualSummary: pd.DataFrame | None = None
+    residualMetrics: pd.DataFrame | None = None
+    residualFindings: pd.DataFrame | None = None
+    referenceResiduals: pd.DataFrame | None = None
 
 
 def failedSummary(detectors: pd.DataFrame, failed: pd.DataFrame) -> pd.DataFrame:
@@ -635,6 +648,8 @@ def buildReport(inputs: ReportInputs) -> str:
             )
         )
 
+    parts += _residualSection(inputs, verdicts)
+
     if not unvalidated.empty:
         parts += [
             "<h2 id='unvalidated'>Unvalidated</h2>",
@@ -750,9 +765,76 @@ one-off single, judged like a set.</li>
 <li><b>Against the reference</b>: arcs and traces lamp by lamp, daily ones and singles against the reference's
 sets.</li>
 <li><code>medDxCenter</code> is the offset from the calibration detectorMap: drift, shown, not gated.</li>
+<li><b>Line residuals</b>: <code>dmLineResiduals</code>' verdicts on the same images (PIPE2D-1956). The median offset of
+each line species from <code>detectorMap_calib</code> is drift: at WARN the visit's adjustment absorbs it
+(<code>APPLY_SHIFT</code>), at FAIL it does not (<code>RECALIBRATE</code>). The robust RMS of the lines the fit held
+back, against the visit's own detectorMap, is the scatter left on lines it was not fitted to; stored, and judged once
+thresholds are derived from the reference run. A calibration set sits at zero against the calibration built from it.</li>
 <li><b>n-arm darks</b>: the n detectors keep an image of a bright exposure for a while. Darks aren't measured yet
 (PIPE2D-1925), so the timeline shows only when they were taken relative to lit exposures.</li>
 </ul>"""
+
+
+def _residualSection(inputs: ReportInputs, judgedImages: pd.DataFrame) -> list[str]:
+    """Return the line-residuals section: ``dmLineResiduals``' verdicts on the gated images."""
+    parts = ["<h2>Line residuals</h2>"]
+    summary = inputs.residualSummary
+    if summary is None or summary.empty:
+        return [
+            *parts,
+            "<p class='caption'>No <code>dmLineResiduals</code> output in this collection: judged before the task"
+            " joined the pipeline (PIPE2D-1956).</p>",
+        ]
+    parts.append(
+        "<p class='caption'><code>dmLineResiduals</code>: each line species' median offset from"
+        " <code>detectorMap_calib</code> (drift: WARN <code>APPLY_SHIFT</code>, FAIL <code>RECALIBRATE</code>), and"
+        " the robust RMS of the lines the fit held back against the visit's own detectorMap (stored; judged where"
+        " thresholds are derived). A calibration set sits at zero against the calibration built from it.</p>"
+    )
+    keys = ["visit", "arm", "spectrograph"]
+    verdicts = populations(summary.reset_index(drop=True), inputs.visits)
+    verdicts = verdicts.assign(status=verdicts["qaStatus"])
+    gated = verdicts[verdicts["validated"].astype(bool)]
+    have = pd.MultiIndex.from_frame(summary[keys])
+    missing = int((~pd.MultiIndex.from_frame(judgedImages[keys]).isin(have)).sum())
+    if missing:
+        parts.append(f"<p class='caption'>{missing} gated images have no line residuals.</p>")
+    if not gated.empty:
+        parts.append(_figure(plotVerdictGrid(gated, title="Line residuals: worst verdict per night")))
+        parts.append(_details("Counts by type and arm", _table(verdictCounts(gated))))
+        actions = gated.pivot_table(
+            index="arm", columns="recommendedAction", values="visit", aggfunc="size", fill_value=0
+        ).reset_index()
+        actions.columns.name = None
+        parts.append(_details("Recommended actions by arm", _table(actions)))
+    found = inputs.residualFindings
+    found = found[found["validated"].astype(bool)] if found is not None and not found.empty else None
+    if found is None or found.empty:
+        parts.append("<p>No gated image warns or fails.</p>")
+    else:
+        parts.append(_table(residualProblems(found)))
+        parts.append(
+            _details(
+                f"Every finding: {len(found)} images",
+                _table(_ordered(found).drop(columns=["validated", "expected"])),
+            )
+        )
+    metrics = inputs.residualMetrics
+    if metrics is not None and not metrics.empty and not gated.empty:
+        gatedMetrics = metrics.merge(gated[keys].drop_duplicates(), on=keys)
+        table = scatterTable(
+            gatedMetrics,
+            inputs.referenceResiduals,
+            labels=(inputs.period, inputs.referenceName or "reference"),
+        )
+        if not table.empty:
+            parts.append(
+                _details(
+                    "Scatter of the lines held back, against the visit's detectorMap, by arm and species (px)",
+                    _table(table),
+                )
+            )
+    return parts
 
 
 def _persistenceSection(lastLit: pd.DataFrame, timeline: pd.DataFrame | None) -> list[str]:
