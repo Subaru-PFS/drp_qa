@@ -6,14 +6,23 @@ and the reader is tested with a stub.
 """
 
 import re
-from collections.abc import Callable, Iterable, Mapping
+import time
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS, pipelineVersions
 
-__all__ = ["chooseRun", "readCalibValidity", "readMetrics", "readPipelineVersions", "readReductionPipelines"]
+__all__ = [
+    "chooseRun",
+    "exportMetrics",
+    "readCalibValidity",
+    "readMetrics",
+    "readPipelineVersions",
+    "readReductionPipelines",
+]
 
 #: Data ID keys copied onto each row when the stored table lacks them.
 _DATA_ID_KEYS = ("visit", "arm", "spectrograph")
@@ -21,10 +30,12 @@ _DATA_ID_KEYS = ("visit", "arm", "spectrograph")
 
 def readMetrics(
     butler,
-    visits: Iterable[int],
+    visits: Iterable[int] | None = None,
     datasetType: str = "iqQaMetrics",
     collections: str | Iterable[str] | None = None,
     instrument: str = "PFS",
+    visitRange: tuple[int, int] | None = None,
+    progress: bool = False,
 ) -> pd.DataFrame:
     """Read and concatenate a per-detector metrics table for some visits.
 
@@ -35,7 +46,7 @@ def readMetrics(
     ----------
     butler : `lsst.daf.butler.Butler`
         A Butler; read-only is enough.
-    visits : iterable of `int`
+    visits : iterable of `int`, optional
         The visits to read, e.g. ``ValidationVisitSet.visits``.
     datasetType : `str`, optional
         The dataset type. Default is ``iqQaMetrics``.
@@ -43,6 +54,12 @@ def readMetrics(
         Collections to search, in order. Defaults to the Butler's own.
     instrument : `str`, optional
         Instrument name. Default is ``PFS``.
+    visitRange : `tuple` [`int`, `int`], optional
+        Every visit from the first to the last, inclusive, e.g. a whole run;
+        instead of ``visits``.
+    progress : `bool`, optional
+        Print how many datasets there are, then done/total, elapsed and ETA
+        every 100 and at the end.
 
     Returns
     -------
@@ -54,19 +71,31 @@ def readMetrics(
     Raises
     ------
     ValueError
-        If ``visits`` is empty.
+        If ``visits`` is empty, or not exactly one of ``visits`` and
+        ``visitRange`` is given.
     LookupError
         If no datasets match: an empty result is an error to report, not an
         empty table to calibrate on.
     """
-    visits = tuple(sorted({int(visit) for visit in visits}))
-    if not visits:
-        raise ValueError("No visits to read")
+    if (visits is None) == (visitRange is None):
+        raise ValueError("Give one of visits and visitRange")
+    if visitRange is not None:
+        first, last = (int(visit) for visit in visitRange)
+        where = "instrument = instrumentName AND visit >= firstVisit AND visit <= lastVisit"
+        bind = {"instrumentName": instrument, "firstVisit": first, "lastVisit": last}
+        described = f"visits {first}-{last}"
+    else:
+        visits = tuple(sorted({int(visit) for visit in visits}))
+        if not visits:
+            raise ValueError("No visits to read")
+        where = "instrument = instrumentName AND visit IN (visits)"
+        bind = {"instrumentName": instrument, "visits": visits}
+        described = f"{len(visits)} visits ({visits[0]}-{visits[-1]})"
     refs = butler.query_datasets(
         datasetType,
         collections=collections,
-        where="instrument = instrumentName AND visit IN (visits)",
-        bind={"instrumentName": instrument, "visits": visits},
+        where=where,
+        bind=bind,
         # One dataset per data ID, from the first collection that has it. A
         # detector reduced twice in a chain would otherwise count twice.
         find_first=True,
@@ -74,22 +103,79 @@ def readMetrics(
         explain=False,
     )
     if not refs:
-        raise LookupError(
-            f"No {datasetType} datasets for {len(visits)} visits ({visits[0]}-{visits[-1]})"
-            f" in collections {collections!r}"
-        )
+        raise LookupError(f"No {datasetType} datasets for {described} in collections {collections!r}")
 
-    tables = []
-    for ref in refs:
+    total, start, tables = len(refs), time.monotonic(), []
+    if progress:
+        print(f"{datasetType}: reading {total} datasets for {described}", flush=True)
+    for done, ref in enumerate(refs, 1):
         table = butler.get(ref)
         dataId = ref.dataId
         for key in _DATA_ID_KEYS:
             if key not in table.columns and key in dataId:
                 table[key] = dataId[key]
         tables.append(table)
+        if progress and (done % 100 == 0 or done == total):
+            elapsed = time.monotonic() - start
+            eta = elapsed / done * (total - done)
+            print(f"{datasetType}: {done}/{total}  {elapsed:.0f} s elapsed, ETA {eta:.0f} s", flush=True)
     metrics = pd.concat(tables, ignore_index=True)
     sortKeys = [key for key in _DATA_ID_KEYS if key in metrics.columns]
     return metrics.sort_values(sortKeys, ignore_index=True)
+
+
+def exportMetrics(
+    butler,
+    collection: str,
+    datasetTypes: Sequence[str],
+    out: Path | str,
+    visits: Iterable[int] | None = None,
+    visitRange: tuple[int, int] | None = None,
+    instrument: str = "PFS",
+) -> list[Path]:
+    """Write per-detector tables from one collection to parquet, for work away from the Butler.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        A Butler; read-only is enough.
+    collection : `str`
+        The collection to read.
+    datasetTypes : sequence of `str`
+        Per-detector tables, e.g. ``dmDriftSummary``, ``dmDriftMetrics``,
+        ``iqQaMetrics``.
+    out : `pathlib.Path` or `str`
+        Directory to write to; made if missing.
+    visits, visitRange
+        Which visits; see `readMetrics`.
+    instrument : `str`, optional
+        Instrument name. Default is ``PFS``.
+
+    Returns
+    -------
+    `list` [`pathlib.Path`]
+        One file per dataset type, ``<datasetType>-<collection>.parquet``
+        with ``/`` in the collection made ``_``.
+    """
+    out = Path(out).expanduser()
+    out.mkdir(parents=True, exist_ok=True)
+    stem = collection.replace("/", "_")
+    paths = []
+    for datasetType in datasetTypes:
+        table = readMetrics(
+            butler,
+            visits,
+            datasetType,
+            collections=[collection],
+            instrument=instrument,
+            visitRange=visitRange,
+            progress=True,
+        )
+        path = out / f"{datasetType}-{stem}.parquet"
+        table.to_parquet(path)
+        print(f"{datasetType}: {len(table)} rows -> {path} ({path.stat().st_size / 1e6:.2f} MB)", flush=True)
+        paths.append(path)
+    return paths
 
 
 def readPipelineVersions(
