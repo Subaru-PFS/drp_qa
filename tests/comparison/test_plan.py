@@ -146,6 +146,14 @@ def testReducedSequencesAreOnlyJudged(classified):
     }
     judge = pipetaskCommand(result[0], **common)
     assert judge[judge.index("-p") + 1] == "pipelines/qaThresholds.yaml#imageQualityQa,dmLineResiduals"
+    # The judge-only pass runs exactly the QA tasks the thresholds pipeline includes.
+    from pathlib import Path
+
+    from pfs.drp.qa.comparison.plan import JUDGE_TASKS
+
+    pipeline = (Path(__file__).parents[2] / "pipelines" / "qaThresholds.yaml").read_text()
+    included = pipeline.split("include:")[1].split("\n\n")[0]
+    assert [line.strip()[2:] for line in included.strip().splitlines()] == list(JUDGE_TASKS)
     assert "-c" not in judge and "-C" not in judge  # no reduction labels to configure
     reduce = pipetaskCommand(result[1], cosmicrayConfigFile="/tmp/cr.py", **common)
     assert reduce[reduce.index("-p") + 1] == "pipelines/qaThresholds.yaml"

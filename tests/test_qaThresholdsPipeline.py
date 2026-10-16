@@ -19,13 +19,11 @@ def importedLabels(text: str, key: str) -> list[str]:
 
 
 def testImportsTheQaTasksWithoutMergeArms():
-    from pfs.drp.qa.comparison.plan import JUDGE_TASKS
-
     text = (PIPELINES / "qaThresholds.yaml").read_text()
     assert "$DRP_STELLA_DIR/pipelines/reduceExposure.yaml" in text
     assert "$DRP_QA_DIR/pipelines/drpQA.yaml" in text
-    # The judge-only comparison pass runs exactly the QA tasks the pipeline includes.
-    assert importedLabels(text, "include") == ["imageQualityQa", "dmLineResiduals"] == list(JUDGE_TASKS)
+    # The same labels as comparison mode's judge-only pass (tests/comparison/test_plan.py checks).
+    assert importedLabels(text, "include") == ["imageQualityQa", "dmLineResiduals"]
     assert importedLabels(text, "exclude") == ["mergeArms"]
 
 
