@@ -12,8 +12,11 @@ calibration's input visits from ``dmDriftSummary`` and the sequence from
 
     uv run --no-project --with pandas --with pyarrow python makeDriftFixture.py [DIR]
 
-``DIR`` holds the files ``reports/PIPE2D-1921/exportDrift.py`` wrote; default
-``~/Projects/Subaru/PFS/reports/PIPE2D-1921``.
+``DIR`` holds the files ``bin.src/exportMetrics.py`` wrote, run where the Butler is::
+
+    python bin.src/exportMetrics.py -c u/wtg/qa-thresholds/008 -t dmDriftSummary dmDriftMetrics -o DIR
+
+default ``~/Projects/Subaru/PFS/reports/PIPE2D-1921``.
 """
 
 import sys

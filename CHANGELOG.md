@@ -10,6 +10,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **`bin.src/exportMetrics.py`** (PIPE2D-1921, PIPE2D-1956) — per-detector QA tables from a Butler collection to parquet,
+  for the validation visits or a visit range, with progress. `readers.readMetrics` gains `visitRange` and `progress`;
+  `readers.exportMetrics` writes the files. `makeDriftFixture.py` is remade from its output.
+
 - **Detector-map line residuals** (PIPE2D-1921, PIPE2D-1956) — new task `dmLineResiduals` (`drpQA.yaml`), per
   detector, measuring every line of `lines` against two references (`reference`): `detectorMap_calib` (`calib`),
   the drift, and the visit's own adjusted `detectorMap` (`visit`), whose `RESERVED` lines test how well it predicts

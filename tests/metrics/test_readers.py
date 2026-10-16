@@ -8,6 +8,7 @@ import pytest
 
 from pfs.drp.qa.metrics.readers import (
     chooseRun,
+    exportMetrics,
     readCalibValidity,
     readMetrics,
     readPipelineVersions,
@@ -39,13 +40,16 @@ class StubButler:
         self.queries.append(
             {"datasetType": datasetType, "collections": collections, "where": where, "bind": bind, **kwargs}
         )
-        visits = set(bind["visits"])
+        if "visits" in bind:
+            wanted = set(bind["visits"]).__contains__
+        else:
+            wanted = range(bind["firstVisit"], bind["lastVisit"] + 1).__contains__
         return [
             StubRef(
                 datasetType, {"instrument": bind["instrumentName"], "visit": v, "arm": a, "spectrograph": s}
             )
             for (v, a, s) in self.tables
-            if v in visits
+            if wanted(v)
         ]
 
     def get(self, ref):
@@ -91,6 +95,55 @@ def testOneQueryForEveryVisit(butler):
     assert query["bind"] == {"instrumentName": "PFS", "visits": (100, 101)}
     assert "100" not in query["where"]
     assert query["find_first"] is True
+
+
+def testVisitRange(butler):
+    """Every visit of a range, e.g. a whole run, bound as its ends."""
+    metrics = readMetrics(butler, visitRange=(100, 500))
+    assert sorted(set(metrics["visit"])) == [100, 101]
+    (query,) = butler.queries
+    assert query["bind"] == {"instrumentName": "PFS", "firstVisit": 100, "lastVisit": 500}
+    assert "100" not in query["where"]
+    # Negative control: the range's ends are inclusive, and 999 lies beyond it.
+    assert 999 in set(readMetrics(butler, visitRange=(100, 999))["visit"])
+
+
+def testVisitsOrRange(butler):
+    with pytest.raises(ValueError, match="one of visits and visitRange"):
+        readMetrics(butler)
+    with pytest.raises(ValueError, match="one of visits and visitRange"):
+        readMetrics(butler, [100], visitRange=(100, 101))
+
+
+def testProgress(butler, capsys):
+    readMetrics(butler, [100, 101], progress=True)
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "iqQaMetrics: reading 3 datasets for 2 visits (100-101)"
+    assert lines[-1].startswith("iqQaMetrics: 3/3 ") and "ETA 0 s" in lines[-1]
+    # Negative control: quiet by default.
+    readMetrics(butler, [100, 101])
+    assert capsys.readouterr().out == ""
+
+
+def testExportMetrics(butler, tmp_path):
+    paths = exportMetrics(
+        butler,
+        "u/someone/qa/008",
+        ["iqQaMetrics", "dmLineResidualSummary"],
+        tmp_path / "out",
+        visits=[100, 101],
+    )
+    assert [path.name for path in paths] == [
+        "iqQaMetrics-u_someone_qa_008.parquet",
+        "dmLineResidualSummary-u_someone_qa_008.parquet",
+    ]
+    written = pd.read_parquet(paths[0])
+    assert written[["visit", "arm", "spectrograph"]].values.tolist() == [
+        [100, "b", 1],
+        [100, "b", 2],
+        [101, "r", 1],
+    ]
+    assert [query["collections"] for query in butler.queries] == [["u/someone/qa/008"]] * 2
 
 
 def testNothingFoundRaises(butler):

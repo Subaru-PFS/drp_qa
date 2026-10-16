@@ -111,6 +111,8 @@ the pipeline/config glue to run them.
   - `plotIqQaTimeSeries.py` — cross-visit `iqQaMetrics` time series via `plotting/iqQa.py`
   - `fiberNormsQa.py` — entry point for `fiberNormsQa.main`
   - `qaComparison.py` — entry point for `pfs.drp.qa.comparison.cli.main` (comparison mode)
+  - `exportMetrics.py` — per-detector QA tables (`iqQaMetrics`, `dmLineResidualMetrics`, ...) from a
+    collection to parquet, with progress, via `metrics.readers.exportMetrics`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),
   which contains the core reduction logic and C++ primitives, and on `pfs_utils`. Both
   are `setupRequired` in `ups/drp_qa.table`; `pfs-utils` is also a hard `pyproject.toml`
