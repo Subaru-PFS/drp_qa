@@ -209,7 +209,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   are plotted, and open-shutter ones once; `plotFocusByAG` applies `onlyGuideStars`; titles give the visit range and
   say "closed shutter"; `showTheta` and an axes-only `showTelescopeErrors` work; the arrows' legend works with
   matplotlib 3.9; FWHM points are drawn once; the cursor readout reads correctly and needs no database; and the
-  averages use only valid matches. `README.md` has a "Guider tools" section, and the notebook
+  averages use only valid matches. `plotFocus` joins each half's FWHM medians whatever `connectMedian`, as
+  drp_stella did, and its focus-error legends name every camera, greying and striking out any with no data
+  (INSTRM-3036). `README.md` has a "Guider tools" section, and the notebook
   `docs/guider-plots.ipynb` describes each plot (what it shows, its data, how to read it, what to look for) beside
   an annotated sample drawn from the tests' AG data; with `USE_OPDB = True` it runs on the opdb and checks the
   readers and fits the plots don't use. `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its
