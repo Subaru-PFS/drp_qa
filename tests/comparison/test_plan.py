@@ -145,7 +145,7 @@ def testReducedSequencesAreOnlyJudged(classified):
         "skipExistingIn": ["drpActor/reductions"],
     }
     judge = pipetaskCommand(result[0], **common)
-    assert judge[judge.index("-p") + 1] == "pipelines/qaThresholds.yaml#imageQualityQa"
+    assert judge[judge.index("-p") + 1] == "pipelines/qaThresholds.yaml#imageQualityQa,dmLineResiduals"
     assert "-c" not in judge and "-C" not in judge  # no reduction labels to configure
     reduce = pipetaskCommand(result[1], cosmicrayConfigFile="/tmp/cr.py", **common)
     assert reduce[reduce.index("-p") + 1] == "pipelines/qaThresholds.yaml"

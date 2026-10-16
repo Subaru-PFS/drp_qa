@@ -82,6 +82,7 @@ __all__ = [
     "residualVerdict",
     "robustRms",
     "speciesResiduals",
+    "wideResiduals",
 ]
 
 #: The ``description`` of trace centroids in ``lines``.
@@ -638,6 +639,91 @@ def _action(verdict: Any) -> str:
     if verdict.statusType == UNFITTED or not verdict.metric.startswith("median"):
         return "RECALIBRATE"
     return "APPLY_SHIFT" if verdict.status == "WARN" else "RECALIBRATE"
+
+
+def wideResiduals(
+    metrics: pd.DataFrame,
+    reference: str,
+    statusTypes: Sequence[str],
+    summary: pd.DataFrame | None = None,
+    kinds: pd.DataFrame | None = None,
+    excludeCalibInputs: bool = False,
+) -> pd.DataFrame:
+    """Return ``dmLineResidualMetrics`` rows of one reference as one row per detector and species.
+
+    The long table pivoted on ``metric``, for deriving thresholds
+    (`pfs.drp.qa.metrics.calibration.calibrate` takes a column per metric) and
+    for the test fixtures made from the validation visits.
+
+    Parameters
+    ----------
+    metrics : `pandas.DataFrame`
+        ``dmLineResidualMetrics`` rows (`RESIDUAL_COLUMNS`), of any number of
+        detectors.
+    reference : `str`
+        `CALIB` or `VISIT`: the rows kept.
+    statusTypes : sequence of `str`
+        The ``statusType`` values kept: ``(BOTH, UNFITTED)`` for the drift
+        against the calibration, ``(RESERVED,)`` for the scatter the adjusted
+        map leaves.
+    summary : `pandas.DataFrame`, optional
+        ``dmLineResidualSummary`` rows of the same detectors: adds the
+        calibration columns (``calibId``, ``calibRun``, ``calibCreated``,
+        ``calibFirstVisit``, ``calibLastVisit``, those present).
+    kinds : `pandas.DataFrame`, optional
+        A table with ``visit``, ``arm``, ``spectrograph`` and ``obsType`` or
+        ``seqName``, e.g. ``iqQaMetrics``: adds them, so that the validation
+        set's ``seqType`` selectors match the rows.
+    excludeCalibInputs : `bool`, optional
+        Drop the detectors whose visit lies within the input visits of the
+        calibration they were measured against (``calibFirstVisit`` to
+        ``calibLastVisit``, inclusive): a calibration's own inputs sit at zero
+        against it by construction, and their adjusted maps are fitted to the
+        lines the calibration was. Needs ``summary``.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``reference``,
+        ``description``, ``statusType``, a column per metric (``nLines``,
+        ``linesPerFiber`` and `RESIDUAL_METRICS`, NaN where the species
+        measures no such component), then the calibration and kind columns;
+        sorted by detector and species.
+
+    Raises
+    ------
+    ValueError
+        If ``excludeCalibInputs`` without ``summary``.
+    """
+    if excludeCalibInputs and summary is None:
+        raise ValueError("excludeCalibInputs needs the summary, which holds each calibration's input visits")
+    keys = ["visit", "arm", "spectrograph"]
+    index = [*keys, "cameraSet", "reference", "description", "statusType"]
+    columns = [*index, *_COUNT_METRICS, *RESIDUAL_METRICS]
+    rows = metrics[(metrics["reference"] == reference) & metrics["statusType"].isin(tuple(statusTypes))]
+    if rows.empty:
+        wide = pd.DataFrame(columns=columns)
+    else:
+        # pivot, not pivot_table: a detector with no pfsConfig has a null cameraSet, which a groupby drops.
+        wide = rows.pivot(index=index, columns="metric", values="value").reset_index()
+        wide.columns.name = None
+        wide = wide.reindex(columns=columns)
+    if summary is not None:
+        calibColumns = [
+            column
+            for column in ("calibId", "calibRun", "calibCreated", "calibFirstVisit", "calibLastVisit")
+            if column in summary
+        ]
+        wide = wide.merge(summary[[*keys, *calibColumns]].drop_duplicates(keys), on=keys, how="left")
+        if excludeCalibInputs:
+            first = pd.to_numeric(wide["calibFirstVisit"], errors="coerce")
+            last = pd.to_numeric(wide["calibLastVisit"], errors="coerce")
+            own = first.notna() & last.notna() & (wide["visit"] >= first) & (wide["visit"] <= last)
+            wide = wide[~own.to_numpy()]
+    if kinds is not None:
+        kindColumns = [column for column in ("obsType", "seqName") if column in kinds]
+        wide = wide.merge(kinds[[*keys, *kindColumns]].drop_duplicates(keys), on=keys, how="left")
+    return wide.sort_values([*keys, "description"], ignore_index=True)
 
 
 def longResiduals(

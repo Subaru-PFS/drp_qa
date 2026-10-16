@@ -10,6 +10,18 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **`dmLineResiduals` in the thresholds pipeline and comparison mode** (PIPE2D-1956) — `pipelines/qaThresholds.yaml`
+  runs it beside `imageQualityQa`, and a judge-only comparison pass runs both (`plan.JUDGE_TASKS`). Comparison mode
+  reads `dmLineResidualSummary` and `dmLineResidualMetrics`, writes them and `lineResidualFindings-<period>.csv` beside
+  the report, and adds a *Line residuals* section: verdicts per detector and night, recommended actions, problems, and
+  the scatter of the lines held back by arm and species against the reference run's
+  (`pfs.drp.qa.comparison.residuals`). `lineResiduals.wideResiduals` pivots the long table to a column per metric,
+  with the calibration's input visits and the sequence, for `calibrate` and the fixtures; the thresholds notebook
+  reads the task's tables into its cache and derives `robustRmsDeltaX`/`robustRmsDeltaY` thresholds from the
+  `RESERVED` lines against the visit's detectorMap, each calibration's own inputs left out, into
+  `dmLineResidualThresholds-<run>.yaml`. `makeDriftFixture.py` reads that cache. `findings.describeImages` is the
+  shared tail of the gate's and the residuals' findings.
+
 - **`bin.src/exportMetrics.py`** (PIPE2D-1921, PIPE2D-1956) — per-detector QA tables from a Butler collection to parquet,
   for the validation visits or a visit range, with progress. `readers.readMetrics` gains `visitRange` and `progress`;
   `readers.exportMetrics` writes the files. `makeDriftFixture.py` is remade from its output.

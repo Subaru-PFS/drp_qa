@@ -23,6 +23,7 @@ from pfs.drp.qa.comparison.reduction import cosmicrayConfig, cosmicrayGroups, dr
 from pfs.drp.qa.metrics.validationVisits import visitExpression
 
 __all__ = [
+    "JUDGE_TASKS",
     "STATUS_ORDER",
     "Pass",
     "coverage",
@@ -38,6 +39,10 @@ __all__ = [
 
 #: Coverage of a judged visit's detector, from done to blocked.
 STATUS_ORDER = ("judged", "to judge", "to reduce", "failed", "no pfsConfig", "no raw", "raw not in opdb")
+
+#: The QA tasks of the pipeline, which a judge-only pass runs on reductions that exist: the gate,
+#: and the line residuals against the calibration and the visit's detectorMap (PIPE2D-1956).
+JUDGE_TASKS = ("imageQualityQa", "dmLineResiduals")
 
 #: A failed quantum in a ``pipetask`` log.
 _FAILED_RE = re.compile(r"Execution of task '(\w+)' on quantum \{([^}]*)\} failed\. Exception (.*)$")
@@ -266,7 +271,7 @@ class Pass:
         Visit to cosmic-ray group, the group being the first visit of its
         sequence: ``cosmicray``'s ``groups`` with ``grouping="manual"``.
     judgeOnly : `bool`, optional
-        Whether every image is already reduced, so only ``imageQualityQa``
+        Whether every image is already reduced, so only the QA tasks (`JUDGE_TASKS`)
         runs; its name ends ``-judge``.
     """
 
@@ -434,8 +439,8 @@ def pipetaskCommand(
     # misses them, and a bare INFO sets only lsst. The fit statistics imageQualityQa reads from
     # the stored reduceExposure_log are INFO lines (PIPE2D-1938).
     command = ["pipetask", "--long-log", "--log-level", "pfs=INFO", "run", "-j", str(jobs)]
-    # A judge-only pass runs one task, so the reduction's overrides would name labels it lacks.
-    subset = f"{pipeline}#imageQualityQa" if item.judgeOnly else pipeline
+    # A judge-only pass runs the QA tasks alone, so the reduction's overrides would name labels it lacks.
+    subset = f"{pipeline}#{','.join(JUDGE_TASKS)}" if item.judgeOnly else pipeline
     command += ["-b", butler, "-p", subset, "-i", ",".join(inputs), "-o", output]
     if rebase:
         command += ["--rebase"]

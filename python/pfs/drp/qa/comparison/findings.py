@@ -27,6 +27,7 @@ from pfs.drp.qa.metrics.gate import STATUS_ORDER, configThresholds, judge, loadT
 __all__ = [
     "DAILY_UNJUDGED",
     "FLUX_METRICS",
+    "describeImages",
     "describeSetup",
     "extentOf",
     "findings",
@@ -284,14 +285,53 @@ def findings(
     images["status"] = [STATUS_ORDER[int(r)] if not pd.isna(r) else "" for r in worst.reindex(images.index)]
     crossings = judged[judged["status"].isin(["WARN", "FAIL"])]
     images["metrics"] = crossings.groupby("row")["reason"].agg("; ".join).reindex(images.index).fillna("")
-    images["extent"] = extentOf(images)
     images["expected"] = _expected(metrics.reset_index(drop=True), visitSet)
+    return describeImages(images, visits, notes)
+
+
+def describeImages(
+    images: pd.DataFrame, visits: pd.DataFrame, notes: pd.DataFrame | None = None
+) -> pd.DataFrame:
+    """Return the images that warn or fail, with what is known of their visits.
+
+    The common tail of `findings` and of
+    `pfs.drp.qa.comparison.residuals.residualFindings`: each judged
+    table says what crossed, this says where and in what setup.
+
+    Parameters
+    ----------
+    images : `pandas.DataFrame`
+        One row per judged image: ``visit``, ``arm``, ``spectrograph``,
+        ``status`` (``PASS``, ``WARN``, ``FAIL`` or empty) and ``metrics``
+        (the crossings, as text); ``expected`` optional. Every image is
+        given, not only the bad ones: the extent of a problem is judged
+        against the images of its visit. Other columns are kept, after the
+        standard ones.
+    visits : `pandas.DataFrame`
+        From `pfs.drp.qa.comparison.classify.classifyVisits`.
+    notes : `pandas.DataFrame`, optional
+        From `pfs.drp.qa.comparison.queries.readNotes`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        The ``WARN`` and ``FAIL`` rows, in the columns `findings` describes,
+        then any other column of ``images``, sorted by image.
+    """
+    keys = ["visit", "arm", "spectrograph"]
+    images = images.reset_index(drop=True)
+    if "expected" not in images:
+        images = images.assign(expected="")
+    images = images.assign(extent=extentOf(images))
+    standard = [*keys, "status", "metrics", "extent", "expected"]
+    extra = [column for column in images.columns if column not in standard]
 
     info = visits.rename(columns={"pfs_visit_id": "visit"}).set_index("visit")
     result = images[images["status"].isin(["WARN", "FAIL"])].copy()
+    columns = [*keys, "night", "sequence_type", "category", "validated", "iic_sequence_id", "status"]
+    columns += ["metrics", "extent", "expected", "setup", "notes", *extra]
     if result.empty:
-        columns = [*keys, "night", "sequence_type", "category", "validated", "iic_sequence_id", "status"]
-        return pd.DataFrame(columns=[*columns, "metrics", "extent", "expected", "setup", "notes"])
+        return pd.DataFrame(columns=columns)
     for column in ("night", "sequence_type", "category", "validated", "iic_sequence_id"):
         result[column] = result["visit"].map(info[column])
     result["setup"] = [
@@ -299,8 +339,6 @@ def findings(
     ]
     result["extent"] = _wholeSequence(result, images, info)
     result["notes"] = _notesFor(result, info, notes)
-    columns = [*keys, "night", "sequence_type", "category", "validated", "iic_sequence_id", "status"]
-    columns += ["metrics", "extent", "expected", "setup", "notes"]
     return result[columns].sort_values(keys, ignore_index=True)
 
 

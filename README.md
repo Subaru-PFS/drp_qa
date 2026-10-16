@@ -101,6 +101,12 @@ are derived from the validation set (PIPE2D-1956). The weighted RMS and the soft
 `iqQaMetrics` and `iqQaSpeciesMetrics`, not recomputed. Logic in the stack-free `pfs.drp.qa.metrics.lineResiduals`.
 No plot is drawn as the task runs: plot `dmLineResidualData` afterwards.
 
+It runs in `pipelines/qaThresholds.yaml` beside `imageQualityQa`, so the thresholds notebook and comparison mode
+measure it on every visit they judge: comparison mode reports its verdicts beside the gate's
+([Comparison mode](#comparison-mode)), and the notebook derives the scatter thresholds from the validation visits
+([QA thresholds](#qa-thresholds-and-the-validation-visit-set)), written to `dmLineResidualThresholds-<run>.yaml` for
+`thresholdsFile`.
+
 ##### Options
 
 - `minLines`: fewest lines a species needs to be measured. Default `10`.
@@ -510,11 +516,14 @@ verdict is known. The decisions behind the current set:
   requirement: Run25's known-good values sit at most 1.4 % above their median (3.3 % for Argon arcs, whose b, r and m
   widths scatter most), healthy detectors moved −3 to +4 % between Run25 and Run30, and the SM1 defocus reads +24 to
   +41 %. On Run25 no known-good arc or quartz fails and one warns (135841 m1 Argon); every known-bad one fails.
-- **`dmLineResiduals` judges drift by tolerance, scatter not yet** (PIPE2D-1921, PIPE2D-1956). The median offsets
-  from `detectorMap_calib` are judged at WARN 1 px and FAIL 2 px, a physical limit short of drp_stella's 3 px
-  line-search radius: offsets from a calibration sit near zero in the run it came from, so no percentile applies. The
-  robust RMS of `RESERVED` lines against the visit's own detectorMap is stored and not judged until thresholds are
-  derived from Run25's known-good visits; until then `dmResiduals` runs beside it for comparison.
+- **`dmLineResiduals` judges drift by tolerance, scatter by derived thresholds** (PIPE2D-1921, PIPE2D-1956). The
+  median offsets from `detectorMap_calib` are judged at WARN 1 px and FAIL 2 px, a physical limit short of
+  drp_stella's 3 px line-search radius: offsets from a calibration sit near zero in the run it came from, so no
+  percentile applies. The robust RMS of `RESERVED` lines against the visit's own detectorMap is derived in the
+  notebook like the other percentile thresholds, per arm, species and camera set, from the known-good visits of each
+  arm's reference run less each calibration's own input visits (their adjusted maps are fitted to the lines the
+  calibration was), and adopted through the task's `thresholdsFile`. Until a file is adopted it is stored, not
+  judged, and `dmResiduals` runs beside it for comparison.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
 - **Thresholds hold for the pipeline that reduced their visits** (PIPE2D-1938). Two reductions of the same Run25
@@ -631,6 +640,13 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
 - **Findings are written from the data.** Each `WARN` or `FAIL` image gets the metrics that crossed, how far the
   problem spreads (detector, arm, spectrograph, most of the visit, the whole sequence), the setup and the opdb's
   notes beside it. Notes never decide a verdict.
+- **Line residuals are judged beside the gate** (PIPE2D-1956). `dmLineResiduals` runs in the same passes as
+  `imageQualityQa`, and the report's *Line residuals* section has its verdicts per detector and night, the
+  recommended actions by arm, its problems and findings (the reference, species and metric of each crossing), and the
+  scatter of the lines the fit held back, by arm and species, beside the reference run's: what a scatter threshold is
+  derived from. `dmLineResidualSummary-<period>.parquet`, `dmLineResidualMetrics-<period>.parquet` and
+  `lineResidualFindings-<period>.csv` are written beside the report. A collection judged before the task joined the
+  pipeline has none, and the section says so.
 
 Four steps, each safe to repeat. Files go under `--data-dir`: opdb reads in `opdb/`, everything else in
 `<run>/qa/<drp_qa version>/`; the report shows science visits, so keep it local.
@@ -653,7 +669,8 @@ run's own). Its collection and files are named after that pipeline, `<period>/<v
 drp_stella's `getPfsVersions`, each product's version if they differ; `--pipeline-version` names it), so a new
 pipeline starts afresh while a new drp_qa version reuses the same pipeline's reductions and only judges again. Passes are `calibration`,
 `sky` and `unvalidated-calibration`, gated first, each split by sequence: sequences with an image to reduce get the
-whole pipeline, and sequences already reduced by drpActor only `imageQualityQa` (a `-judge` pass, e.g. `sky-judge`;
+whole pipeline, and sequences already reduced by drpActor only the QA tasks, `imageQualityQa` and `dmLineResiduals`
+(a `-judge` pass, e.g. `sky-judge`;
 `--pass sky` selects both). Otherwise pipetask reruns `cosmicray` wherever a reduction lacks the `cosmicray_log`
 that `imageQualityQa` optionally reads, though the reduction is reused; the judge-only images then have no
 cosmic-ray counts, which are not gated. `run --dry-run` builds
