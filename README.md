@@ -494,14 +494,18 @@ verdict is known. The decisions behind the current set:
 
 - **Run25 is the reference run.** Its calibrations were made for it, and it is the most complete stable set. Every
   threshold is derived from Run25's known-good visits.
-- **The validation set holds Run25's known-good visits only.** From other runs it holds only known-bad visits, as
-  fault examples: each is checked against the thresholds, and none derives one. (Run27 and Run30 known-good entries
-  still in the YAML are removed by PIPE2D-1933.)
+- **The validation set holds Run25's known-good visits**, and Run29's for two detectors' quartz (below). From
+  other runs it holds only known-bad visits, as fault examples: each is checked against the thresholds, and none
+  derives one.
 - **A set is never its own reference.** The gate decides whether a run's calibration set should be used to build its
   calibrations, so a set counts as known-good only once the calibrations built from it have proved out (used, with good
-  reductions), and then only for later runs. Each arm's reference is chosen from such sets (PIPE2D-1938): Run25's
-  n-arm thresholds predate the pipeline changes that made the n arm reliable (about Run29–30), so n-arm verdicts are
-  provisional until then.
+  reductions), and then only for later runs. Each detector's reference is chosen from such sets (PIPE2D-1938): reduced
+  with one pipeline, Runs 25–30 agree with Run25 to within 3 % in `medFwhm` everywhere but two cameras, so Run25 stays
+  the reference except for b2 quartz (SM2's slit was refocused on 2026-03-11 and its quartz width stepped from 3.12
+  to 3.34 px, where it has stayed) and n4 quartz (Run25's 3.10 px is the outlier against a steady 3.22 px since), which
+  take Run29's detectorMap set (`cameras`/`excludeCameras` in the YAML; `referenceRuns: [25, 29]`). The n-arm
+  verdicts were provisional while Run25's n-arm reductions predated the pipeline fixes; reduced afresh, the n arm agrees
+  with Run25 like the others.
 - **Other runs are compared, not used for derivation.** Comparison mode (PIPE2D-1929) judges every visit of a run
   against Run25's thresholds; Run30 is the first. Run27 is not a fair comparison: no
   calibrations were made from it, and its n-arm flag rates sit 2–5 points above Run25's.

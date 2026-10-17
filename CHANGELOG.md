@@ -10,6 +10,12 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **b2 and n4 quartz take their reference from Run29** (PIPE2D-1938) — reduced with one pipeline, Runs 25–30 agree
+  with Run25 in `medFwhm` to within 3 % everywhere but b2 quartz (SM2's slit refocused on 2026-03-11) and n4 quartz
+  (Run25's width is the outlier). Run25's trace entries leave those two out, Run29's detectorMap set holds them alone,
+  and `referenceRuns` is `[25, 29]`; the thresholds are re-derived from the fresh Run25 and Run29 comparison
+  collections with the pipeline recorded.
+
 - **Per-camera selectors in the validation set, and a guard on `--fresh`** (PIPE2D-1938) — entries take `cameras`
   and `excludeCameras` (`b2`, `n4`), so a detector's known-good values can come from another reference run; the
   thresholds notebook takes `EXTRA_COLLECTIONS`, read beside the run for such reference runs. `qaComparison.py run
