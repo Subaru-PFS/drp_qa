@@ -11,6 +11,7 @@ comment for the entry schema.
 This module imports neither the LSST stack nor the Butler, so it runs in CI.
 """
 
+import re
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from importlib.resources import files
@@ -19,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import yaml
 
 __all__ = [
@@ -76,6 +78,13 @@ class ValidationVisit:
         Arms the entry applies to; empty means all arms.
     spectrographs : `tuple` [`int`]
         Spectrographs the entry applies to; empty means all spectrographs.
+    cameras : `tuple` [`str`]
+        Cameras (``b2``, ``n4``) the entry applies to, within ``arms`` and
+        ``spectrographs``; empty means all. For a detector whose reference is
+        another run's: a camera that changed state, or whose reference-run
+        value is the outlier (PIPE2D-1938).
+    excludeCameras : `tuple` [`str`]
+        Cameras the entry leaves out, the complement of ``cameras``.
     seqType : `str` or `None`
         The ``W_SEQNAM`` value this entry applies to, if restricted.
     metric : `str` or `None`
@@ -102,6 +111,8 @@ class ValidationVisit:
     run: int | None = None
     arms: tuple[str, ...] = ()
     spectrographs: tuple[int, ...] = ()
+    cameras: tuple[str, ...] = ()
+    excludeCameras: tuple[str, ...] = ()
     seqType: str | None = None
     metric: str | None = None
     reason: str | None = None
@@ -143,6 +154,12 @@ class ValidationVisit:
             return False
         if spectrograph is not None and self.spectrographs and spectrograph not in self.spectrographs:
             return False
+        if arm is not None and spectrograph is not None:
+            camera = f"{arm}{spectrograph}"
+            if self.cameras and camera not in self.cameras:
+                return False
+            if camera in self.excludeCameras:
+                return False
         return not (seqType is not None and self.seqType is not None and seqType != self.seqType)
 
 
@@ -316,12 +333,27 @@ def matchRows(frame, entries: Iterable[ValidationVisit]) -> np.ndarray:
         series = frame[column]
         return (series.isna() | series.isin(values)).to_numpy()
 
+    def cameraSelector(cameras: Sequence[str], exclude: Sequence[str]) -> np.ndarray:
+        # A row whose arm or spectrograph is unknown is not restricted, as for the other selectors.
+        if not (cameras or exclude) or "arm" not in frame.columns or "spectrograph" not in frame.columns:
+            return np.ones(len(frame), dtype=bool)
+        spectrograph = pd.to_numeric(frame["spectrograph"], errors="coerce")
+        known = (frame["arm"].notna() & spectrograph.notna()).to_numpy()
+        camera = frame["arm"].astype(str) + spectrograph.astype("Int64").astype(str)
+        mask = np.ones(len(frame), dtype=bool)
+        if cameras:
+            mask &= ~known | camera.isin(cameras).to_numpy()
+        if exclude:
+            mask &= ~known | ~camera.isin(exclude).to_numpy()
+        return mask
+
     mask = np.zeros(len(frame), dtype=bool)
     for entry in entries:
         mask |= (
             frame["visit"].isin(entry.visits).to_numpy()
             & selector("arm", entry.arms)
             & selector("spectrograph", entry.spectrographs)
+            & cameraSelector(entry.cameras, entry.excludeCameras)
             & selector("seqName", (entry.seqType,) if entry.seqType is not None else ())
         )
     return mask
@@ -518,7 +550,7 @@ def formatTables(visitSet: ValidationVisitSet) -> str:
                 visits,
                 "" if entry.run is None else str(entry.run),
                 entry.sequenceType or "",
-                ", ".join(entry.arms) or "all",
+                _armsCell(entry),
                 ", ".join(str(s) for s in entry.spectrographs) or "all",
                 entry.seqType or "any",
                 entry.expect,
@@ -528,6 +560,16 @@ def formatTables(visitSet: ValidationVisitSet) -> str:
             lines.append("| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks) + "\n"
+
+
+def _armsCell(entry: ValidationVisit) -> str:
+    """Return the arms, and the camera selectors, of an entry for its table row."""
+    text = ", ".join(entry.arms) or "all"
+    if entry.cameras:
+        text += f"; cameras {', '.join(entry.cameras)}"
+    if entry.excludeCameras:
+        text += f"; not {', '.join(entry.excludeCameras)}"
+    return text
 
 
 def defaultValidationVisitsPath() -> Path:
@@ -679,6 +721,8 @@ _ENTRY_KEYS = frozenset(
         "sequenceType",
         "arms",
         "spectrographs",
+        "cameras",
+        "excludeCameras",
         "seqType",
         "expect",
         "metric",
@@ -740,12 +784,20 @@ def _parseEntry(item: Any, defaultExpect: str | None, where: str) -> ValidationV
             f"{where}: invalid sequenceType {sequenceType!r}, must be one of {', '.join(SEQUENCE_TYPES)}"
         )
 
+    cameras = _parseCameras(item.get("cameras"), "cameras", where)
+    excludeCameras = _parseCameras(item.get("excludeCameras"), "excludeCameras", where)
+    both = sorted(set(cameras) & set(excludeCameras))
+    if both:
+        raise ValueError(f"{where}: cameras both selected and excluded: {', '.join(both)}")
+
     return ValidationVisit(
         visits=visits,
         expect=expect,
         sequenceType=sequenceType,
         arms=_parseSequence(item.get("arms"), str, "arms", where),
         spectrographs=_parseSequence(item.get("spectrographs"), int, "spectrographs", where),
+        cameras=cameras,
+        excludeCameras=excludeCameras,
         seqType=_optionalStr(item.get("seqType")),
         metric=_optionalStr(item.get("metric")),
         reason=_optionalStr(item.get("reason")),
@@ -753,6 +805,18 @@ def _parseEntry(item: Any, defaultExpect: str | None, where: str) -> ValidationV
         unconfirmed=_asBool(item.get("unconfirmed", False), "unconfirmed", where),
         placeholder=placeholder,
     )
+
+
+_CAMERA_RE = re.compile(r"^[brnm][1-4]$")
+
+
+def _parseCameras(value: Any, name: str, where: str) -> tuple[str, ...]:
+    """Parse a list of camera names (``b2``, ``n4``), validating each."""
+    cameras = _parseSequence(value, str, name, where)
+    bad = [camera for camera in cameras if not _CAMERA_RE.match(camera)]
+    if bad:
+        raise ValueError(f"{where}: {name} must name cameras like b2 or n4, not {', '.join(bad)}")
+    return cameras
 
 
 def _parseVisits(item: dict, where: str, placeholder: bool) -> tuple[int, ...]:

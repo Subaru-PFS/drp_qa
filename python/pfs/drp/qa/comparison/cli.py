@@ -60,6 +60,7 @@ __all__ = [
     "pipelineVersion",
     "pipetaskFailures",
     "resolveCollections",
+    "unexpectedPipeline",
 ]
 
 #: Where drpActor writes its reductions.
@@ -536,7 +537,12 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
     """Run the ``plan`` and ``run`` commands."""
     from lsst.daf.butler import Butler
 
-    from pfs.drp.qa.comparison.butlerQueries import collectionExists, detectorHoldings, ownRuns
+    from pfs.drp.qa.comparison.butlerQueries import (
+        collectionExists,
+        detectorHoldings,
+        freshPipelines,
+        ownRuns,
+    )
 
     butler = Butler(args.butler, writeable=False)
     judged = visits.loc[visits["judged"], "pfs_visit_id"]
@@ -560,6 +566,19 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
     print("detector images:", ", ".join(f"{(detectors['status'] == s).sum()} {s}" for s in STATUS_ORDER))
     if (detectors["status"] == "failed").any():
         print("failed images are not rescheduled (they fail the same way each time); --retry-failed to retry")
+    if args.fresh:
+        others = [
+            label for label in freshPipelines(butler, args.prefix, period.name) if label != args.variant
+        ]
+        warning = unexpectedPipeline(
+            args.variant, earlier, others, int((detectors["status"] == "to reduce").sum())
+        )
+        if warning and args.command == "run" and not args.new_pipeline:
+            raise SystemExit(
+                f"!! {warning}\n!! Set up that stack, or pass --new-pipeline to reduce with this one."
+            )
+        if warning:
+            print(f"!! {warning}", file=sys.stderr)
 
     outputExists = collectionExists(butler, output)
     # Skip what this version has judged, in its own runs: skipping the output chain would also skip
@@ -678,6 +697,41 @@ def pipetaskFailures(text: str, limit: int = MAX_FAILURE_LINES) -> tuple[str | N
     return summary, [line[:300] for line in lines[-limit:]]
 
 
+def unexpectedPipeline(
+    variant: str, earlier: Sequence[str], others: Sequence[str], toReduce: int
+) -> str | None:
+    """Say when a ``--fresh`` run would reduce a period again under a new pipeline label.
+
+    Reductions are reused only under the same label, so a shell with another
+    stack set up plans the whole reduction again, silently, where a judge pass
+    was meant (PIPE2D-1938).
+
+    Parameters
+    ----------
+    variant : `str`
+        This run's pipeline label; empty when not ``--fresh``.
+    earlier : sequence of `str`
+        The period's earlier collections under this label (reused).
+    others : sequence of `str`
+        The period's fresh pipeline labels other than this one.
+    toReduce : `int`
+        Detector images the plan would reduce.
+
+    Returns
+    -------
+    `str` or `None`
+        The warning, or `None` when nothing is amiss: no other label, this
+        label already has reductions, or nothing is to reduce.
+    """
+    if not variant or earlier or not others or toReduce <= 0:
+        return None
+    return (
+        f"--fresh would reduce {toReduce} detector images under pipeline {variant!r}, which has no "
+        f"reductions of this period yet, while {', '.join(repr(o) for o in others)} "
+        f"{'has' if len(others) == 1 else 'have'}: is this the stack you meant?"
+    )
+
+
 def _earlier(butler, args, period: Period, output: str) -> list[str]:
     """Return the earlier collections of this period, and mode, whose reductions this one reuses."""
     from pfs.drp.qa.comparison.butlerQueries import earlierReductions
@@ -757,6 +811,12 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         choices=["set", "daily", "single"],
         help="judge only the arcs and traces of this cadence, e.g. set for the calibration sets; repeatable",
+    )
+    parser.add_argument(
+        "--new-pipeline",
+        action="store_true",
+        help="with run --fresh: reduce the period again under this pipeline label although another label"
+        " already has fresh reductions of it (otherwise run stops, since that is the whole reduction again)",
     )
     parser.add_argument(
         "--retry-failed",

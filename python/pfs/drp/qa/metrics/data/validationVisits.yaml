@@ -33,6 +33,9 @@
 # Optional selectors (omitted means "every value"):
 #   arms:           list of str, e.g. [b, r, n, m]
 #   spectrographs:  list of int, e.g. [1, 2, 3, 4]
+#   cameras:        list of str, e.g. [b2, n4]: only these cameras, within arms and
+#                   spectrographs. For a detector whose reference is another run's.
+#   excludeCameras: list of str: every camera but these.
 #   seqType:        str, the W_SEQNAM value, e.g. "Arc: HgCd"
 #
 # Sections:

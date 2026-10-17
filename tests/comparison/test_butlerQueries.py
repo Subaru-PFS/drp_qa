@@ -93,3 +93,32 @@ def testOwnRuns():
         "u/me/comparison/run30/v2/20261013T105556Z",
     ]
     assert ownRuns(butler, "u/me/comparison/run30/v3") == []
+
+
+def testFreshPipelines():
+    """The pipeline labels of a period's fresh collections: chains two levels under the period."""
+    from pfs.drp.qa.comparison.butlerQueries import freshPipelines
+
+    def info(name, kind):
+        return SimpleNamespace(name=name, type=SimpleNamespace(name=kind))
+
+    infos = [
+        info("u/me/comparison/run25/v1/pfs-w.2026.39", "CHAINED"),
+        info("u/me/comparison/run25/v1/pfs-w.2026.39/20261017T000000Z", "RUN"),
+        info("u/me/comparison/run25/v1/datamodel-w.2026.40+drp_stella-w.2026.41", "CHAINED"),
+        info("u/me/comparison/run25/v2/datamodel-w.2026.40+drp_stella-w.2026.41", "CHAINED"),
+        info("u/me/comparison/run25/v1", "CHAINED"),  # default mode: one level
+        info("u/me/comparison/run25/v1/20261013T000000Z", "RUN"),  # its run, not a label
+        info("u/me/comparison/run26/v1/pfs-w.2026.39", "CHAINED"),  # another period
+    ]
+    butler = SimpleNamespace(
+        collections=SimpleNamespace(query_info=lambda pattern: [i for i in infos if fnmatch(i.name, pattern)])
+    )
+    assert freshPipelines(butler, "u/me/comparison", "run25") == {
+        "datamodel-w.2026.40+drp_stella-w.2026.41": [
+            "u/me/comparison/run25/v2/datamodel-w.2026.40+drp_stella-w.2026.41",
+            "u/me/comparison/run25/v1/datamodel-w.2026.40+drp_stella-w.2026.41",
+        ],
+        "pfs-w.2026.39": ["u/me/comparison/run25/v1/pfs-w.2026.39"],
+    }
+    assert freshPipelines(butler, "u/me/comparison", "run27") == {}

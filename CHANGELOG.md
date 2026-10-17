@@ -10,6 +10,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Per-camera selectors in the validation set, and a guard on `--fresh`** (PIPE2D-1938) — entries take `cameras`
+  and `excludeCameras` (`b2`, `n4`), so a detector's known-good values can come from another reference run; the
+  thresholds notebook takes `EXTRA_COLLECTIONS`, read beside the run for such reference runs. `qaComparison.py run
+  --fresh` stops when its pipeline label has no reductions of the period while another label has, since that would be
+  the whole reduction again where a judge pass was meant (`--new-pipeline` overrides; `plan` warns):
+  `butlerQueries.freshPipelines`, `cli.unexpectedPipeline`.
+
 - **`dmLineResiduals` in the thresholds pipeline and comparison mode** (PIPE2D-1956) — `pipelines/qaThresholds.yaml`
   runs it beside `imageQualityQa`, and a judge-only comparison pass runs both (`plan.JUDGE_TASKS`). Comparison mode
   reads `dmLineResidualSummary` and `dmLineResidualMetrics`, writes them and `lineResidualFindings-<period>.csv` beside

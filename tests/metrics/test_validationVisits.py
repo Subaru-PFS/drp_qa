@@ -540,3 +540,50 @@ class TestSequenceGroups:
         """Run25 block A and block B argon are different sequences."""
         groups = sequenceGroups(loadValidationVisits())
         assert groups[133025] == groups[133027] != groups[133042]
+
+
+class TestCameraSelectors:
+    def testMatchesAppliesCamerasWhenBothAreKnown(self):
+        entry = ValidationVisit(visits=(1,), expect="PASS", arms=("b", "n"), cameras=("b2", "n4"))
+        assert entry.matches(1, "b", 2) and entry.matches(1, "n", 4)
+        assert not entry.matches(1, "b", 1) and not entry.matches(1, "n", 2)
+        assert entry.matches(1, "b") and entry.matches(1, spectrograph=1)  # unknown half: not applied
+        assert not entry.matches(1, "r", 2)  # arms still apply
+        excluded = ValidationVisit(visits=(1,), expect="PASS", excludeCameras=("b2",))
+        assert not excluded.matches(1, "b", 2) and excluded.matches(1, "b", 1) and excluded.matches(1, "b")
+
+    def testMatchRowsUsesCameras(self):
+        import pandas as pd
+
+        frame = pd.DataFrame(
+            {"visit": [1, 1, 1, 1, 2], "arm": ["b", "b", "n", None, "b"], "spectrograph": [1, 2, 4, 2, 2]}
+        )
+        only = ValidationVisit(visits=(1, 2), expect="PASS", cameras=("b2", "n4"))
+        assert matchRows(frame, [only]).tolist() == [
+            False,
+            True,
+            True,
+            True,
+            True,
+        ]  # null arm: not restricted
+        without = ValidationVisit(visits=(1, 2), expect="PASS", excludeCameras=("b2", "n4"))
+        assert matchRows(frame, [without]).tolist() == [True, False, False, True, False]
+        # Negative control: a frame without spectrographs can't apply a camera selector.
+        assert matchRows(frame.drop(columns="spectrograph"), [only]).all()
+
+    def testParseCameras(self, writeYaml):
+        path = writeYaml(
+            "version: 1\nknown_good:\n"
+            "  - {visitRange: [10, 12], sequenceType: scienceTrace, cameras: [b2, n4], excludeCameras: [r1]}\n"
+        )
+        entry = loadValidationVisits(path).knownGood[0]
+        assert entry.cameras == ("b2", "n4") and entry.excludeCameras == ("r1",)
+        for text, message in (
+            ("cameras: [b5]", "cameras must name cameras"),
+            ("cameras: [bb2]", "cameras must name cameras"),
+            ("excludeCameras: [x2]", "excludeCameras must name cameras"),
+            ("cameras: [b2], excludeCameras: [b2]", "both selected and excluded"),
+        ):
+            bad = writeYaml(f"version: 1\nknown_good:\n  - {{visit: 1, sequenceType: scienceArc, {text}}}\n")
+            with pytest.raises(ValueError, match=message):
+                loadValidationVisits(bad)
