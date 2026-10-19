@@ -16,6 +16,7 @@ import pandas as pd
 import pytest
 from matplotlib import pyplot as plt
 from matplotlib.backend_bases import MouseEvent
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.collections import PathCollection
 from matplotlib.colors import to_rgb
 from matplotlib.figure import Figure
@@ -419,7 +420,7 @@ def testShowAgcErrorsForVisitsSign(realAgcData):
 
 
 def testShowAgcErrorsForVisitsPlotActorAxes(realAgcData):
-    """ics_pfsPlotActor's three axes, given without the figure, are drawn on and titled at the top."""
+    """ics_pfsPlotActor's three axes, given without the figure, are drawn on; the figure is titled."""
     fig = Figure()
     ax1 = fig.add_subplot(311)
     axes = [ax1, fig.add_subplot(312, sharex=ax1), fig.add_subplot(313, sharex=ax1)]
@@ -429,8 +430,9 @@ def testShowAgcErrorsForVisitsPlotActorAxes(realAgcData):
     assert plot.fig is fig
     assert list(plot.axes[:, 0]) == axes
     assert len(fig.axes) == 3
-    assert axes[0].get_title().startswith("pfs_visit_id 148284..148292")
-    assert not fig.get_suptitle()
+    assert fig.get_suptitle().startswith("pfs_visit_id 148284..148292")
+    # Negative control: no panel carries the title, as drp_qa once put it on the top-left one.
+    assert not any(ax.get_title() for ax in axes)
 
 
 def testShowAgcErrorsForVisitsNoValidMatches(realAgcData):
@@ -1027,6 +1029,42 @@ def testPlotFocusColorbar(focusSweep):
     assert len(first.colorbars) == 1
     assert second.colorbars[0] is first.colorbars[0]
     assert len(fig.axes) == 4
+
+
+def testPlotFocusColorbarSurvivesTightLayout(focusSweep):
+    """The colorbar sits right of the top focus-error panel, clear of every panel after tight_layout.
+
+    ics_pfsPlotActor calls ``tight_layout`` after drawing. A colorbar taking its space from every panel
+    (``fig.colorbar(ax=list(axes))``, as plotFocus once did) is spread over by it.
+    """
+    fig = Figure(figsize=(15, 6.5))
+    FigureCanvasAgg(fig)
+    axes = fig.subplots(2, 1, sharex=True, squeeze=False).flatten()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        plot = plotFocus(focusSweep, showAGActorFocus=False, colorBy="visit", fig=fig, axes=axes)
+        fig.tight_layout()
+        fig.canvas.draw()
+    assert not [w for w in caught if "tight_layout" in str(w.message)]
+
+    (colorbar,) = plot.colorbars
+    box = colorbar.ax.get_position()
+    assert box.x0 >= plot.axes[0, 0].get_position().x1
+    assert not any(box.overlaps(ax.get_position()) for ax in plot.axes.flat)
+
+    # Negative control: the old placement, a colorbar taking its space from every panel, is overlapped.
+    old = Figure(figsize=(15, 6.5))
+    FigureCanvasAgg(old)
+    oldAxes = old.subplots(2, 1, sharex=True, squeeze=False).flatten()
+    scatter = oldAxes[0].scatter(
+        focusSweep.agc_exposure_id, focusSweep.agc_camera_id, c=focusSweep.pfs_visit_id
+    )
+    oldColorbar = old.colorbar(scatter, ax=list(oldAxes))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        old.tight_layout()
+    old.canvas.draw()
+    assert any(oldColorbar.ax.get_position().overlaps(ax.get_position()) for ax in oldAxes)
 
 
 def clickAt(fig: Figure, ax, x: float, y: float) -> None:
