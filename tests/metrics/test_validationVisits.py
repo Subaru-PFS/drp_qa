@@ -204,13 +204,17 @@ class TestUnconfirmedVerdicts:
         """They are real visits; hiding them defeats the point of recording them."""
         visitSet = loadValidationVisits()
         suspect = {entry.visits[0] for entry in visitSet.knownBad if entry.unconfirmed}
-        # 133532, 135830, 134334: Run25 SM3's y offset from its calibration (PIPE2D-1921).
-        assert suspect == {149883, 150661, 133532, 135830, 134334}
+        # Run25 SM3's y offset from its calibration (PIPE2D-1921): its traces, arcs and twilights
+        # after the calibration block, named visit by visit (an entry's visits are reduced, so a
+        # range here would sweep in every visit between them).
+        sm3 = {133532, 133536, 134338, 135828, 135849, 135830, 134334, 134880, 135275}
+        assert suspect == {149883, 150661} | sm3
+        assert len(visitSet.visits) < 200  # negative control: no entry spans a run
 
     def testConfirmedBadExcludesThem(self):
         """A guess must not decide whether a threshold separates the bad data."""
         visitSet = loadValidationVisits()
-        assert len(visitSet.confirmedBad) == len(visitSet.knownBad) - 5
+        assert len(visitSet.confirmedBad) == len(visitSet.knownBad) - 11
         assert all(not entry.unconfirmed for entry in visitSet.confirmedBad)
 
     def testTheyStillCarryAVerdictAndAReason(self):
