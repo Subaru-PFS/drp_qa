@@ -235,8 +235,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   matplotlib 3.9; FWHM points are drawn once; the cursor readout reads correctly and needs no database; and the
   averages use only valid matches. `plotFocus` joins each half's FWHM medians whatever `connectMedian`, as
   drp_stella did, and its focus-error legends name every camera, greying and striking out any with no data
-  (INSTRM-3036). `README.md` has a "Guider tools" section, and the notebook
-  `docs/guider-plots.ipynb` describes each plot (what it shows, its data, how to read it, what to look for) beside
+  (INSTRM-3036). As in drp_stella, every plot titles the figure, also on given axes, and `plotFocus`'s colorbar
+  sits beside the top focus-error panel, where a caller's `tight_layout` leaves it clear. `README.md` has a
+  "Guider tools" section, and the notebook `docs/guider-plots.ipynb` describes each plot (what it shows, its data,
+  how to read it, what to look for) beside
   an annotated sample drawn from the tests' AG data; with `USE_OPDB = True` it runs on the opdb and checks the
   readers and fits the plots don't use. `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its
   drp_qa replacement, on a real opdb (PIPE2D-1899).

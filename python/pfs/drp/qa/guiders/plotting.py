@@ -11,9 +11,11 @@ panels, the artists showing the data, and its colorbars. Given the
 ones, so that a figure can be redrawn in place, as ics_pfsPlotActor does.
 Pyplot is only used to make a new figure, never to find the current axes.
 
-A plot that makes its panels (given no ``ax`` or ``axes``) puts its title on
-the figure; one drawn on given axes puts it on its top-left panel, so that
-plots sharing a figure don't overwrite each other's.
+Every plot puts its title on the figure, as drp_stella did, including one
+drawn on given axes. Plots sharing a figure therefore overwrite each other's
+title, the last drawn winning (in ics_pfsPlotActor's combined guider view,
+`showGuiderErrors`'s); give each its own `~matplotlib.figure.SubFigure` to
+keep both.
 
 Positions are in hardware coordinates and offsets are a center minus a
 reference, in microns, as `pfs.drp.qa.guiders.coordinates` says. AG cameras
@@ -41,6 +43,7 @@ from matplotlib.path import Path
 from matplotlib.patheffects import AbstractPathEffect
 from matplotlib.ticker import MaxNLocator, ScalarFormatter
 from matplotlib.transforms import IdentityTransform
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from pfs.drp.qa.guiders import analysis
 from pfs.drp.qa.guiders.analysis import (
@@ -183,11 +186,8 @@ def _plainTicks(axis, rotate: bool = False) -> None:
 
 
 def _finish(fig: Figure | SubFigure, axes: np.ndarray, ownPanels: bool, title: str) -> None:
-    """Title the figure if the plot made its panels, else its top-left panel; label ticks in full."""
-    if ownPanels:
-        fig.suptitle(title)
-    else:
-        axes[0, 0].set_title(title, fontsize="medium")
+    """Title the figure, whether or not the plot made its panels; label ticks in full."""
+    fig.suptitle(title)
     for ax in axes.flat:
         _plainTicks(ax.xaxis, rotate=axes.shape[1] > 1)
         _plainTicks(ax.yaxis)
@@ -2208,7 +2208,13 @@ def plotFocus(
 
     newColorbars = ()
     if mappable is not None:
-        newColorbars = (_colorbar(fig, mappable, colorBy, colorbars, 0, ax=list(axes.flat)),)
+        # Beside the top focus-error panel, as drp_stella put it: a colorbar taking its space from every panel
+        # doesn't survive the caller's tight_layout, which spreads the panels back over it.
+        cax = None
+        if not colorbars:
+            divider = make_axes_locatable(axes[0, -1])
+            cax = divider.append_axes("right", size=f"{2 * axes.shape[1]}%", pad=0.05)
+        newColorbars = (_colorbar(fig, mappable, colorBy, colorbars, 0, cax=cax),)
 
     if ownPanels and "agActor" in rows and "opdb" in rows:
         axes[rows.index("opdb"), 0].sharey(axes[rows.index("agActor"), 0])
