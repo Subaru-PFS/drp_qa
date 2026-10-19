@@ -714,7 +714,41 @@ known_bad:
   # u/wtg/qa-thresholds/006). The adjustment absorbs it, so the reductions are
   # good, but SM3's medianDeltaY reaches the 1.0 px WARN. Unconfirmed until the
   # cause is known: reported, not judged, and known-good for every other metric.
-  - visitRange: [133532, 135850]
+  # An entry's visits are reduced and read, so these name the SM3 traces and twilights themselves
+  # (the known-good entries' visits), not a range that would sweep in every visit between them.
+  - visitRange: [133532, 133533]
+    sequenceType: scienceTrace
+    spectrographs: [3]
+    seqType: "Trace"
+    expect: WARN
+    metric: medianDeltaY
+    unconfirmed: true
+    reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
+  - visitRange: [133536, 133537]
+    sequenceType: scienceTrace
+    spectrographs: [3]
+    seqType: "Trace"
+    expect: WARN
+    metric: medianDeltaY
+    unconfirmed: true
+    reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
+  - visitRange: [134338, 134339]
+    sequenceType: scienceTrace
+    spectrographs: [3]
+    seqType: "Trace"
+    expect: WARN
+    metric: medianDeltaY
+    unconfirmed: true
+    reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
+  - visitRange: [135828, 135829]
+    sequenceType: scienceTrace
+    spectrographs: [3]
+    seqType: "Trace"
+    expect: WARN
+    metric: medianDeltaY
+    unconfirmed: true
+    reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
+  - visitRange: [135849, 135850]
     sequenceType: scienceTrace
     spectrographs: [3]
     seqType: "Trace"
@@ -729,7 +763,23 @@ known_bad:
     metric: medianDeltaY
     unconfirmed: true
     reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
-  - visitRange: [134334, 135279]
+  - visitRange: [134334, 134337]
+    sequenceType: scienceObject
+    spectrographs: [3]
+    seqType: "Twilight sky"
+    expect: WARN
+    metric: medianDeltaY
+    unconfirmed: true
+    reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
+  - visitRange: [134880, 134886]
+    sequenceType: scienceObject
+    spectrographs: [3]
+    seqType: "Twilight sky"
+    expect: WARN
+    metric: medianDeltaY
+    unconfirmed: true
+    reason: "Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown."
+  - visitRange: [135275, 135279]
     sequenceType: scienceObject
     spectrographs: [3]
     seqType: "Twilight sky"
