@@ -567,13 +567,15 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
     if (detectors["status"] == "failed").any():
         print("failed images are not rescheduled (they fail the same way each time); --retry-failed to retry")
     if args.fresh:
-        others = [
-            label for label in freshPipelines(butler, args.prefix, period.name) if label != args.variant
-        ]
+        # This label's own collections include the output itself, which `earlier` leaves out: a run
+        # resumed after an interruption, or retried, must not be told its label has nothing yet.
+        labels = freshPipelines(butler, args.prefix, period.name)
+        known = [*earlier, *labels.get(args.variant, [])]
+        others = [label for label in labels if label != args.variant]
         warning = unexpectedPipeline(
-            args.variant, earlier, others, int((detectors["status"] == "to reduce").sum())
+            args.variant, known, others, int((detectors["status"] == "to reduce").sum())
         )
-        if warning and args.command == "run" and not args.new_pipeline:
+        if warning and args.command == "run" and not args.dry_run and not args.new_pipeline:
             raise SystemExit(
                 f"!! {warning}\n!! Set up that stack, or pass --new-pipeline to reduce with this one."
             )
@@ -816,7 +818,8 @@ def _parser() -> argparse.ArgumentParser:
         "--new-pipeline",
         action="store_true",
         help="with run --fresh: reduce the period again under this pipeline label although another label"
-        " already has fresh reductions of it (otherwise run stops, since that is the whole reduction again)",
+        " already has fresh reductions of it and this one none (otherwise run stops, since that is the whole"
+        " reduction again; plan and --dry-run only warn)",
     )
     parser.add_argument(
         "--retry-failed",

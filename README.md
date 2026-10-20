@@ -670,7 +670,8 @@ drp_stella's `getPfsVersions`, each product's version if they differ; `--pipelin
 pipeline starts afresh while a new drp_qa version reuses the same pipeline's reductions and only judges again. Since
 the label comes from the stack set up in the shell, `run --fresh` stops when its label has no reductions of the
 period yet while another label has (the whole reduction again, where a judge pass was meant); `--new-pipeline`
-reduces anyway, and `plan` only warns. Passes are `calibration`,
+reduces anyway, `plan` and `--dry-run` only warn, and a run resumed under its own label is not stopped. Passes are
+`calibration`,
 `sky` and `unvalidated-calibration`, gated first, each split by sequence: sequences with an image to reduce get the
 whole pipeline, and sequences already reduced by drpActor only the QA tasks, `imageQualityQa` and `dmLineResiduals`
 (a `-judge` pass, e.g. `sky-judge`;
