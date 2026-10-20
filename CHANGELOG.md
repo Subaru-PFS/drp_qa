@@ -28,10 +28,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   calibration's own input visits (zero against the calibration is the drift's concern). Not judged, with the reason
   in each entry's provenance: the lamps' y scatter; the mercury and cadmium lines, whose y scatter is intrinsically
   variable; trace centroids on arcs and twilights; and the sky-line species. A
-  `known_good` entry takes `metrics`, the metrics it is a reference for, and `excludeMetrics`: Run29's 2026-07-14 and
-  07-23 arc sets (which built no calibration) are reference values for the line scatter while the image-quality
-  references stay Run25's, and Run29's trace sets are b2 and n4's image-quality reference but not their scatter one,
-  which Run25 gives like every other camera's. `bin.src/judgeScatterThresholds.py` judges comparison mode's exported
+  `known_good` entry takes `metrics`, the metrics it is a reference for, and `excludeMetrics`: Run29's trace sets are
+  b2 and n4's image-quality reference but not their scatter one, which Run25 gives like every other camera's.
+  `bin.src/judgeScatterThresholds.py` judges comparison mode's exported
   scatter with a thresholds file, run by run: the acceptance check an adoption must pass. Comparison mode's scatter
   table is by observation type, and tables stored before the column take it from `iqQaMetrics`.
 

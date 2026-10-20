@@ -94,8 +94,8 @@ class ValidationVisit:
     metrics : `tuple` [`str`]
         For a ``known_good`` entry, the metrics it is known good for; empty
         means every metric. A visit can be a reference for one metric and not
-        another: Run29's arcs are reference values for the line scatter
-        (PIPE2D-1956) while the image-quality references stay Run25's.
+        another: Run25's trace sets are b2 and n4's reference for the line
+        scatter (PIPE2D-1956) while their image-quality reference is Run29's.
     excludeMetrics : `tuple` [`str`]
         For a ``known_good`` entry, metrics it is not a reference for: the
         complement of ``metrics``. Run29's trace sets are the b2 and n4
