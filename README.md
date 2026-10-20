@@ -277,17 +277,22 @@ Each metric is judged by the `thresholdsFile` entry for its population, and by t
 has none. `thresholdsFile` is an absolute path, or one relative to `pfs/drp/qa/metrics/data`; empty, the config fields
 judge alone.
 
-The default, `iqQaThresholds-run25.yaml`, holds the thresholds derived from the Run25 validation visits, as adopted
-(PIPE2D-1917, PIPE2D-1918, PIPE2D-1942) by `makeRun25Thresholds.py` beside it; each entry records its provenance:
+The default, `iqQaThresholds-run25.yaml`, holds the thresholds derived from the validation visits, as adopted
+(PIPE2D-1917, PIPE2D-1918, PIPE2D-1942, PIPE2D-1938) by `makeRun25Thresholds.py` beside it; each entry records its
+provenance. They were derived from `u/wtg/qa-thresholds/010`, every validation visit reduced afresh with the pipeline
+the file records (datamodel w.2026.40, obs_pfs w.2026.40, drp_stella w.2026.41-6-ge56938d2). The reference is Run25,
+except that b2 and n4 quartz take Run29's detectorMap set (see [QA thresholds](#qa-thresholds-and-the-validation-visit-set)).
 
-- `medFwhm` per detector and lamp: WARN 3 % and FAIL 5 % above the Run25 known-good median of the image's arm,
+- `medFwhm` per detector and lamp: WARN 3 % and FAIL 5 % above the reference known-good median of the image's arm,
   spectrograph, `obsType` and lamp (`species`), on arcs and quartz (from the calexp width), every arm included.
   The spectrographs of one arm differ from each other by more than any one of them varies (r quartz: r2 3.27 px,
   r4 3.39 px, each within 0.03 px), and the lamps of one arm differ even more (b arcs: Argon 2.5 px, Krypton 2.85 px).
-- `medFwhm` per arm, judging only an image whose detector and lamp have no Run25 median: arcs b 2.872/2.89,
-  r 2.987/2.993, n 3.05/3.1, m 3.18/3.21 px; quartz b 3.192/3.198, r 3.39/3.391, n 3.257/3.26 px, and m not judged
-  (16 known-good values, below the 20-sample floor).
-- `linesPerFiber` per arm and sequence (`seqName`), lower is worse (PIPE2D-1935): a tolerance below the Run25
+  b-arm Argon is not judged: under a line per lit fiber, its median width rests on a handful of lines and the
+  known-good exposures scatter −4 to +2 % about their median, so the SM1 defocus is caught on the other lamps.
+- `medFwhm` per arm, judging only an image whose detector and lamp have no reference median: arcs b 2.872/2.89,
+  r 2.988/2.993, n 3.05/3.1, m 3.18/3.21 px; quartz b 3.33/3.34 (Run25 and Run29's b2 pooled), r 3.391/3.392,
+  n 3.269/3.272 px, and m not judged (16 known-good values, below the 20-sample floor).
+- `linesPerFiber` per arm and sequence (`seqName`), lower is worse (PIPE2D-1935): a tolerance below the reference
   known-good median, 25 %/50 % on arcs and 2.5 %/5 % on quartz. Known-good arcs reach 19 % below their median
   (n HgCd) and quartz 1.1 %; the obstructed Run30 frames sit 60–98 % below on arcs and 9–56 % on quartz. b Argon,
   under a line per lit fiber, is not judged. `nLines` is not judged: it counts rows, mostly trace centroids on an
@@ -494,14 +499,20 @@ verdict is known. The decisions behind the current set:
 
 - **Run25 is the reference run.** Its calibrations were made for it, and it is the most complete stable set. Every
   threshold is derived from Run25's known-good visits.
-- **The validation set holds Run25's known-good visits only.** From other runs it holds only known-bad visits, as
-  fault examples: each is checked against the thresholds, and none derives one. (Run27 and Run30 known-good entries
-  still in the YAML are removed by PIPE2D-1933.)
+- **The validation set holds Run25's known-good visits**, and Run29's for two detectors' quartz (below). From
+  other runs it holds only known-bad visits, as fault examples: each is checked against the thresholds, and none
+  derives one.
 - **A set is never its own reference.** The gate decides whether a run's calibration set should be used to build its
   calibrations, so a set counts as known-good only once the calibrations built from it have proved out (used, with good
-  reductions), and then only for later runs. Each arm's reference is chosen from such sets (PIPE2D-1938): Run25's
-  n-arm thresholds predate the pipeline changes that made the n arm reliable (about Run29–30), so n-arm verdicts are
-  provisional until then.
+  reductions), and then only for later runs. Each detector's reference is chosen from such sets (PIPE2D-1938): reduced
+  with one pipeline, Runs 25–30 agree with Run25 to within 3 % in `medFwhm` everywhere but two cameras, so Run25 stays
+  the reference except for b2 quartz (SM2's slit was refocused on 2026-03-11 and its quartz width stepped from 3.12
+  to 3.34 px, where it has stayed) and n4 quartz (Run25's 3.10 px is the outlier against a steady 3.22 px since), which
+  take Run29's detectorMap set (`cameras`/`excludeCameras` in the YAML; `referenceRuns: [25, 29]`). The n-arm
+  verdicts were provisional while Run25's n-arm reductions predated the pipeline fixes; reduced afresh, the n arm agrees
+  with Run25 like the others. Adopted 2026-10-19 from `u/wtg/qa-thresholds/010`: re-judged with the new file, Runs
+  28, 29 and 30 go from 41, 57 and 32 flagged images to 1, 3 and 3, the rest being single arcs and n4's Neon arcs,
+  whose width has crept from +1.5 % (Run26) to +4.7 % (Run30) of Run25's while its quartz stayed put.
 - **Other runs are compared, not used for derivation.** Comparison mode (PIPE2D-1929) judges every visit of a run
   against Run25's thresholds; Run30 is the first. Run27 is not a fair comparison: no
   calibrations were made from it, and its n-arm flag rates sit 2–5 points above Run25's.

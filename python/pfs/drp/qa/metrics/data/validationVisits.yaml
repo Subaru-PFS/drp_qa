@@ -79,6 +79,13 @@ version: 1
 # against it in comparison mode (PIPE2D-1929), not here. Run27 had no science and no calibrations of its own, so it was reduced
 # against older ones and is suspect. Ranges are each run's calibration summary;
 # Run30's starts at 148039, its summary also repeating Run28 and Run29 sequences.
+#
+# Two detectors take their quartz reference from Run29 instead (PIPE2D-1938), whose
+# detectorMap set was used to build its calibrations: b2, whose slit was refocused on
+# 2026-03-11 (its quartz width stepped from 3.12 to 3.34 px and has stayed), and n4,
+# whose Run25 quartz width (3.10 px) is the outlier against a steady 3.22 px since.
+# Run25's trace entries leave those two cameras out, and Run29's trace entries hold
+# them alone.
 runs:
   25: [132657, 135850]
   26: [136166, 139742]
@@ -86,7 +93,7 @@ runs:
   28: [141254, 144311]
   29: [144587, 147830]
   30: [148039, 150896]
-referenceRuns: [25]
+referenceRuns: [25, 29]
 
 known_good:
   # Run25, 2025-11-10/11. A stable calibration sequence at fixed pointing
@@ -131,6 +138,7 @@ known_good:
     sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
+    excludeCameras: [b2, n4]  # reference in Run29 (PIPE2D-1938)
     seqType: "Trace"
     note: "Run25 stable set, block A. 20 s scienceTrace; exercises the calexp trace-width path."
 
@@ -163,6 +171,7 @@ known_good:
     sequenceType: scienceTrace
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
+    excludeCameras: [b2, n4]  # reference in Run29 (PIPE2D-1938)
     seqType: "Trace"
     note: "Run25 stable set, block B. 20 s scienceTrace."
 
@@ -176,6 +185,7 @@ known_good:
     sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
+    excludeCameras: [b2, n4]  # reference in Run29 (PIPE2D-1938)
     seqType: "Trace"
     note: "Run25 block C, az 168. 20 s scienceTrace."
   - visitRange: [135830, 135831]
@@ -236,6 +246,7 @@ known_good:
     sequenceType: scienceTrace
     arms: [b, m]
     spectrographs: [1, 2, 3, 4]
+    excludeCameras: [b2, n4]  # reference in Run29 (PIPE2D-1938)
     seqType: "Trace"
     note: "Run25 block C, az 168, m arm. 20 s scienceTrace."
 
@@ -264,18 +275,21 @@ known_good:
     sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
+    excludeCameras: [b2, n4]  # reference in Run29 (PIPE2D-1938)
     seqType: "Trace"
     note: "Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace."
   - visitRange: [133536, 133537]
     sequenceType: scienceTrace
     arms: [b, r]
     spectrographs: [1, 2, 3, 4]
+    excludeCameras: [b2, n4]  # reference in Run29 (PIPE2D-1938)
     seqType: "Trace"
     note: "Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace; n arm not read."
   - visitRange: [134338, 134339]
     sequenceType: scienceTrace
     arms: [b, r, n]
     spectrographs: [1, 2, 3, 4]
+    excludeCameras: [b2, n4]  # reference in Run29 (PIPE2D-1938)
     seqType: "Trace"
     note: "Run25 uniformity set, 2025-11-21, az 290. 20 s scienceTrace."
 
@@ -289,6 +303,38 @@ known_good:
     note: >-
       Run25 uniformity set, 2025-11-28, az 290, insrot 90. 180 s. Reference case
       for the O2/OH sky-line check, as for the other twilight entries.
+
+  # Run29, the detectorMap set used to build its calibrations (2026-07-07, 07-14 and 07-23).
+  # Known good for b2 and n4 quartz only: their reference (PIPE2D-1938). The other cameras
+  # keep Run25's.
+  - visitRange: [145025, 145034]
+    sequenceType: scienceTrace
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    cameras: [b2, n4]
+    seqType: "Trace"
+    note: "Run29 detectorMap set, 2026-07-07, b/r/n arms. b2 and n4 quartz reference (PIPE2D-1938)."
+  - visitRange: [145062, 145071]
+    sequenceType: scienceTrace
+    arms: [b, m]
+    spectrographs: [1, 2, 3, 4]
+    cameras: [b2]
+    seqType: "Trace"
+    note: "Run29 detectorMap set, 2026-07-07, b/m arms. b2 quartz reference (PIPE2D-1938)."
+  - visitRange: [146090, 146092]
+    sequenceType: scienceTrace
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    cameras: [b2, n4]
+    seqType: "Trace"
+    note: "Run29 detectorMap set, 2026-07-14. b2 and n4 quartz reference (PIPE2D-1938)."
+  - visitRange: [147745, 147747]
+    sequenceType: scienceTrace
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    cameras: [b2, n4]
+    seqType: "Trace"
+    note: "Run29 detectorMap set, 2026-07-23. b2 and n4 quartz reference (PIPE2D-1938)."
 
 known_bad:
   # Run25 b-arm arcs of the faint and crowded lamps: most of their lines are
@@ -446,7 +492,7 @@ known_bad:
   # listed; the visits between them carry no verdict. Run27 read no m arm.
   - visitRange: [140005, 140006]
     sequenceType: scienceArc
-    arms: [b, r, n]
+    arms: [r, n]  # b-arm Argon medFwhm is not judged (PIPE2D-1938): under a line per lit fiber
     spectrographs: [1]
     seqType: "Arc: Argon"
     expect: FAIL
@@ -479,7 +525,7 @@ known_bad:
     reason: "SM1 defocused (Run27). 30 s, az 336."
   - visitRange: [140124, 140126]
     sequenceType: scienceArc
-    arms: [b, r, n]
+    arms: [r, n]  # b-arm Argon medFwhm is not judged (PIPE2D-1938): under a line per lit fiber
     spectrographs: [1]
     seqType: "Arc: Argon"
     expect: FAIL
@@ -715,7 +761,8 @@ known_bad:
   # good, but SM3's medianDeltaY reaches the 1.0 px WARN. Unconfirmed until the
   # cause is known: reported, not judged, and known-good for every other metric.
   # An entry's visits are reduced and read, so these name the SM3 traces and twilights themselves
-  # (the known-good entries' visits), not a range that would sweep in every visit between them.
+  # (the visits of the known-good entries, and the cloudy twilight 134334-134337), not a range
+  # that would sweep in every visit between them.
   - visitRange: [133532, 133533]
     sequenceType: scienceTrace
     spectrographs: [3]

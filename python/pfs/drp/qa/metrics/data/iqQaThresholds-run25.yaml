@@ -1,10 +1,15 @@
 # Made by makeRun25Thresholds.py from tests/metrics/data/iqQaThresholds-run25.yaml; see its docstring.
 version: 2
-derivedOn: '2026-10-13'
-collection: u/wtg/qa-thresholds/004
+derivedOn: '2026-10-19'
+collection: u/wtg/qa-thresholds/010
 referenceRuns:
 - 25
-drpQaVersion: w.2026.35-111-gea1f6f0-dirty
+- 29
+drpQaVersion: w.2026.35-158-g3800b92-dirty
+pipelineVersions:
+  datamodel: w.2026.40
+  obs_pfs: w.2026.40
+  drp_stella: w.2026.41-6-ge56938d2
 thresholds:
 - metric: medFwhm
   population:
@@ -21,7 +26,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135848 (n=184): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135848 (n=184): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=184 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
@@ -30,16 +35,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 3.192
-  fail: 3.198
-  nGood: 56
-  nGoodVisits: 14
-  visitRange: 133040-135850
+  warn: 3.33
+  fail: 3.34
+  nGood: 68
+  nGoodVisits: 40
+  visitRange: 133040-147747
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-12 (PIPE2D-1918). Derived 2026-10-13 from validation visits 133040-135850 (n=56):
-    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=56 cannot bound p99 at 95% confidence: its interval is open, and
+  provenance: 'Adopted 2026-10-12 (PIPE2D-1918). Derived 2026-10-19 from validation visits 133040-147747 (n=68):
+    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=68 cannot bound p99 at 95% confidence: its interval is open, and
     FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
@@ -56,7 +61,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133042-135848 (n=80): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135848 (n=80): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=80 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
@@ -72,12 +77,12 @@ thresholds:
   visitRange: 133054-135850
   reliable: false
   failBounded: false
-  degenerate: false
+  degenerate: true
   provenance: 'Not judged (2026-10-12, PIPE2D-1918): the derivation from visits 133054-135850 has n=16, below the
     20-sample floor, and the config''s medFwhm WARN would flag every known-good value. Derived values were: Derived
-    2026-10-13 from validation visits 133054-135850 (n=16): WARN at p95, FAIL at p99. NOT RELIABLE: n=16 is below
+    2026-10-19 from validation visits 133054-135850 (n=16): WARN at p95, FAIL at p99. NOT RELIABLE: n=16 is below
     the 20-sample floor. FAIL UNBOUNDED: n=16 cannot bound p99 at 95% confidence: its interval is open, and FAIL
-    may move a long way with more data.'
+    may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: medFwhm
   population:
     arm: n
@@ -93,7 +98,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=104 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
@@ -102,16 +107,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 3.257
-  fail: 3.26
-  nGood: 32
-  nGoodVisits: 8
-  visitRange: 133040-135829
+  warn: 3.269
+  fail: 3.272
+  nGood: 40
+  nGoodVisits: 24
+  visitRange: 133040-147747
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-12 (PIPE2D-1918). Derived 2026-10-13 from validation visits 133040-135829 (n=32):
-    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=32 cannot bound p99 at 95% confidence: its interval is open, and
+  provenance: 'Adopted 2026-10-12 (PIPE2D-1918). Derived 2026-10-19 from validation visits 133040-147747 (n=40):
+    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=40 cannot bound p99 at 95% confidence: its interval is open, and
     FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
@@ -120,7 +125,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 2.987
+  warn: 2.988
   fail: 2.993
   nGood: 104
   nGoodVisits: 26
@@ -128,7 +133,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=104 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
@@ -137,15 +142,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 3.39
-  fail: 3.391
+  warn: 3.391
+  fail: 3.392
   nGood: 40
   nGoodVisits: 10
   visitRange: 133040-135829
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-12 (PIPE2D-1918). Derived 2026-10-13 from validation visits 133040-135829 (n=40):
+  provenance: 'Adopted 2026-10-12 (PIPE2D-1918). Derived 2026-10-19 from validation visits 133040-135829 (n=40):
     WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=40 cannot bound p99 at 95% confidence: its interval is open, and
     FAIL may move a long way with more data.'
 - metric: medFwhm
@@ -157,16 +162,18 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 2.614
-  fail: 2.664
+  warn: null
+  fail: null
   nGood: 10
   nGoodVisits: 10
   visitRange: 133025-135842
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133025-135842 (n=10):
-    WARN 3% and FAIL 5% above the known-good median, 2.537px.'
+  provenance: 'Not judged (2026-10-19, PIPE2D-1938): under a line per lit fiber, the median width of a b-arm Argon
+    arc rests on a handful of lines, and the known-good exposures scatter -4 to +2 % about their median. Derived
+    values were: Derived 2026-10-19 from validation visits 133025-135842 (n=10): WARN 3% and FAIL 5% above the known-good
+    median, 2.537px.'
 - metric: medFwhm
   population:
     arm: b
@@ -176,15 +183,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 2.891
-  fail: 2.947
+  warn: 2.89
+  fail: 2.946
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133037-135840 (n=6):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133037-135840 (n=6):
     WARN 3% and FAIL 5% above the known-good median, 2.806px.'
 - metric: medFwhm
   population:
@@ -203,7 +210,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133034-135848 (n=10):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133034-135848 (n=10):
     WARN 3% and FAIL 5% above the known-good median, 2.864px.'
 - metric: medFwhm
   population:
@@ -222,7 +229,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133031-135846 (n=10):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133031-135846 (n=10):
     WARN 3% and FAIL 5% above the known-good median, 2.821px.'
 - metric: medFwhm
   population:
@@ -241,7 +248,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133028-135844 (n=10):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133028-135844 (n=10):
     WARN 3% and FAIL 5% above the known-good median, 2.768px.'
 - metric: medFwhm
   population:
@@ -259,7 +266,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133040-135850 (n=14):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133040-135850 (n=14):
     WARN 3% and FAIL 5% above the known-good median, 3.149px.'
 - metric: medFwhm
   population:
@@ -270,16 +277,18 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 2.596
-  fail: 2.646
+  warn: null
+  fail: null
   nGood: 10
   nGoodVisits: 10
   visitRange: 133025-135842
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133025-135842 (n=10):
-    WARN 3% and FAIL 5% above the known-good median, 2.52px.'
+  provenance: 'Not judged (2026-10-19, PIPE2D-1938): under a line per lit fiber, the median width of a b-arm Argon
+    arc rests on a handful of lines, and the known-good exposures scatter -4 to +2 % about their median. Derived
+    values were: Derived 2026-10-19 from validation visits 133025-135842 (n=10): WARN 3% and FAIL 5% above the known-good
+    median, 2.52px.'
 - metric: medFwhm
   population:
     arm: b
@@ -297,7 +306,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133037-135840 (n=6):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133037-135840 (n=6):
     WARN 3% and FAIL 5% above the known-good median, 2.81px.'
 - metric: medFwhm
   population:
@@ -316,7 +325,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133034-135848 (n=10):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133034-135848 (n=10):
     WARN 3% and FAIL 5% above the known-good median, 2.873px.'
 - metric: medFwhm
   population:
@@ -335,7 +344,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133031-135846 (n=10):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133031-135846 (n=10):
     WARN 3% and FAIL 5% above the known-good median, 2.817px.'
 - metric: medFwhm
   population:
@@ -354,7 +363,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133028-135844 (n=10):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133028-135844 (n=10):
     WARN 3% and FAIL 5% above the known-good median, 2.766px.'
 - metric: medFwhm
   population:
@@ -364,16 +373,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.252
-  fail: 3.315
-  nGood: 14
-  nGoodVisits: 14
-  visitRange: 133040-135850
+  warn: 3.424
+  fail: 3.49
+  nGood: 26
+  nGoodVisits: 26
+  visitRange: 145025-147747
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133040-135850 (n=14):
-    WARN 3% and FAIL 5% above the known-good median, 3.157px.'
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 145025-147747 (n=26):
+    WARN 3% and FAIL 5% above the known-good median, 3.323px.'
 - metric: medFwhm
   population:
     arm: b
@@ -383,16 +392,18 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 2.82
-  fail: 2.875
+  warn: null
+  fail: null
   nGood: 10
   nGoodVisits: 10
   visitRange: 133025-135842
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133025-135842 (n=10):
-    WARN 3% and FAIL 5% above the known-good median, 2.737px.'
+  provenance: 'Not judged (2026-10-19, PIPE2D-1938): under a line per lit fiber, the median width of a b-arm Argon
+    arc rests on a handful of lines, and the known-good exposures scatter -4 to +2 % about their median. Derived
+    values were: Derived 2026-10-19 from validation visits 133025-135842 (n=10): WARN 3% and FAIL 5% above the known-good
+    median, 2.74px.'
 - metric: medFwhm
   population:
     arm: b
@@ -410,7 +421,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133037-135840 (n=6):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133037-135840 (n=6):
     WARN 3% and FAIL 5% above the known-good median, 2.833px.'
 - metric: medFwhm
   population:
@@ -429,7 +440,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133034-135848 (n=10):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133034-135848 (n=10):
     WARN 3% and FAIL 5% above the known-good median, 2.849px.'
 - metric: medFwhm
   population:
@@ -448,7 +459,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133031-135846 (n=10):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133031-135846 (n=10):
     WARN 3% and FAIL 5% above the known-good median, 2.821px.'
 - metric: medFwhm
   population:
@@ -467,7 +478,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133028-135844 (n=10):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133028-135844 (n=10):
     WARN 3% and FAIL 5% above the known-good median, 2.779px.'
 - metric: medFwhm
   population:
@@ -485,7 +496,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133040-135850 (n=14):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133040-135850 (n=14):
     WARN 3% and FAIL 5% above the known-good median, 3.187px.'
 - metric: medFwhm
   population:
@@ -496,16 +507,18 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 2.744
-  fail: 2.797
+  warn: null
+  fail: null
   nGood: 10
   nGoodVisits: 10
   visitRange: 133025-135842
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133025-135842 (n=10):
-    WARN 3% and FAIL 5% above the known-good median, 2.663px.'
+  provenance: 'Not judged (2026-10-19, PIPE2D-1938): under a line per lit fiber, the median width of a b-arm Argon
+    arc rests on a handful of lines, and the known-good exposures scatter -4 to +2 % about their median. Derived
+    values were: Derived 2026-10-19 from validation visits 133025-135842 (n=10): WARN 3% and FAIL 5% above the known-good
+    median, 2.663px.'
 - metric: medFwhm
   population:
     arm: b
@@ -523,7 +536,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133037-135840 (n=6):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133037-135840 (n=6):
     WARN 3% and FAIL 5% above the known-good median, 2.81px.'
 - metric: medFwhm
   population:
@@ -535,14 +548,14 @@ thresholds:
   absolute: false
   method: tolerance
   warn: 2.934
-  fail: 2.991
+  fail: 2.99
   nGood: 10
   nGoodVisits: 10
   visitRange: 133034-135848
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133034-135848 (n=10):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133034-135848 (n=10):
     WARN 3% and FAIL 5% above the known-good median, 2.848px.'
 - metric: medFwhm
   population:
@@ -561,7 +574,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133031-135846 (n=10):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133031-135846 (n=10):
     WARN 3% and FAIL 5% above the known-good median, 2.814px.'
 - metric: medFwhm
   population:
@@ -580,7 +593,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133028-135844 (n=10):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133028-135844 (n=10):
     WARN 3% and FAIL 5% above the known-good median, 2.745px.'
 - metric: medFwhm
   population:
@@ -590,16 +603,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.245
-  fail: 3.308
+  warn: 3.246
+  fail: 3.309
   nGood: 14
   nGoodVisits: 14
   visitRange: 133040-135850
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133040-135850 (n=14):
-    WARN 3% and FAIL 5% above the known-good median, 3.15px.'
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133040-135850 (n=14):
+    WARN 3% and FAIL 5% above the known-good median, 3.151px.'
 - metric: medFwhm
   population:
     arm: m
@@ -617,7 +630,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133042-135842 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133042-135842 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 3.119px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -637,7 +650,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133051-135848 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133051-135848 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.847px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -657,7 +670,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133048-135846 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133048-135846 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.917px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -677,7 +690,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133045-135844 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133045-135844 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 3.013px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -688,7 +701,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.51
+  warn: 3.52
   fail: 3.58
   nGood: 4
   nGoodVisits: 4
@@ -696,8 +709,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133054-135850 (n=4):
-    WARN 3% and FAIL 5% above the known-good median, 3.408px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95%
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133054-135850 (n=4):
+    WARN 3% and FAIL 5% above the known-good median, 3.409px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
   population:
@@ -716,7 +729,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133042-135842 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133042-135842 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 3.027px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -736,7 +749,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133051-135848 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133051-135848 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.832px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -756,7 +769,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133048-135846 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133048-135846 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.897px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -776,7 +789,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133045-135844 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133045-135844 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.952px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -787,7 +800,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.423
+  warn: 3.424
   fail: 3.49
   nGood: 4
   nGoodVisits: 4
@@ -795,7 +808,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133054-135850 (n=4):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133054-135850 (n=4):
     WARN 3% and FAIL 5% above the known-good median, 3.323px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -815,7 +828,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133042-135842 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133042-135842 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 3.178px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -835,7 +848,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133051-135848 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133051-135848 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.806px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -855,7 +868,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133048-135846 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133048-135846 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.908px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -875,7 +888,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133045-135844 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133045-135844 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.977px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -894,8 +907,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133054-135850 (n=4):
-    WARN 3% and FAIL 5% above the known-good median, 3.409px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95%
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133054-135850 (n=4):
+    WARN 3% and FAIL 5% above the known-good median, 3.408px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
   population:
@@ -914,7 +927,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133042-135842 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133042-135842 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 3.082px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -926,16 +939,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 2.95
-  fail: 3.007
+  warn: 2.948
+  fail: 3.005
   nGood: 5
   nGoodVisits: 5
   visitRange: 133051-135848
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133051-135848 (n=5):
-    WARN 3% and FAIL 5% above the known-good median, 2.864px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133051-135848 (n=5):
+    WARN 3% and FAIL 5% above the known-good median, 2.862px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
   population:
@@ -954,7 +967,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133048-135846 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133048-135846 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.924px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -974,7 +987,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133045-135844 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133045-135844 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 3.012px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -993,8 +1006,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133054-135850 (n=4):
-    WARN 3% and FAIL 5% above the known-good median, 3.381px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95%
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133054-135850 (n=4):
+    WARN 3% and FAIL 5% above the known-good median, 3.382px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
   population:
@@ -1013,7 +1026,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133025-135831 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.854px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1025,7 +1038,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 2.949
+  warn: 2.95
   fail: 3.007
   nGood: 6
   nGoodVisits: 6
@@ -1033,8 +1046,8 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133037-135840 (n=6):
-    WARN 3% and FAIL 5% above the known-good median, 2.863px.'
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133037-135840 (n=6):
+    WARN 3% and FAIL 5% above the known-good median, 2.864px.'
 - metric: medFwhm
   population:
     arm: n
@@ -1052,7 +1065,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133034-135837 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 3.011px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1072,7 +1085,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133031-135835 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.911px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1092,8 +1105,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133028-135833 (n=5):
-    WARN 3% and FAIL 5% above the known-good median, 2.764px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
+    WARN 3% and FAIL 5% above the known-good median, 2.763px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
   population:
@@ -1103,16 +1116,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.275
-  fail: 3.339
+  warn: 3.279
+  fail: 3.343
   nGood: 8
   nGoodVisits: 8
   visitRange: 133040-135829
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133040-135829 (n=8):
-    WARN 3% and FAIL 5% above the known-good median, 3.179px.'
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133040-135829 (n=8):
+    WARN 3% and FAIL 5% above the known-good median, 3.183px.'
 - metric: medFwhm
   population:
     arm: n
@@ -1130,7 +1143,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133025-135831 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.872px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1142,16 +1155,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.124
-  fail: 3.185
+  warn: 3.123
+  fail: 3.184
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133037-135840 (n=6):
-    WARN 3% and FAIL 5% above the known-good median, 3.033px.'
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133037-135840 (n=6):
+    WARN 3% and FAIL 5% above the known-good median, 3.032px.'
 - metric: medFwhm
   population:
     arm: n
@@ -1169,7 +1182,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133034-135837 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 3.045px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1189,7 +1202,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133031-135835 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.945px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1209,7 +1222,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133028-135833 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.82px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1220,16 +1233,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.292
-  fail: 3.356
+  warn: 3.297
+  fail: 3.361
   nGood: 8
   nGoodVisits: 8
   visitRange: 133040-135829
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133040-135829 (n=8):
-    WARN 3% and FAIL 5% above the known-good median, 3.196px.'
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133040-135829 (n=8):
+    WARN 3% and FAIL 5% above the known-good median, 3.201px.'
 - metric: medFwhm
   population:
     arm: n
@@ -1247,7 +1260,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133025-135831 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.863px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1267,7 +1280,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133037-135840 (n=6):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133037-135840 (n=6):
     WARN 3% and FAIL 5% above the known-good median, 3.006px.'
 - metric: medFwhm
   population:
@@ -1286,7 +1299,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133034-135837 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 3.077px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1298,7 +1311,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.03
+  warn: 3.029
   fail: 3.088
   nGood: 5
   nGoodVisits: 5
@@ -1306,8 +1319,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133031-135835 (n=5):
-    WARN 3% and FAIL 5% above the known-good median, 2.941px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
+    WARN 3% and FAIL 5% above the known-good median, 2.94px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
   population:
@@ -1326,7 +1339,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133028-135833 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.789px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1345,7 +1358,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133040-135829 (n=8):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133040-135829 (n=8):
     WARN 3% and FAIL 5% above the known-good median, 3.249px.'
 - metric: medFwhm
   population:
@@ -1357,14 +1370,14 @@ thresholds:
   absolute: false
   method: tolerance
   warn: 2.903
-  fail: 2.96
+  fail: 2.959
   nGood: 5
   nGoodVisits: 5
   visitRange: 133025-135831
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133025-135831 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.818px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1384,8 +1397,8 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133037-135840 (n=6):
-    WARN 3% and FAIL 5% above the known-good median, 2.805px.'
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133037-135840 (n=6):
+    WARN 3% and FAIL 5% above the known-good median, 2.804px.'
 - metric: medFwhm
   population:
     arm: n
@@ -1403,7 +1416,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133034-135837 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.989px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1423,7 +1436,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133031-135835 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.715px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1443,7 +1456,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133028-135833 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.668px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1454,16 +1467,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.194
-  fail: 3.256
-  nGood: 8
-  nGoodVisits: 8
-  visitRange: 133040-135829
+  warn: 3.331
+  fail: 3.396
+  nGood: 16
+  nGoodVisits: 16
+  visitRange: 145025-147747
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133040-135829 (n=8):
-    WARN 3% and FAIL 5% above the known-good median, 3.1px.'
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 145025-147747 (n=16):
+    WARN 3% and FAIL 5% above the known-good median, 3.234px.'
 - metric: medFwhm
   population:
     arm: r
@@ -1481,7 +1494,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133025-135831 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.758px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1501,7 +1514,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133037-135840 (n=6):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133037-135840 (n=6):
     WARN 3% and FAIL 5% above the known-good median, 2.955px.'
 - metric: medFwhm
   population:
@@ -1520,7 +1533,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133034-135837 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.943px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1540,7 +1553,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133031-135835 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.941px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1560,7 +1573,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133028-135833 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.964px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1571,7 +1584,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.408
+  warn: 3.409
   fail: 3.475
   nGood: 10
   nGoodVisits: 10
@@ -1579,7 +1592,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133040-135829 (n=10):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133040-135829 (n=10):
     WARN 3% and FAIL 5% above the known-good median, 3.309px.'
 - metric: medFwhm
   population:
@@ -1598,7 +1611,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133025-135831 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.736px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1618,7 +1631,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133037-135840 (n=6):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133037-135840 (n=6):
     WARN 3% and FAIL 5% above the known-good median, 2.889px.'
 - metric: medFwhm
   population:
@@ -1637,7 +1650,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133034-135837 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.901px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1657,7 +1670,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133031-135835 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.921px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1677,7 +1690,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133028-135833 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.923px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1688,16 +1701,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.37
-  fail: 3.436
+  warn: 3.373
+  fail: 3.438
   nGood: 10
   nGoodVisits: 10
   visitRange: 133040-135829
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133040-135829 (n=10):
-    WARN 3% and FAIL 5% above the known-good median, 3.272px.'
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133040-135829 (n=10):
+    WARN 3% and FAIL 5% above the known-good median, 3.274px.'
 - metric: medFwhm
   population:
     arm: r
@@ -1715,7 +1728,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133025-135831 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.741px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1735,7 +1748,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133037-135840 (n=6):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133037-135840 (n=6):
     WARN 3% and FAIL 5% above the known-good median, 2.941px.'
 - metric: medFwhm
   population:
@@ -1754,7 +1767,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133034-135837 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.914px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1774,7 +1787,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133031-135835 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.94px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1794,7 +1807,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133028-135833 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.942px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1805,7 +1818,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.417
+  warn: 3.416
   fail: 3.483
   nGood: 10
   nGoodVisits: 10
@@ -1813,8 +1826,8 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133040-135829 (n=10):
-    WARN 3% and FAIL 5% above the known-good median, 3.317px.'
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133040-135829 (n=10):
+    WARN 3% and FAIL 5% above the known-good median, 3.316px.'
 - metric: medFwhm
   population:
     arm: r
@@ -1832,7 +1845,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133025-135831 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.823px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1852,7 +1865,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133037-135840 (n=6):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133037-135840 (n=6):
     WARN 3% and FAIL 5% above the known-good median, 2.952px.'
 - metric: medFwhm
   population:
@@ -1871,7 +1884,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133034-135837 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.961px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1891,7 +1904,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133031-135835 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.947px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1911,7 +1924,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133028-135833 (n=5):
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
     WARN 3% and FAIL 5% above the known-good median, 2.987px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95%
     confidence.'
 - metric: medFwhm
@@ -1922,7 +1935,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.49
+  warn: 3.5
   fail: 3.56
   nGood: 10
   nGoodVisits: 10
@@ -1930,8 +1943,8 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-13 from validation visits 133040-135829 (n=10):
-    WARN 3% and FAIL 5% above the known-good median, 3.388px.'
+  provenance: 'Adopted 2026-10-13 (PIPE2D-1942). Derived 2026-10-19 from validation visits 133040-135829 (n=10):
+    WARN 3% and FAIL 5% above the known-good median, 3.389px.'
 - metric: linesPerFiber
   population:
     arm: b
@@ -1966,7 +1979,7 @@ thresholds:
   failBounded: true
   degenerate: false
   provenance: 'Adopted 2026-10-14 (PIPE2D-1935). Derived 2026-10-14 from validation visits 133037-135840 (n=24):
-    WARN 25% and FAIL 50% below the known-good median, 19.35.'
+    WARN 25% and FAIL 50% below the known-good median, 19.38.'
 - metric: linesPerFiber
   population:
     arm: b
@@ -2000,7 +2013,7 @@ thresholds:
   failBounded: true
   degenerate: false
   provenance: 'Adopted 2026-10-14 (PIPE2D-1935). Derived 2026-10-14 from validation visits 133031-135846 (n=40):
-    WARN 25% and FAIL 50% below the known-good median, 66.44.'
+    WARN 25% and FAIL 50% below the known-good median, 66.43.'
 - metric: linesPerFiber
   population:
     arm: b
@@ -2026,15 +2039,15 @@ thresholds:
   absolute: false
   method: tolerance
   warn: 4050.0
-  fail: 3950.0
-  nGood: 56
-  nGoodVisits: 14
-  visitRange: 133040-135850
+  fail: 3940.0
+  nGood: 68
+  nGoodVisits: 40
+  visitRange: 133040-147747
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-14 (PIPE2D-1935). Derived 2026-10-14 from validation visits 133040-135850 (n=56):
-    WARN 2% and FAIL 5% below the known-good median, 4159.'
+  provenance: 'Adopted 2026-10-14 (PIPE2D-1935). Derived 2026-10-14 from validation visits 133040-147747 (n=68):
+    WARN 2% and FAIL 5% below the known-good median, 4157.'
 - metric: linesPerFiber
   population:
     arm: m
@@ -2059,8 +2072,8 @@ thresholds:
   higherIsWorse: false
   absolute: false
   method: tolerance
-  warn: 29.6
-  fail: 19.7
+  warn: 29.7
+  fail: 19.8
   nGood: 20
   nGoodVisits: 5
   visitRange: 133051-135848
@@ -2068,7 +2081,7 @@ thresholds:
   failBounded: true
   degenerate: false
   provenance: 'Adopted 2026-10-14 (PIPE2D-1935). Derived 2026-10-14 from validation visits 133051-135848 (n=20):
-    WARN 25% and FAIL 50% below the known-good median, 39.54.'
+    WARN 25% and FAIL 50% below the known-good median, 39.72.'
 - metric: linesPerFiber
   population:
     arm: m
@@ -2085,7 +2098,7 @@ thresholds:
   failBounded: true
   degenerate: false
   provenance: 'Adopted 2026-10-14 (PIPE2D-1935). Derived 2026-10-14 from validation visits 133048-135846 (n=20):
-    WARN 25% and FAIL 50% below the known-good median, 55.04.'
+    WARN 25% and FAIL 50% below the known-good median, 54.84.'
 - metric: linesPerFiber
   population:
     arm: m
@@ -2102,7 +2115,7 @@ thresholds:
   failBounded: true
   degenerate: false
   provenance: 'Adopted 2026-10-14 (PIPE2D-1935). Derived 2026-10-14 from validation visits 133045-135844 (n=20):
-    WARN 25% and FAIL 50% below the known-good median, 55.58.'
+    WARN 25% and FAIL 50% below the known-good median, 55.66.'
 - metric: linesPerFiber
   population:
     arm: m
@@ -2144,7 +2157,7 @@ thresholds:
   higherIsWorse: false
   absolute: false
   method: tolerance
-  warn: 16.8
+  warn: 16.9
   fail: 11.2
   nGood: 24
   nGoodVisits: 6
@@ -2153,7 +2166,7 @@ thresholds:
   failBounded: true
   degenerate: false
   provenance: 'Adopted 2026-10-14 (PIPE2D-1935). Derived 2026-10-14 from validation visits 133037-135840 (n=24):
-    WARN 25% and FAIL 50% below the known-good median, 22.52.'
+    WARN 25% and FAIL 50% below the known-good median, 22.55.'
 - metric: linesPerFiber
   population:
     arm: n
@@ -2187,7 +2200,7 @@ thresholds:
   failBounded: true
   degenerate: false
   provenance: 'Adopted 2026-10-14 (PIPE2D-1935). Derived 2026-10-14 from validation visits 133031-135835 (n=20):
-    WARN 25% and FAIL 50% below the known-good median, 23.05.'
+    WARN 25% and FAIL 50% below the known-good median, 23.06.'
 - metric: linesPerFiber
   population:
     arm: n
@@ -2204,7 +2217,7 @@ thresholds:
   failBounded: true
   degenerate: false
   provenance: 'Adopted 2026-10-14 (PIPE2D-1935). Derived 2026-10-14 from validation visits 133028-135833 (n=20):
-    WARN 25% and FAIL 50% below the known-good median, 33.'
+    WARN 25% and FAIL 50% below the known-good median, 33.01.'
 - metric: linesPerFiber
   population:
     arm: n
@@ -2214,14 +2227,14 @@ thresholds:
   method: tolerance
   warn: 3970.0
   fail: 3860.0
-  nGood: 32
-  nGoodVisits: 8
-  visitRange: 133040-135829
+  nGood: 40
+  nGoodVisits: 24
+  visitRange: 133040-147747
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Adopted 2026-10-14 (PIPE2D-1935). Derived 2026-10-14 from validation visits 133040-135829 (n=32):
-    WARN 2% and FAIL 5% below the known-good median, 4072.'
+  provenance: 'Adopted 2026-10-14 (PIPE2D-1935). Derived 2026-10-14 from validation visits 133040-147747 (n=40):
+    WARN 2% and FAIL 5% below the known-good median, 4073.'
 - metric: linesPerFiber
   population:
     arm: r
@@ -2263,7 +2276,7 @@ thresholds:
   higherIsWorse: false
   absolute: false
   method: tolerance
-  warn: 48.0
+  warn: 49.0
   fail: 32.0
   nGood: 20
   nGoodVisits: 5
@@ -2272,7 +2285,7 @@ thresholds:
   failBounded: true
   degenerate: false
   provenance: 'Adopted 2026-10-14 (PIPE2D-1935). Derived 2026-10-14 from validation visits 133034-135837 (n=20):
-    WARN 25% and FAIL 50% below the known-good median, 65.26.'
+    WARN 25% and FAIL 50% below the known-good median, 65.65.'
 - metric: linesPerFiber
   population:
     arm: r

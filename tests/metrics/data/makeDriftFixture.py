@@ -11,11 +11,11 @@ writes ``dmLineResidualMetrics-<run>.parquet`` and ``dmLineResidualSummary-<run>
 ``~/.cache/drp_qa``, the run being the collection with ``/`` made ``_``. ``bin.src/exportMetrics.py``
 names its files the same way, so its output directory serves too.
 
-    PYTHONPATH=python uv run --no-project --with pandas --with pyarrow --with numpy \\
+    PYTHONPATH=python uv run --no-project --with pandas --with pyarrow --with numpy --with pyyaml --with scipy \\
         python tests/metrics/data/makeDriftFixture.py [RUN [DIR]]
 
-``RUN`` is the collection (default ``u/wtg/qa-thresholds/009``), ``DIR`` the directory (default
-``~/.cache/drp_qa``). The fixture before this one, from ``u/wtg/qa-thresholds/008`` and
+``RUN`` is the collection (default ``u/wtg/qa-thresholds/010``), ``DIR`` the directory (default
+``~/Projects/Subaru/PFS/reports/PIPE2D-1938``, where ``makeGateFixtures.py`` reads the same run). The fixture before this one, from ``u/wtg/qa-thresholds/008`` and
 ``dmDriftMonitor``, held rows against the calibration only, with no ``reference`` column; the test
 adds it when missing.
 """
@@ -29,8 +29,8 @@ from pfs.drp.qa.metrics.lineResiduals import BOTH, CALIB, RESERVED, UNFITTED, VI
 
 KEYS = ["visit", "arm", "spectrograph"]
 
-run = sys.argv[1] if len(sys.argv) > 1 else "u/wtg/qa-thresholds/009"
-source = Path(sys.argv[2] if len(sys.argv) > 2 else "~/.cache/drp_qa").expanduser()
+run = sys.argv[1] if len(sys.argv) > 1 else "u/wtg/qa-thresholds/010"
+source = Path(sys.argv[2] if len(sys.argv) > 2 else "~/Projects/Subaru/PFS/reports/PIPE2D-1938").expanduser()
 stem = run.replace("/", "_")
 here = Path(__file__).parent
 metrics = pd.read_parquet(source / f"dmLineResidualMetrics-{stem}.parquet")

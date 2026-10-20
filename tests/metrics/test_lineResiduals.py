@@ -469,9 +469,10 @@ def testUnfittedCrossingIsRecalibrate():
 
 
 def testValidationVerdicts():
-    """The shipped config on the validation run (u/wtg/qa-thresholds/006): no known-good is flagged.
+    """The shipped config on the validation run (u/wtg/qa-thresholds/010): no known-good is flagged.
 
-    The calibration's own input visits are known-good too, and sit at zero by construction.
+    The calibration's own input visits are known-good too, and sit at zero by construction. The
+    sky-line species of the twilights (OH, O2, OI, NaI) are set aside: judging them is PIPE2D-1956.
     """
     from pathlib import Path
 
@@ -483,13 +484,15 @@ def testValidationVerdicts():
     if "reference" not in rows:
         rows = rows.assign(reference=CALIB)
     rows = rows[(rows["nLines"] >= 10) & (rows["reference"] == CALIB)].reset_index(drop=True)
+    sky = rows["description"].isin(["OH", "O2", "OI", "NaI"])
+    assert sky.any()  # the twilights are in the fixture; their species are not asserted on below
     config = residualThresholds(1.0, 2.0, 1.0, 2.0)
     judged = judge(rows, config).set_index(["row", "metric"])
     visitSet = loadValidationVisits()
     for metric in ("medianDeltaX", "medianDeltaY"):
         labelled = labelRows(rows, visitSet, metric)
         status = judged.xs(metric, level="metric")["status"]
-        good = status.loc[labelled.index[labelled["validation"] == "good"]]
+        good = status.loc[labelled.index[(labelled["validation"] == "good") & ~sky[labelled.index]]]
         assert len(good[good != ""]) > 300 and (good[good != ""] == "PASS").all(), metric
         unconfirmed = status.loc[labelled.index[labelled["validation"] == UNCONFIRMED]]
         if metric == "medianDeltaY":

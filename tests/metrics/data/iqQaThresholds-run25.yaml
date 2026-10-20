@@ -1,9 +1,14 @@
 version: 2
-derivedOn: '2026-10-13'
-collection: u/wtg/qa-thresholds/004
+derivedOn: '2026-10-19'
+collection: u/wtg/qa-thresholds/010
 referenceRuns:
 - 25
-drpQaVersion: w.2026.35-111-gea1f6f0-dirty
+- 29
+drpQaVersion: w.2026.35-158-g3800b92-dirty
+pipelineVersions:
+  datamodel: w.2026.40
+  obs_pfs: w.2026.40
+  drp_stella: w.2026.41-6-ge56938d2
 thresholds:
 - metric: medFwhm
   population:
@@ -20,7 +25,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135848 (n=184): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135848 (n=184): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=184 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
@@ -29,16 +34,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 3.192
-  fail: 3.198
-  nGood: 56
-  nGoodVisits: 14
-  visitRange: 133040-135850
+  warn: 3.33
+  fail: 3.34
+  nGood: 68
+  nGoodVisits: 40
+  visitRange: 133040-147747
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135850 (n=56): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=56 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+  provenance: 'Derived 2026-10-19 from validation visits 133040-147747 (n=68): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=68 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
     arm: m
@@ -54,7 +59,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133042-135848 (n=80): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135848 (n=80): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=80 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
@@ -63,17 +68,18 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 3.415
+  warn: 3.416
   fail: 3.416
   nGood: 16
   nGoodVisits: 4
   visitRange: 133054-135850
   reliable: false
   failBounded: false
-  degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133054-135850 (n=16): WARN at p95, FAIL at p99. NOT RELIABLE:
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133054-135850 (n=16): WARN at p95, FAIL at p99. NOT RELIABLE:
     n=16 is below the 20-sample floor. FAIL UNBOUNDED: n=16 cannot bound p99 at 95% confidence: its interval is
-    open, and FAIL may move a long way with more data.'
+    open, and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can
+    never fire.'
 - metric: medFwhm
   population:
     arm: n
@@ -89,7 +95,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=104 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
@@ -98,16 +104,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 3.257
-  fail: 3.26
-  nGood: 32
-  nGoodVisits: 8
-  visitRange: 133040-135829
+  warn: 3.269
+  fail: 3.272
+  nGood: 40
+  nGoodVisits: 24
+  visitRange: 133040-147747
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=32 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+  provenance: 'Derived 2026-10-19 from validation visits 133040-147747 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=40 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
     arm: r
@@ -115,7 +121,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 2.987
+  warn: 2.988
   fail: 2.993
   nGood: 104
   nGoodVisits: 26
@@ -123,7 +129,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=104 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
@@ -132,15 +138,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 3.39
-  fail: 3.391
+  warn: 3.391
+  fail: 3.392
   nGood: 40
   nGoodVisits: 10
   visitRange: 133040-135829
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=40 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
@@ -159,7 +165,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135842 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135842 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.537px.'
 - metric: medFwhm
   population:
@@ -170,15 +176,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 2.891
-  fail: 2.947
+  warn: 2.89
+  fail: 2.946
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
     median, 2.806px.'
 - metric: medFwhm
   population:
@@ -197,7 +203,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135848 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.864px.'
 - metric: medFwhm
   population:
@@ -216,7 +222,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135846 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.821px.'
 - metric: medFwhm
   population:
@@ -235,7 +241,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135844 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.768px.'
 - metric: medFwhm
   population:
@@ -253,7 +259,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135850 (n=14): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135850 (n=14): WARN 3% and FAIL 5% above the known-good
     median, 3.149px.'
 - metric: medFwhm
   population:
@@ -272,7 +278,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135842 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135842 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.52px.'
 - metric: medFwhm
   population:
@@ -291,7 +297,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
     median, 2.81px.'
 - metric: medFwhm
   population:
@@ -310,7 +316,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135848 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.873px.'
 - metric: medFwhm
   population:
@@ -329,7 +335,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135846 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.817px.'
 - metric: medFwhm
   population:
@@ -348,7 +354,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135844 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.766px.'
 - metric: medFwhm
   population:
@@ -358,16 +364,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.252
-  fail: 3.315
-  nGood: 14
-  nGoodVisits: 14
-  visitRange: 133040-135850
+  warn: 3.424
+  fail: 3.49
+  nGood: 26
+  nGoodVisits: 26
+  visitRange: 145025-147747
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135850 (n=14): WARN 3% and FAIL 5% above the known-good
-    median, 3.157px.'
+  provenance: 'Derived 2026-10-19 from validation visits 145025-147747 (n=26): WARN 3% and FAIL 5% above the known-good
+    median, 3.323px.'
 - metric: medFwhm
   population:
     arm: b
@@ -377,16 +383,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 2.82
-  fail: 2.875
+  warn: 2.823
+  fail: 2.878
   nGood: 10
   nGoodVisits: 10
   visitRange: 133025-135842
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135842 (n=10): WARN 3% and FAIL 5% above the known-good
-    median, 2.737px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135842 (n=10): WARN 3% and FAIL 5% above the known-good
+    median, 2.74px.'
 - metric: medFwhm
   population:
     arm: b
@@ -404,7 +410,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
     median, 2.833px.'
 - metric: medFwhm
   population:
@@ -423,7 +429,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135848 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.849px.'
 - metric: medFwhm
   population:
@@ -442,7 +448,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135846 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.821px.'
 - metric: medFwhm
   population:
@@ -461,7 +467,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135844 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.779px.'
 - metric: medFwhm
   population:
@@ -479,7 +485,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135850 (n=14): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135850 (n=14): WARN 3% and FAIL 5% above the known-good
     median, 3.187px.'
 - metric: medFwhm
   population:
@@ -498,7 +504,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135842 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135842 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.663px.'
 - metric: medFwhm
   population:
@@ -517,7 +523,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
     median, 2.81px.'
 - metric: medFwhm
   population:
@@ -529,14 +535,14 @@ thresholds:
   absolute: false
   method: tolerance
   warn: 2.934
-  fail: 2.991
+  fail: 2.99
   nGood: 10
   nGoodVisits: 10
   visitRange: 133034-135848
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135848 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.848px.'
 - metric: medFwhm
   population:
@@ -555,7 +561,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135846 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.814px.'
 - metric: medFwhm
   population:
@@ -574,7 +580,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135844 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 2.745px.'
 - metric: medFwhm
   population:
@@ -584,16 +590,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.245
-  fail: 3.308
+  warn: 3.246
+  fail: 3.309
   nGood: 14
   nGoodVisits: 14
   visitRange: 133040-135850
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135850 (n=14): WARN 3% and FAIL 5% above the known-good
-    median, 3.15px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135850 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 3.151px.'
 - metric: medFwhm
   population:
     arm: m
@@ -611,7 +617,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133042-135842 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 3.119px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -630,7 +636,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133051-135848 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.847px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -649,7 +655,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133048-135846 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.917px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -668,7 +674,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133045-135844 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 3.013px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -678,7 +684,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.51
+  warn: 3.52
   fail: 3.58
   nGood: 4
   nGoodVisits: 4
@@ -686,8 +692,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133054-135850 (n=4): WARN 3% and FAIL 5% above the known-good
-    median, 3.408px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
+  provenance: 'Derived 2026-10-19 from validation visits 133054-135850 (n=4): WARN 3% and FAIL 5% above the known-good
+    median, 3.409px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
     arm: m
@@ -705,7 +711,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133042-135842 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 3.027px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -724,7 +730,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133051-135848 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.832px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -743,7 +749,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133048-135846 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.897px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -762,7 +768,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133045-135844 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.952px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -772,7 +778,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.423
+  warn: 3.424
   fail: 3.49
   nGood: 4
   nGoodVisits: 4
@@ -780,7 +786,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133054-135850 (n=4): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133054-135850 (n=4): WARN 3% and FAIL 5% above the known-good
     median, 3.323px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -799,7 +805,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133042-135842 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 3.178px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -818,7 +824,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133051-135848 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.806px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -837,7 +843,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133048-135846 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.908px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -856,7 +862,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133045-135844 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.977px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -874,8 +880,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133054-135850 (n=4): WARN 3% and FAIL 5% above the known-good
-    median, 3.409px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
+  provenance: 'Derived 2026-10-19 from validation visits 133054-135850 (n=4): WARN 3% and FAIL 5% above the known-good
+    median, 3.408px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
     arm: m
@@ -893,7 +899,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133042-135842 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 3.082px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -904,16 +910,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 2.95
-  fail: 3.007
+  warn: 2.948
+  fail: 3.005
   nGood: 5
   nGoodVisits: 5
   visitRange: 133051-135848
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133051-135848 (n=5): WARN 3% and FAIL 5% above the known-good
-    median, 2.864px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 3% and FAIL 5% above the known-good
+    median, 2.862px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
     arm: m
@@ -931,7 +937,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133048-135846 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.924px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -950,7 +956,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133045-135844 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 3.012px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -968,8 +974,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133054-135850 (n=4): WARN 3% and FAIL 5% above the known-good
-    median, 3.381px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
+  provenance: 'Derived 2026-10-19 from validation visits 133054-135850 (n=4): WARN 3% and FAIL 5% above the known-good
+    median, 3.382px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
     arm: n
@@ -987,7 +993,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.854px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -998,7 +1004,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 2.949
+  warn: 2.95
   fail: 3.007
   nGood: 6
   nGoodVisits: 6
@@ -1006,8 +1012,8 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
-    median, 2.863px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
+    median, 2.864px.'
 - metric: medFwhm
   population:
     arm: n
@@ -1025,7 +1031,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 3.011px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1044,7 +1050,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.911px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1063,8 +1069,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
-    median, 2.764px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
+    median, 2.763px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
     arm: n
@@ -1073,16 +1079,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.275
-  fail: 3.339
+  warn: 3.279
+  fail: 3.343
   nGood: 8
   nGoodVisits: 8
   visitRange: 133040-135829
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=8): WARN 3% and FAIL 5% above the known-good
-    median, 3.179px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=8): WARN 3% and FAIL 5% above the known-good
+    median, 3.183px.'
 - metric: medFwhm
   population:
     arm: n
@@ -1100,7 +1106,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.872px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1111,16 +1117,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.124
-  fail: 3.185
+  warn: 3.123
+  fail: 3.184
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
-    median, 3.033px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
+    median, 3.032px.'
 - metric: medFwhm
   population:
     arm: n
@@ -1138,7 +1144,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 3.045px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1157,7 +1163,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.945px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1176,7 +1182,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.82px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1186,16 +1192,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.292
-  fail: 3.356
+  warn: 3.297
+  fail: 3.361
   nGood: 8
   nGoodVisits: 8
   visitRange: 133040-135829
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=8): WARN 3% and FAIL 5% above the known-good
-    median, 3.196px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=8): WARN 3% and FAIL 5% above the known-good
+    median, 3.201px.'
 - metric: medFwhm
   population:
     arm: n
@@ -1213,7 +1219,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.863px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1232,7 +1238,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
     median, 3.006px.'
 - metric: medFwhm
   population:
@@ -1251,7 +1257,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 3.077px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1262,7 +1268,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.03
+  warn: 3.029
   fail: 3.088
   nGood: 5
   nGoodVisits: 5
@@ -1270,8 +1276,8 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
-    median, 2.941px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
+    median, 2.94px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
     arm: n
@@ -1289,7 +1295,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.789px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1307,7 +1313,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=8): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=8): WARN 3% and FAIL 5% above the known-good
     median, 3.249px.'
 - metric: medFwhm
   population:
@@ -1319,14 +1325,14 @@ thresholds:
   absolute: false
   method: tolerance
   warn: 2.903
-  fail: 2.96
+  fail: 2.959
   nGood: 5
   nGoodVisits: 5
   visitRange: 133025-135831
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.818px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1345,8 +1351,8 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
-    median, 2.805px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
+    median, 2.804px.'
 - metric: medFwhm
   population:
     arm: n
@@ -1364,7 +1370,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.989px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1383,7 +1389,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.715px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1402,7 +1408,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.668px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1412,16 +1418,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.194
-  fail: 3.256
-  nGood: 8
-  nGoodVisits: 8
-  visitRange: 133040-135829
+  warn: 3.331
+  fail: 3.396
+  nGood: 16
+  nGoodVisits: 16
+  visitRange: 145025-147747
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=8): WARN 3% and FAIL 5% above the known-good
-    median, 3.1px.'
+  provenance: 'Derived 2026-10-19 from validation visits 145025-147747 (n=16): WARN 3% and FAIL 5% above the known-good
+    median, 3.234px.'
 - metric: medFwhm
   population:
     arm: r
@@ -1439,7 +1445,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.758px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1458,7 +1464,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
     median, 2.955px.'
 - metric: medFwhm
   population:
@@ -1477,7 +1483,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.943px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1496,7 +1502,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.941px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1515,7 +1521,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.964px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1525,7 +1531,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.408
+  warn: 3.409
   fail: 3.475
   nGood: 10
   nGoodVisits: 10
@@ -1533,7 +1539,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=10): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=10): WARN 3% and FAIL 5% above the known-good
     median, 3.309px.'
 - metric: medFwhm
   population:
@@ -1552,7 +1558,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.736px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1571,7 +1577,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
     median, 2.889px.'
 - metric: medFwhm
   population:
@@ -1590,7 +1596,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.901px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1609,7 +1615,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.921px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1628,7 +1634,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.923px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1638,16 +1644,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.37
-  fail: 3.436
+  warn: 3.373
+  fail: 3.438
   nGood: 10
   nGoodVisits: 10
   visitRange: 133040-135829
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=10): WARN 3% and FAIL 5% above the known-good
-    median, 3.272px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=10): WARN 3% and FAIL 5% above the known-good
+    median, 3.274px.'
 - metric: medFwhm
   population:
     arm: r
@@ -1665,7 +1671,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.741px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1684,7 +1690,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
     median, 2.941px.'
 - metric: medFwhm
   population:
@@ -1703,7 +1709,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.914px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1722,7 +1728,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.94px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1741,7 +1747,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.942px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1751,7 +1757,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.417
+  warn: 3.416
   fail: 3.483
   nGood: 10
   nGoodVisits: 10
@@ -1759,8 +1765,8 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=10): WARN 3% and FAIL 5% above the known-good
-    median, 3.317px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=10): WARN 3% and FAIL 5% above the known-good
+    median, 3.316px.'
 - metric: medFwhm
   population:
     arm: r
@@ -1778,7 +1784,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.823px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1797,7 +1803,7 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 3% and FAIL 5% above the known-good
     median, 2.952px.'
 - metric: medFwhm
   population:
@@ -1816,7 +1822,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.961px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1835,7 +1841,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.947px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1854,7 +1860,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 3% and FAIL 5% above the known-good
     median, 2.987px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: medFwhm
   population:
@@ -1864,7 +1870,7 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.49
+  warn: 3.5
   fail: 3.56
   nGood: 10
   nGoodVisits: 10
@@ -1872,8 +1878,8 @@ thresholds:
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=10): WARN 3% and FAIL 5% above the known-good
-    median, 3.388px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=10): WARN 3% and FAIL 5% above the known-good
+    median, 3.389px.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -1882,17 +1888,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 4.9
-  fail: 4.9
+  warn: 70.53
+  fail: 70.63
   nGood: 24
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: false
-  degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
-    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -1901,15 +1906,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 4.68
-  fail: 4.69
+  warn: 37.9
+  fail: 38.0
   nGood: 20
   nGoodVisits: 5
   visitRange: 133042-135842
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133042-135842 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
@@ -1919,15 +1924,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 4.8
-  fail: 4.81
+  warn: 68.69
+  fail: 68.71
   nGood: 20
   nGoodVisits: 5
   visitRange: 133051-135848
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133051-135848 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
@@ -1937,16 +1942,17 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 3.75
-  fail: 3.86
+  warn: 30.21
+  fail: 30.21
   nGood: 20
   nGoodVisits: 5
   visitRange: 133048-135846
   reliable: true
   failBounded: false
-  degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133048-135846 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -1955,15 +1961,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 10.5
-  fail: 10.6
+  warn: 63.2
+  fail: 63.4
   nGood: 20
   nGoodVisits: 5
   visitRange: 133045-135844
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133045-135844 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
@@ -1973,15 +1979,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 4.21
-  fail: 4.23
+  warn: 31.0
+  fail: 31.1
   nGood: 20
   nGoodVisits: 5
   visitRange: 133025-135831
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135831 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
@@ -1991,15 +1997,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 1.248
-  fail: 1.257
+  warn: 70.5
+  fail: 70.8
   nGood: 24
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
@@ -2009,15 +2015,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 24.9
-  fail: 25.5
+  warn: 73.7
+  fail: 73.9
   nGood: 20
   nGoodVisits: 5
   visitRange: 133034-135837
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
@@ -2027,15 +2033,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 39.6
-  fail: 39.6
+  warn: 83.6
+  fail: 83.6
   nGood: 20
   nGoodVisits: 5
   visitRange: 133031-135835
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
     DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: pctFlagged
@@ -2046,15 +2052,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 13.8
-  fail: 14.4
+  warn: 57.5
+  fail: 58.6
   nGood: 20
   nGoodVisits: 5
   visitRange: 133028-135833
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
@@ -2064,15 +2070,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 4.07
-  fail: 4.1
+  warn: 46.0
+  fail: 47.2
   nGood: 20
   nGoodVisits: 5
   visitRange: 133025-135831
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135831 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
@@ -2082,15 +2088,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 5.84
-  fail: 5.9
+  warn: 90.74
+  fail: 90.87
   nGood: 24
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
@@ -2100,16 +2106,17 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 5.2
-  fail: 5.25
+  warn: 68.66
+  fail: 68.66
   nGood: 20
   nGoodVisits: 5
   visitRange: 133034-135837
   reliable: true
   failBounded: false
-  degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -2118,17 +2125,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 6.1
-  fail: 6.1
+  warn: 45.09
+  fail: 45.15
   nGood: 20
   nGoodVisits: 5
   visitRange: 133031-135835
   reliable: true
   failBounded: false
-  degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
-    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: arc
@@ -2137,16 +2143,17 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 15.0
-  fail: 15.3
+  warn: 68.6
+  fail: 68.6
   nGood: 20
   nGoodVisits: 5
   visitRange: 133028-135833
   reliable: true
   failBounded: false
-  degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: pctFlagged
   population:
     obsType: trace
@@ -2155,16 +2162,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 8.2
-  fail: 8.24
-  nGood: 56
-  nGoodVisits: 14
-  visitRange: 133040-135850
+  warn: 4.82
+  fail: 4.86
+  nGood: 68
+  nGoodVisits: 40
+  visitRange: 133040-147747
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135850 (n=56): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=56 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+  provenance: 'Derived 2026-10-19 from validation visits 133040-147747 (n=68): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=68 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
   population:
     obsType: trace
@@ -2173,15 +2180,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 3.39
-  fail: 3.4
+  warn: 0.0265
+  fail: 0.0314
   nGood: 16
   nGoodVisits: 4
   visitRange: 133054-135850
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133054-135850 (n=16): WARN at p95, FAIL at p99. NOT RELIABLE:
+  provenance: 'Derived 2026-10-19 from validation visits 133054-135850 (n=16): WARN at p95, FAIL at p99. NOT RELIABLE:
     n=16 is below the 20-sample floor. FAIL UNBOUNDED: n=16 cannot bound p99 at 95% confidence: its interval is
     open, and FAIL may move a long way with more data.'
 - metric: pctFlagged
@@ -2192,16 +2199,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 6.7
-  fail: 6.7
-  nGood: 32
-  nGoodVisits: 8
-  visitRange: 133040-135829
+  warn: 4.0
+  fail: 4.0
+  nGood: 40
+  nGoodVisits: 24
+  visitRange: 133040-147747
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
-    n=32 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+  provenance: 'Derived 2026-10-19 from validation visits 133040-147747 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=40 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
     DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: pctFlagged
   population:
@@ -2211,15 +2218,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 5.07
-  fail: 5.09
+  warn: 2.3
+  fail: 2.4
   nGood: 40
   nGoodVisits: 10
   visitRange: 133040-135829
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
     n=40 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2229,14 +2236,14 @@ thresholds:
   absolute: false
   method: percentile
   warn: 39510.0
-  fail: 39460.0
+  fail: 39500.0
   nGood: 40
   nGoodVisits: 10
   visitRange: 133025-135842
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135842 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135842 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=40 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2253,7 +2260,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=24 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
@@ -2271,7 +2278,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135848 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=40 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
@@ -2289,7 +2296,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135846 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=40 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2306,7 +2313,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135844 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=40 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2315,16 +2322,16 @@ thresholds:
   higherIsWorse: false
   absolute: false
   method: percentile
-  warn: 2427000.0
-  fail: 2427000.0
-  nGood: 56
-  nGoodVisits: 14
-  visitRange: 133040-135850
+  warn: 2429200.0
+  fail: 2429200.0
+  nGood: 68
+  nGoodVisits: 40
+  visitRange: 133040-147747
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135850 (n=56): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=56 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
+  provenance: 'Derived 2026-10-19 from validation visits 133040-147747 (n=68): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=68 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
   population:
@@ -2341,7 +2348,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 134880-135279 (n=48): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=48 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2358,7 +2365,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133042-135842 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
@@ -2376,7 +2383,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133051-135848 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
@@ -2394,7 +2401,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133048-135846 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2411,7 +2418,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133045-135844 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2428,7 +2435,7 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133054-135850 (n=16): WARN at p5, FAIL at p1. NOT RELIABLE:
+  provenance: 'Derived 2026-10-19 from validation visits 133054-135850 (n=16): WARN at p5, FAIL at p1. NOT RELIABLE:
     n=16 is below the 20-sample floor. FAIL UNBOUNDED: n=16 cannot bound p1 at 95% confidence: its interval is open,
     and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
     fire.'
@@ -2447,7 +2454,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135831 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2464,7 +2471,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=24 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2481,7 +2488,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135837 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2498,7 +2505,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135835 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
@@ -2516,7 +2523,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135833 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2525,16 +2532,16 @@ thresholds:
   higherIsWorse: false
   absolute: false
   method: percentile
-  warn: 2383200.0
-  fail: 2383200.0
-  nGood: 32
-  nGoodVisits: 8
-  visitRange: 133040-135829
+  warn: 2275000.0
+  fail: 2275000.0
+  nGood: 40
+  nGoodVisits: 24
+  visitRange: 133040-147747
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=32): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
-    n=32 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
+  provenance: 'Derived 2026-10-19 from validation visits 133040-147747 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+    n=40 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
   population:
@@ -2551,7 +2558,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 134880-135279 (n=48): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=48 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2568,7 +2575,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133025-135831 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
@@ -2586,7 +2593,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=24 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2603,7 +2610,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133034-135837 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2620,7 +2627,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133031-135835 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2637,7 +2644,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 133028-135833 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=20): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=20 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: nLines
   population:
@@ -2654,7 +2661,7 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Derived 2026-10-13 from validation visits 133040-135829 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=40): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=40 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: nLines
@@ -2664,7 +2671,7 @@ thresholds:
   higherIsWorse: false
   absolute: false
   method: percentile
-  warn: 2160000.0
+  warn: 2170000.0
   fail: 2130000.0
   nGood: 48
   nGoodVisits: 12
@@ -2672,5 +2679,5 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-13 from validation visits 134880-135279 (n=48): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p5, FAIL at p1. FAIL UNBOUNDED:
     n=48 cannot bound p1 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'

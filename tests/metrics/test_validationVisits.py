@@ -82,14 +82,34 @@ class TestCheckedInSet:
         ]
         assert len(faults) == 14 and {entry.run for entry in faults} == {27}
         assert {entry.run for entry in visitSet.confirmedBad} == {25, 27, 30}
-        assert {entry.run for entry in visitSet.knownGood} == {25}
+        # Run29 holds the b2 and n4 quartz references only (PIPE2D-1938).
+        assert {entry.run for entry in visitSet.knownGood} == {25, 29}
+        run29 = [entry for entry in visitSet.knownGood if entry.run == 29]
+        assert run29 and all(entry.sequenceType == "scienceTrace" for entry in run29)
+        assert set().union(*(entry.cameras for entry in run29)) == {"b2", "n4"}
 
     def testKnownGoodIsPopulated(self):
         """The Run25 stable set; thresholds cannot be derived without it."""
         visitSet = loadValidationVisits()
         assert visitSet.knownGood, "no usable known_good entries"
         assert visitSet.goodVisits[0] == 133025
-        assert visitSet.goodVisits[-1] == 135850
+        assert visitSet.goodVisits[-1] == 147747  # Run29's last trace set
+
+    def testQuartzReferenceOfB2AndN4IsRun29(self):
+        """Run25's trace entries leave b2 and n4 out; Run29's hold them alone (PIPE2D-1938)."""
+        visitSet = loadValidationVisits()
+        assert visitSet.expectationFor(133040, arm="b", spectrograph=1) == "PASS"
+        assert visitSet.expectationFor(133040, arm="b", spectrograph=2) is None
+        assert visitSet.expectationFor(133040, arm="n", spectrograph=4) is None
+        assert visitSet.expectationFor(133040, arm="r", spectrograph=2) == "PASS"  # r2 keeps Run25
+        assert visitSet.expectationFor(145025, arm="b", spectrograph=2) == "PASS"
+        assert visitSet.expectationFor(145025, arm="n", spectrograph=4) == "PASS"
+        assert visitSet.expectationFor(145025, arm="b", spectrograph=1) is None
+        assert visitSet.expectationFor(145062, arm="b", spectrograph=2) == "PASS"  # with the m camera set
+        assert visitSet.expectationFor(145062, arm="n", spectrograph=4) is None  # n not read with m
+        # Negative control: Run25's arcs still cover b2 and n4; only the quartz reference moved.
+        assert visitSet.expectationFor(133037, arm="b", spectrograph=2) == "PASS"  # HgCd: no flag-rate caveat
+        assert visitSet.expectationFor(133031, arm="n", spectrograph=4) == "PASS"
 
     def testKnownGoodEntriesAreScopedToTheArmsThatWereRead(self):
         """Run25 block A read b/r/n and block B read b/m; neither covers the other."""
@@ -420,7 +440,7 @@ class TestTables:
             sum(line.startswith("| ") and "---" not in line for line in text.splitlines())
             == len(visitSet) + 4
         ), "one row per entry plus a header per table"
-        assert "| 140005–140006 | 27 | scienceArc | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` |" in text
+        assert "| 140005–140006 | 27 | scienceArc | r, n | 1 | Arc: Argon | FAIL | `medFwhm` |" in text
 
     def testEveryRowHasTheHeadersColumns(self):
         """A cell added to the rows but not the header breaks the Markdown table."""
@@ -502,10 +522,10 @@ class TestRuns:
         with pytest.raises(ValueError, match="referenceRuns not in runs"):
             loadValidationVisits(writeYaml("version: 1\nruns: {25: [1, 9]}\nreferenceRuns: [30]\n"))
 
-    def testCheckedInSetDerivesFromRun25Only(self):
+    def testCheckedInSetDerivesFromRun25AndRun29(self):
         visitSet = loadValidationVisits()
-        assert visitSet.referenceRuns == (25,)
-        assert {entry.run for entry in visitSet.knownGood} == {25}
+        assert visitSet.referenceRuns == (25, 29)  # Run29 for b2 and n4 quartz (PIPE2D-1938)
+        assert {entry.run for entry in visitSet.knownGood} == {25, 29}
 
     def testBArmFlagRatesAreRecordedAsBad(self):
         """The baseline for drp_stella's adjustDetectorMap work: bad for pctFlagged only."""

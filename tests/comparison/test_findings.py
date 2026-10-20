@@ -205,7 +205,7 @@ def testExpectedFromTheValidationSet(defocus):
 
 
 def testTaskPipeline(tmp_path):
-    """The pipeline comes from the task's thresholds file; the shipped Run25 file records none yet."""
+    """The pipeline comes from the task's thresholds file; the shipped file records the one it was derived with."""
     from types import SimpleNamespace
 
     import yaml
@@ -213,7 +213,26 @@ def testTaskPipeline(tmp_path):
     from pfs.drp.qa.comparison.findings import taskPipeline
 
     assert taskPipeline(SimpleNamespace(thresholdsFile="")) == {}
-    assert taskPipeline(SimpleNamespace(thresholdsFile="iqQaThresholds-run25.yaml")) == {}
+    assert taskPipeline(SimpleNamespace(thresholdsFile="iqQaThresholds-run25.yaml")) == {
+        "datamodel": "w.2026.40",
+        "obs_pfs": "w.2026.40",
+        "drp_stella": "w.2026.41-6-ge56938d2",
+    }
+    # Negative control: a file that records no pipeline gives none.
+    bare = tmp_path / "bare.yaml"
+    bare.write_text(
+        yaml.safe_dump(
+            {
+                "version": 2,
+                "derivedOn": "2026-10-14",
+                "collection": "c",
+                "referenceRuns": [25],
+                "drpQaVersion": "v",
+                "thresholds": [],
+            }
+        )
+    )
+    assert taskPipeline(SimpleNamespace(thresholdsFile=str(bare))) == {}
     path = tmp_path / "t.yaml"
     path.write_text(
         yaml.safe_dump(
