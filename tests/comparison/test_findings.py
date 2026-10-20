@@ -227,6 +227,7 @@ def testTaskPipeline(tmp_path):
                 "derivedOn": "2026-10-14",
                 "collection": "c",
                 "referenceRuns": [25],
+                "drpQaVersion": "v",
                 "thresholds": [],
             }
         )
