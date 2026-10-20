@@ -100,10 +100,10 @@ Per reference, line species and line set (`statusType`: `BOTH`, `USED`, `RESERVE
 robust RMS of the x and y residuals, `nLines` and `linesPerFiber`. Judged: against `calib`, over `BOTH` (or
 `UNFITTED`) lines, the median x offset of traces and median y offset of lamp lines (WARN 1 px, `APPLY_SHIFT`; FAIL 2
 px, `RECALIBRATE`); against `visit`, the robust RMS of `RESERVED` lines (`RECALIBRATE`), by the thresholds file
-`dmLineResidualThresholds-run25.yaml` (PIPE2D-1956): trace centroids on quartz frames in x, per detector, at WARN
-20 % and FAIL 50 % above the detector's known-good median in Run25 (b, n and r; the m arm's two values are below the
-floor). Stored, not judged: trace centroids on arcs and twilights; the lamp species, whose scatter differs between
-observing runs by more than it varies within one; and the sky-line species on twilights. The weighted RMS and
+`dmLineResidualThresholds-run25.yaml` (PIPE2D-1956): trace centroids on quartz frames and the Ar, Kr, Ne and Xe
+lines in x, per detector, at WARN 20 % and FAIL 50 % above the detector's known-good median in Run25. Stored, not
+judged: the lamps' y scatter; the mercury and cadmium lines, whose y scatter is intrinsically variable; trace
+centroids on arcs and twilights; and the sky-line species on twilights. The weighted RMS and
 the softening are drp_stella's, in `iqQaMetrics` and `iqQaSpeciesMetrics`, not recomputed. Logic in the stack-free
 `pfs.drp.qa.metrics.lineResiduals`. No plot is drawn as the task runs: plot `dmLineResidualData` afterwards.
 
@@ -538,21 +538,23 @@ verdict is known. The decisions behind the current set:
   median offsets from `detectorMap_calib` are judged at WARN 1 px and FAIL 2 px, a physical limit short of
   drp_stella's 3 px line-search radius: offsets from a calibration sit near zero in the run it came from, so no
   percentile applies. The robust RMS of `RESERVED` lines against the visit's own detectorMap is derived in the
-  notebook like the other percentile thresholds, per arm, species, camera set and observation type, from the
-  known-good visits of each arm's reference run less each calibration's own input visits (their adjusted maps are
-  fitted to the lines the calibration was), and adopted through the task's `thresholdsFile` (2026-10-20, from
-  `u/wtg/qa-thresholds/010`): trace centroids on quartz frames are judged per detector by a tolerance, WARN 20 %
-  and FAIL 50 % above the detector's known-good median, as `medFwhm` is. A detector's quartz trace scatter repeats
-  to about 1 % within a run and differs 20 % between detectors, so a percentile over the pooled detectors is set by
-  the worst one and cuts through the best one's cluster; the regular trace sets of Runs 26–30 sit within +12 % of
-  Run25's per-detector median (+24 % at the end of Run26 on b1, a WARN), the Run27 SM1 defocus at 1.7–4×, a FAIL.
-  Not judged, with the reasons in each entry's provenance: trace centroids on arcs and twilights, which scatter two
-  to three times more on the faint continuum (one population with the quartz traces, they failed 14–20 % of Runs
-  25–27's healthy arcs); the lamp species, whose scatter differs between observing runs by more than it varies within
-  one (thresholds from Run29's arcs flag 20–70 % of Runs 25–28's healthy arcs and about none of Runs 29–30's, so a
-  fixed reference does not transfer); and the twilights' sky species. `bin.src/judgeScatterThresholds.py` is the
-  acceptance check, run on the comparison exports of Runs 25–30 before any adoption; its findings are in
-  `docs/qa-domain-notes.md`. `dmResiduals` runs beside it through Run31 for comparison.
+  notebook like the other percentile thresholds, per arm, species, camera set and observation type, and as a
+  tolerance per detector, from the known-good visits of each arm's reference run, and adopted through the task's
+  `thresholdsFile` (2026-10-20, from
+  `u/wtg/qa-thresholds/010`): trace centroids on quartz frames and the Ar, Kr, Ne and Xe lines are judged in x per
+  detector by a tolerance, WARN 20 % and FAIL 50 % above the detector's known-good median, as `medFwhm` is. A
+  detector's quartz trace scatter repeats to about 1 % within a run and differs 20 % between detectors, so a
+  percentile over the pooled detectors is set by the worst one and cuts through the best one's cluster, and a
+  percentile over one run's arcs does not transfer to the next (thresholds from Run29's arcs flagged 20–70 % of Runs
+  25–28's healthy arcs); against the per-detector median, the regular trace sets and arcs of Runs 25, 26 and 28–30
+  fail at most one image a run and warn on a few percent (b1 and r1 traces at +24 % at the end of Run26, b-arm
+  Xenon arcs), and the Run27 SM1 defocus fails at 1.7–4×. The calibration's own input visits are kept in the scatter
+  derivation (they sit at zero against the calibration, which is the drift's concern, not against the visit's own
+  map). Not judged, with the reasons in each entry's provenance: the lamps' y scatter; the mercury and cadmium
+  lines, whose y scatter is intrinsically variable; trace centroids on arcs and twilights, which scatter two to
+  three times more on the faint continuum; and the twilights' sky species. `bin.src/judgeScatterThresholds.py` is
+  the acceptance check, run on the comparison exports of Runs 25–30 before any adoption, engineering sequences set
+  apart; its findings are in `docs/qa-domain-notes.md`. `dmResiduals` runs beside it through Run31 for comparison.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
 - **Thresholds hold for the pipeline that reduced their visits** (PIPE2D-1938). Two reductions of the same Run25
@@ -647,8 +649,8 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
 - **Everything measurable is judged; only validated types are gated.** `scienceArc`, `scienceTrace` and
   `scienceObject` are *gated*: their thresholds were derived from and checked against such visits. Every other type
   `imageQualityQa` can measure (engineering arcs, flats, fiber profiles, focus sweeps, windowed readouts, new
-  types, and the engineering sequences taken as a validated type: bootstraps, IIS `ImageQuality` frames and health
-  checks, by sequence name) is judged the same way but labelled *unvalidated*, in its own pass and its own report section: a `FAIL`
+  types, and the engineering sequences taken as a validated type: bootstraps, IIS `ImageQuality` frames, health
+  checks, line checks and detectorMap tests, by sequence name) is judged the same way but labelled *unvalidated*, in its own pass and its own report section: a `FAIL`
   there may be what an engineering test expected. Biases and darks have no method yet; test exposures are listed
   only.
 - **n-arm darks are listed with the last lit exposure before them**, from the opdb alone: the n detectors keep an image

@@ -180,11 +180,11 @@ class DmLineResidualsConfig(PipelineTaskConfig, pipelineConnections=DmLineResidu
             " lines against the visit's detectorMap, derived from the validation visits reduced afresh"
             " (u/wtg/qa-thresholds/010, PIPE2D-1938) and adopted in PIPE2D-1956 by"
             " ``makeLineResidualThresholds.py`` beside it: trace centroids on quartz frames (obsType"
-            " ``trace``) judged in x per detector, WARN 20 % and FAIL 50 % above the detector's known-good"
-            " median (b, n and r; the m arm is below the floor). Not judged: trace centroids on arcs and twilights, whose"
-            " faint continuum scatters them two to three times more; lamp species, whose scatter differs"
-            " between observing runs by more than it varies within one; and sky-line species on"
-            " twilights. The median offsets from detectorMap_calib stay with the fields below."
+            " ``trace``) and the Ar, Kr, Ne and Xe lines judged in x per detector, WARN 20 % and FAIL 50 %"
+            " above the detector's known-good median. Not judged: the lamps' y scatter; the mercury and"
+            " cadmium lines, whose y scatter is intrinsically variable; trace centroids on arcs and"
+            " twilights, whose faint continuum scatters them two to three times more; and sky-line species"
+            " on twilights. The median offsets from detectorMap_calib stay with the fields below."
         ),
     )
     xWarnThreshold = Field(

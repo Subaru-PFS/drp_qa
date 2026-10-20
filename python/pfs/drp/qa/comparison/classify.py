@@ -13,7 +13,8 @@ any new type) are *unvalidated*: judged the same way so their results can be see
 off-nominal on purpose, so a FAIL there may be what the test expected. So are the engineering
 sequences taken as those types (`ENGINEERING_SEQUENCES`, by sequence name): a bootstrap, an IIS
 ``ImageQuality`` frame or a health check lights a handful of fibers, and its trace centroids scatter
-twice a trace set's (PIPE2D-1956). `NOT_MEASURED_TYPES` have
+twice a trace set's; a ``LineCheck`` or ``DetectorMap test`` arc is taken off the calibration recipe,
+and its lamp lines scatter like a fault's (PIPE2D-1956). `NOT_MEASURED_TYPES` have
 nothing to measure. Every visit is listed, so a run's coverage is complete and a new sequence
 type shows up rather than disappearing.
 
@@ -57,8 +58,16 @@ __all__ = [
 VALIDATED_TYPES = ("scienceArc", "scienceTrace", "scienceObject")
 
 #: Starts of sequence names (case-insensitive) that are engineering sequences whatever their type:
-#: bootstraps, IIS image-quality frames and health checks light a handful of fibers. Unvalidated.
-ENGINEERING_SEQUENCES = ("bootstrap", "imagequality", "image quality", "health check")
+#: bootstraps, IIS image-quality frames and health checks light a handful of fibers, line checks and
+#: detectorMap tests take lamps and exposures off the calibration recipe. Unvalidated.
+ENGINEERING_SEQUENCES = (
+    "bootstrap",
+    "imagequality",
+    "image quality",
+    "health check",
+    "linecheck",
+    "detectormap test",
+)
 
 #: Sequence types with no arc lines or traces to measure.
 NOT_MEASURED_TYPES = ("biases", "darks", "masterBiases", "masterDarks")

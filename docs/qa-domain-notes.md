@@ -217,8 +217,9 @@ offsets mean:
   also holds the linear change the adjustment absorbs. Known-good robust RMS (Run25, the
   calibration's own visits excluded): x 0.18–0.22 px at p99; y 0.08–0.13 px on lamp
   lines, more on sky lines (NaI 0.32 px).
-- **The calibration's own input visits read zero** by construction; exclude them from any
-  derivation.
+- **The calibration's own input visits read zero** against the calibration by construction; exclude them from any
+  drift derivation. Against the visit's own map they are visits like any other, and the scatter derivation keeps
+  them (PIPE2D-1956).
 
 Measured in the validation run (`u/wtg/qa-thresholds/006`, 2026-10-15):
 
@@ -310,13 +311,20 @@ checked with `bin.src/judgeScatterThresholds.py` on comparison mode's exports of
   (24–28 values per species, 6–7 visits), judged at WARN, flag 20–70 % of the lamp arcs of Runs
   25–28 (r-arm Krypton 71 % in Run25) and about none of Runs 29–30's: the reserved-line scatter
   of lamp lines against the visit's adjusted map differs between runs by more than it varies
-  within one, so no fixed reference transfers. Lamp species are stored, not judged; a within-run
-  baseline is the shape of an answer. A per-detector tolerance about Run25's median (20 %/50 %,
-  as the traces) was tried on 2026-10-20: it has reliable entries for half the lamp rows only
-  (b-arm CdI, HgI, KrI, NeI, XeI, n HgI, r CdI and HgI, 3–7 values each; the n and r Kr/Ne/Xe and
-  every Argon have fewer than three), passes Kr, Ne and Xe in x (0–6 % FAIL outside Run27) and
-  fails 5–20 % of Runs 25–28's HgCd arcs in y (r-arm HgI, CdI; Run25's own r arcs 9 %): the HgCd
-  species' y scatter is intrinsically variable (medians 0.6–1.1 px on n and r).
+  within one, so no fixed reference transfers. A per-detector tolerance about Run25's median
+  (20 %/50 %, as the traces) does: adopted 2026-10-20 in x for Ar, Kr, Ne and Xe on every arm,
+  with the calibration's own input arcs kept in the reference (zero against the calibration is
+  the drift's concern; against the visit's own map a calibration input is a visit like any other),
+  which gives 4–10 values per detector and species. On the standard arcs of Runs 25, 26 and 28–30
+  it fails at most one image a run; b-arm Xenon, with 60–110 lines per detector and weakening
+  (b1: 89 in Run25, 65 in Run29), warns on 15–25 % of its arcs in every run, the one noisy
+  population. Not adopted: y, where the HgCd species' scatter is intrinsically variable (medians
+  0.6–1.1 px on n and r) and a tolerance failed 5–20 % of Runs 25–28's healthy arcs, and the HgCd
+  lines in x with it. `LineCheck` and `DetectorMap test` arcs, taken off the calibration recipe,
+  fail in bulk on the r arm (40–60 % in Runs 28–29) and are unvalidated by name.
+- **The two unnamed Run25 quartz 135903–135904** are an IIS trace sequence (`IIS trace z=0`,
+  `noLampCtl`, in the sequence comment; the name is empty), so the engineering rule, which reads
+  names, gates them: 20 FAILs in Run25 that are IIS frames.
 
 ---
 

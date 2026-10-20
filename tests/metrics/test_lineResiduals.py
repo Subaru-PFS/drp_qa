@@ -931,60 +931,60 @@ def testShippedScatterFileIsTheAdopted():
     remade = module.adopt(derivedDocument)
     assert remade == yaml.safe_load(thresholdsPath("dmLineResidualThresholds-run25.yaml").read_text())
     # The derivation has a percentile row per arm, species, camera set and observation type, and a
-    # tolerance row per detector, species and observation type. The adopted file keeps the percentile
-    # rows except the quartz traces', which the tolerance rows replace, and no other tolerance row.
+    # tolerance row per detector, species and observation type. A population judged per detector keeps
+    # its tolerance rows alone (quartz traces, lamp species but HgCd); the others keep their percentile rows.
     assert len(derivedDocument["thresholds"]) == 329
-    assert len(remade["thresholds"]) == 84
-    tolerance = [e for e in remade["thresholds"] if e["method"] == "tolerance"]
-    assert len(tolerance) == 16
+    assert len(remade["thresholds"]) == 168
+    methods = {e["method"] for e in remade["thresholds"]}
+    assert methods == {"percentile", "tolerance"}
+    perDetector = [module.judgedByTolerance(e["population"]) for e in remade["thresholds"]]
     assert all(
-        e["population"]["description"] == TRACE and e["population"]["obsType"] == QUARTZ for e in tolerance
-    )
-    assert not any(
-        e["method"] == "percentile"
-        and e["population"]["description"] == TRACE
-        and e["population"]["obsType"] == QUARTZ
-        for e in remade["thresholds"]
+        (e["method"] == "tolerance") == flag
+        for e, flag in zip(remade["thresholds"], perDetector, strict=True)
     )
     judged = [e for e in remade["thresholds"] if e["warn"] is not None or e["fail"] is not None]
-    # Trace centroids on quartz frames, per detector, WARN 20 % and FAIL 50 % above the detector's
-    # known-good median: b, n and r; m's two values are below the floor.
-    assert [(e["population"]["arm"], e["population"]["spectrograph"]) for e in judged] == [
-        (arm, spectrograph) for arm in "bnr" for spectrograph in (1, 2, 3, 4)
-    ]
-    assert all(e["population"]["description"] == TRACE and e["metric"] == "robustRmsDeltaX" for e in judged)
-    assert all(e["method"] == "tolerance" and e["reliable"] and e["fail"] is not None for e in judged)
+    # Judged, per detector, WARN 20 % and FAIL 50 % above the detector's known-good median, in x: trace
+    # centroids on quartz frames and the Ar, Kr, Ne and Xe lines, on every arm that reads them.
+    assert len(judged) == 76
+    assert all(
+        e["method"] == "tolerance" and e["metric"] == "robustRmsDeltaX" and e["reliable"] for e in judged
+    )
     assert all(e["warn"] / e["fail"] == pytest.approx(1.2 / 1.5, rel=0.03) for e in judged)
     assert all("WARN 20% and FAIL 50% above the known-good median" in e["provenance"] for e in judged)
-    assert {e["nGood"] for e in judged} == {12, 6, 8}  # b, n, r: Run25's trace sets outside the calibration
-    # Nothing else: sky species, trace centroids on arcs and twilights, lamp species, populations under the floor.
+    assert {(e["population"]["arm"], e["population"]["description"]) for e in judged} == {
+        (arm, species)
+        for arm in "bmnr"
+        for species in ("Trace", "ArI", "KrI", "NeI", "XeI")
+        if (arm, species) != ("b", "ArI")
+    }  # the b arm's Argon has too few lines for a RESERVED set
+    assert all(
+        e["population"]["obsType"] == (QUARTZ if e["population"]["description"] == TRACE else "arc")
+        for e in judged
+    )
+    assert {e["nGood"] for e in judged} == {4, 5, 8, 10, 14}  # the calibration's own inputs count
+    # Not judged, with the reason: lamp y, sky species, HgCd lines, trace centroids on arcs and twilights.
     unjudged = [e for e in remade["thresholds"] if e["warn"] is None and e["fail"] is None]
-    assert len(unjudged) == 72 and all(e["provenance"].startswith("Not judged (") for e in unjudged)
-    kinds = {
+    assert len(unjudged) == 92 and all(e["provenance"].startswith("Not judged (") for e in unjudged)
+    reasons = {
+        "lampY": [e for e in unjudged if e["metric"] == "robustRmsDeltaY" and e["method"] == "tolerance"],
         "sky": [e for e in unjudged if e["population"]["description"] in SKY_SPECIES],
+        "hgcd": [e for e in unjudged if e["population"]["description"] in module.HGCD_SPECIES],
         "arcTraces": [
             e
             for e in unjudged
             if e["population"]["description"] == TRACE and e["population"]["obsType"] != QUARTZ
         ],
-        "lamps": [
-            e
-            for e in unjudged
-            if e["population"]["description"] != TRACE and e["population"]["description"] not in SKY_SPECIES
-        ],
-        "thin": [
-            e
-            for e in unjudged
-            if e["population"]["description"] == TRACE and e["population"]["obsType"] == QUARTZ
-        ],
     }
-    assert {k: len(v) for k, v in kinds.items()} == {"sky": 14, "arcTraces": 8, "lamps": 46, "thin": 4}
-    assert all("faint" in e["provenance"] for e in kinds["arcTraces"])
-    assert all("between observing runs" in e["provenance"] for e in kinds["lamps"])
-    assert all(not e["reliable"] and e["population"]["arm"] == "m" for e in kinds["thin"])  # m: two values
-    # Negative control: the derivation gave the arc-frame traces and the bm lamps reliable percentile
-    # thresholds, and the pooled quartz traces a FAIL; withholding them is the adoption's rule, not the data's.
-    derived = {
+    assert {k: len(v) for k, v in reasons.items()} == {"lampY": 60, "sky": 14, "hgcd": 10, "arcTraces": 8}
+    assert all("y scatter" in e["provenance"] for e in reasons["lampY"])
+    assert all("sky lines' fit" in e["provenance"] for e in reasons["sky"])
+    assert all(
+        "mercury or cadmium" in e["provenance"] and e["method"] == "percentile" for e in reasons["hgcd"]
+    )
+    assert all("faint" in e["provenance"] and e["method"] == "percentile" for e in reasons["arcTraces"])
+    # Negative control: the derivation gave the arc-frame traces reliable percentile thresholds, the pooled
+    # quartz traces a FAIL and 80 lamp populations a reliable y tolerance; withholding them is the adoption's rule.
+    percentile = {
         (
             e["population"]["arm"],
             e["population"]["description"],
@@ -995,17 +995,24 @@ def testShippedScatterFileIsTheAdopted():
         for e in derivedDocument["thresholds"]
         if e["method"] == "percentile"
     }
-    assert sum(derived[k]["reliable"] for k in derived if k[1] == TRACE and k[3] == "arc") == 5
-    assert derived[("b", "KrI", "bm", "arc", "robustRmsDeltaX")]["reliable"]
-    assert derived[("r", TRACE, "brn", "trace", "robustRmsDeltaX")]["fail"] is not None
+    assert sum(percentile[k]["reliable"] for k in percentile if k[1] == TRACE and k[3] == "arc") == 5
+    assert percentile[("r", TRACE, "brn", "trace", "robustRmsDeltaX")]["fail"] is not None
+    lampY = [
+        e
+        for e in derivedDocument["thresholds"]
+        if e["method"] == "tolerance"
+        and e["metric"] == "robustRmsDeltaY"
+        and e["population"]["description"] not in (TRACE, *SKY_SPECIES)
+    ]
+    assert sum(e["reliable"] for e in lampY) == 80
 
 
 def testShippedScatterVerdicts():
     """The adopted file on the validation run (u/wtg/qa-thresholds/010).
 
-    Trace centroids on quartz frames are judged in x per detector (b, n and r; m is below the
-    floor); trace centroids on arcs and twilights, the lamp species and the sky species are not.
-    Counts are the fixture's, whose ``obsType`` is imageQualityQa's.
+    Trace centroids on quartz frames and the Ar, Kr, Ne and Xe lines are judged in x per detector;
+    trace centroids on arcs and twilights, the lamps' y scatter, the HgCd lines and the sky species
+    are not. Counts are the fixture's, whose ``obsType`` is imageQualityQa's.
     """
     from pfs.drp.qa.metrics.calibration import labelRows
     from pfs.drp.qa.metrics.gate import thresholdsPath
@@ -1023,15 +1030,16 @@ def testShippedScatterVerdicts():
     sky = reserved["description"].isin(SKY_SPECIES)
     traces = reserved["description"] == TRACE
     quartz = reserved["obsType"] == QUARTZ
-    lamps = ~traces & ~sky
+    hgcd = reserved["description"].isin(["HgI", "CdI"])
+    lamps = ~traces & ~sky & ~hgcd
     counts = {
         "robustRmsDeltaX": {
-            "quartzTraces": {"PASS": 423, "FAIL": 82, "": 56, "WARN": 14},  # "": the m arm
-            "byArm": {
+            "quartzTraces": {"PASS": 479, "FAIL": 82, "WARN": 14},
+            "quartzByArm": {
                 ("b", "FAIL"): 20,
                 ("b", "PASS"): 180,
                 ("b", "WARN"): 12,
-                ("m", ""): 56,
+                ("m", "PASS"): 56,
                 ("n", "FAIL"): 25,
                 ("n", "PASS"): 118,
                 ("r", "FAIL"): 37,
@@ -1039,17 +1047,21 @@ def testShippedScatterVerdicts():
                 ("r", "WARN"): 2,
             },
             "otherTraces": 862,
-            "lamps": 725,
-            "goodQuartzTraces": {"PASS": 128, "": 16},  # every known-good quartz trace of b, n and r passes
+            "lamps": {"PASS": 468, "FAIL": 63, "WARN": 23},
+            "goodQuartzTraces": {"PASS": 144},  # every known-good quartz trace passes
+            "goodLamps": {"PASS": 357, "WARN": 3},  # three b-arm Xenon arcs at the 20 % WARN
             "unconfirmedQuartzTraces": {"FAIL": 7, "PASS": 3, "WARN": 2},  # 150661, Run30
+            "unconfirmedLamps": {"PASS": 12},
         },
         "robustRmsDeltaY": {
             "quartzTraces": {},  # traces measure x only
-            "byArm": {},
+            "quartzByArm": {},
             "otherTraces": 0,
-            "lamps": 725,
+            "lamps": {"": 554},  # measured, not judged
             "goodQuartzTraces": {"": 144},
+            "goodLamps": {"": 360},
             "unconfirmedQuartzTraces": {"": 12},
+            "unconfirmedLamps": {"": 12},
         },
     }
     for metric, expected in counts.items():
@@ -1061,22 +1073,31 @@ def testShippedScatterVerdicts():
         measured = reserved[metric].notna()
         quartzTraces = traces & quartz & measured
         assert status[quartzTraces].value_counts().to_dict() == expected["quartzTraces"]
-        assert status[quartzTraces].groupby(reserved["arm"]).value_counts().to_dict() == expected["byArm"]
+        assert (
+            status[quartzTraces].groupby(reserved["arm"]).value_counts().to_dict() == expected["quartzByArm"]
+        )
         assert (layer[quartzTraces] == 0).all()  # every quartz trace meets an entry, judged or not
         otherTraces = traces & ~quartz & measured
         assert otherTraces.sum() == expected["otherTraces"] and (status[otherTraces] == "").all()
         assert (layer[otherTraces] == 0).all()  # by an entry with no thresholds, not by absence
-        assert (lamps & measured).sum() == expected["lamps"] and (status[lamps & measured] == "").all()
+        assert (lamps & measured).sum() == 554
+        assert status[lamps & measured].value_counts().to_dict() == expected["lamps"]
         assert (layer[lamps & measured] == 0).all()
+        assert (hgcd & measured).sum() == 171 and (status[hgcd & measured] == "").all()
         labelled = labelRows(reserved, visitSet, metric)
         good = labelled.index[labelled["validation"] == "good"]
         assert (
             status.loc[good[(traces & quartz)[good]]].value_counts().to_dict() == expected["goodQuartzTraces"]
         )
+        assert status.loc[good[lamps[good]]].value_counts().to_dict() == expected["goodLamps"]
         unconfirmed = labelled.index[labelled["validation"] == "unconfirmed"]
         assert (
             status.loc[unconfirmed[(traces & quartz)[unconfirmed]]].value_counts().to_dict()
             == expected["unconfirmedQuartzTraces"]
+        )
+        assert (
+            status.loc[unconfirmed[lamps[unconfirmed]]].value_counts().to_dict()
+            == expected["unconfirmedLamps"]
         )
     # Negative control: a flat 0.03/0.04 px scatter threshold fails or warns most known-good quartz traces.
     strict = judge(reserved, [residualThresholds(1.0, 2.0, 1.0, 2.0, 0.03, 0.04, 0.03, 0.04)])

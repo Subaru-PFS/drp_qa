@@ -18,14 +18,16 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   line-residual thresholds are derived per observation type as well, and the scatter metrics also get a tolerance
   per detector, species and observation type in the registry. `thresholdsFile` defaults to
   `dmLineResidualThresholds-run25.yaml`, made by `makeLineResidualThresholds.py` from the derivation over
-  `u/wtg/qa-thresholds/010`: trace centroids on quartz frames judged in x per detector, WARN 20 % and FAIL 50 % above
-  the detector's known-good median (b, n and r; m's two values are below the floor), 12 of 84 entries. A detector's
-  quartz trace scatter repeats to about 1 % within a run and differs 20 % between detectors, so a pooled percentile
-  flagged regular trace sets 10 % above the reference maximum; against the per-detector median, Runs 25 and 28–30
-  flag no regular trace set, Run26 warns on b1 and r1 at the end of the run (+24 %) and Run27 fails the SM1 defocus
-  (1.7–4×). Not judged, with the reason in each entry's provenance: trace centroids on arcs and twilights; the lamp
-  species, whose scatter differs between observing runs by more than it varies within one (thresholds from Run29's
-  arcs flag 20–70 % of Runs 25–28's healthy arcs and about none of Runs 29–30's); and the sky-line species. A
+  `u/wtg/qa-thresholds/010`: trace centroids on quartz frames and the Ar, Kr, Ne and Xe lines judged in x per
+  detector, WARN 20 % and FAIL 50 % above the detector's known-good median, 76 of 168 entries. A detector's quartz
+  trace scatter repeats to about 1 % within a run and differs 20 % between detectors, so a pooled percentile flagged
+  regular trace sets 10 % above the reference maximum, and a percentile over one run's arcs does not transfer to the
+  next (Run29's flagged 20–70 % of Runs 25–28's healthy arcs); against the per-detector median, Runs 25, 26 and
+  28–30 fail at most one standard arc or trace set an image a run and warn on a few percent (b1 and r1 traces at the
+  end of Run26, b-arm Xenon arcs), and Run27 fails the SM1 defocus (1.7–4×). The scatter derivation keeps the
+  calibration's own input visits (zero against the calibration is the drift's concern). Not judged, with the reason
+  in each entry's provenance: the lamps' y scatter; the mercury and cadmium lines, whose y scatter is intrinsically
+  variable; trace centroids on arcs and twilights; and the sky-line species. A
   `known_good` entry takes `metrics`, the metrics it is a reference for, and `excludeMetrics`: Run29's 2026-07-14 and
   07-23 arc sets (which built no calibration) are reference values for the line scatter while the image-quality
   references stay Run25's, and Run29's trace sets are b2 and n4's image-quality reference but not their scatter one,
@@ -34,9 +36,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   table is by observation type, and tables stored before the column take it from `iqQaMetrics`.
 
 - **Engineering sequences are unvalidated in comparison mode** (PIPE2D-1956) — a bootstrap, an IIS `ImageQuality`
-  frame or a health check (`ENGINEERING_SEQUENCES`, by sequence name) taken as a `scienceTrace` or `scienceArc` lights
-  a handful of fibers, and its trace centroids scatter twice a trace set's; they are judged and reported in the
-  *Unvalidated* section, not gated.
+  frame, a health check, a `LineCheck` or a `DetectorMap test` (`ENGINEERING_SEQUENCES`, by sequence name) taken as a
+  `scienceTrace` or `scienceArc` lights a handful of fibers or takes lamps off the calibration recipe, and its lines
+  scatter like a fault's; they are judged and reported in the *Unvalidated* section, not gated.
 
 - **b2 and n4 quartz take their reference from Run29** (PIPE2D-1938) — reduced with one pipeline, Runs 25–30 agree
   with Run25 in `medFwhm` to within 3 % everywhere but b2 quartz (SM2's slit refocused on 2026-03-11) and n4 quartz

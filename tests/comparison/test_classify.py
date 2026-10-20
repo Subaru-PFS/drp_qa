@@ -75,6 +75,9 @@ def testClassifyVisits(periods, visit, listing):
         visit(14, "2026-01-03 18:12", "scienceTrace", name="ImageQuality (Halogen)"),
         visit(15, "2026-01-03 18:14", "scienceArc", name=" health check"),
         visit(16, "2026-01-03 18:16", "scienceTrace", name="Trace"),  # ...and a trace set
+        visit(17, "2026-01-03 18:18", "scienceArc", name="LineCheck"),
+        visit(18, "2026-01-03 18:20", "scienceArc", name="DetectorMap test (Ne)"),
+        visit(19, "2026-01-03 18:22", "scienceArc", name="Arc: Neon"),
     )
     designs = designKinds(pd.DataFrame({"pfs_design_id": [10, 11], "category": ["QF", "EN"]}))
     result = classifyVisits(visits, periods.values(), designs).set_index("pfs_visit_id")
@@ -99,11 +102,14 @@ def testClassifyVisits(periods, visit, listing):
         14: "unvalidated",
         15: "unvalidated",
         16: "gated",
+        17: "unvalidated",
+        18: "unvalidated",
+        19: "gated",
     }
     assert (
-        result["judged"].sum() == 11
-    )  # the windowed sky frame and the engineering sequences are measured too...
-    assert result["validated"].sum() == 7  # ...but aren't gated
+        result["judged"].sum() == 14
+    )  # the windowed sky frame and the engineering sequences are measured...
+    assert result["validated"].sum() == 8  # ...but aren't gated
     assert result.loc[12, "period"] == "run2-pre"
     assert pd.isna(result.loc[11, "period"])
 
