@@ -85,22 +85,36 @@ class TestCheckedInSet:
         # Run29 holds the b2 and n4 quartz references only (PIPE2D-1938).
         assert {entry.run for entry in visitSet.knownGood} == {25, 29}
         run29 = [entry for entry in visitSet.knownGood if entry.run == 29]
-        assert run29 and all(entry.sequenceType == "scienceTrace" for entry in run29)
-        assert set().union(*(entry.cameras for entry in run29)) == {"b2", "n4"}
+        traces = [entry for entry in run29 if entry.sequenceType == "scienceTrace"]
+        assert traces and set().union(*(entry.cameras for entry in traces)) == {"b2", "n4"}
+        assert all(entry.metrics for entry in run29 if entry.sequenceType == "scienceArc")  # scatter only
 
     def testKnownGoodIsPopulated(self):
         """The Run25 stable set; thresholds cannot be derived without it."""
         visitSet = loadValidationVisits()
         assert visitSet.knownGood, "no usable known_good entries"
         assert visitSet.goodVisits[0] == 133025
-        assert visitSet.goodVisits[-1] == 147747  # Run29's last trace set
+        assert visitSet.goodVisits[-1] == 147762  # Run29's last arc set
 
     def testQuartzReferenceOfB2AndN4IsRun29(self):
-        """Run25's trace entries leave b2 and n4 out; Run29's hold them alone (PIPE2D-1938)."""
+        """Run25's trace entries leave b2 and n4 out; Run29's hold them alone (PIPE2D-1938).
+
+        For the line scatter alone, Run25 stays b2 and n4's reference and Run29 is nobody's
+        (PIPE2D-1956): the entries covering them are scoped by metric.
+        """
         visitSet = loadValidationVisits()
+        scatter = ("robustRmsDeltaX", "robustRmsDeltaY")
+
+        def referencesFor(visit, arm, spectrograph):
+            entries = [e for e in visitSet.knownGood if e.matches(visit, arm, spectrograph)]
+            return {metric for metric in ("medFwhm", *scatter) for e in entries if e.isReferenceFor(metric)}
+
         assert visitSet.expectationFor(133040, arm="b", spectrograph=1) == "PASS"
-        assert visitSet.expectationFor(133040, arm="b", spectrograph=2) is None
-        assert visitSet.expectationFor(133040, arm="n", spectrograph=4) is None
+        assert referencesFor(133040, "b", 1) == {"medFwhm", *scatter}
+        assert referencesFor(133040, "b", 2) == set(scatter)  # Run25 b2: scatter reference only
+        assert referencesFor(133040, "n", 4) == set(scatter)
+        assert referencesFor(145025, "b", 2) == {"medFwhm"}  # Run29 b2: image quality only
+        assert referencesFor(145025, "b", 1) == set()
         assert visitSet.expectationFor(133040, arm="r", spectrograph=2) == "PASS"  # r2 keeps Run25
         assert visitSet.expectationFor(145025, arm="b", spectrograph=2) == "PASS"
         assert visitSet.expectationFor(145025, arm="n", spectrograph=4) == "PASS"
@@ -613,3 +627,80 @@ class TestCameraSelectors:
             bad = writeYaml(f"version: 1\nknown_good:\n  - {{visit: 1, sequenceType: scienceArc, {text}}}\n")
             with pytest.raises(ValueError, match=message):
                 loadValidationVisits(bad)
+
+
+class TestMetricScopedKnownGood:
+    def testScopedEntriesLabelOnlyTheirMetrics(self):
+        from pfs.drp.qa.metrics.calibration import GOOD, labelRows
+
+        visitSet = loadValidationVisits()
+        rows = pd.DataFrame(
+            {
+                "visit": [147748, 147748, 133031, 133031],
+                "arm": ["b", "b", "b", "b"],
+                "spectrograph": [1, 1, 1, 1],
+                "seqName": ["Arc: Argon", "Arc: Argon", "Arc: Neon", "Arc: Neon"],
+                "robustRmsDeltaX": [0.1, 0.1, 0.1, 0.1],
+                "medFwhm": [2.8, 2.8, 2.8, 2.8],
+            }
+        )
+        scatter = labelRows(rows, visitSet, "robustRmsDeltaX")
+        assert (scatter.loc[scatter["visit"] == 147748, "validation"] == GOOD).all()  # Run29 arc: scatter
+        width = labelRows(rows, visitSet, "medFwhm")
+        assert 147748 not in set(width["visit"])  # not an image-quality reference
+        # Negative control: an unscoped known-good visit labels every metric.
+        assert (scatter.loc[scatter["visit"] == 133031, "validation"] == GOOD).all()
+        assert (width.loc[width["visit"] == 133031, "validation"] == GOOD).all()
+
+    def testExcludedMetrics(self, writeYaml):
+        """A known-good entry with excludeMetrics is a reference for every other metric."""
+        from pfs.drp.qa.metrics.calibration import labelRows
+
+        path = writeYaml(
+            "version: 1\nknown_good:\n"
+            "  - {visit: 1, sequenceType: scienceTrace, excludeMetrics: [robustRmsDeltaX]}\n"
+            "  - {visit: 2, sequenceType: scienceTrace, metrics: [robustRmsDeltaX]}\n"
+        )
+        visitSet = loadValidationVisits(path)
+        first, second = visitSet.knownGood
+        assert first.excludeMetrics == ("robustRmsDeltaX",) and not first.metrics
+        assert first.isReferenceFor("medFwhm") and not first.isReferenceFor("robustRmsDeltaX")
+        assert second.isReferenceFor("robustRmsDeltaX") and not second.isReferenceFor("medFwhm")
+        rows = pd.DataFrame(
+            {"visit": [1, 2], "arm": "b", "spectrograph": 1, "robustRmsDeltaX": 0.1, "medFwhm": 2.8}
+        )
+        assert labelRows(rows, visitSet, "robustRmsDeltaX")["visit"].tolist() == [2]
+        assert labelRows(rows, visitSet, "medFwhm")["visit"].tolist() == [1]
+        # Negative control: a metric both selected and excluded is a contradiction, not a silent choice.
+        with pytest.raises(ValueError, match="both selected and excluded"):
+            loadValidationVisits(
+                writeYaml(
+                    "version: 1\nknown_good:\n"
+                    "  - {visit: 1, sequenceType: scienceTrace, metrics: [a], excludeMetrics: [a]}\n"
+                )
+            )
+        # An unscoped entry is a reference for everything.
+        assert ValidationVisit(visits=(3,), expect="PASS", sequenceType="scienceTrace").isReferenceFor("x")
+
+    def testCheckedInScopedEntries(self):
+        visitSet = loadValidationVisits()
+        scatter = ("robustRmsDeltaX", "robustRmsDeltaY")
+        # Run29's trace sets are the b2/n4 image-quality reference, not the scatter one...
+        run29Traces = [e for e in visitSet.knownGood if e.run == 29 and e.sequenceType == "scienceTrace"]
+        assert len(run29Traces) == 4 and all(e.excludeMetrics == scatter for e in run29Traces)
+        # ...which Run25's trace sets give b2 and n4 like every other camera.
+        b2n4 = [e for e in visitSet.knownGood if e.run == 25 and e.cameras]
+        assert len(b2n4) == 7 and all(e.metrics == scatter and set(e.cameras) <= {"b2", "n4"} for e in b2n4)
+        assert all(e.isReferenceFor("robustRmsDeltaX") and not e.isReferenceFor("medFwhm") for e in b2n4)
+        scoped = [entry for entry in visitSet.knownGood if entry.metrics and entry.run == 29]
+        assert len(scoped) == 9
+        assert all(entry.run == 29 and entry.sequenceType == "scienceArc" for entry in scoped)
+        assert all(entry.metrics == ("robustRmsDeltaX", "robustRmsDeltaY") for entry in scoped)
+        assert all(not entry.metrics for entry in visitSet.knownBad)
+
+    def testParseMetrics(self, writeYaml):
+        path = writeYaml(
+            "version: 1\nknown_good:\n  - {visit: 1, sequenceType: scienceArc, metrics: [robustRmsDeltaX]}\n"
+        )
+        entry = loadValidationVisits(path).knownGood[0]
+        assert entry.metrics == ("robustRmsDeltaX",) and entry.metric is None and not entry.excludeMetrics

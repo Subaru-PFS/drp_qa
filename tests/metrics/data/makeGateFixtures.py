@@ -4,7 +4,8 @@ The inputs are what ``docs/qa-thresholds.ipynb`` caches for each collection:
 the validation visits' ``iqQaMetrics``, and the thresholds derived from them.
 All are engineering and calibration visits.
 
-- ``iqQaMetrics-validation.parquet`` and ``iqQaThresholds-run25.yaml``, from
+- ``iqQaMetrics-validation.parquet``, ``iqQaThresholds-run25.yaml`` and
+  ``dmLineResidualThresholds-run25.yaml``, from
   ``u/wtg/qa-thresholds/010`` (PIPE2D-1938): every validation visit reduced
   afresh with datamodel w.2026.40, obs_pfs w.2026.40 and drp_stella
   w.2026.41-6-ge56938d2, the pipeline of the Run25-30 comparison, with
@@ -68,5 +69,6 @@ for stem, name, columns in (
         here / name, index=False
     )
     print(f"{name}: {len(metrics)} rows from {stem}")
-shutil.copyfile(source / f"iqQaThresholds-{STEM}.yaml", here / "iqQaThresholds-run25.yaml")
-print("iqQaThresholds-run25.yaml copied from", STEM)
+for derived in ("iqQaThresholds", "dmLineResidualThresholds"):
+    shutil.copyfile(source / f"{derived}-{STEM}.yaml", here / f"{derived}-run25.yaml")
+    print(f"{derived}-run25.yaml copied from", STEM)

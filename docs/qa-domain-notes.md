@@ -217,8 +217,9 @@ offsets mean:
   also holds the linear change the adjustment absorbs. Known-good robust RMS (Run25, the
   calibration's own visits excluded): x 0.18–0.22 px at p99; y 0.08–0.13 px on lamp
   lines, more on sky lines (NaI 0.32 px).
-- **The calibration's own input visits read zero** by construction; exclude them from any
-  derivation.
+- **The calibration's own input visits read zero** against the calibration by construction; exclude them from any
+  drift derivation. Against the visit's own map they are visits like any other, and the scatter derivation keeps
+  them (PIPE2D-1956).
 
 Measured in the validation run (`u/wtg/qa-thresholds/006`, 2026-10-15):
 
@@ -279,10 +280,51 @@ Against the calibration it reproduces 008 exactly. RESERVED robust RMS against t
   spectrograph defocused in part of the run; against the calibration built later, SM3 sits
   0.85 px in y (median, up to 5.4 px; 0.88 px in x) and SM2 reaches 3.3 px in y. The metric
   separates both faults from Run25.
-- **No thresholds yet.** Each arm and species has 5–12 known-good visits, so the 95th and
-  99th percentiles are both the maximum and WARN would sit on FAIL. The plan is a tolerance
-  above each arm and species' known-good median, lamp lines and traces only, checked on later
-  runs' healthy detectors once PIPE2D-1938's reductions are run through `dmLineResiduals`.
+Judged in `u/wtg/qa-thresholds/010` (2026-10-20, every validation visit reduced afresh) and
+checked with `bin.src/judgeScatterThresholds.py` on comparison mode's exports of Runs 25–30:
+
+- **Trace centroids must be split by frame type.** On a quartz (`obsType` `trace`) the
+  RESERVED trace scatter is 0.02–0.05 px (n1 0.08–0.13 through Run28); on an arc's faint
+  continuum it is 0.10–0.14 px, and on a twilight 0.06–0.17. Pooled, the thresholds sat between
+  and failed 14–20 % of Runs 25–27's healthy arcs while every quartz passed. The task now stores
+  `obsType` and the derivation groups by it.
+- **Quartz trace scatter is repeatable per detector to about 1 %, differs between detectors by
+  20 %, and moves between runs.** In Run25 b1–b4 sit at 0.038, 0.044, 0.042, 0.046 px on every
+  trace set; r3 reads 0.048 (Run25), 0.039 (Run26), 0.056 (Run27), 0.055 (Run28), 0.015 (Run29);
+  b, r and n all drop to 0.015–0.03 px from Run29. A percentile over the pooled detectors is
+  set by the worst detector (n by n1's 0.089) and cuts through the top detector's cluster (r4 at
+  the p95 of its own run), so with 22–24 values the p95 and p99 coincide and the thresholds flag
+  Run26's late b1/b4 trace sets at +10 % and all of Run28's r3. Adopted instead (2026-10-20): a
+  tolerance about each detector's Run25 median, WARN 20 % and FAIL 50 %, as `medFwhm` has. The
+  regular trace sets of Runs 26–30 sit within +12 % of it (b1 and r1 reach +24 % and +28 % at the
+  end of Run26: WARN), the Run27 SM1 defocus at 1.7–4× (FAIL, with r2 at 2.2× and one Run27 set at
+  1.5–1.9× on the other cameras); Runs 28–30 flag nothing. b2 and n4 keep Run25 as their scatter
+  reference (their scatter is unremarkable there), Run29 being their image-quality reference only.
+  The m arm has two known-good values per detector, below the floor: not judged.
+- **Bootstrap, IIS and health-check quartz are not full-slit quartz.** Their trace scatter is
+  0.07–0.13 px, twice a trace set's, on every camera (Run25 132766–132767, 132958–132999,
+  135903–135904; Run26 Bootstrap sets; Run29 147778–147780 `ImageQuality (Halogen)`); they are
+  `scienceTrace` frames, so comparison mode gated them with the trace sets until they were made
+  unvalidated by sequence name (`ENGINEERING_SEQUENCES`). Cobra scans (`theta_scan_*`, `home`)
+  with the quartz on scatter like a trace set and stay gated.
+- **Lamp-line scatter is run-dependent.** Thresholds from Run29's 2026-07-14 and 07-23 arcs
+  (24–28 values per species, 6–7 visits), judged at WARN, flag 20–70 % of the lamp arcs of Runs
+  25–28 (r-arm Krypton 71 % in Run25) and about none of Runs 29–30's: the reserved-line scatter
+  of lamp lines against the visit's adjusted map differs between runs by more than it varies
+  within one, so no fixed reference transfers. A per-detector tolerance about Run25's median
+  (20 %/50 %, as the traces) does: adopted 2026-10-20 in x for Ar, Kr, Ne and Xe on every arm,
+  with the calibration's own input arcs kept in the reference (zero against the calibration is
+  the drift's concern; against the visit's own map a calibration input is a visit like any other),
+  which gives 4–10 values per detector and species. On the standard arcs of Runs 25, 26 and 28–30
+  it fails at most one image a run; b-arm Xenon, with 60–110 lines per detector and weakening
+  (b1: 89 in Run25, 65 in Run29), warns on 15–25 % of its arcs in every run, the one noisy
+  population. Not adopted: y, where the HgCd species' scatter is intrinsically variable (medians
+  0.6–1.1 px on n and r) and a tolerance failed 5–20 % of Runs 25–28's healthy arcs, and the HgCd
+  lines in x with it. `LineCheck` and `DetectorMap test` arcs, taken off the calibration recipe,
+  fail in bulk on the r arm (40–60 % in Runs 28–29) and are unvalidated by name.
+- **The two unnamed Run25 quartz 135903–135904** are an IIS trace sequence (`IIS trace z=0`,
+  `noLampCtl`, in the sequence comment; the name is empty), so the engineering rule, which reads
+  names, gates them: 20 FAILs in Run25 that are IIS frames.
 
 ---
 

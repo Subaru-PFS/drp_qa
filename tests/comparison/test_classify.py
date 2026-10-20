@@ -71,6 +71,13 @@ def testClassifyVisits(periods, visit, listing):
         visit(10, "2026-01-04 15:30", None),  # no sequence
         visit(11, "2026-01-20 18:00", "scienceArc"),  # between runs
         visit(12, "2026-02-02 18:00", "scienceArc"),  # run2's pre-run period
+        visit(13, "2026-01-03 18:10", "scienceTrace", name="Bootstrap"),  # engineering sequences...
+        visit(14, "2026-01-03 18:12", "scienceTrace", name="ImageQuality (Halogen)"),
+        visit(15, "2026-01-03 18:14", "scienceArc", name=" health check"),
+        visit(16, "2026-01-03 18:16", "scienceTrace", name="Trace"),  # ...and a trace set
+        visit(17, "2026-01-03 18:18", "scienceArc", name="LineCheck"),
+        visit(18, "2026-01-03 18:20", "scienceArc", name="DetectorMap test (Ne)"),
+        visit(19, "2026-01-03 18:22", "scienceArc", name="Arc: Neon"),
     )
     designs = designKinds(pd.DataFrame({"pfs_design_id": [10, 11], "category": ["QF", "EN"]}))
     result = classifyVisits(visits, periods.values(), designs).set_index("pfs_visit_id")
@@ -91,9 +98,18 @@ def testClassifyVisits(periods, visit, listing):
         10: "no sequence",
         11: "outside every period",
         12: "gated",
+        13: "unvalidated",
+        14: "unvalidated",
+        15: "unvalidated",
+        16: "gated",
+        17: "unvalidated",
+        18: "unvalidated",
+        19: "gated",
     }
-    assert result["judged"].sum() == 7  # the windowed sky frame is measured too...
-    assert result["validated"].sum() == 6  # ...but isn't gated
+    assert (
+        result["judged"].sum() == 14
+    )  # the windowed sky frame and the engineering sequences are measured...
+    assert result["validated"].sum() == 8  # ...but aren't gated
     assert result.loc[12, "period"] == "run2-pre"
     assert pd.isna(result.loc[11, "period"])
 

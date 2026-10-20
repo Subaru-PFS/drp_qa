@@ -208,12 +208,22 @@ METRIC_SPECS = {
         ),
         # dmLineResidualMetrics (PIPE2D-1921, PIPE2D-1956): per line species and line set, against
         # each reference (the ``reference`` column). x from every species, y from lamp lines; b-arm
-        # offsets from the calibration depend on the camera set (PIPE2D-1927).
+        # offsets from the calibration depend on the camera set (PIPE2D-1927), and trace centroids
+        # scatter two to three times more on an arc's faint continuum than on a quartz (obsType).
+        # The scatter also gets a tolerance per detector, species and frame type: a detector's
+        # quartz trace scatter repeats to about 1 % within a run and differs 20 % between
+        # detectors, so a pooled percentile is set by the worst detector and cuts through the
+        # best one's cluster. Regular trace sets of Runs 26-30 sit within +12 % of Run25's
+        # per-detector median (+24 % at the end of Run26 on b1), the Run27 SM1 defocus at 1.7-4x.
         *(
             MetricSpec(
                 name,
                 absolute=name.startswith("median"),
-                groupBy=("reference", "statusType", "arm", "description", "cameraSet"),
+                groupBy=("reference", "statusType", "arm", "description", "cameraSet", "obsType"),
+                tolerance=None if name.startswith("median") else (0.2, 0.5),
+                toleranceBy=()
+                if name.startswith("median")
+                else ("reference", "statusType", "arm", "spectrograph", "description", "obsType"),
                 units="pixels",
                 reference=_LINE_REFERENCES,
                 label=f"|{name}|" if name.startswith("median") else "",
