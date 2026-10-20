@@ -96,8 +96,11 @@ good line is measured, as `UNFITTED`. Trace centroids measure x, lamp lines x an
 Per reference, line species and line set (`statusType`: `BOTH`, `USED`, `RESERVED`, or `UNFITTED`): the median and
 robust RMS of the x and y residuals, `nLines` and `linesPerFiber`. Judged: against `calib`, over `BOTH` (or
 `UNFITTED`) lines, the median x offset of traces and median y offset of lamp lines (WARN 1 px, `APPLY_SHIFT`; FAIL 2
-px, `RECALIBRATE`); against `visit`, the robust RMS of `RESERVED` lines (`RECALIBRATE`), not judged until thresholds
-are derived from the validation set (PIPE2D-1956). The weighted RMS and the softening are drp_stella's, in
+px, `RECALIBRATE`); against `visit`, the robust RMS of `RESERVED` lines (`RECALIBRATE`), by the thresholds file
+`dmLineResidualThresholds-run25.yaml` (PIPE2D-1956): every arm's trace centroids in x, at the p95/p99 of the
+validation visits (40–116 values from 10–35 visits); the b arm's Krypton, Neon and Xenon lines read with the m camera
+set, in x and y, at WARN only (20 values from 5 visits, where a p99 FAIL would sit at the sample maximum); the other
+lamp species and the sky-line species on twilights are stored, not judged. The weighted RMS and the softening are drp_stella's, in
 `iqQaMetrics` and `iqQaSpeciesMetrics`, not recomputed. Logic in the stack-free `pfs.drp.qa.metrics.lineResiduals`.
 No plot is drawn as the task runs: plot `dmLineResidualData` afterwards.
 
@@ -114,7 +117,8 @@ measure it on every visit they judge: comparison mode reports its verdicts besid
 - `maxTraceRowsPerFiber`: most `USED` trace rows per fiber stored in `dmLineResidualData`, evenly spaced in y; `0`
   for all. Default `100`. Lamp and `RESERVED` lines are always stored; the statistics use every line.
 - `thresholdsFile`: a thresholds file judged before the fields below; entries may name `reference`, `statusType`,
-  `arm`, `spectrograph`, `description` and `cameraSet`.
+  `arm`, `spectrograph`, `description` and `cameraSet`. Default `dmLineResidualThresholds-run25.yaml`, adopted by
+  `makeLineResidualThresholds.py` beside it; empty for the fields alone.
 - `xWarnThreshold`, `xFailThreshold`, `yWarnThreshold`, `yFailThreshold`: on the median offsets from the
   calibration, in pixels. Defaults `1.0`, `2.0`, `1.0`, `2.0`.
 - `xRmsWarnThreshold`, `xRmsFailThreshold`, `yRmsWarnThreshold`, `yRmsFailThreshold`: on the robust RMS of
@@ -533,8 +537,11 @@ verdict is known. The decisions behind the current set:
   percentile applies. The robust RMS of `RESERVED` lines against the visit's own detectorMap is derived in the
   notebook like the other percentile thresholds, per arm, species and camera set, from the known-good visits of each
   arm's reference run less each calibration's own input visits (their adjusted maps are fitted to the lines the
-  calibration was), and adopted through the task's `thresholdsFile`. Until a file is adopted it is stored, not
-  judged, and `dmResiduals` runs beside it for comparison.
+  calibration was), and adopted through the task's `thresholdsFile` (2026-10-20, from `u/wtg/qa-thresholds/010`):
+  judged for every arm's trace centroids, with 40–116 values from 10–35 visits, and at WARN only for the b arm's
+  lamps read with m (20 values from 5 visits); the other lamp species wait for a second reference run, and the
+  twilights' sky species are not judged.
+  `dmResiduals` runs beside it through Run31 for comparison.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
 - **Thresholds hold for the pipeline that reduced their visits** (PIPE2D-1938). Two reductions of the same Run25

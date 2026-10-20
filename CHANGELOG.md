@@ -10,6 +10,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Scatter thresholds adopted for `dmLineResiduals`** (PIPE2D-1956) — `thresholdsFile` defaults to
+  `dmLineResidualThresholds-run25.yaml`, made by `makeLineResidualThresholds.py` from the notebook's derivation over
+  `u/wtg/qa-thresholds/010`: the robust RMS of `RESERVED` lines against the visit's detectorMap, judged at p95/p99 for
+  every arm's trace centroids in x (40–116 values from 10–35 visits), and at WARN only for the b arm's Krypton, Neon
+  and Xenon lines with the m camera set in x and y (20 values from 5 visits, where a p99 FAIL would sit at the sample
+  maximum): 11 of 67 populations. The other lamp species and the sky-line species on twilights are not judged.
+
 - **b2 and n4 quartz take their reference from Run29** (PIPE2D-1938) — reduced with one pipeline, Runs 25–30 agree
   with Run25 in `medFwhm` to within 3 % everywhere but b2 quartz (SM2's slit refocused on 2026-03-11) and n4 quartz
   (Run25's width is the outlier). Run25's trace entries leave those two out, Run29's detectorMap set holds them alone,

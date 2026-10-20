@@ -1,0 +1,1408 @@
+version: 2
+derivedOn: '2026-10-19'
+collection: u/wtg/qa-thresholds/010
+referenceRuns:
+- 25
+- 29
+drpQaVersion: w.2026.35-158-g3800b92-dirty
+pipelineVersions:
+  datamodel: w.2026.40
+  obs_pfs: w.2026.40
+  drp_stella: w.2026.41-6-ge56938d2
+thresholds:
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: CdI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0456
+  fail: 0.0494
+  nGood: 12
+  nGoodVisits: 3
+  visitRange: 135838-135840
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135838-135840 (n=12): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: HgI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0657
+  fail: 0.0657
+  nGood: 12
+  nGoodVisits: 3
+  visitRange: 135838-135840
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 135838-135840 (n=12): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can
+    never fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: KrI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0889
+  fail: 0.0897
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: KrI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.09
+  fail: 0.09
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135836-135837
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 135836-135837 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NaI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.216
+  fail: 0.264
+  nGood: 32
+  nGoodVisits: 9
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=32 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NeI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.115
+  fail: 0.117
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NeI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.114
+  fail: 0.114
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135834-135835
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 135834-135835 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: OH
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 3.34
+  fail: 3.43
+  nGood: 31
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=31): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=31 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: OI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.117
+  fail: 0.136
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.128
+  fail: 0.134
+  nGood: 82
+  nGoodVisits: 29
+  visitRange: 133045-145071
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-145071 (n=82): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=82 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: br
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0464
+  fail: 0.0464
+  nGood: 6
+  nGoodVisits: 2
+  visitRange: 133536-133537
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133536-133537 (n=6): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=6 is below the 20-sample floor. FAIL UNBOUNDED: n=6 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.134
+  fail: 0.147
+  nGood: 108
+  nGoodVisits: 33
+  visitRange: 133532-147747
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133532-147747 (n=108): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=108 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: XeI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.139
+  fail: 0.143
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: XeI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.121
+  fail: 0.121
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135832-135833
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 135832-135833 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: ArI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.065
+  fail: 0.066
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135841-135842
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135841-135842 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: KrI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.099
+  fail: 0.1
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135847-135848
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135847-135848 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: NeI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.203
+  fail: 0.204
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135845-135846
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135845-135846 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: Trace
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.207
+  fail: 0.226
+  nGood: 40
+  nGoodVisits: 10
+  visitRange: 135841-135850
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135841-135850 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=40 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: XeI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.13
+  fail: 0.132
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135843-135844
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135843-135844 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: ArI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.233
+  fail: 0.233
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135830-135831
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 135830-135831 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: HgI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.134
+  fail: 0.137
+  nGood: 12
+  nGoodVisits: 3
+  visitRange: 135838-135840
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135838-135840 (n=12): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: KrI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.201
+  fail: 0.202
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135836-135837
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135836-135837 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: NeI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.1084
+  fail: 0.1113
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135834-135835
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135834-135835 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: O2
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.45
+  fail: 0.51
+  nGood: 40
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=40 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: OH
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.134
+  fail: 0.152
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: Trace
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.2
+  fail: 0.235
+  nGood: 116
+  nGoodVisits: 35
+  visitRange: 133532-147747
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133532-147747 (n=116): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=116 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: XeI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.163
+  fail: 0.166
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135832-135833
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135832-135833 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: ArI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0462
+  fail: 0.0468
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135830-135831
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135830-135831 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: CdI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0401
+  fail: 0.042
+  nGood: 12
+  nGoodVisits: 3
+  visitRange: 135838-135840
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135838-135840 (n=12): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: HgI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.144
+  fail: 0.153
+  nGood: 12
+  nGoodVisits: 3
+  visitRange: 135838-135840
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135838-135840 (n=12): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: KrI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0418
+  fail: 0.042
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135836-135837
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135836-135837 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: NeI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.121
+  fail: 0.123
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135834-135835
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135834-135835 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: O2
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.29
+  fail: 0.29
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 134880-134880
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 134880-134880 (n=1): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=1 is below the 20-sample floor. FAIL UNBOUNDED: n=1 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: OH
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.167
+  fail: 0.172
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: Trace
+    cameraSet: br
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.05
+  fail: 0.051
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 133536-133537
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133536-133537 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: Trace
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.173
+  fail: 0.209
+  nGood: 116
+  nGoodVisits: 29
+  visitRange: 133532-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133532-135840 (n=116): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=116 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: XeI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.084
+  fail: 0.0845
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135832-135833
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135832-135833 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: CdI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.138
+  fail: 0.149
+  nGood: 12
+  nGoodVisits: 3
+  visitRange: 135838-135840
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135838-135840 (n=12): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: HgI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.087
+  fail: 0.089
+  nGood: 12
+  nGoodVisits: 3
+  visitRange: 135838-135840
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135838-135840 (n=12): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: KrI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.129
+  fail: 0.147
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: KrI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.115
+  fail: 0.115
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135836-135837
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 135836-135837 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NaI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 4.33
+  fail: 5.38
+  nGood: 32
+  nGoodVisits: 9
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=32 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NeI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.068
+  fail: 0.068
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NeI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.064
+  fail: 0.065
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135834-135835
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135834-135835 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: OH
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 5.08
+  fail: 6.65
+  nGood: 31
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=31): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=31 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: OI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 4.24
+  fail: 4.7
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: XeI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.143
+  fail: 0.149
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: XeI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.149
+  fail: 0.159
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135832-135833
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135832-135833 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: ArI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.114
+  fail: 0.115
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135841-135842
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135841-135842 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: KrI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.13
+  fail: 0.131
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135847-135848
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135847-135848 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: NeI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.161
+  fail: 0.162
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135845-135846
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135845-135846 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: XeI
+    cameraSet: bm
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.137
+  fail: 0.138
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135843-135844
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135843-135844 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: ArI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.239
+  fail: 0.245
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135830-135831
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135830-135831 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: HgI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.58
+  fail: 0.59
+  nGood: 12
+  nGoodVisits: 3
+  visitRange: 135838-135840
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135838-135840 (n=12): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: KrI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.166
+  fail: 0.171
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135836-135837
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135836-135837 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: NeI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.1207
+  fail: 0.1239
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135834-135835
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135834-135835 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: O2
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.493
+  fail: 0.888
+  nGood: 40
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=40 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: OH
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.161
+  fail: 0.184
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: XeI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.171
+  fail: 0.174
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135832-135833
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135832-135833 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: ArI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.067
+  fail: 0.068
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135830-135831
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135830-135831 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: CdI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.087
+  fail: 0.092
+  nGood: 12
+  nGoodVisits: 3
+  visitRange: 135838-135840
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135838-135840 (n=12): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: HgI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 1.14
+  fail: 1.18
+  nGood: 12
+  nGoodVisits: 3
+  visitRange: 135838-135840
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135838-135840 (n=12): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: KrI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0483
+  fail: 0.0493
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135836-135837
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 135836-135837 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: NeI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.118
+  fail: 0.118
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135834-135835
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 135834-135835 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: O2
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.11
+  fail: 0.11
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 134880-134880
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 134880-134880 (n=1): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=1 is below the 20-sample floor. FAIL UNBOUNDED: n=1 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: OH
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 1.4
+  fail: 2.7
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: XeI
+    cameraSet: brn
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.1
+  fail: 0.1
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135832-135833
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 135832-135833 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'

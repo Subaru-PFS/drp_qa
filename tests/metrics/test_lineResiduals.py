@@ -814,3 +814,126 @@ def testWideResiduals():
     assert wideResiduals(metrics, VISIT, (BOTH,)).empty
     with pytest.raises(ValueError, match="summary"):
         wideResiduals(metrics, CALIB, (BOTH,), excludeCalibInputs=True)
+
+
+SKY_SPECIES = ("OH", "O2", "OI", "NaI")
+
+
+def _driftFixture() -> pd.DataFrame:
+    from pathlib import Path
+
+    return pd.read_parquet(Path(__file__).parent / "data" / "dmDriftMetrics-validation.parquet")
+
+
+def testShippedScatterFileIsTheAdopted():
+    """The shipped scatter file is what its script makes from the derivation."""
+    import importlib.util
+    from pathlib import Path
+
+    import yaml
+
+    from pfs.drp.qa.metrics.gate import thresholdsPath
+
+    script = thresholdsPath("makeLineResidualThresholds.py")
+    spec = importlib.util.spec_from_file_location("makeLineResidualThresholds", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    source = Path(__file__).parent / "data" / "dmLineResidualThresholds-run25.yaml"
+    remade = module.adopt(yaml.safe_load(source.read_text()))
+    assert remade == yaml.safe_load(thresholdsPath("dmLineResidualThresholds-run25.yaml").read_text())
+    judged = [e for e in remade["thresholds"] if e["warn"] is not None or e["fail"] is not None]
+    assert len(judged) == 11 and all(e["reliable"] for e in judged)
+    # Every arm's traces in x get WARN and FAIL; the b arm's bm lamps, 20 values from 5 visits, WARN only.
+    full = [e for e in judged if e["fail"] is not None]
+    warnOnly = [e for e in judged if e["fail"] is None]
+    assert all(e["population"]["description"] == "Trace" and e["metric"] == "robustRmsDeltaX" for e in full)
+    assert {e["population"]["arm"] for e in full} == set("bmnr") and len(full) == 5
+    assert {
+        (e["population"]["arm"], e["population"]["description"], e["population"]["cameraSet"])
+        for e in warnOnly
+    } == {
+        ("b", "KrI", "bm"),
+        ("b", "NeI", "bm"),
+        ("b", "XeI", "bm"),
+    }
+    assert all(e["nGoodVisits"] < 10 and e["warn"] is not None for e in warnOnly) and len(warnOnly) == 6
+    assert not any(e["population"]["description"] in SKY_SPECIES for e in judged)
+    # Negative control: the derivation gave those six a FAIL; the WARN-only rule is the adoption's.
+    derived = {
+        (e["population"]["arm"], e["population"]["description"], e["population"]["cameraSet"], e["metric"]): e
+        for e in yaml.safe_load(source.read_text())["thresholds"]
+    }
+    for e in warnOnly:
+        key = (
+            e["population"]["arm"],
+            e["population"]["description"],
+            e["population"]["cameraSet"],
+            e["metric"],
+        )
+        assert derived[key]["fail"] is not None and derived[key]["reliable"]
+
+
+def testShippedScatterVerdicts():
+    """The adopted file on the validation run (u/wtg/qa-thresholds/010).
+
+    Every arm's traces are judged in x, the b-arm bm lamps at WARN only in x and y; the other
+    lamp species and the sky species are not. Counts are the fixture's.
+    """
+    from pfs.drp.qa.metrics.calibration import labelRows
+    from pfs.drp.qa.metrics.gate import thresholdsPath
+    from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
+
+    rows = _driftFixture()
+    reserved = rows[(rows["reference"] == VISIT) & (rows["statusType"] == RESERVED)].reset_index(drop=True)
+    thresholds = [
+        thresholdsPath("dmLineResidualThresholds-run25.yaml"),
+        residualThresholds(1.0, 2.0, 1.0, 2.0),
+    ]
+    judged = judge(reserved, thresholds).set_index(["row", "metric"])
+    visitSet = loadValidationVisits()
+    sky = reserved["description"].isin(SKY_SPECIES)
+    traces = reserved["description"] == TRACE
+    fullSets = reserved["cameraSet"].isin(["bm", "brn"])
+    bmLamps = (
+        (reserved["arm"] == "b")
+        & (reserved["cameraSet"] == "bm")
+        & reserved["description"].isin(["KrI", "NeI", "XeI"])
+    )
+    counts = {
+        "robustRmsDeltaX": {
+            "traces": {"PASS": 1286, "FAIL": 89, "WARN": 46},
+            "bmLamps": {"PASS": 57, "WARN": 3},
+            "others": 681,
+            "goodTraces": {"PASS": 682, "WARN": 29, "FAIL": 15, "": 14},  # "": b traces read with r alone
+            "goodBmLamps": {"PASS": 57, "WARN": 3},
+        },
+        "robustRmsDeltaY": {
+            "traces": {},  # traces measure x only
+            "bmLamps": {"PASS": 58, "WARN": 2},
+            "others": 665,
+            "goodTraces": {"": 740},
+            "goodBmLamps": {"PASS": 58, "WARN": 2},
+        },
+    }
+    for metric, expected in counts.items():
+        table = judged.xs(metric, level="metric")
+        status, layer = table["status"], table["layer"]
+        # Sky species are unjudged: by an entry with no thresholds where the derivation had values
+        # (423 rows), and by absence, the config's NaN, where it had none (8).
+        assert sky.sum() == 431 and (status[sky] == "").all() and (layer[sky] == 0).sum() == 423
+        measured = reserved[metric].notna()
+        assert status[traces & fullSets & measured].value_counts().to_dict() == expected["traces"]
+        assert status[bmLamps & measured].value_counts().to_dict() == expected["bmLamps"]
+        assert (layer[bmLamps & measured] == 0).all()  # WARN only: FAIL never appears above
+        others = ~(traces & fullSets) & ~bmLamps & ~sky & measured
+        assert others.sum() == expected["others"] and (status[others] == "").all()
+        labelled = labelRows(reserved, visitSet, metric)
+        good = labelled.index[labelled["validation"] == "good"]
+        assert status.loc[good[traces[good]]].value_counts().to_dict() == expected["goodTraces"]
+        assert status.loc[good[bmLamps[good]]].value_counts().to_dict() == expected["goodBmLamps"]
+    # Negative control: a flat 0.05/0.10 px scatter threshold fails or warns most known-good traces.
+    strict = judge(reserved, [residualThresholds(1.0, 2.0, 1.0, 2.0, 0.05, 0.1, 0.05, 0.1)])
+    strictX = strict.set_index(["row", "metric"]).xs("robustRmsDeltaX", level="metric")["status"]
+    labelled = labelRows(reserved, visitSet, "robustRmsDeltaX")
+    goodTraces = labelled.index[(labelled["validation"] == "good") & traces[labelled.index]]
+    assert strictX.loc[goodTraces].value_counts().to_dict() == {"WARN": 320, "FAIL": 271, "PASS": 149}

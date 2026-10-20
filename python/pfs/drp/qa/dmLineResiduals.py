@@ -164,13 +164,20 @@ class DmLineResidualsConfig(PipelineTaskConfig, pipelineConnections=DmLineResidu
     )
     thresholdsFile = Field(
         dtype=str,
-        default="",
+        default="dmLineResidualThresholds-run25.yaml",
         doc=(
             "Thresholds file (`pfs.drp.qa.metrics.calibration.writeThresholds`), judged before the"
             " threshold fields: an absolute path, or one relative to ``pfs/drp/qa/metrics/data``;"
             " empty for the fields alone. Entries may name ``reference``, ``statusType``, ``arm``,"
             " ``spectrograph``, ``description`` and ``cameraSet``; an entry that leaves ``reference``"
-            " null applies to both references."
+            " null applies to both references. The default holds the robust RMS of RESERVED lines"
+            " against the visit's detectorMap, derived 2026-10-19 from the validation visits reduced"
+            " afresh (u/wtg/qa-thresholds/010, PIPE2D-1938) and adopted in PIPE2D-1956 by"
+            " ``makeLineResidualThresholds.py`` beside it: judged for every arm's trace centroids in x,"
+            " at WARN only for the b arm's Krypton, Neon and Xenon lines read with the m camera set"
+            " (20 reference values from 5 visits), not judged for the other lamp species nor for"
+            " sky-line species on twilights. The median"
+            " offsets from detectorMap_calib stay with the fields below."
         ),
     )
     xWarnThreshold = Field(
