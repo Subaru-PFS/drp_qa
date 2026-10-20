@@ -308,6 +308,12 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
+- **`dmLineResidualData` samples `RESERVED` trace rows too** (PIPE2D-1956) — `maxTraceRowsPerFiber` (100) now caps
+  each fiber's `RESERVED` trace rows as well as its `USED` ones, evenly in y. `RESERVED` trace rows were kept whole
+  and made up 77–79 % of the rows on a quartz or twilight visit (~350–400 per fiber; 140141 and 134336 in
+  `u/wtg/qa-thresholds/010`, ~110 MB per visit). Lamp and sky lines and `UNFITTED` rows are still stored whole, and
+  the statistics still use every line, so a trace statistic recomputed from the table is an estimate.
+
 - **`iqQaSpeciesMetrics` holds the softening, and traces** (PIPE2D-1956) — per species, `fitXSoften` and
   `fitYSoften` beside `fitXRms` and `fitYRms`, read from the same `Stats for <species>` lines of the
   `reduceExposure` log, and a `Trace` species. `longFormat.speciesStats` still returns the lamp species' RMS pair.

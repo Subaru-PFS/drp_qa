@@ -364,9 +364,11 @@ def lineTable(
     """Return ``dmLineResidualData``: `lineResiduals` with the detector, in `LINE_COLUMNS`.
 
     A fit can keep millions of trace rows (twilight b3/b4 kept about 2
-    million), so the trace centroids a fit used may be sampled. Lamp lines,
-    and lines held back (``RESERVED``) or ``UNFITTED``, are always kept whole:
-    only the stored table is sampled, never the statistics.
+    million), so the trace centroids may be sampled: those the fit used, and
+    those it held back (``RESERVED``), each to at most ``maxTraceRowsPerFiber``
+    per fiber. Lamp and sky lines, and ``UNFITTED`` rows, are always kept
+    whole. Only the stored table is sampled, never the statistics, so a trace
+    statistic recomputed from the table is an estimate of the stored one.
 
     Parameters
     ----------
@@ -375,8 +377,8 @@ def lineTable(
     dataId : mapping
         ``visit``, ``arm``, ``spectrograph``.
     maxTraceRowsPerFiber : `int`, optional
-        Most ``USED`` trace rows kept per fiber, evenly spaced in y; 0 keeps
-        them all.
+        Most ``USED``, and most ``RESERVED``, trace rows kept per fiber,
+        evenly spaced in y; 0 keeps them all.
 
     Returns
     -------
@@ -385,22 +387,28 @@ def lineTable(
         columns, when there are no lines.
     """
     if maxTraceRowsPerFiber > 0:
-        residuals = residuals[_sampleUsedTraces(residuals, maxTraceRowsPerFiber)]
+        residuals = residuals[_sampleTraces(residuals, maxTraceRowsPerFiber)]
     frame = residuals.assign(visit=dataId["visit"], arm=dataId["arm"], spectrograph=dataId["spectrograph"])
     return frame.reindex(columns=list(LINE_COLUMNS)).astype(LINE_COLUMNS)
 
 
-def _sampleUsedTraces(residuals: pd.DataFrame, maxRows: int) -> np.ndarray:
-    """Return which rows to keep: ``USED`` trace rows, at most ``maxRows`` per fiber evenly in y, and all others."""
+def _sampleTraces(residuals: pd.DataFrame, maxRows: int) -> np.ndarray:
+    """Return which rows to keep: at most ``maxRows`` of each fiber's USED, and RESERVED, trace rows; all others.
+
+    Each fiber's rows of one status type are kept evenly spaced in y.
+    """
     keep = np.ones(len(residuals), dtype=bool)
-    used = ((residuals["description"] == TRACE) & (residuals["statusType"] == USED)).to_numpy()
-    if not used.any():
+    sampled = (
+        (residuals["description"] == TRACE) & residuals["statusType"].isin((USED, RESERVED))
+    ).to_numpy()
+    if not sampled.any():
         return keep
-    traces = residuals[used]
-    position = np.flatnonzero(used)
-    # Each row's rank in y within its fiber, and its fiber's row count.
-    rank = traces.groupby("fiberId")["y"].rank(method="first").to_numpy(dtype=int) - 1
-    count = traces.groupby("fiberId")["y"].transform("size").to_numpy(dtype=int)
+    traces = residuals[sampled]
+    position = np.flatnonzero(sampled)
+    # Each row's rank in y within its fiber and status type, and that group's row count.
+    groups = traces.groupby(["fiberId", "statusType"])["y"]
+    rank = groups.rank(method="first").to_numpy(dtype=int) - 1
+    count = groups.transform("size").to_numpy(dtype=int)
     # Keep the ranks nearest maxRows evenly spaced points, as np.linspace(0, count - 1, maxRows) would.
     # The point a rank falls nearest, capped at the last: with one point, both ends would round to it.
     step = (count - 1) / max(maxRows - 1, 1)
