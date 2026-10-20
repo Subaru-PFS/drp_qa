@@ -690,8 +690,7 @@ def testLineTableSamplesTraces():
     # Every fifth line is RESERVED: 40 trace rows per fiber, above the limit like the USED ones.
     for statusType in (USED, RESERVED):
         stored = table[(table["description"] == TRACE) & (table["statusType"] == statusType)]
-        assert stored.groupby("fiberId").size().max() <= 10
-        assert stored.groupby("fiberId").size().min() >= 9
+        assert (stored.groupby("fiberId").size() == 10).all()
         # Spread over the detector, not the first rows: the lowest and highest y of each fiber are kept.
         first = offsets[isTrace & (offsets["statusType"] == statusType).to_numpy()]
         assert set(stored.groupby("fiberId")["y"].max()) == set(first.groupby("fiberId")["y"].max())
@@ -711,13 +710,18 @@ def testLineTableSamplesTraces():
 @pytest.mark.parametrize("limit", [1, 2, 7])
 def testLineTableSamplingNeverExceedsTheLimit(limit):
     calib = FakeCalib(numFibers=3)
-    offsets = residuals(makeLines(calib, traceRows=50, lampLines=0), calib)
+    lines, _ = withReserved(makeLines(calib, traceRows=50, lampLines=0))
+    offsets = residuals(lines, calib)
     table = lineTable(offsets, DATA_ID, maxTraceRowsPerFiber=limit)
-    perFiber = table.groupby("fiberId").size()
-    assert (perFiber == limit).all()
+    # Both status types have more rows per fiber than any limit: each keeps exactly the limit.
+    assert (offsets.groupby(["fiberId", "statusType"]).size() > max(limit, 7)).all()
+    perGroup = table.groupby(["fiberId", "statusType"]).size()
+    assert set(perGroup.index.get_level_values("statusType")) == {USED, RESERVED}
+    assert (perGroup == limit).all()
     if limit == 1:
         # As np.linspace(0, n - 1, 1): the lowest row only.
-        assert (table.groupby("fiberId")["y"].min() == offsets["y"].min()).all()
+        lowest = offsets.groupby(["fiberId", "statusType"])["y"].min()
+        assert table.groupby(["fiberId", "statusType"])["y"].min().equals(lowest)
 
 
 def testVisitVerdictStandsWhenTheCalibrationMeasuresNothing():

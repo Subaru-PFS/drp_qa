@@ -127,7 +127,7 @@ measure it on every visit they judge: comparison mode reports its verdicts besid
 |-------------------------|----------------------------------------|-------------------------------------------------------------------------------------------------------------------|
 | `dmLineResidualMetrics` | `instrument, visit, arm, spectrograph` | Long format: one row per reference, species, `statusType` and metric, with the metric's verdict.                  |
 | `dmLineResidualSummary` | `instrument, visit, arm, spectrograph` | One row: `qaStatus`, `qaDecidedBy`, `qaReason`, `recommendedAction`, `fitted`, and the calibration used.          |
-| `dmLineResidualData`    | `instrument, visit, arm, spectrograph` | One row per line measured (`USED` traces sampled), with `dxCalib`, `dyCalib`, `dxVisit`, `dyVisit`.              |
+| `dmLineResidualData`    | `instrument, visit, arm, spectrograph` | One row per line measured (`USED` and `RESERVED` traces sampled), with `dxCalib`, `dyCalib`, `dxVisit`, `dyVisit`. |
 
 #### `dmResiduals`
 
