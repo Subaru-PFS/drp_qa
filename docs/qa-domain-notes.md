@@ -323,8 +323,9 @@ checked with `bin.src/judgeScatterThresholds.py` on comparison mode's exports of
   lines in x with it. `LineCheck` and `DetectorMap test` arcs, taken off the calibration recipe,
   fail in bulk on the r arm (40–60 % in Runs 28–29) and are unvalidated by name.
 - **The two unnamed Run25 quartz 135903–135904** are an IIS trace sequence (`IIS trace z=0`,
-  `noLampCtl`, in the sequence comment; the name is empty), so the engineering rule, which reads
-  names, gates them: 20 FAILs in Run25 that are IIS frames.
+  `noLampCtl`, in the sequence comment; the name is empty) taken on 2025-12-02, after Run25's last
+  science night (11-30); Run25's period now ends there, so they are outside every period and not
+  judged. Had they fallen inside, the engineering rule, which reads names, would have gated them.
 
 ---
 
