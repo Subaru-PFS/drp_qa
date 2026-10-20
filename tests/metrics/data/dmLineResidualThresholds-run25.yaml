@@ -1,0 +1,6942 @@
+version: 2
+derivedOn: '2026-10-19'
+collection: u/wtg/qa-thresholds/010
+referenceRuns:
+- 25
+- 29
+drpQaVersion: w.2026.35-173-g12b9ea8-dirty
+pipelineVersions:
+  datamodel: w.2026.40
+  obs_pfs: w.2026.40
+  drp_stella: w.2026.41-6-ge56938d2
+thresholds:
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: CdI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0418
+  fail: 0.0484
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: HgI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0657
+  fail: 0.0657
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: KrI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0889
+  fail: 0.0897
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: KrI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.091
+  fail: 0.095
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NaI
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.216
+  fail: 0.264
+  nGood: 32
+  nGoodVisits: 9
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=32 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NeI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.115
+  fail: 0.117
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NeI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.113
+  fail: 0.114
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: OH
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 3.34
+  fail: 3.43
+  nGood: 31
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=31): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=31 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: OI
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.117
+  fail: 0.136
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.129
+  fail: 0.135
+  nGood: 60
+  nGoodVisits: 15
+  visitRange: 133045-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135848 (n=60): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=60 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: bm
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0466
+  fail: 0.0467
+  nGood: 16
+  nGoodVisits: 4
+  visitRange: 133054-135850
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133054-135850 (n=16): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=16 is below the 20-sample floor. FAIL UNBOUNDED: n=16 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: br
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0464
+  fail: 0.0464
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 133536-133537
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133536-133537 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.127
+  fail: 0.133
+  nGood: 84
+  nGoodVisits: 21
+  visitRange: 133028-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135840 (n=84): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=84 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: brn
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0465
+  fail: 0.0465
+  nGood: 32
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=32 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.143
+  fail: 0.213
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: XeI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.139
+  fail: 0.143
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: XeI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.131
+  fail: 0.134
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: ArI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.065
+  fail: 0.066
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: KrI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.098
+  fail: 0.1
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: NeI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.204
+  fail: 0.205
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: Trace
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.223
+  fail: 0.227
+  nGood: 80
+  nGoodVisits: 20
+  visitRange: 133042-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135848 (n=80): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=80 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: Trace
+    cameraSet: bm
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.076
+  fail: 0.076
+  nGood: 16
+  nGoodVisits: 4
+  visitRange: 133054-135850
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133054-135850 (n=16): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=16 is below the 20-sample floor. FAIL UNBOUNDED: n=16 cannot bound p99 at 95% confidence: its interval is
+    open, and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can
+    never fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: XeI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.129
+  fail: 0.131
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: ArI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.255
+  fail: 0.255
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: HgI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.142
+  fail: 0.144
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: KrI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.229
+  fail: 0.234
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: NeI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.1102
+  fail: 0.1116
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: O2
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.45
+  fail: 0.51
+  nGood: 40
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=40 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: OH
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.134
+  fail: 0.152
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: Trace
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.231
+  fail: 0.24
+  nGood: 104
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=104 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: Trace
+    cameraSet: brn
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.09
+  fail: 0.09
+  nGood: 32
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=32 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: Trace
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.166
+  fail: 0.171
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: XeI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.179
+  fail: 0.186
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: ArI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0471
+  fail: 0.048
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: CdI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0449
+  fail: 0.0453
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: HgI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.154
+  fail: 0.16
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: KrI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0415
+  fail: 0.0419
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: NeI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.119
+  fail: 0.122
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: O2
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.29
+  fail: 0.29
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 134880-134880
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 134880-134880 (n=1): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=1 is below the 20-sample floor. FAIL UNBOUNDED: n=1 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: OH
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.167
+  fail: 0.172
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: Trace
+    cameraSet: br
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.05
+  fail: 0.051
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 133536-133537
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133536-133537 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: Trace
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.211
+  fail: 0.219
+  nGood: 104
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=104 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: Trace
+    cameraSet: brn
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.05
+  fail: 0.051
+  nGood: 32
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=32 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: Trace
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.117
+  fail: 0.123
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: XeI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.083
+  fail: 0.085
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0442
+  fail: 0.0552
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.03677px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.062
+  fail: 0.077
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.0511px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.081
+  fail: 0.102
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.06749px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: NaI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.154
+  fail: 0.193
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 0.1281px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.076
+  fail: 0.095
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.06269px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 3.16
+  fail: 3.94
+  nGood: 7
+  nGoodVisits: 7
+  visitRange: 134880-134886
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-134886 (n=7): WARN 20% and FAIL 50% above the known-good
+    median, 2.626px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: OI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.086
+  fail: 0.108
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.07151px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.103
+  fail: 0.128
+  nGood: 36
+  nGoodVisits: 36
+  visitRange: 133028-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135848 (n=36): WARN 20% and FAIL 50% above the known-good
+    median, 0.08515px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0485
+  fail: 0.0607
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 133040-135850
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135850 (n=14): WARN 20% and FAIL 50% above the known-good
+    median, 0.04041px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: Trace
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.111
+  fail: 0.138
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.09179px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.138
+  fail: 0.173
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.1147px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0472
+  fail: 0.059
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.03931px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.071
+  fail: 0.089
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.05878px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.093
+  fail: 0.116
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.07691px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: NaI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.145
+  fail: 0.181
+  nGood: 7
+  nGoodVisits: 7
+  visitRange: 134881-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134881-135279 (n=7): WARN 20% and FAIL 50% above the known-good
+    median, 0.1206px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.095
+  fail: 0.119
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.07913px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 3.42
+  fail: 4.27
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 2.845px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: OI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.098
+  fail: 0.122
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.0813px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.107
+  fail: 0.134
+  nGood: 36
+  nGoodVisits: 36
+  visitRange: 133028-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135848 (n=36): WARN 20% and FAIL 50% above the known-good
+    median, 0.08912px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0526
+  fail: 0.0657
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 133040-135850
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135850 (n=14): WARN 20% and FAIL 50% above the known-good
+    median, 0.04379px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: Trace
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.119
+  fail: 0.149
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.0987px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.127
+  fail: 0.159
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.1055px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0492
+  fail: 0.0615
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.04095px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.071
+  fail: 0.089
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.05875px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.107
+  fail: 0.133
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.08847px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: NaI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.148
+  fail: 0.185
+  nGood: 9
+  nGoodVisits: 9
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=9): WARN 20% and FAIL 50% above the known-good
+    median, 0.123px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.129
+  fail: 0.162
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.1074px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 2.59
+  fail: 3.24
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 2.154px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: OI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.106
+  fail: 0.132
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.08754px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.119
+  fail: 0.149
+  nGood: 36
+  nGoodVisits: 36
+  visitRange: 133028-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135848 (n=36): WARN 20% and FAIL 50% above the known-good
+    median, 0.09867px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0508
+  fail: 0.0635
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 133040-135850
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135850 (n=14): WARN 20% and FAIL 50% above the known-good
+    median, 0.0423px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: Trace
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.125
+  fail: 0.156
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.1037px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.132
+  fail: 0.165
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.1094px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0453
+  fail: 0.0566
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.03768px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.074
+  fail: 0.092
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.06086px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.1
+  fail: 0.124
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.08251px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: NaI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.187
+  fail: 0.233
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 0.1553px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.12
+  fail: 0.15
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.09973px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 3.12
+  fail: 3.9
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 2.595px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: OI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.111
+  fail: 0.139
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.09236px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.124
+  fail: 0.154
+  nGood: 36
+  nGoodVisits: 36
+  visitRange: 133028-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135848 (n=36): WARN 20% and FAIL 50% above the known-good
+    median, 0.1026px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0556
+  fail: 0.0695
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 133040-135850
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135850 (n=14): WARN 20% and FAIL 50% above the known-good
+    median, 0.04632px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: Trace
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.139
+  fail: 0.174
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.1158px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.122
+  fail: 0.153
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.1014px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.063
+  fail: 0.079
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.052px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.091
+  fail: 0.114
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.07567px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.204
+  fail: 0.255
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1694px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.159
+  fail: 0.198
+  nGood: 20
+  nGoodVisits: 20
+  visitRange: 133042-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135848 (n=20): WARN 20% and FAIL 50% above the known-good
+    median, 0.1319px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.08
+  fail: 0.1
+  nGood: 4
+  nGoodVisits: 4
+  visitRange: 133054-135850
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133054-135850 (n=4): WARN 20% and FAIL 50% above the known-good
+    median, 0.06633px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.127
+  fail: 0.159
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1054px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0369
+  fail: 0.0461
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.0307px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0521
+  fail: 0.0652
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.04341px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.1
+  fail: 0.124
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08256px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.11
+  fail: 0.138
+  nGood: 20
+  nGoodVisits: 20
+  visitRange: 133042-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135848 (n=20): WARN 20% and FAIL 50% above the known-good
+    median, 0.09164px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0394
+  fail: 0.0492
+  nGood: 4
+  nGoodVisits: 4
+  visitRange: 133054-135850
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133054-135850 (n=4): WARN 20% and FAIL 50% above the known-good
+    median, 0.03275px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.08
+  fail: 0.1
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.06664px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0398
+  fail: 0.0498
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.03315px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0438
+  fail: 0.0547
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.03645px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.076
+  fail: 0.095
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.06323px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.109
+  fail: 0.136
+  nGood: 20
+  nGoodVisits: 20
+  visitRange: 133042-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135848 (n=20): WARN 20% and FAIL 50% above the known-good
+    median, 0.09055px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0346
+  fail: 0.0433
+  nGood: 4
+  nGoodVisits: 4
+  visitRange: 133054-135850
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133054-135850 (n=4): WARN 20% and FAIL 50% above the known-good
+    median, 0.02881px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.077
+  fail: 0.096
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.06356px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.077
+  fail: 0.097
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.06408px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.116
+  fail: 0.145
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.0961px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.242
+  fail: 0.303
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.2015px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.178
+  fail: 0.222
+  nGood: 20
+  nGoodVisits: 20
+  visitRange: 133042-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135848 (n=20): WARN 20% and FAIL 50% above the known-good
+    median, 0.1479px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.09
+  fail: 0.113
+  nGood: 4
+  nGoodVisits: 4
+  visitRange: 133054-135850
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133054-135850 (n=4): WARN 20% and FAIL 50% above the known-good
+    median, 0.07472px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.152
+  fail: 0.19
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1264px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.28
+  fail: 0.35
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.2327px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.167
+  fail: 0.209
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.139px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.243
+  fail: 0.304
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.2024px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.124
+  fail: 0.155
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1029px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: O2
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.409
+  fail: 0.512
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.3408px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.147
+  fail: 0.184
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.122px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.244
+  fail: 0.305
+  nGood: 26
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=26): WARN 20% and FAIL 50% above the known-good
+    median, 0.2033px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.107
+  fail: 0.134
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 0.08894px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: Trace
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.186
+  fail: 0.232
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.1543px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.21
+  fail: 0.262
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1745px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.158
+  fail: 0.197
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1311px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.117
+  fail: 0.147
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.09739px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.161
+  fail: 0.201
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1334px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.099
+  fail: 0.124
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08214px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: O2
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.269
+  fail: 0.336
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.2238px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.112
+  fail: 0.14
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.09273px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.176
+  fail: 0.22
+  nGood: 26
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=26): WARN 20% and FAIL 50% above the known-good
+    median, 0.1461px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.072
+  fail: 0.09
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 0.05979px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: Trace
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.139
+  fail: 0.174
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.1157px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.143
+  fail: 0.179
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1191px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.086
+  fail: 0.107
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.07096px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.068
+  fail: 0.085
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.0563px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.082
+  fail: 0.103
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.06802px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.105
+  fail: 0.132
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08738px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: O2
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.395
+  fail: 0.494
+  nGood: 4
+  nGoodVisits: 4
+  visitRange: 134885-135277
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134885-135277 (n=4): WARN 20% and FAIL 50% above the known-good
+    median, 0.3288px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.09
+  fail: 0.112
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.0743px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.113
+  fail: 0.141
+  nGood: 26
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=26): WARN 20% and FAIL 50% above the known-good
+    median, 0.09378px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0325
+  fail: 0.0406
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 0.02702px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: Trace
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.128
+  fail: 0.16
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.106px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.073
+  fail: 0.091
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.06043px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.092
+  fail: 0.115
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.07638px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.077
+  fail: 0.096
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.06366px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.099
+  fail: 0.124
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08236px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.099
+  fail: 0.123
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08178px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: O2
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.242
+  fail: 0.302
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.2012px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.087
+  fail: 0.109
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.07224px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.119
+  fail: 0.149
+  nGood: 26
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=26): WARN 20% and FAIL 50% above the known-good
+    median, 0.09898px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0285
+  fail: 0.0356
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 0.02369px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: Trace
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.112
+  fail: 0.14
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.09321px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.095
+  fail: 0.119
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.07874px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.042
+  fail: 0.0525
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.03496px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0319
+  fail: 0.0398
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.0265px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.134
+  fail: 0.167
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.1113px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0422
+  fail: 0.0527
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.03512px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.091
+  fail: 0.113
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.07527px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.136
+  fail: 0.17
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.113px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.108
+  fail: 0.135
+  nGood: 26
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=26): WARN 20% and FAIL 50% above the known-good
+    median, 0.08982px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0468
+  fail: 0.0585
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.03898px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: Trace
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.077
+  fail: 0.096
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.06384px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.084
+  fail: 0.105
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.06993px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0317
+  fail: 0.0397
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.02641px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0355
+  fail: 0.0444
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.02958px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.099
+  fail: 0.123
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.0819px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0341
+  fail: 0.0426
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.02838px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0585
+  fail: 0.0731
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.0487px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.122
+  fail: 0.152
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.101px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.097
+  fail: 0.121
+  nGood: 26
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=26): WARN 20% and FAIL 50% above the known-good
+    median, 0.08022px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0237
+  fail: 0.0296
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.01971px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: Trace
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.065
+  fail: 0.081
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.05348px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.074
+  fail: 0.092
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.06133px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0555
+  fail: 0.0693
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.04618px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.046
+  fail: 0.0575
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.03831px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.168
+  fail: 0.209
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.1392px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0407
+  fail: 0.0509
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.03389px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.134
+  fail: 0.167
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.111px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.167
+  fail: 0.209
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.1389px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.119
+  fail: 0.149
+  nGood: 26
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=26): WARN 20% and FAIL 50% above the known-good
+    median, 0.09903px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0571
+  fail: 0.0713
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.04751px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: Trace
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.086
+  fail: 0.107
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.07105px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.092
+  fail: 0.115
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.07632px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0527
+  fail: 0.0659
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.04387px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0404
+  fail: 0.0505
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.03364px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.15
+  fail: 0.188
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.1248px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0435
+  fail: 0.0543
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.03618px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.141
+  fail: 0.176
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1167px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: O2
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.345
+  fail: 0.431
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 134880-134880
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-134880 (n=1): WARN 20% and FAIL 50% above the known-good
+    median, 0.2869px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.182
+  fail: 0.227
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.1511px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: Trace
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.13
+  fail: 0.163
+  nGood: 26
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135840 (n=26): WARN 20% and FAIL 50% above the known-good
+    median, 0.1081px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0599
+  fail: 0.0749
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133040-135829 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.04988px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: Trace
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.084
+  fail: 0.104
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.06927px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.099
+  fail: 0.124
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08215px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: CdI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.143
+  fail: 0.15
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: HgI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.09
+  fail: 0.092
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: KrI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.129
+  fail: 0.147
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: KrI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.114
+  fail: 0.115
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NaI
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 4.33
+  fail: 5.38
+  nGood: 32
+  nGoodVisits: 9
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=32 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NeI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.068
+  fail: 0.068
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NeI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0668
+  fail: 0.0682
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: OH
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 5.08
+  fail: 6.65
+  nGood: 31
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=31): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=31 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: OI
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 4.24
+  fail: 4.7
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: XeI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.143
+  fail: 0.149
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: XeI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.131
+  fail: 0.155
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: ArI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.121
+  fail: 0.123
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: KrI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.131
+  fail: 0.131
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: NeI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.164
+  fail: 0.168
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: XeI
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.149
+  fail: 0.156
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: ArI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.247
+  fail: 0.253
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: HgI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.62
+  fail: 0.62
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: KrI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.172
+  fail: 0.174
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: NeI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.124
+  fail: 0.125
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: O2
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.493
+  fail: 0.888
+  nGood: 40
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=40 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: OH
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.161
+  fail: 0.184
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: XeI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.181
+  fail: 0.198
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: ArI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.065
+  fail: 0.067
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: CdI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.081
+  fail: 0.091
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: HgI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 1.03
+  fail: 1.17
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: KrI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0498
+  fail: 0.0528
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: NeI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.121
+  fail: 0.121
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: O2
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.11
+  fail: 0.11
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 134880-134880
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 134880-134880 (n=1): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=1 is below the 20-sample floor. FAIL UNBOUNDED: n=1 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: OH
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 1.4
+  fail: 2.7
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: XeI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.1
+  fail: 0.1
+  nGood: 20
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=20 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.09
+  fail: 0.113
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.07484px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.077
+  fail: 0.097
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.06406px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.094
+  fail: 0.117
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.07786px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: NaI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.225
+  fail: 0.281
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 0.187px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0535
+  fail: 0.0669
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.04454px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 3.32
+  fail: 4.14
+  nGood: 7
+  nGoodVisits: 7
+  visitRange: 134880-134886
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-134886 (n=7): WARN 20% and FAIL 50% above the known-good
+    median, 2.76px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: OI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.266
+  fail: 0.332
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.221px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.14
+  fail: 0.175
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.116px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.099
+  fail: 0.124
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.08246px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.09
+  fail: 0.112
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.0746px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.123
+  fail: 0.153
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.1018px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: NaI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.169
+  fail: 0.211
+  nGood: 7
+  nGoodVisits: 7
+  visitRange: 134881-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134881-135279 (n=7): WARN 20% and FAIL 50% above the known-good
+    median, 0.1401px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.067
+  fail: 0.083
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.05524px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 3.4
+  fail: 4.25
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 2.828px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: OI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.198
+  fail: 0.247
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.1642px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.142
+  fail: 0.177
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.1177px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.084
+  fail: 0.105
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.06965px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.104
+  fail: 0.13
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.08666px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.095
+  fail: 0.118
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.07854px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: NaI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.378
+  fail: 0.472
+  nGood: 9
+  nGoodVisits: 9
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=9): WARN 20% and FAIL 50% above the known-good
+    median, 0.3145px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.077
+  fail: 0.097
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.06401px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 3.97
+  fail: 4.96
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 3.306px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: OI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.475
+  fail: 0.593
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.3953px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.147
+  fail: 0.184
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.1224px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.114
+  fail: 0.143
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.09482px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.07
+  fail: 0.087
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.05766px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.097
+  fail: 0.121
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.08009px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: NaI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.359
+  fail: 0.449
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 0.2987px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.068
+  fail: 0.085
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.0563px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 3.42
+  fail: 4.27
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+    median, 2.846px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: OI
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.204
+  fail: 0.254
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.1693px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.144
+  fail: 0.18
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 20% and FAIL 50% above the known-good
+    median, 0.1196px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.125
+  fail: 0.157
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1042px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.137
+  fail: 0.172
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1141px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.18
+  fail: 0.225
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1495px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.153
+  fail: 0.191
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1272px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0478
+  fail: 0.0597
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.03977px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0429
+  fail: 0.0536
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.03568px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.091
+  fail: 0.113
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.0752px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.094
+  fail: 0.117
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.07755px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0415
+  fail: 0.0519
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.03454px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.087
+  fail: 0.109
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.07206px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.086
+  fail: 0.108
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.07165px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.104
+  fail: 0.13
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08612px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.138
+  fail: 0.172
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1143px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.155
+  fail: 0.194
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1288px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.195
+  fail: 0.243
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1617px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.174
+  fail: 0.218
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1447px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.291
+  fail: 0.364
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.2424px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.72
+  fail: 0.9
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.5961px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.199
+  fail: 0.249
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1658px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.144
+  fail: 0.18
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1196px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: O2
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.31
+  fail: 0.387
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.2579px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.184
+  fail: 0.23
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.1529px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.21
+  fail: 0.262
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1744px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.139
+  fail: 0.173
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1152px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.536
+  fail: 0.669
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.446px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.11
+  fail: 0.137
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.09093px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.108
+  fail: 0.135
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08987px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: O2
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.227
+  fail: 0.284
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.1888px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.121
+  fail: 0.151
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.1px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.147
+  fail: 0.184
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1221px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.101
+  fail: 0.126
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08371px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.387
+  fail: 0.484
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.3224px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.108
+  fail: 0.134
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08918px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.118
+  fail: 0.147
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.09798px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: O2
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.82
+  fail: 1.02
+  nGood: 4
+  nGoodVisits: 4
+  visitRange: 134885-135277
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134885-135277 (n=4): WARN 20% and FAIL 50% above the known-good
+    median, 0.678px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.105
+  fail: 0.132
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.08736px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.114
+  fail: 0.142
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.09449px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.102
+  fail: 0.128
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08472px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.465
+  fail: 0.582
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.3874px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.115
+  fail: 0.144
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.09557px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.11
+  fail: 0.138
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.09149px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: O2
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.36
+  fail: 0.449
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.2993px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.102
+  fail: 0.127
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.08447px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.112
+  fail: 0.139
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.09252px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0556
+  fail: 0.0695
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.04629px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0446
+  fail: 0.0557
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.03712px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.149
+  fail: 0.186
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.1238px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0473
+  fail: 0.0591
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.0394px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.103
+  fail: 0.129
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08578px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.406
+  fail: 0.508
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.3382px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.094
+  fail: 0.117
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.07775px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0312
+  fail: 0.039
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.02597px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0378
+  fail: 0.0472
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.03143px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.169
+  fail: 0.211
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.1406px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0383
+  fail: 0.0479
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.03187px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.069
+  fail: 0.086
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.05678px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.183
+  fail: 0.229
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.1521px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.08
+  fail: 0.1
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.06634px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.072
+  fail: 0.09
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.05986px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.078
+  fail: 0.097
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.06464px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.215
+  fail: 0.268
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.1784px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0514
+  fail: 0.0642
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.04276px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.133
+  fail: 0.166
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1102px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.72
+  fail: 0.9
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.5994px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.104
+  fail: 0.13
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08613px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.067
+  fail: 0.084
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.05559px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: CdI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.079
+  fail: 0.098
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.06506px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: HgI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.166
+  fail: 0.208
+  nGood: 6
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+    median, 0.1381px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0491
+  fail: 0.0614
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.0409px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.141
+  fail: 0.177
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.1174px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: O2
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.128
+  fail: 0.159
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 134880-134880
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-134880 (n=1): WARN 20% and FAIL 50% above the known-good
+    median, 0.1058px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: OH
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.62
+  fail: 0.77
+  nGood: 12
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
+    median, 0.5097px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.106
+  fail: 0.133
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+    median, 0.08822px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'

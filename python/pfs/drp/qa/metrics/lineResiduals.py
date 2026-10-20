@@ -34,6 +34,13 @@ statistics: not measured. The components are kept apart, never combined.
 and the visit is reduced against the calibration unadjusted: every good line is
 then measured once, as ``UNFITTED``, and the summary's ``fitted`` is false.
 
+``obsType`` is the frame's observation type, from the ``W_SEQTYP`` header of
+the visit's pfsConfig as ``imageQualityQa`` classifies it (`observationType`:
+``trace`` for a quartz, ``arc``, ``twilight``, ...). It is a population column:
+trace centroids are measured on every frame, but on an arc the continuum is
+faint and they scatter two to three times more than on a quartz, so a
+threshold on their scatter is derived and judged per frame type.
+
 Judged (`JUDGED`), everything else stored as a diagnostic:
 
 - against ``calib``, over ``BOTH`` (or ``UNFITTED``) lines: the drift. The
@@ -63,21 +70,25 @@ __all__ = [
     "CALIB",
     "JUDGED",
     "LINE_COLUMNS",
+    "QUARTZ",
     "RECOMMENDED_ACTIONS",
     "REFERENCES",
     "RESERVED",
     "RESIDUAL_COLUMNS",
     "RESIDUAL_METRICS",
+    "SKY_SPECIES",
     "STATUS_TYPES",
     "SUMMARY_COLUMNS",
     "TRACE",
     "UNFITTED",
     "USED",
     "VISIT",
+    "addObsType",
     "cameraSet",
     "lineResiduals",
     "lineTable",
     "longResiduals",
+    "observationType",
     "residualThresholds",
     "residualVerdict",
     "robustRms",
@@ -87,6 +98,10 @@ __all__ = [
 
 #: The ``description`` of trace centroids in ``lines``.
 TRACE = "Trace"
+#: Line species of the night sky, measured on twilights and science frames.
+SKY_SPECIES = ("OH", "O2", "OI", "NaI")
+#: The ``obsType`` of a quartz frame: the only frames trace scatter is judged on.
+QUARTZ = "trace"
 
 #: drp_stella's ``ReferenceLineStatus.BAD`` (NOT_VISIBLE, BLEND, SUSPECT,
 #: REJECTED, BROAD): the status bits ``fitDetectorMap`` drops by default.
@@ -149,6 +164,7 @@ RESIDUAL_COLUMNS = {
     "arm": "string",
     "spectrograph": "int64",
     "cameraSet": "string",
+    "obsType": "string",
     "reference": "string",
     "description": "string",
     "statusType": "string",
@@ -238,6 +254,68 @@ def cameraSet(pfsConfig: Any, arm: str | None = None) -> str | None:
         arms.add(arm)
     named = "".join(a for a in _ARM_ORDER if a in arms)
     return named or None
+
+
+def observationType(header: Any) -> str | None:
+    """Return the frame's observation type, as ``imageQualityQa`` classifies it.
+
+    Parameters
+    ----------
+    header : mapping or `None`
+        The visit's header (``PfsConfig.header``, or any ``get``): ``W_SEQTYP``
+        and ``W_SEQNAM``.
+
+    Returns
+    -------
+    `str` or `None`
+        ``arc``, ``trace`` (a quartz), ``dark``, ``twilight``, ``allsky`` or
+        ``science`` (``scienceObject`` by its sequence name), ``unknown`` when
+        ``W_SEQTYP`` is absent or unrecognised; `None` without a header. The
+        values of ``iqQaMetrics.obsType``, so one thresholds population
+        vocabulary serves both tasks.
+    """
+    if header is None:
+        return None
+    seqType = str(header.get("W_SEQTYP") or "").strip()
+    seqName = str(header.get("W_SEQNAM") or "").strip().lower()
+    if seqType == "scienceArc":
+        return "arc"
+    if seqType == "scienceTrace":
+        return QUARTZ
+    if seqType == "scienceDark":
+        return "dark"
+    if seqType in ("scienceObject", "scienceObject_windowed"):
+        if seqName.startswith("twilight"):
+            return "twilight"
+        return "allsky" if seqName.startswith("sky") else "science"
+    return "unknown"
+
+
+def addObsType(metrics: pd.DataFrame, kinds: pd.DataFrame | None) -> pd.DataFrame:
+    """Return ``metrics`` with ``obsType`` filled from ``kinds`` where it is missing or null.
+
+    Tables stored before ``obsType`` was a column (PIPE2D-1956) have it from
+    ``iqQaMetrics``, which classifies the same header.
+
+    Parameters
+    ----------
+    metrics : `pandas.DataFrame`
+        Rows with ``visit``, ``arm`` and ``spectrograph``.
+    kinds : `pandas.DataFrame` or `None`
+        Rows with the same keys and ``obsType``; `None` leaves ``metrics`` as
+        it is.
+    """
+    if kinds is None or "obsType" not in kinds.columns:
+        return metrics
+    keys = ["visit", "arm", "spectrograph"]
+    lookup = kinds[[*keys, "obsType"]].drop_duplicates(keys).rename(columns={"obsType": "_obsType"})
+    merged = metrics.merge(lookup, on=keys, how="left")
+    merged.index = metrics.index
+    if "obsType" in merged.columns:
+        merged["obsType"] = merged["obsType"].where(merged["obsType"].notna(), merged["_obsType"])
+    else:
+        merged["obsType"] = merged["_obsType"]
+    return merged.drop(columns="_obsType")
 
 
 def lineResiduals(
@@ -546,6 +624,7 @@ def residualVerdict(
     thresholds: pd.DataFrame | Sequence[pd.DataFrame],
     minLines: int,
     camera: str | None = None,
+    obsType: str | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Judge the `JUDGED` rows and metrics of each species, and the detector.
 
@@ -558,11 +637,13 @@ def residualVerdict(
     thresholds : `pandas.DataFrame` or a sequence of them
         Threshold tables, highest priority first (`pfs.drp.qa.metrics.gate`).
         Population columns may name ``reference``, ``statusType``, ``arm``,
-        ``spectrograph``, ``description`` and ``cameraSet``.
+        ``spectrograph``, ``description``, ``cameraSet`` and ``obsType``.
     minLines : `int`
         As given to `speciesResiduals`; for the reason string.
     camera : `str`, optional
         `cameraSet`.
+    obsType : `str`, optional
+        `observationType`.
 
     Returns
     -------
@@ -590,6 +671,7 @@ def residualVerdict(
             arm=dataId["arm"],
             spectrograph=dataId["spectrograph"],
             cameraSet=camera,
+            obsType=obsType,
         )
         .reset_index(drop=True)
     )
@@ -680,8 +762,10 @@ def wideResiduals(
         ``calibFirstVisit``, ``calibLastVisit``, those present).
     kinds : `pandas.DataFrame`, optional
         A table with ``visit``, ``arm``, ``spectrograph`` and ``obsType`` or
-        ``seqName``, e.g. ``iqQaMetrics``: adds them, so that the validation
-        set's ``seqType`` selectors match the rows.
+        ``seqName``, e.g. ``iqQaMetrics``: adds ``seqName``, so that the
+        validation set's ``seqType`` selectors match the rows, and fills
+        ``obsType`` where the stored rows lack it (`addObsType`: tables made
+        before it was a column).
     excludeCalibInputs : `bool`, optional
         Drop the detectors whose visit lies within the input visits of the
         calibration they were measured against (``calibFirstVisit`` to
@@ -692,11 +776,11 @@ def wideResiduals(
     Returns
     -------
     `pandas.DataFrame`
-        ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``reference``,
-        ``description``, ``statusType``, a column per metric (``nLines``,
-        ``linesPerFiber`` and `RESIDUAL_METRICS`, NaN where the species
-        measures no such component), then the calibration and kind columns;
-        sorted by detector and species.
+        ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``obsType`` (when
+        stored), ``reference``, ``description``, ``statusType``, a column per
+        metric (``nLines``, ``linesPerFiber`` and `RESIDUAL_METRICS`, NaN
+        where the species measures no such component), then the calibration
+        and kind columns; sorted by detector and species.
 
     Raises
     ------
@@ -706,7 +790,8 @@ def wideResiduals(
     if excludeCalibInputs and summary is None:
         raise ValueError("excludeCalibInputs needs the summary, which holds each calibration's input visits")
     keys = ["visit", "arm", "spectrograph"]
-    index = [*keys, "cameraSet", "reference", "description", "statusType"]
+    stored = ["obsType"] if "obsType" in metrics.columns else []
+    index = [*keys, "cameraSet", *stored, "reference", "description", "statusType"]
     columns = [*index, *_COUNT_METRICS, *RESIDUAL_METRICS]
     rows = metrics[(metrics["reference"] == reference) & metrics["statusType"].isin(tuple(statusTypes))]
     if rows.empty:
@@ -729,13 +814,18 @@ def wideResiduals(
             own = first.notna() & last.notna() & (wide["visit"] >= first) & (wide["visit"] <= last)
             wide = wide[~own.to_numpy()]
     if kinds is not None:
-        kindColumns = [column for column in ("obsType", "seqName") if column in kinds]
-        wide = wide.merge(kinds[[*keys, *kindColumns]].drop_duplicates(keys), on=keys, how="left")
+        wide = addObsType(wide, kinds)
+        if "seqName" in kinds:
+            wide = wide.merge(kinds[[*keys, "seqName"]].drop_duplicates(keys), on=keys, how="left")
     return wide.sort_values([*keys, "description"], ignore_index=True)
 
 
 def longResiduals(
-    species: pd.DataFrame, judged: pd.DataFrame, dataId: Mapping[str, Any], camera: str | None = None
+    species: pd.DataFrame,
+    judged: pd.DataFrame,
+    dataId: Mapping[str, Any],
+    camera: str | None = None,
+    obsType: str | None = None,
 ) -> pd.DataFrame:
     """Return ``dmLineResidualMetrics``: one row per reference, species, ``statusType`` and metric.
 
@@ -753,6 +843,8 @@ def longResiduals(
         ``visit``, ``arm``, ``spectrograph``.
     camera : `str`, optional
         `cameraSet`.
+    obsType : `str`, optional
+        `observationType`.
 
     Returns
     -------
@@ -782,6 +874,7 @@ def longResiduals(
                     "arm": dataId["arm"],
                     "spectrograph": dataId["spectrograph"],
                     "cameraSet": camera,
+                    "obsType": obsType,
                     "reference": reference,
                     "description": description,
                     "statusType": record["statusType"],

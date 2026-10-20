@@ -171,10 +171,14 @@ def scatterTable(
     Returns
     -------
     `pandas.DataFrame`
-        ``arm``, ``description``, ``component`` (``x`` or ``y``), and per run
-        ``images <label>``, ``median <label>`` and ``p95 <label>`` (px,
-        rounded to 3 decimals); empty when nothing was measured.
+        ``arm``, ``obsType`` (when both tables carry it: trace centroids
+        scatter differently on a quartz and on an arc), ``description``,
+        ``component`` (``x`` or ``y``), and per run ``images <label>``,
+        ``median <label>`` and ``p95 <label>`` (px, rounded to 3 decimals);
+        empty when nothing was measured.
     """
+    byType = "obsType" in metrics.columns and (reference is None or "obsType" in reference.columns)
+    groups = ["arm", *(["obsType"] if byType else []), "description", "component"]
 
     def stats(frame: pd.DataFrame, label: str) -> pd.DataFrame:
         rows = frame[
@@ -184,7 +188,7 @@ def scatterTable(
             & frame["value"].notna()
         ]
         rows = rows.assign(component=rows["metric"].map(_SCATTER))
-        table = rows.groupby(["arm", "description", "component"])["value"].agg(
+        table = rows.groupby(groups, dropna=False)["value"].agg(
             ["size", "median", lambda v: v.quantile(0.95)]
         )
         table.columns = [f"images {label}", f"median {label}", f"p95 {label}"]
@@ -192,7 +196,7 @@ def scatterTable(
 
     table = stats(metrics, labels[0])
     if table.empty:
-        return pd.DataFrame(columns=["arm", "description", "component", *table.columns])
+        return pd.DataFrame(columns=[*groups, *table.columns])
     if reference is not None and not reference.empty:
         table = table.join(stats(reference, labels[1]), how="left")
     return table.round(3).reset_index()

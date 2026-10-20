@@ -55,6 +55,10 @@
 #   metric:   str, optional. The metric whose name should identify the fault.
 #             The full-rebuild acceptance criterion is that a known_bad visit
 #             fails *for the expected reason*, not merely that it fails.
+#   metrics:  list of str, optional, known_good only: the metrics the entry is
+#             known good for (every metric when omitted). A run's visits can be
+#             the reference for one metric and not another.
+#   excludeMetrics: list of str, optional, known_good only: every metric but these.
 #   reason:   str, why this verdict is expected.
 #   note:     str, free-form context.
 #
@@ -313,6 +317,7 @@ known_good:
     spectrographs: [1, 2, 3, 4]
     cameras: [b2, n4]
     seqType: "Trace"
+    excludeMetrics: [robustRmsDeltaX, robustRmsDeltaY]  # scatter reference stays Run25's
     note: "Run29 detectorMap set, 2026-07-07, b/r/n arms. b2 and n4 quartz reference (PIPE2D-1938)."
   - visitRange: [145062, 145071]
     sequenceType: scienceTrace
@@ -320,6 +325,7 @@ known_good:
     spectrographs: [1, 2, 3, 4]
     cameras: [b2]
     seqType: "Trace"
+    excludeMetrics: [robustRmsDeltaX, robustRmsDeltaY]  # scatter reference stays Run25's
     note: "Run29 detectorMap set, 2026-07-07, b/m arms. b2 quartz reference (PIPE2D-1938)."
   - visitRange: [146090, 146092]
     sequenceType: scienceTrace
@@ -327,6 +333,7 @@ known_good:
     spectrographs: [1, 2, 3, 4]
     cameras: [b2, n4]
     seqType: "Trace"
+    excludeMetrics: [robustRmsDeltaX, robustRmsDeltaY]  # scatter reference stays Run25's
     note: "Run29 detectorMap set, 2026-07-14. b2 and n4 quartz reference (PIPE2D-1938)."
   - visitRange: [147745, 147747]
     sequenceType: scienceTrace
@@ -334,7 +341,20 @@ known_good:
     spectrographs: [1, 2, 3, 4]
     cameras: [b2, n4]
     seqType: "Trace"
+    excludeMetrics: [robustRmsDeltaX, robustRmsDeltaY]  # scatter reference stays Run25's
     note: "Run29 detectorMap set, 2026-07-23. b2 and n4 quartz reference (PIPE2D-1938)."
+
+  # b2 and n4 on Run25's trace sets, for the line scatter only (PIPE2D-1956): their quartz trace
+  # scatter is unremarkable in Run25 (b2 0.044 px between b1's 0.040 and b4's 0.046) and dropped
+  # with every camera's from Run29, so Run25 is their scatter reference as it is the others'.
+  # The image-quality references above leave them out (excludeCameras).
+  - {visitRange: [133040, 133041], sequenceType: scienceTrace, arms: [b, n], spectrographs: [2, 4], cameras: [b2, n4], seqType: "Trace", metrics: [robustRmsDeltaX, robustRmsDeltaY]}
+  - {visitRange: [133054, 133055], sequenceType: scienceTrace, arms: [b], spectrographs: [2], cameras: [b2], seqType: "Trace", metrics: [robustRmsDeltaX, robustRmsDeltaY]}
+  - {visitRange: [133532, 133533], sequenceType: scienceTrace, arms: [b, n], spectrographs: [2, 4], cameras: [b2, n4], seqType: "Trace", metrics: [robustRmsDeltaX, robustRmsDeltaY]}
+  - {visitRange: [133536, 133537], sequenceType: scienceTrace, arms: [b], spectrographs: [2], cameras: [b2], seqType: "Trace", metrics: [robustRmsDeltaX, robustRmsDeltaY]}
+  - {visitRange: [134338, 134339], sequenceType: scienceTrace, arms: [b, n], spectrographs: [2, 4], cameras: [b2, n4], seqType: "Trace", metrics: [robustRmsDeltaX, robustRmsDeltaY]}
+  - {visitRange: [135828, 135829], sequenceType: scienceTrace, arms: [b, n], spectrographs: [2, 4], cameras: [b2, n4], seqType: "Trace", metrics: [robustRmsDeltaX, robustRmsDeltaY]}
+  - {visitRange: [135849, 135850], sequenceType: scienceTrace, arms: [b], spectrographs: [2], cameras: [b2], seqType: "Trace", metrics: [robustRmsDeltaX, robustRmsDeltaY]}
 
 known_bad:
   # Run25 b-arm arcs of the faint and crowded lamps: most of their lines are

@@ -8,7 +8,10 @@
 # official ones, 07-07 to 07-23.
 runs:
   - name: run25
-    nights: ["2025-11-07", "2025-12-03"]
+    # The last science night is 2025-11-30 (block C's calibrations, 135828-135850, are its morning).
+    # The IIS trace sequence of 2025-12-02 08:08 HST (135903-135904, night 12-01) is post-run
+    # engineering (PIPE2D-1956).
+    nights: ["2025-11-07", "2025-11-30"]
     preRun: ["2025-11-02", "2025-11-03"]
 
   - name: run26

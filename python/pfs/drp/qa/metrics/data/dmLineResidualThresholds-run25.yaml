@@ -1,0 +1,3777 @@
+# Made by makeLineResidualThresholds.py from tests/metrics/data/dmLineResidualThresholds-run25.yaml; see its docstring.
+version: 2
+derivedOn: '2026-10-19'
+collection: u/wtg/qa-thresholds/010
+referenceRuns:
+- 25
+- 29
+drpQaVersion: w.2026.35-173-g12b9ea8-dirty
+pipelineVersions:
+  datamodel: w.2026.40
+  obs_pfs: w.2026.40
+  drp_stella: w.2026.41-6-ge56938d2
+thresholds:
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: CdI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a mercury or cadmium line, whose scatter in y is intrinsically
+    variable (medians 0.6-1.1 px on the n and r arms): a per-detector tolerance failed 5-20 % of Runs 25-28''s healthy
+    arcs. Derived values were: Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL
+    at p99. FAIL UNBOUNDED: n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long
+    way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: HgI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a mercury or cadmium line, whose scatter in y is intrinsically
+    variable (medians 0.6-1.1 px on the n and r arms): a per-detector tolerance failed 5-20 % of Runs 25-28''s healthy
+    arcs. Derived values were: Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL
+    at p99. FAIL UNBOUNDED: n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long
+    way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NaI
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 32
+  nGoodVisits: 9
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-135279 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=32 cannot bound p99 at 95% confidence:
+    its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: OH
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 31
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-135279 (n=31): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=31 cannot bound p99 at 95% confidence:
+    its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: OI
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=48 cannot bound p99 at 95% confidence:
+    its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 60
+  nGoodVisits: 15
+  visitRange: 133045-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on arc frames, where the continuum is faint
+    and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values were:
+    Derived 2026-10-19 from validation visits 133045-135848 (n=60): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=60
+    cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 84
+  nGoodVisits: 21
+  visitRange: 133028-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on arc frames, where the continuum is faint
+    and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values were:
+    Derived 2026-10-19 from validation visits 133028-135840 (n=84): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=84
+    cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on twilight frames, where the continuum is
+    faint and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values
+    were: Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: Trace
+    cameraSet: bm
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 80
+  nGoodVisits: 20
+  visitRange: 133042-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on arc frames, where the continuum is faint
+    and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values were:
+    Derived 2026-10-19 from validation visits 133042-135848 (n=80): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=80
+    cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: HgI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a mercury or cadmium line, whose scatter in y is intrinsically
+    variable (medians 0.6-1.1 px on the n and r arms): a per-detector tolerance failed 5-20 % of Runs 25-28''s healthy
+    arcs. Derived values were: Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL
+    at p99. FAIL UNBOUNDED: n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long
+    way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: O2
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 40
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-135279 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=40 cannot bound p99 at 95% confidence:
+    its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: OH
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=48 cannot bound p99 at 95% confidence:
+    its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: Trace
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 104
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on arc frames, where the continuum is faint
+    and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values were:
+    Derived 2026-10-19 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=104
+    cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: Trace
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on twilight frames, where the continuum is
+    faint and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values
+    were: Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: CdI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a mercury or cadmium line, whose scatter in y is intrinsically
+    variable (medians 0.6-1.1 px on the n and r arms): a per-detector tolerance failed 5-20 % of Runs 25-28''s healthy
+    arcs. Derived values were: Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL
+    at p99. FAIL UNBOUNDED: n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long
+    way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: HgI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a mercury or cadmium line, whose scatter in y is intrinsically
+    variable (medians 0.6-1.1 px on the n and r arms): a per-detector tolerance failed 5-20 % of Runs 25-28''s healthy
+    arcs. Derived values were: Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL
+    at p99. FAIL UNBOUNDED: n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long
+    way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: O2
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 134880-134880
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-134880 (n=1): WARN at p95, FAIL at p99. NOT RELIABLE: n=1 is below the 20-sample floor. FAIL UNBOUNDED:
+    n=1 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
+    WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: OH
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=48 cannot bound p99 at 95% confidence:
+    its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: Trace
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 104
+  nGoodVisits: 26
+  visitRange: 133025-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on arc frames, where the continuum is faint
+    and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values were:
+    Derived 2026-10-19 from validation visits 133025-135840 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=104
+    cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: Trace
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on twilight frames, where the continuum is
+    faint and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values
+    were: Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.081
+  fail: 0.102
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133034-135848 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.06749px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.076
+  fail: 0.095
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133031-135846 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.06269px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0485
+  fail: 0.0607
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 133040-135850
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133040-135850 (n=14):
+    WARN 20% and FAIL 50% above the known-good median, 0.04041px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.138
+  fail: 0.173
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133028-135844 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.1147px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.093
+  fail: 0.116
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133034-135848 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.07691px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.095
+  fail: 0.119
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133031-135846 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.07913px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0526
+  fail: 0.0657
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 133040-135850
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133040-135850 (n=14):
+    WARN 20% and FAIL 50% above the known-good median, 0.04379px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.127
+  fail: 0.159
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133028-135844 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.1055px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.107
+  fail: 0.133
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133034-135848 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.08847px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.129
+  fail: 0.162
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133031-135846 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.1074px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0508
+  fail: 0.0635
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 133040-135850
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133040-135850 (n=14):
+    WARN 20% and FAIL 50% above the known-good median, 0.0423px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.132
+  fail: 0.165
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133028-135844 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.1094px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.1
+  fail: 0.124
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133034-135848 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.08251px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.12
+  fail: 0.15
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133031-135846 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.09973px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0556
+  fail: 0.0695
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 133040-135850
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133040-135850 (n=14):
+    WARN 20% and FAIL 50% above the known-good median, 0.04632px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.122
+  fail: 0.153
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133028-135844 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.1014px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.063
+  fail: 0.079
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133042-135842 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.052px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.091
+  fail: 0.114
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133051-135848 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.07567px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.204
+  fail: 0.255
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133048-135846 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.1694px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.08
+  fail: 0.1
+  nGood: 4
+  nGoodVisits: 4
+  visitRange: 133054-135850
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133054-135850 (n=4):
+    WARN 20% and FAIL 50% above the known-good median, 0.06633px. MEDIAN UNBOUNDED: n=4 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.127
+  fail: 0.159
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133045-135844 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.1054px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0369
+  fail: 0.0461
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133042-135842 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.0307px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0521
+  fail: 0.0652
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133051-135848 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.04341px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.1
+  fail: 0.124
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133048-135846 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.08256px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0394
+  fail: 0.0492
+  nGood: 4
+  nGoodVisits: 4
+  visitRange: 133054-135850
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133054-135850 (n=4):
+    WARN 20% and FAIL 50% above the known-good median, 0.03275px. MEDIAN UNBOUNDED: n=4 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.08
+  fail: 0.1
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133045-135844 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.06664px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0398
+  fail: 0.0498
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133042-135842 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.03315px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0438
+  fail: 0.0547
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133051-135848 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.03645px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.076
+  fail: 0.095
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133048-135846 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.06323px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0346
+  fail: 0.0433
+  nGood: 4
+  nGoodVisits: 4
+  visitRange: 133054-135850
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133054-135850 (n=4):
+    WARN 20% and FAIL 50% above the known-good median, 0.02881px. MEDIAN UNBOUNDED: n=4 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.077
+  fail: 0.096
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133045-135844 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.06356px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.077
+  fail: 0.097
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133042-135842 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.06408px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.116
+  fail: 0.145
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133051-135848 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.0961px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.242
+  fail: 0.303
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133048-135846 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.2015px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.09
+  fail: 0.113
+  nGood: 4
+  nGoodVisits: 4
+  visitRange: 133054-135850
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133054-135850 (n=4):
+    WARN 20% and FAIL 50% above the known-good median, 0.07472px. MEDIAN UNBOUNDED: n=4 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.152
+  fail: 0.19
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133045-135844 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.1264px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.28
+  fail: 0.35
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.2327px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.243
+  fail: 0.304
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.2024px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.124
+  fail: 0.155
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.1029px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.107
+  fail: 0.134
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133040-135829 (n=8):
+    WARN 20% and FAIL 50% above the known-good median, 0.08894px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.21
+  fail: 0.262
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.1745px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.158
+  fail: 0.197
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.1311px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.161
+  fail: 0.201
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.1334px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.099
+  fail: 0.124
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.08214px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.072
+  fail: 0.09
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133040-135829 (n=8):
+    WARN 20% and FAIL 50% above the known-good median, 0.05979px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.143
+  fail: 0.179
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.1191px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.086
+  fail: 0.107
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.07096px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.082
+  fail: 0.103
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.06802px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.105
+  fail: 0.132
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.08738px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0325
+  fail: 0.0406
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133040-135829 (n=8):
+    WARN 20% and FAIL 50% above the known-good median, 0.02702px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.073
+  fail: 0.091
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.06043px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.092
+  fail: 0.115
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.07638px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.099
+  fail: 0.124
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.08236px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.099
+  fail: 0.123
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.08178px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0285
+  fail: 0.0356
+  nGood: 8
+  nGoodVisits: 8
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133040-135829 (n=8):
+    WARN 20% and FAIL 50% above the known-good median, 0.02369px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.095
+  fail: 0.119
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.07874px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.042
+  fail: 0.0525
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.03496px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0422
+  fail: 0.0527
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.03512px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.091
+  fail: 0.113
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.07527px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0468
+  fail: 0.0585
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133040-135829 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.03898px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.084
+  fail: 0.105
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.06993px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0317
+  fail: 0.0397
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.02641px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0341
+  fail: 0.0426
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.02838px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0585
+  fail: 0.0731
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.0487px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0237
+  fail: 0.0296
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133040-135829 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.01971px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.074
+  fail: 0.092
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.06133px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0555
+  fail: 0.0693
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.04618px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0407
+  fail: 0.0509
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.03389px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.134
+  fail: 0.167
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.111px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0571
+  fail: 0.0713
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133040-135829 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.04751px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.092
+  fail: 0.115
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.07632px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0527
+  fail: 0.0659
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133025-135831 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.04387px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0435
+  fail: 0.0543
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133034-135837 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.03618px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.141
+  fail: 0.176
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133031-135835 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.1167px. MEDIAN UNBOUNDED: n=5 cannot bound the median at
+    95% confidence.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: Trace
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.0599
+  fail: 0.0749
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133040-135829
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133040-135829 (n=10):
+    WARN 20% and FAIL 50% above the known-good median, 0.04988px.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 0.099
+  fail: 0.124
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133028-135833 (n=5):
+    WARN 20% and FAIL 50% above the known-good median, 0.08215px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: CdI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a mercury or cadmium line, whose scatter in y is intrinsically
+    variable (medians 0.6-1.1 px on the n and r arms): a per-detector tolerance failed 5-20 % of Runs 25-28''s healthy
+    arcs. Derived values were: Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL
+    at p99. FAIL UNBOUNDED: n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long
+    way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: HgI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a mercury or cadmium line, whose scatter in y is intrinsically
+    variable (medians 0.6-1.1 px on the n and r arms): a per-detector tolerance failed 5-20 % of Runs 25-28''s healthy
+    arcs. Derived values were: Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL
+    at p99. FAIL UNBOUNDED: n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long
+    way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: NaI
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 32
+  nGoodVisits: 9
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-135279 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=32 cannot bound p99 at 95% confidence:
+    its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: OH
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 31
+  nGoodVisits: 8
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-135279 (n=31): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=31 cannot bound p99 at 95% confidence:
+    its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: OI
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=48 cannot bound p99 at 95% confidence:
+    its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: HgI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a mercury or cadmium line, whose scatter in y is intrinsically
+    variable (medians 0.6-1.1 px on the n and r arms): a per-detector tolerance failed 5-20 % of Runs 25-28''s healthy
+    arcs. Derived values were: Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL
+    at p99. FAIL UNBOUNDED: n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long
+    way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: O2
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 40
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-135279 (n=40): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=40 cannot bound p99 at 95% confidence:
+    its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: OH
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=48 cannot bound p99 at 95% confidence:
+    its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: CdI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a mercury or cadmium line, whose scatter in y is intrinsically
+    variable (medians 0.6-1.1 px on the n and r arms): a per-detector tolerance failed 5-20 % of Runs 25-28''s healthy
+    arcs. Derived values were: Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL
+    at p99. FAIL UNBOUNDED: n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long
+    way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: HgI
+    cameraSet: brn
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133037-135840
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a mercury or cadmium line, whose scatter in y is intrinsically
+    variable (medians 0.6-1.1 px on the n and r arms): a per-detector tolerance failed 5-20 % of Runs 25-28''s healthy
+    arcs. Derived values were: Derived 2026-10-19 from validation visits 133037-135840 (n=24): WARN at p95, FAIL
+    at p99. FAIL UNBOUNDED: n=24 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long
+    way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: O2
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 134880-134880
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-134880 (n=1): WARN at p95, FAIL at p99. NOT RELIABLE: n=1 is below the 20-sample floor. FAIL UNBOUNDED:
+    n=1 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
+    WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: OH
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a sky-line species on twilight frames, whose scatter is the
+    sky lines'' fit rather than the instrument''s state. Derived values were: Derived 2026-10-19 from validation
+    visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=48 cannot bound p99 at 95% confidence:
+    its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133034-135848
+    (n=10): WARN 20% and FAIL 50% above the known-good median, 0.07786px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133031-135846
+    (n=10): WARN 20% and FAIL 50% above the known-good median, 0.04454px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133028-135844
+    (n=10): WARN 20% and FAIL 50% above the known-good median, 0.116px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133034-135848
+    (n=10): WARN 20% and FAIL 50% above the known-good median, 0.1018px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133031-135846
+    (n=10): WARN 20% and FAIL 50% above the known-good median, 0.05524px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133028-135844
+    (n=10): WARN 20% and FAIL 50% above the known-good median, 0.1177px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133034-135848
+    (n=10): WARN 20% and FAIL 50% above the known-good median, 0.07854px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133031-135846
+    (n=10): WARN 20% and FAIL 50% above the known-good median, 0.06401px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133028-135844
+    (n=10): WARN 20% and FAIL 50% above the known-good median, 0.1224px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133034-135848
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133034-135848
+    (n=10): WARN 20% and FAIL 50% above the known-good median, 0.08009px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133031-135846
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133031-135846
+    (n=10): WARN 20% and FAIL 50% above the known-good median, 0.0563px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 10
+  nGoodVisits: 10
+  visitRange: 133028-135844
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133028-135844
+    (n=10): WARN 20% and FAIL 50% above the known-good median, 0.1196px.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133042-135842
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1042px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133051-135848
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1141px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133048-135846
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1495px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133045-135844
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1272px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133042-135842
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.03977px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133051-135848
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.03568px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133048-135846
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.0752px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133045-135844
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.07755px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133042-135842
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.03454px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133051-135848
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.07206px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133048-135846
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.07165px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133045-135844
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.08612px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133042-135842
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133042-135842
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1143px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133051-135848
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133051-135848
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1288px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133048-135846
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133048-135846
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1617px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133045-135844
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133045-135844
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1447px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133025-135831
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.2424px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133034-135837
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1658px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133031-135835
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1196px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133028-135833
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1744px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133025-135831
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1152px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133034-135837
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.09093px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133031-135835
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.08987px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133028-135833
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1221px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133025-135831
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.08371px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133034-135837
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.08918px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133031-135835
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.09798px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133028-135833
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.09449px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133025-135831
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.08472px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133034-135837
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.09557px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133031-135835
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.09149px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133028-135833
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.09252px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133025-135831
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.04629px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133034-135837
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.0394px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133031-135835
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.08578px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 1
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133028-135833
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.07775px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133025-135831
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.02597px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133034-135837
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.03187px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133031-135835
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.05678px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 2
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133028-135833
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.06634px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133025-135831
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.05986px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133034-135837
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.04276px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133031-135835
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1102px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 3
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133028-135833
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.08613px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: ArI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133025-135831
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133025-135831
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.05559px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: KrI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133034-135837
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133034-135837
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.0409px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: NeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133031-135835
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133031-135835
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.1174px. MEDIAN UNBOUNDED: n=5 cannot bound the median
+    at 95% confidence.'
+- metric: robustRmsDeltaY
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    spectrograph: 4
+    description: XeI
+    obsType: arc
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: null
+  fail: null
+  nGood: 5
+  nGoodVisits: 5
+  visitRange: 133028-135833
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the y scatter of a lamp species, not yet checked against later
+    runs on its own; the x scatter is judged. Derived values were: Derived 2026-10-19 from validation visits 133028-135833
+    (n=5): WARN 20% and FAIL 50% above the known-good median, 0.08822px. MEDIAN UNBOUNDED: n=5 cannot bound the
+    median at 95% confidence.'

@@ -112,3 +112,22 @@ def testScatterTable():
     assert table.iloc[0]["median run1"] == 0.05 and pd.isna(table.iloc[1]["median run1"])
     assert "p95 run2" in table and table.iloc[0]["p95 run2"] < 0.3
     assert scatterTable(_metrics(ignored)).empty
+    # With the frame type stored, traces on a quartz and on an arc are separate rows; a reference
+    # without it keeps the table by arm and species alone.
+    traces = _metrics(
+        [
+            (v, "b", 1, "visit", "Trace", "RESERVED", "robustRmsDeltaX", value, "")
+            for v, value in ((1, 0.04), (2, 0.12), (3, 0.13))
+        ]
+    ).assign(obsType=["trace", "arc", "arc"])
+    byType = scatterTable(traces, labels=("run2", "run1"))
+    assert list(
+        byType[["arm", "obsType", "description", "component", "images run2"]].itertuples(
+            index=False, name=None
+        )
+    ) == [
+        ("b", "arc", "Trace", "x", 2),
+        ("b", "trace", "Trace", "x", 1),
+    ]
+    pooled = scatterTable(traces, reference, labels=("run2", "run1"))
+    assert "obsType" not in pooled.columns and list(pooled["images run2"]) == [3]

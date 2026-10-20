@@ -459,6 +459,11 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     residualSummary, residualMetrics = _readResiduals(butler, done, ownRuns(butler, output))
     residualFound = None
     if residualSummary is not None:
+        from pfs.drp.qa.metrics.lineResiduals import addObsType
+
+        # Tables stored before obsType was a column (PIPE2D-1956) take it from imageQualityQa's.
+        residualMetrics = addObsType(residualMetrics, metrics)
+        residualSummary = addObsType(residualSummary, metrics)
         residualSummary.to_parquet(workDir / f"dmLineResidualSummary-{period.name}.parquet")
         residualMetrics.to_parquet(workDir / f"dmLineResidualMetrics-{period.name}.parquet")
         residualFound = residualFindings(residualMetrics, residualSummary, visits, frames["notes"])
@@ -483,6 +488,7 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
                 gatedVisits = referenceVisits.loc[referenceVisits["validated"].astype(bool), "pfs_visit_id"]
                 referenceResiduals = pd.read_parquet(residualCache)
                 referenceResiduals = referenceResiduals[referenceResiduals["visit"].isin(gatedVisits)]
+                referenceResiduals = addObsType(referenceResiduals, reference)
         else:
             print(f"No {args.reference} metrics at {cache}: report {args.reference} first", file=sys.stderr)
 
