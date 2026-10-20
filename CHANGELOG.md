@@ -35,6 +35,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   scatter with a thresholds file, run by run: the acceptance check an adoption must pass. Comparison mode's scatter
   table is by observation type, and tables stored before the column take it from `iqQaMetrics`.
 
+- **Run25's period ends on its last science night, 2025-11-30** (PIPE2D-1956) — the IIS trace sequence of
+  2025-12-02 (135903–135904), post-run engineering with no sequence name, is no longer judged as Run25.
+
 - **Engineering sequences are unvalidated in comparison mode** (PIPE2D-1956) — a bootstrap, an IIS `ImageQuality`
   frame, a health check, a `LineCheck` or a `DetectorMap test` (`ENGINEERING_SEQUENCES`, by sequence name) taken as a
   `scienceTrace` or `scienceArc` lights a handful of fibers or takes lamps off the calibration recipe, and its lines
