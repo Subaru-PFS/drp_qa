@@ -293,18 +293,30 @@ checked with `bin.src/judgeScatterThresholds.py` on comparison mode's exports of
   b, r and n all drop to 0.015–0.03 px from Run29. A percentile over the pooled detectors is
   set by the worst detector (n by n1's 0.089) and cuts through the top detector's cluster (r4 at
   the p95 of its own run), so with 22–24 values the p95 and p99 coincide and the thresholds flag
-  Run26's late b1/b4 trace sets at +10 % and all of Run28's r3. The original plan, a tolerance
-  about each detector's known-good median as `medFwhm` has, fits this metric better.
+  Run26's late b1/b4 trace sets at +10 % and all of Run28's r3. Adopted instead (2026-10-20): a
+  tolerance about each detector's Run25 median, WARN 20 % and FAIL 50 %, as `medFwhm` has. The
+  regular trace sets of Runs 26–30 sit within +12 % of it (b1 and r1 reach +24 % and +28 % at the
+  end of Run26: WARN), the Run27 SM1 defocus at 1.7–4× (FAIL, with r2 at 2.2× and one Run27 set at
+  1.5–1.9× on the other cameras); Runs 28–30 flag nothing. b2 and n4 keep Run25 as their scatter
+  reference (their scatter is unremarkable there), Run29 being their image-quality reference only.
+  The m arm has two known-good values per detector, below the floor: not judged.
 - **Bootstrap, IIS and health-check quartz are not full-slit quartz.** Their trace scatter is
   0.07–0.13 px, twice a trace set's, on every camera (Run25 132766–132767, 132958–132999,
   135903–135904; Run26 Bootstrap sets; Run29 147778–147780 `ImageQuality (Halogen)`); they are
-  `scienceTrace` frames, so comparison mode gates them with the trace sets.
+  `scienceTrace` frames, so comparison mode gated them with the trace sets until they were made
+  unvalidated by sequence name (`ENGINEERING_SEQUENCES`). Cobra scans (`theta_scan_*`, `home`)
+  with the quartz on scatter like a trace set and stay gated.
 - **Lamp-line scatter is run-dependent.** Thresholds from Run29's 2026-07-14 and 07-23 arcs
   (24–28 values per species, 6–7 visits), judged at WARN, flag 20–70 % of the lamp arcs of Runs
   25–28 (r-arm Krypton 71 % in Run25) and about none of Runs 29–30's: the reserved-line scatter
   of lamp lines against the visit's adjusted map differs between runs by more than it varies
   within one, so no fixed reference transfers. Lamp species are stored, not judged; a within-run
-  baseline is the shape of an answer.
+  baseline is the shape of an answer. A per-detector tolerance about Run25's median (20 %/50 %,
+  as the traces) was tried on 2026-10-20: it has reliable entries for half the lamp rows only
+  (b-arm CdI, HgI, KrI, NeI, XeI, n HgI, r CdI and HgI, 3–7 values each; the n and r Kr/Ne/Xe and
+  every Argon have fewer than three), passes Kr, Ne and Xe in x (0–6 % FAIL outside Run27) and
+  fails 5–20 % of Runs 25–28's HgCd arcs in y (r-arm HgI, CdI; Run25's own r arcs 9 %): the HgCd
+  species' y scatter is intrinsically variable (medians 0.6–1.1 px on n and r).
 
 ---
 

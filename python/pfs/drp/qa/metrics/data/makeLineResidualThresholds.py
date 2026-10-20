@@ -7,12 +7,20 @@ visit reduced afresh with the pipeline the file records), kept in the tests as
 was derived from: the robust RMS of the lines the visit's detectorMap fit held
 back (``RESERVED``), against that adjusted map, per arm, line species, camera
 set and observation type (PIPE2D-1956), each calibration's own input visits left
-out. Adopting it:
+out; and, for the scatter metrics, a tolerance per detector, species and
+observation type (`pfs.drp.qa.metrics.registry`). Adopting it:
 
-- **Trace centroids on quartz frames are judged** (``obsType`` ``trace``), WARN
-  at p95 and FAIL at p99 as derived, where the derivation is reliable (20 or
-  more known-good values); with fewer than `MIN_VISITS` visits behind them, at
-  WARN only, since a p99 FAIL would then sit at the sample maximum.
+- **Trace centroids on quartz frames are judged per detector** (``obsType``
+  ``trace``), by the tolerance: WARN 20 % and FAIL 50 % above the detector's
+  known-good median, where the derivation has the three values a median needs.
+  A detector's quartz trace scatter repeats to about 1 % within a run and
+  differs 20 % between detectors (Run25 b1-b4: 0.040, 0.044, 0.042, 0.046 px),
+  so the pooled percentile is set by the worst detector and cuts through the
+  best one's cluster; the regular trace sets of Runs 26-30 sit within +12 % of
+  Run25's per-detector median (+24 % at the end of Run26 on b1), the Run27 SM1
+  defocus at 1.7-4x. The pooled percentile entries for quartz traces are
+  dropped from the adopted file (an equally specific second entry would be an
+  error in the gate); the derivation keeps them.
 - **Trace centroids on arcs and twilights are not judged.** The continuum is
   faint there, and the centroids scatter two to three times more than on a
   quartz (Runs 25-30 medians 0.10-0.13 px against 0.02-0.04): one population
@@ -27,7 +35,9 @@ out. Adopting it:
   scatter up to several pixels on the b arm, which is the sky lines' fit, not the
   instrument's state; judging science frames is later work (PIPE2D-1939 for
   the n arm, PIPE2D-1923 for the rollup).
-- **Nothing below the 20-sample floor is judged.**
+- **Nothing below the sample floor is judged**: 20 values for a percentile, 3
+  for a tolerance. The tolerance rows of every other population are left out of
+  the adopted file; the derivation keeps them.
 
 The task's config fields still judge the median offsets from ``detectorMap_calib``
 (1 and 2 px); this file holds only the scatter entries, so the two never overlap.
@@ -49,8 +59,6 @@ ROOT = Path(__file__).parents[6]
 SOURCE = ROOT / "tests" / "metrics" / "data" / "dmLineResidualThresholds-run25.yaml"
 OUTPUT = Path(__file__).parent / "dmLineResidualThresholds-run25.yaml"
 
-#: Fewest known-good visits for a FAIL threshold: on 20 values from 5, a p99 sits at the sample maximum.
-MIN_VISITS = 10
 ADOPTED = "2026-10-20"
 
 
@@ -73,6 +81,11 @@ def adopt(document: dict) -> dict:
         entry = dict(entry)
         population = entry["population"]
         description, obsType = population.get("description"), population.get("obsType")
+        quartzTrace = description == TRACE and obsType == QUARTZ
+        if entry.get("method") == "tolerance" and not quartzTrace:
+            continue  # only quartz traces are judged per detector; the derivation keeps the rest
+        if entry.get("method") == "percentile" and quartzTrace:
+            continue  # replaced by the per-detector tolerance; two matching entries would tie
         reason = None
         if description in SKY_SPECIES:
             reason = (
@@ -91,18 +104,15 @@ def adopt(document: dict) -> dict:
                 "healthy arcs)"
             )
         elif not entry.get("reliable"):
-            reason = f"the derivation has n={entry.get('nGood')} from {entry.get('nGoodVisits')} visits, below the 20-sample floor"
+            floor = 3 if entry.get("method") == "tolerance" else 20
+            reason = (
+                f"the derivation has n={entry.get('nGood')} from {entry.get('nGoodVisits')} visits, below the "
+                f"{floor}-sample floor"
+            )
         if reason is not None:
             entry |= {"warn": None, "fail": None}
             entry["provenance"] = (
                 f"Not judged ({ADOPTED}, PIPE2D-1956): {reason}. Derived values were: {entry['provenance']}"
-            )
-        elif (entry.get("nGoodVisits") or 0) < MIN_VISITS:
-            entry["fail"] = None
-            entry["provenance"] = (
-                f"Adopted at WARN only ({ADOPTED}, PIPE2D-1956): n={entry.get('nGood')} from "
-                f"{entry.get('nGoodVisits')} visits, so a p99 FAIL would sit at the sample maximum and flag one "
-                f"known-good image in twenty. Derived values were: {entry['provenance']}"
             )
         else:
             entry["provenance"] = f"Adopted {ADOPTED} (PIPE2D-1956). {entry['provenance']}"

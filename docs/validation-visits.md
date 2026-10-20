@@ -163,10 +163,17 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 133536–133537 | 25 | scienceTrace | b, r; not b2, n4 | 1, 2, 3, 4 | Trace | PASS |  | Run25 uniformity set, 2025-11-12, az 90. 20 s scienceTrace; n arm not read. |
 | 134338–134339 | 25 | scienceTrace | b, r, n; not b2, n4 | 1, 2, 3, 4 | Trace | PASS |  | Run25 uniformity set, 2025-11-21, az 290. 20 s scienceTrace. |
 | 135275–135279 | 25 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | PASS |  | Run25 uniformity set, 2025-11-28, az 290, insrot 90. 180 s. Reference case for the O2/OH sky-line check, as for the other twilight entries. |
-| 145025–145034 | 29 | scienceTrace | b, r, n; cameras b2, n4 | 1, 2, 3, 4 | Trace | PASS |  | Run29 detectorMap set, 2026-07-07, b/r/n arms. b2 and n4 quartz reference (PIPE2D-1938). |
-| 145062–145071 | 29 | scienceTrace | b, m; cameras b2 | 1, 2, 3, 4 | Trace | PASS |  | Run29 detectorMap set, 2026-07-07, b/m arms. b2 quartz reference (PIPE2D-1938). |
-| 146090–146092 | 29 | scienceTrace | b, r, n; cameras b2, n4 | 1, 2, 3, 4 | Trace | PASS |  | Run29 detectorMap set, 2026-07-14. b2 and n4 quartz reference (PIPE2D-1938). |
-| 147745–147747 | 29 | scienceTrace | b, r, n; cameras b2, n4 | 1, 2, 3, 4 | Trace | PASS |  | Run29 detectorMap set, 2026-07-23. b2 and n4 quartz reference (PIPE2D-1938). |
+| 145025–145034 | 29 | scienceTrace | b, r, n; cameras b2, n4 | 1, 2, 3, 4 | Trace | PASS | not `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 detectorMap set, 2026-07-07, b/r/n arms. b2 and n4 quartz reference (PIPE2D-1938). |
+| 145062–145071 | 29 | scienceTrace | b, m; cameras b2 | 1, 2, 3, 4 | Trace | PASS | not `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 detectorMap set, 2026-07-07, b/m arms. b2 quartz reference (PIPE2D-1938). |
+| 146090–146092 | 29 | scienceTrace | b, r, n; cameras b2, n4 | 1, 2, 3, 4 | Trace | PASS | not `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 detectorMap set, 2026-07-14. b2 and n4 quartz reference (PIPE2D-1938). |
+| 147745–147747 | 29 | scienceTrace | b, r, n; cameras b2, n4 | 1, 2, 3, 4 | Trace | PASS | not `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 detectorMap set, 2026-07-23. b2 and n4 quartz reference (PIPE2D-1938). |
+| 133040–133041 | 25 | scienceTrace | b, n; cameras b2, n4 | 2, 4 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
+| 133054–133055 | 25 | scienceTrace | b; cameras b2 | 2 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
+| 133532–133533 | 25 | scienceTrace | b, n; cameras b2, n4 | 2, 4 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
+| 133536–133537 | 25 | scienceTrace | b; cameras b2 | 2 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
+| 134338–134339 | 25 | scienceTrace | b, n; cameras b2, n4 | 2, 4 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
+| 135828–135829 | 25 | scienceTrace | b, n; cameras b2, n4 | 2, 4 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
+| 135849–135850 | 25 | scienceTrace | b; cameras b2 | 2 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
 | 146093–146094 | 29 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Argon | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 arc set, 2026-07-14, b/r/n arms. Line-scatter reference only (PIPE2D-1956). |
 | 147748–147750 | 29 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Argon | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 arc set, 2026-07-23, b/r/n arms. Line-scatter reference only (PIPE2D-1956). |
 | 146095–146096 | 29 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Xenon | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 arc set, 2026-07-14, b/r/n arms. Line-scatter reference only (PIPE2D-1956). |

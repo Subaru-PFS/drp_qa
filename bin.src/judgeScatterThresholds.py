@@ -6,9 +6,11 @@ RMS of every lamp arc and quartz of the runs compared must not fail in bulk, or 
 describe the reference visits' night rather than the instrument. Reads the
 ``dmLineResidualMetrics-<period>.parquet`` and ``dmLineResidualSummary-<period>.parquet`` that
 ``qaComparison.py report`` writes beside each report (and ``iqQaMetrics-<period>.parquet`` there
-for the observation type of tables stored before ``obsType`` was a column), judges the
-``RESERVED`` rows against the visit's detectorMap with the file (and the task's config fallback),
-and prints WARN and FAIL counts per run, arm, observation type and species. Stack-free.
+for the observation type of tables stored before ``obsType`` was a column, and the sequence
+names), judges the ``RESERVED`` rows against the visit's detectorMap with the file (and the task's
+config fallback), and prints WARN and FAIL counts per run, arm, observation type and species.
+Engineering sequences (bootstraps, IIS frames, health checks: `ENGINEERING_SEQUENCES`), which the
+gate leaves unvalidated, are counted apart. Stack-free.
 
 Example::
 
@@ -23,6 +25,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from pfs.drp.qa.comparison.classify import engineeringSequences
 from pfs.drp.qa.metrics.gate import judge
 from pfs.drp.qa.metrics.lineResiduals import RESERVED, VISIT, residualThresholds, wideResiduals
 
@@ -45,21 +48,24 @@ def scatterVerdicts(
         fallback (``pfs.drp.qa.metrics.lineResiduals.residualThresholds``).
     kinds : `pandas.DataFrame`, optional
         ``iqQaMetrics`` rows of the same images: their ``obsType``, for tables
-        stored before it was a column.
+        stored before it was a column, and their ``seqName``.
 
     Returns
     -------
     `pandas.DataFrame`
         ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``obsType``,
-        ``description``, ``metric``, ``value``, ``status`` (``PASS``, ``WARN``,
-        ``FAIL`` or empty for not judged).
+        ``description``, ``engineering`` (an engineering sequence by its
+        name, which the gate leaves unvalidated; false without ``kinds``),
+        ``metric``, ``value``, ``status`` (``PASS``, ``WARN``, ``FAIL`` or
+        empty for not judged).
     """
     wide = wideResiduals(metrics, VISIT, (RESERVED,), summary=summary, kinds=kinds)
     if "obsType" not in wide.columns:
         wide["obsType"] = None
+    wide["engineering"] = engineeringSequences(wide["seqName"]) if "seqName" in wide.columns else False
     judged = judge(wide, [thresholds, residualThresholds(1.0, 2.0, 1.0, 2.0)])
     judged = judged[judged["metric"].isin(SCATTER)]
-    keys = ["visit", "arm", "spectrograph", "cameraSet", "obsType", "description"]
+    keys = ["visit", "arm", "spectrograph", "cameraSet", "obsType", "description", "engineering"]
     rows = wide[keys].iloc[judged["row"].to_numpy()].reset_index(drop=True)
     return rows.assign(
         metric=judged["metric"].to_numpy(),
@@ -68,10 +74,19 @@ def scatterVerdicts(
     )
 
 
-def summarize(verdicts: pd.DataFrame) -> pd.DataFrame:
-    """Count verdicts per arm, observation type and species: ``judged``, ``WARN``, ``FAIL`` and ``FAIL%``."""
+def summarize(verdicts: pd.DataFrame, engineering: bool = False) -> pd.DataFrame:
+    """Count verdicts per arm, observation type and species: ``judged``, ``WARN``, ``FAIL`` and ``FAIL%``.
+
+    Parameters
+    ----------
+    verdicts : `pandas.DataFrame`
+        From `scatterVerdicts`.
+    engineering : `bool`, optional
+        Count the engineering sequences (which the gate leaves unvalidated)
+        instead of the others.
+    """
     columns = ["arm", "obsType", "description", "judged", "WARN", "FAIL", "FAIL%"]
-    judged = verdicts[verdicts["status"] != ""]
+    judged = verdicts[(verdicts["status"] != "") & (verdicts["engineering"].astype(bool) == engineering)]
     if judged.empty:
         return pd.DataFrame(columns=columns)
     counts = judged.groupby(["arm", "obsType", "description"], dropna=False)["status"].agg(
@@ -102,6 +117,12 @@ def main(argv: Sequence[str] | None = None) -> None:
             counts = summarize(verdicts)
             print(f"\n== {period} ({directory})")
             print(counts.to_string(index=False))
+            unvalidated = summarize(verdicts, engineering=True)
+            if not unvalidated.empty:
+                print(
+                    f"-- engineering sequences, unvalidated in the gate: {int(unvalidated['judged'].sum())} judged,"
+                    f" {int(unvalidated['WARN'].sum())} WARN, {int(unvalidated['FAIL'].sum())} FAIL"
+                )
             judged = int(counts["judged"].sum())
             totals.append(
                 {

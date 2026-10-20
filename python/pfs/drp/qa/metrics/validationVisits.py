@@ -96,6 +96,11 @@ class ValidationVisit:
         means every metric. A visit can be a reference for one metric and not
         another: Run29's arcs are reference values for the line scatter
         (PIPE2D-1956) while the image-quality references stay Run25's.
+    excludeMetrics : `tuple` [`str`]
+        For a ``known_good`` entry, metrics it is not a reference for: the
+        complement of ``metrics``. Run29's trace sets are the b2 and n4
+        image-quality reference but not their line-scatter one, which stays
+        Run25's like every other camera's.
     reason : `str` or `None`
         Why this verdict is expected.
     note : `str` or `None`
@@ -121,10 +126,17 @@ class ValidationVisit:
     seqType: str | None = None
     metric: str | None = None
     metrics: tuple[str, ...] = ()
+    excludeMetrics: tuple[str, ...] = ()
     reason: str | None = None
     note: str | None = None
     unconfirmed: bool = False
     placeholder: bool = False
+
+    def isReferenceFor(self, metric: str) -> bool:
+        """Return whether a ``known_good`` entry is a reference for ``metric`` (``metrics``, ``excludeMetrics``)."""
+        if self.metrics and metric not in self.metrics:
+            return False
+        return metric not in self.excludeMetrics
 
     def matches(
         self,
@@ -134,6 +146,10 @@ class ValidationVisit:
         seqType: str | None = None,
     ) -> bool:
         """Return True when this entry covers the given detector-visit.
+
+        The metric selectors (``metrics``, ``excludeMetrics``) are not
+        applied here: `pfs.drp.qa.metrics.calibration.labelRows` applies them,
+        knowing which metric it labels for (`isReferenceFor`).
 
         A selector passed as ``None`` is not applied: it means "unknown", not
         "no match".
@@ -572,7 +588,10 @@ def _metricCell(entry: ValidationVisit) -> str:
     """Return the metric a known-bad entry names, or the metrics a known-good one is scoped to."""
     if entry.metric:
         return f"`{entry.metric}`"
-    return ", ".join(f"`{name}`" for name in entry.metrics)
+    text = ", ".join(f"`{name}`" for name in entry.metrics)
+    if entry.excludeMetrics:
+        text += ("; " if text else "") + "not " + ", ".join(f"`{name}`" for name in entry.excludeMetrics)
+    return text
 
 
 def _armsCell(entry: ValidationVisit) -> str:
@@ -740,6 +759,7 @@ _ENTRY_KEYS = frozenset(
         "expect",
         "metric",
         "metrics",
+        "excludeMetrics",
         "reason",
         "note",
         "unconfirmed",
@@ -803,6 +823,11 @@ def _parseEntry(item: Any, defaultExpect: str | None, where: str) -> ValidationV
     both = sorted(set(cameras) & set(excludeCameras))
     if both:
         raise ValueError(f"{where}: cameras both selected and excluded: {', '.join(both)}")
+    metrics = _parseSequence(item.get("metrics"), str, "metrics", where)
+    excludeMetrics = _parseSequence(item.get("excludeMetrics"), str, "excludeMetrics", where)
+    both = sorted(set(metrics) & set(excludeMetrics))
+    if both:
+        raise ValueError(f"{where}: metrics both selected and excluded: {', '.join(both)}")
 
     return ValidationVisit(
         visits=visits,
@@ -814,7 +839,8 @@ def _parseEntry(item: Any, defaultExpect: str | None, where: str) -> ValidationV
         excludeCameras=excludeCameras,
         seqType=_optionalStr(item.get("seqType")),
         metric=_optionalStr(item.get("metric")),
-        metrics=_parseSequence(item.get("metrics"), str, "metrics", where),
+        metrics=metrics,
+        excludeMetrics=excludeMetrics,
         reason=_optionalStr(item.get("reason")),
         note=_optionalStr(item.get("note")),
         unconfirmed=_asBool(item.get("unconfirmed", False), "unconfirmed", where),

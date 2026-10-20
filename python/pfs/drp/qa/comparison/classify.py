@@ -10,7 +10,10 @@ calibrations.
 `VALIDATED_TYPES` are *gated*: their thresholds were derived from, and checked against, visits of
 those types. The others (engineering arcs, flats, fiber profiles, focus sweeps, windowed readouts,
 any new type) are *unvalidated*: judged the same way so their results can be seen, but often
-off-nominal on purpose, so a FAIL there may be what the test expected. `NOT_MEASURED_TYPES` have
+off-nominal on purpose, so a FAIL there may be what the test expected. So are the engineering
+sequences taken as those types (`ENGINEERING_SEQUENCES`, by sequence name): a bootstrap, an IIS
+``ImageQuality`` frame or a health check lights a handful of fibers, and its trace centroids scatter
+twice a trace set's (PIPE2D-1956). `NOT_MEASURED_TYPES` have
 nothing to measure. Every visit is listed, so a run's coverage is complete and a new sequence
 type shows up rather than disappearing.
 
@@ -37,6 +40,7 @@ __all__ = [
     "CADENCE_TYPES",
     "DAILY_MIN_NIGHTS",
     "ENGINEERING_CATEGORIES",
+    "ENGINEERING_SEQUENCES",
     "FOCUS_SWEEP_MIN_RANGE",
     "FOCUS_SWEEP_MIN_STEPS",
     "NOT_MEASURED_TYPES",
@@ -45,11 +49,16 @@ __all__ = [
     "cadences",
     "classifyVisits",
     "designKinds",
+    "engineeringSequences",
     "focusSweeps",
 ]
 
 #: Sequence types the thresholds are validated for: the gate.
 VALIDATED_TYPES = ("scienceArc", "scienceTrace", "scienceObject")
+
+#: Starts of sequence names (case-insensitive) that are engineering sequences whatever their type:
+#: bootstraps, IIS image-quality frames and health checks light a handful of fibers. Unvalidated.
+ENGINEERING_SEQUENCES = ("bootstrap", "imagequality", "image quality", "health check")
 
 #: Sequence types with no arc lines or traces to measure.
 NOT_MEASURED_TYPES = ("biases", "darks", "masterBiases", "masterDarks")
@@ -127,6 +136,12 @@ def focusSweeps(sky: pd.DataFrame) -> pd.Series:
     # Unnamed visits share one key, though they need not share a field: never a sweep.
     sweep = (steps >= FOCUS_SWEEP_MIN_STEPS) & (span >= FOCUS_SWEEP_MIN_RANGE) & (name != "")
     return sweep.astype("boolean").fillna(False).astype(bool)
+
+
+def engineeringSequences(names: pd.Series) -> pd.Series:
+    """Return whether each sequence name is an engineering sequence (`ENGINEERING_SEQUENCES`)."""
+    lowered = names.fillna("").astype(str).str.strip().str.lower()
+    return lowered.str.startswith(ENGINEERING_SEQUENCES)
 
 
 def cadences(visits: pd.DataFrame) -> pd.Series:
@@ -255,6 +270,7 @@ def classifyVisits(
 
     reason = pd.Series("gated", index=visits.index, dtype=object)
     reason[~sequenceType.isin(VALIDATED_TYPES)] = "unvalidated"
+    reason[engineeringSequences(visits["sequence_name"]).to_numpy()] = "unvalidated"
     notMeasured = sequenceType.isin(NOT_MEASURED_TYPES)
     reason[notMeasured] = "no method for " + sequenceType[notMeasured].astype(str)
     reason[sequenceType.isna()] = "no sequence"
