@@ -155,7 +155,7 @@ class ValidationVisit:
         if spectrograph is not None and self.spectrographs and spectrograph not in self.spectrographs:
             return False
         if arm is not None and spectrograph is not None:
-            camera = f"{arm}{spectrograph}"
+            camera = f"{arm}{int(spectrograph)}"  # a float spectrograph, as a frame may carry, is 2, not 2.0
             if self.cameras and camera not in self.cameras:
                 return False
             if camera in self.excludeCameras:

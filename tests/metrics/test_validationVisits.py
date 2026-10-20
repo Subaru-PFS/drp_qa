@@ -575,6 +575,8 @@ class TestCameraSelectors:
         assert not entry.matches(1, "r", 2)  # arms still apply
         excluded = ValidationVisit(visits=(1,), expect="PASS", excludeCameras=("b2",))
         assert not excluded.matches(1, "b", 2) and excluded.matches(1, "b", 1) and excluded.matches(1, "b")
+        # A float spectrograph, as a metrics frame may carry, names the same camera.
+        assert entry.matches(1, "b", 2.0) and not excluded.matches(1, "b", 2.0)
 
     def testMatchRowsUsesCameras(self):
         import pandas as pd
