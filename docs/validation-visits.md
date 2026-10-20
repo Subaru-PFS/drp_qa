@@ -32,10 +32,10 @@ refocused on 2026-03-11 and whose quartz width stepped from 3.12 to 3.34 px, whe
 stayed; and n4, whose Run25 quartz width (3.10 px) is the outlier against a steady 3.22 px in
 every run since. Run25's trace entries leave those two cameras out (`excludeCameras`), and
 Run29's detectorMap set holds them alone (`cameras`), so each population still has one
-reference. Run29's later arc sets (2026-07-14 and 07-23, which built no calibration) are known
-good for the line-scatter metrics only (`metrics: [robustRmsDeltaX, robustRmsDeltaY]`,
-PIPE2D-1956): a known-good entry with `metrics` counts for those metrics' derivations and no
-other, so Run25 stays the image-quality reference. From other runs the set holds only known-bad visits, as fault examples: each is
+reference. For the line-scatter metrics Run25 is every camera's reference, b2 and n4 included
+(PIPE2D-1956): Run29's trace entries carry `excludeMetrics: [robustRmsDeltaX, robustRmsDeltaY]`,
+and Run25's trace sets have b2/n4 entries scoped to those two metrics (`metrics`), so a
+known-good entry can be the reference for some metrics and not others. From other runs the set holds only known-bad visits, as fault examples: each is
 checked against the thresholds, and none derives one. The YAML's `runs` table gives each
 run's visit range, so every entry belongs to one run.
 
@@ -174,15 +174,6 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 134338–134339 | 25 | scienceTrace | b, n; cameras b2, n4 | 2, 4 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
 | 135828–135829 | 25 | scienceTrace | b, n; cameras b2, n4 | 2, 4 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
 | 135849–135850 | 25 | scienceTrace | b; cameras b2 | 2 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
-| 146093–146094 | 29 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Argon | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 arc set, 2026-07-14, b/r/n arms. Line-scatter reference only (PIPE2D-1956). |
-| 147748–147750 | 29 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Argon | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 arc set, 2026-07-23, b/r/n arms. Line-scatter reference only (PIPE2D-1956). |
-| 146095–146096 | 29 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Xenon | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 arc set, 2026-07-14, b/r/n arms. Line-scatter reference only (PIPE2D-1956). |
-| 147751–147753 | 29 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Xenon | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 arc set, 2026-07-23, b/r/n arms. Line-scatter reference only (PIPE2D-1956). |
-| 146097–146098 | 29 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 arc set, 2026-07-14, b/r/n arms. Line-scatter reference only (PIPE2D-1956). |
-| 147754–147756 | 29 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 arc set, 2026-07-23, b/r/n arms. Line-scatter reference only (PIPE2D-1956). |
-| 146099–146100 | 29 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Krypton | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 arc set, 2026-07-14, b/r/n arms. Line-scatter reference only (PIPE2D-1956). |
-| 147757–147759 | 29 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Krypton | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 arc set, 2026-07-23, b/r/n arms. Line-scatter reference only (PIPE2D-1956). |
-| 147760–147762 | 29 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: HgCd | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` | Run29 arc set, 2026-07-23, b/r/n arms. Line-scatter reference only (PIPE2D-1956). |
 
 ### Known bad
 
