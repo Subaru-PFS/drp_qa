@@ -13,8 +13,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **b2 and n4 quartz take their reference from Run29** (PIPE2D-1938) — reduced with one pipeline, Runs 25–30 agree
   with Run25 in `medFwhm` to within 3 % everywhere but b2 quartz (SM2's slit refocused on 2026-03-11) and n4 quartz
   (Run25's width is the outlier). Run25's trace entries leave those two out, Run29's detectorMap set holds them alone,
-  and `referenceRuns` is `[25, 29]`; the thresholds are re-derived from the fresh Run25 and Run29 comparison
-  collections with the pipeline recorded.
+  and `referenceRuns` is `[25, 29]`. The thresholds are re-derived from `u/wtg/qa-thresholds/010`, every validation
+  visit reduced afresh with the comparison's pipeline, which the file now records (so the gate's provisional marking
+  has a reference), and adopted by `makeRun25Thresholds.py`: b2 quartz WARN/FAIL 3.424/3.490 px and n4 quartz
+  3.331/3.396 px from Run29; b-arm Argon `medFwhm` no longer judged (under a line per lit fiber, the known-good
+  exposures scatter −4 to +2 %). Re-judged, Runs 28–30 drop from 41, 57 and 32 flagged images to 1, 3 and 3. The
+  gate and drift fixtures are remade from 010 (`makeGateFixtures.py`, `makeDriftFixture.py`); the drift fixture now
+  carries both references and the twilights' sky species.
 
 - **Per-camera selectors in the validation set, and a guard on `--fresh`** (PIPE2D-1938) — entries take `cameras`
   and `excludeCameras` (`b2`, `n4`), so a detector's known-good values can come from another reference run; the

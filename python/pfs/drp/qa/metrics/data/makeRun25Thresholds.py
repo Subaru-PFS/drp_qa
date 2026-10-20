@@ -1,11 +1,14 @@
 """Make ``iqQaThresholds-run25.yaml``, the thresholds ``imageQualityQa`` uses by default.
 
-The source is the file ``docs/qa-thresholds.ipynb`` derived from the Run25
-validation visits (collection ``u/wtg/qa-thresholds/004``: the reductions of
-``003`` with ``imageQualityQa`` rerun once the calexp trace width worked,
-PIPE2D-1918), kept in the tests as ``tests/metrics/data/iqQaThresholds-run25.yaml``
-beside the metrics it was derived from. Arc metrics are the same in both runs.
-Adopting it changed five things:
+The source is the file ``docs/qa-thresholds.ipynb`` derived from the validation
+visits (collection ``u/wtg/qa-thresholds/010``, PIPE2D-1938: every validation
+visit reduced afresh with the pipeline of the Run25-30 comparison, datamodel
+w.2026.40, obs_pfs w.2026.40 and drp_stella w.2026.41-6-ge56938d2, which the
+file records), kept in the tests as ``tests/metrics/data/iqQaThresholds-run25.yaml``
+beside the metrics it was derived from. The reference is Run25; b2 and n4 quartz
+take Run29's detectorMap set (``referenceRuns: [25, 29]`` in the validation
+set): SM2's slit was refocused on 2026-03-11, and Run25's n4 quartz width is the
+outlier against every run since. Adopting it changes six things:
 
 - **pctFlagged is not judged.** Its populations hold 5 visits each, so FAIL
   sits at the sample's maximum, and Run27's known-good n-arm flag rates are 2-5
@@ -17,21 +20,25 @@ Adopting it changed five things:
   ``lines``: on an arc mostly trace centroids, whose number follows the
   illumination, and only the fibers a design lights, so an arc lighting one
   fiber group failed it. ``linesPerFiber`` counts unflagged lamp lines (trace
-  centroids on a quartz) per lit fiber, measured in ``u/wtg/qa-thresholds/005``
-  (004's reductions, ``imageQualityQa`` rerun) and merged into the validation
-  fixture. It is judged as a tolerance below the
-  Run25 known-good median of each arm and sequence (``seqName``): arcs 25 %/50 %
+  centroids on a quartz) per lit fiber. It is judged as a tolerance below the
+  reference known-good median of each arm and sequence (``seqName``): arcs 25 %/50 %
   (known-good arcs reach 19 % below, on n HgCd; the obstructed ones sit 60-98 %
   below), quartz 2.5 %/5 % (known-good 1.1 %, obstructed 9-55 %). An arm whose
   lamp gives under ``MIN_LINES_PER_FIBER`` lines per fiber (b Argon) is not
   judged. Twilight is not measured.
 - **medFwhm is judged per detector and lamp** (PIPE2D-1942): WARN 3 % and FAIL
-  5 % above the Run25 known-good median of its arm, spectrograph, obsType and
+  5 % above the reference known-good median of its arm, spectrograph, obsType and
   lamp, adopted as derived. The spectrographs of one arm differ from each
   other by more than any one of them varies (r quartz: r2 3.27 px, r4 3.39 px,
   each within 0.03 px), so the per-arm percentiles put each arm's widest
   spectrograph at FAIL. The per-arm entries stay, judging
-  only an image whose detector and lamp have no Run25 median.
+  only an image whose detector and lamp have no reference median.
+- **b-arm Argon medFwhm is not judged** (PIPE2D-1938). With under a line per lit
+  fiber, the median width of a b-arm Argon arc rests on a handful of lines: the
+  known-good exposures scatter -4 to +2 % about their median where every other
+  lamp sits within 1.5 %, and in Runs 28-30 one in twelve b-arm Argon images
+  crossed WARN or FAIL with nothing else wrong. The same reason leaves its
+  linesPerFiber unjudged.
 - **Per-arm quartz medFwhm is judged on b, r and n as derived** (PIPE2D-1918),
   from the calexp width. The m arm's derivation has 16 known-good values,
   below the 20-sample floor, so it judges nothing: the config's 3.2 px WARN
@@ -69,6 +76,8 @@ FLAGS_UNJUDGED = "2026-10-08"
 TRACE_FWHM_ADOPTED = "2026-10-12"
 #: When medFwhm per detector and lamp was adopted.
 TOLERANCE_ADOPTED = "2026-10-13"
+#: When b-arm Argon medFwhm stopped being judged, and b2 and n4 quartz took Run29's reference.
+B_ARGON_UNJUDGED = "2026-10-19"
 
 
 def adopt(document: dict, metrics: pd.DataFrame) -> dict:
@@ -93,7 +102,19 @@ def adopt(document: dict, metrics: pd.DataFrame) -> dict:
         if entry["metric"] in ("pctFlagged", "nLines"):
             continue
         if entry["method"] == "tolerance":
-            entry["provenance"] = f"Adopted {TOLERANCE_ADOPTED} (PIPE2D-1942). {entry['provenance']}"
+            if (
+                entry["metric"] == "medFwhm"
+                and population.get("arm") == "b"
+                and population.get("species") == "Argon"
+            ):
+                entry |= {"warn": None, "fail": None}
+                entry["provenance"] = (
+                    f"Not judged ({B_ARGON_UNJUDGED}, PIPE2D-1938): under a line per lit fiber, the median width "
+                    "of a b-arm Argon arc rests on a handful of lines, and the known-good exposures scatter -4 to "
+                    f"+2 % about their median. Derived values were: {entry['provenance']}"
+                )
+            else:
+                entry["provenance"] = f"Adopted {TOLERANCE_ADOPTED} (PIPE2D-1942). {entry['provenance']}"
         elif entry["metric"] == "medFwhm" and population.get("obsType") == "trace":
             if entry["reliable"]:
                 entry["provenance"] = f"Adopted {TRACE_FWHM_ADOPTED} (PIPE2D-1918). {entry['provenance']}"

@@ -11,7 +11,7 @@ writes ``dmLineResidualMetrics-<run>.parquet`` and ``dmLineResidualSummary-<run>
 ``~/.cache/drp_qa``, the run being the collection with ``/`` made ``_``. ``bin.src/exportMetrics.py``
 names its files the same way, so its output directory serves too.
 
-    PYTHONPATH=python uv run --no-project --with pandas --with pyarrow --with numpy \\
+    PYTHONPATH=python uv run --no-project --with pandas --with pyarrow --with numpy --with pyyaml --with scipy \\
         python tests/metrics/data/makeDriftFixture.py [RUN [DIR]]
 
 ``RUN`` is the collection (default ``u/wtg/qa-thresholds/009``), ``DIR`` the directory (default

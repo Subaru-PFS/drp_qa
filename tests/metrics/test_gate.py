@@ -303,7 +303,12 @@ def testShippedFileIsTheAdoptedRun25(stored):
 
 
 def testShippedFileVerdicts(stored):
-    """Adopted Run25: obstructed frames and defocused quartz fail, one-group arcs pass, no known-good fails; flags aren't judged."""
+    """The adopted file: obstructed frames and defocused quartz fail, no known-good fails; flags aren't judged.
+
+    The fixture is ``u/wtg/qa-thresholds/010`` (PIPE2D-1938): the validation visits reduced afresh,
+    Run29's b2 and n4 quartz among them. The one-group Run30 arcs that PIPE2D-1935 checked are no
+    longer validation visits; comparison mode judges them with every other daily arc.
+    """
     thresholds = [thresholdsPath(configDefaults().thresholdsFile), configThresholds(configDefaults())]
     judged = judge(stored, thresholds)
     verdicts = gate(stored, thresholds, default="UNKNOWN")
@@ -326,26 +331,34 @@ def testShippedFileVerdicts(stored):
     assert (goodLines.loc[~argon, "status"] == "PASS").all() and (goodLines.loc[argon, "status"] == "").all()
     run25Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(133040, 135850)
     assert (perFiber.loc[np.flatnonzero(run25Quartz), "status"] == "PASS").all()
-    # One fiber group lit (Run30 daily neon): each lit fiber measures a full slit's lines, so they pass.
-    oneGroup = np.flatnonzero(stored["visit"].isin([149398, 149881, 150367, 150413]))
-    assert len(oneGroup) == 44 and (perFiber.loc[oneGroup, "status"] == "PASS").all()
-    # Negative control: the derived nLines entries, counting rows of lines, fail or warn them.
-    derivedLines = readThresholds(RUN25)[1]
-    derivedLines = derivedLines[derivedLines["metric"] == "nLines"]
-    rowsJudged = judge(stored.iloc[oneGroup], [derivedLines])
-    assert rowsJudged["status"].isin(["WARN", "FAIL"]).mean() > 0.9
     # medFwhm (PIPE2D-1942): every known-good arc and quartz is judged against its own detector and
-    # lamp's Run25 median, and none fails; every known-bad one with a value fails.
+    # lamp's reference median, and none fails; every known-bad one with a value fails. b-arm Argon
+    # is not judged (PIPE2D-1938): under a line per fiber, its width rests on a handful of lines.
     labelled = labelRows(stored, loadValidationVisits(), "medFwhm")
     fwhm = judged[judged["metric"] == "medFwhm"].set_index("row")
+    bArgon = (stored["arm"] == "b") & (stored["seqName"] == "Arc: Argon")
     good = fwhm.loc[labelled.index[labelled["validation"] == "good"]]
     good = good[good["value"].notna()]
-    assert len(good) == 616 and good["population"].str.contains("spectrograph=").all()
+    assert len(good) == 636 and good["population"].str.contains("spectrograph=").all()
     assert (good["layer"] == 0).all() and (good["status"] != "FAIL").all()
-    assert good["status"].value_counts().to_dict() == {"PASS": 615, "WARN": 1}  # 135841 m1 Argon, +3.3 %
+    assert good["status"].value_counts().to_dict() == {
+        "PASS": 595,
+        "": 40,
+        "WARN": 1,
+    }  # 135841 m1 Argon, +3.3 %
+    assert bArgon[good.index[good["status"] == ""]].all() and bArgon[good.index].sum() == 40
     bad = fwhm.loc[labelled.index[labelled["validation"] == "bad:FAIL"]]
     bad = bad[bad["value"].notna()]
-    assert len(bad) == 87 and (bad["status"] == "FAIL").all()
+    assert len(bad) == 87 and (bad.loc[~bArgon[bad.index], "status"] == "FAIL").all()
+    assert bArgon[bad.index].sum() == 5 and (bad.loc[bArgon[bad.index], "status"] == "").all()
+    # The b2 and n4 quartz reference is Run29's set (PIPE2D-1938): its traces pass on those two cameras.
+    run29Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(144587, 147830)
+    moved = run29Quartz & stored["arm"].add(stored["spectrograph"].astype(str)).isin(["b2", "n4"])
+    assert moved.sum() == 42 and (verdicts.loc[moved, "qaStatus"] == "PASS").all()
+    # Negative control: Run25's own b2 quartz, 5 % narrower, would fail against a Run25 reference but
+    # passes the adopted one; the derived file's per-arm quartz entries, which pool both runs, fail none either.
+    run25B2 = run25Quartz & (stored["arm"] == "b") & (stored["spectrograph"] == 2)
+    assert run25B2.sum() == 14 and (verdicts.loc[run25B2, "qaStatus"] == "PASS").all()
     # Negative control: the per-arm entries alone fail known-good arcs and quartz.
     perArm = readThresholds(thresholdsPath(configDefaults().thresholdsFile))[1]
     perArm = perArm[perArm["method"] != "tolerance"].drop(columns=["spectrograph", "species"])
