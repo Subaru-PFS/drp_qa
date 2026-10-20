@@ -211,9 +211,15 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 |---|---|---|---|---|---|---|---|---|
 | 150661 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | Trace | FAIL |  | Noted "Mirror cover open, but screen is wrong position" in the calibration summary. Probably a failure; neither the verdict nor the metric that should catch it has been established. |
 | 149883 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | FAIL |  | Noted "Home" in the calibration summary, a note whose meaning is not settled. Other visits carry the same tag. Recorded so its metrics can be compared against the Run25 set; probably a failure, but unestablished. |
-| 133532–135850 | 25 | scienceTrace | all | 3 | Trace | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
+| 133532–133533 | 25 | scienceTrace | all | 3 | Trace | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
+| 133536–133537 | 25 | scienceTrace | all | 3 | Trace | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
+| 134338–134339 | 25 | scienceTrace | all | 3 | Trace | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
+| 135828–135829 | 25 | scienceTrace | all | 3 | Trace | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
+| 135849–135850 | 25 | scienceTrace | all | 3 | Trace | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
 | 135830–135848 | 25 | scienceArc | all | 3 | any | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
-| 134334–135279 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
+| 134334–134337 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
+| 134880–134886 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
+| 135275–135279 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
 
 ### Placeholders
 

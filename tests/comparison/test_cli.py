@@ -153,3 +153,20 @@ def testOnlyTheReductionConfigCountsTowardsTheVersion():
     }
     modules = {path.name for path in package.iterdir() if path.name != "__pycache__"}
     assert modules - neutral == {"reduction.py"}  # a new module counts until it is listed
+
+
+def testUnexpectedPipeline():
+    """A --fresh run that would reduce everything again under a new label is called out."""
+    from pfs.drp.qa.comparison.cli import unexpectedPipeline
+
+    warning = unexpectedPipeline("pfs-w.2026.39", [], ["datamodel-w.2026.40+drp_stella-w.2026.41"], 2152)
+    assert warning and "2152 detector images" in warning and "'pfs-w.2026.39'" in warning
+    assert "'datamodel-w.2026.40+drp_stella-w.2026.41' has" in warning
+    # Not amiss: the label already has reductions, nothing to reduce, no other label, or not --fresh.
+    assert (
+        unexpectedPipeline("pfs-w.2026.39", ["u/me/comparison/run25/v1/pfs-w.2026.39"], ["other"], 2152)
+        is None
+    )
+    assert unexpectedPipeline("pfs-w.2026.39", [], ["other"], 0) is None
+    assert unexpectedPipeline("pfs-w.2026.39", [], [], 2152) is None
+    assert unexpectedPipeline("", [], ["other"], 2152) is None

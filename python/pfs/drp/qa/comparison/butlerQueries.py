@@ -16,6 +16,7 @@ __all__ = [
     "datasetVisits",
     "detectorHoldings",
     "earlierReductions",
+    "freshPipelines",
 ]
 
 #: The data ID keys of a detector image.
@@ -78,6 +79,37 @@ def earlierReductions(butler, prefix: str, period: str, reductions: str, exclude
     pattern = re.compile(rf"{re.escape(base)}/[^/]+{suffix}")
     names = butler.collections.query(f"{base}/*")
     return sorted((name for name in names if pattern.fullmatch(name) and name != exclude), reverse=True)
+
+
+def freshPipelines(butler, prefix: str, period: str) -> dict[str, list[str]]:
+    """Return the pipeline labels a period's ``--fresh`` reductions were made with.
+
+    A fresh comparison's collection is ``<prefix>/<period>/<version>/<pipeline>``,
+    a chain two levels under the period; a default-mode comparison's RUNs sit
+    at the same depth but are not chains.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        The Butler.
+    prefix : `str`
+        The comparison prefix, e.g. ``u/someone/comparison``.
+    period : `str`
+        The period, e.g. ``run30``.
+
+    Returns
+    -------
+    `dict` [`str`, `list` [`str`]]
+        The collections of each label, newest name first; empty when the
+        period has no fresh reductions.
+    """
+    base = f"{prefix.rstrip('/')}/{period}/"
+    found: dict[str, list[str]] = {}
+    for info in butler.collections.query_info(f"{base}*"):
+        rest = info.name[len(base) :].split("/") if info.name.startswith(base) else []
+        if len(rest) == 2 and info.type.name == "CHAINED":
+            found.setdefault(rest[1], []).append(info.name)
+    return {label: sorted(names, reverse=True) for label, names in sorted(found.items())}
 
 
 def ownRuns(butler, output: str) -> list[str]:
