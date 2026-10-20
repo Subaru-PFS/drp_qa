@@ -35,7 +35,8 @@ Run29's detectorMap set holds them alone (`cameras`), so each population still h
 reference. For the line-scatter metrics Run25 is every camera's reference, b2 and n4 included
 (PIPE2D-1956): Run29's trace entries carry `excludeMetrics: [robustRmsDeltaX, robustRmsDeltaY]`,
 and Run25's trace sets have b2/n4 entries scoped to those two metrics (`metrics`), so a
-known-good entry can be the reference for some metrics and not others. From other runs the set holds only known-bad visits, as fault examples: each is
+known-good entry can be the reference for some metrics and not others. From other runs the set
+holds only known-bad visits, as fault examples: each is
 checked against the thresholds, and none derives one. The YAML's `runs` table gives each
 run's visit range, so every entry belongs to one run.
 

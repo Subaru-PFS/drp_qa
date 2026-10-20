@@ -29,7 +29,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   in each entry's provenance: the lamps' y scatter; the mercury and cadmium lines, whose y scatter is intrinsically
   variable; trace centroids on arcs and twilights; and the sky-line species. A
   `known_good` entry takes `metrics`, the metrics it is a reference for, and `excludeMetrics`: Run29's trace sets are
-  b2 and n4's image-quality reference but not their scatter one, which Run25 gives like every other camera's. `bin.src/judgeScatterThresholds.py` judges comparison mode's exported
+  b2 and n4's image-quality reference but not their scatter one, which Run25 gives like every other camera's.
+  `bin.src/judgeScatterThresholds.py` judges comparison mode's exported
   scatter with a thresholds file, run by run: the acceptance check an adoption must pass. Comparison mode's scatter
   table is by observation type, and tables stored before the column take it from `iqQaMetrics`.
 
