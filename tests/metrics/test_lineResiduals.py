@@ -15,17 +15,21 @@ from pfs.drp.qa.metrics.lineResiduals import (
     BOTH,
     CALIB,
     LINE_COLUMNS,
+    QUARTZ,
     RESERVED,
     RESIDUAL_COLUMNS,
+    SKY_SPECIES,
     STATUS_TYPES,
     TRACE,
     UNFITTED,
     USED,
     VISIT,
+    addObsType,
     cameraSet,
     lineResiduals,
     lineTable,
     longResiduals,
+    observationType,
     residualThresholds,
     residualVerdict,
     robustRms,
@@ -121,12 +125,14 @@ def reserved(species: pd.DataFrame, reference: str = VISIT) -> pd.DataFrame:
     return rows.set_index("description")
 
 
-def measure(lines, calib, minLines=10, litFibers=None, thresholds=None, camera=None, visit=None):
+def measure(
+    lines, calib, minLines=10, litFibers=None, thresholds=None, camera=None, visit=None, obsType=None
+):
     """Return ``(both(species), judged, summary, species)`` for ``lines``."""
     full = speciesOf(lines, calib, minLines, litFibers, visit)
     if thresholds is None:
         thresholds = residualThresholds(0.1, 0.15, 0.1, 0.15)
-    judged, summary = residualVerdict(full, DATA_ID, thresholds, minLines, camera)
+    judged, summary = residualVerdict(full, DATA_ID, thresholds, minLines, camera, obsType)
     return both(full), judged, summary, full
 
 
@@ -335,6 +341,72 @@ def testRobustRms():
 )
 def testCameraSet(config, arm, expected):
     assert cameraSet(config, arm) == expected
+
+
+class Header(dict):
+    """A ``PfsConfig.header``: a mapping with ``get``."""
+
+
+@pytest.mark.parametrize(
+    "header, expected",
+    [
+        ({"W_SEQTYP": "scienceTrace", "W_SEQNAM": "Trace"}, QUARTZ),
+        ({"W_SEQTYP": "scienceArc", "W_SEQNAM": "Arc: Neon"}, "arc"),
+        ({"W_SEQTYP": "scienceObject", "W_SEQNAM": "Twilight flat"}, "twilight"),
+        ({"W_SEQTYP": "scienceObject_windowed", "W_SEQNAM": "sky test"}, "allsky"),
+        ({"W_SEQTYP": "scienceObject", "W_SEQNAM": "field"}, "science"),
+        ({"W_SEQTYP": "scienceDark"}, "dark"),
+        ({"W_SEQTYP": " scienceTrace ", "W_SEQNAM": None}, QUARTZ),  # padded, as a FITS card can be
+        ({"W_SEQNAM": "Trace"}, "unknown"),
+        ({"W_SEQTYP": "ditheredFlats"}, "unknown"),
+        (None, None),
+    ],
+)
+def testObservationType(header, expected):
+    """The frame type is imageQualityQa's ``obsType``, from the pfsConfig header; None without one."""
+    assert observationType(None if header is None else Header(header)) == expected
+    # Negative control: a quartz is never read as an arc, whatever its sequence name says.
+    assert observationType(Header({"W_SEQTYP": "scienceTrace", "W_SEQNAM": "Arc: Neon"})) != "arc"
+
+
+def testTraceScatterIsJudgedPerFrame():
+    """A trace-scatter entry naming ``obsType`` applies to that frame type and no other."""
+    calib = FakeCalib()
+    lines, _ = withReserved(makeLines(calib, traceRows=40), noise=0.2)
+    entry = residualThresholds(1.0, 2.0, 1.0, 2.0, 0.05, 0.1).iloc[[2]].assign(obsType=QUARTZ)
+    thresholds = [entry, residualThresholds(1.0, 2.0, 1.0, 2.0)]
+    _, judgedQuartz, quartz, full = measure(lines, calib, thresholds=thresholds, obsType=QUARTZ)
+    _, judgedArc, arc, _ = measure(lines, calib, thresholds=thresholds, obsType="arc")
+    _, judgedNone, none, _ = measure(lines, calib, thresholds=thresholds)
+    scatter = judgedQuartz[
+        (judgedQuartz["metric"] == "robustRmsDeltaX")
+        & (judgedQuartz["description"] == TRACE)
+        & (judgedQuartz["reference"] == VISIT)
+    ]
+    assert (scatter["status"] == "FAIL").all() and quartz["recommendedAction"] == "RECALIBRATE"
+    for judged, summary in ((judgedArc, arc), (judgedNone, none)):
+        rows = judged[
+            (judged["metric"] == "robustRmsDeltaX")
+            & (judged["description"] == TRACE)
+            & (judged["reference"] == VISIT)
+        ]
+        assert (rows["status"] == "").all(), (
+            "an arc's traces, or a frame of unknown type, are not judged by it"
+        )
+        assert summary["recommendedAction"] != "RECALIBRATE"
+    long = longResiduals(full, judgedQuartz, DATA_ID, "brn", QUARTZ)
+    assert (long["obsType"] == QUARTZ).all() and long["obsType"].dtype == "string"
+    assert longResiduals(full, judgedNone, DATA_ID)["obsType"].isna().all()
+    # Negative control: the same entry without obsType judges every frame.
+    _, judgedAny, _, _ = measure(
+        lines, calib, thresholds=[entry.drop(columns="obsType"), thresholds[1]], obsType="arc"
+    )
+    rows = judgedAny[
+        (judgedAny["metric"] == "robustRmsDeltaX")
+        & (judgedAny["description"] == TRACE)
+        & (judgedAny["reference"] == VISIT)
+    ]
+    assert (rows["status"] == "FAIL").all()
 
 
 def testRegistry():
@@ -730,7 +802,7 @@ def testVisitVerdictStandsWhenTheCalibrationMeasuresNothing():
     assert (empty["qaStatus"], empty["recommendedAction"]) == ("UNKNOWN", "INSUFFICIENT_DATA")
 
 
-def _longRows(visit, arm, spectrograph, cameraSet, reference, description, statusType, values):
+def _longRows(visit, arm, spectrograph, cameraSet, reference, description, statusType, values, obsType="arc"):
     """Return ``dmLineResidualMetrics`` rows of one species."""
     return [
         {
@@ -738,6 +810,7 @@ def _longRows(visit, arm, spectrograph, cameraSet, reference, description, statu
             "arm": arm,
             "spectrograph": spectrograph,
             "cameraSet": cameraSet,
+            "obsType": obsType,
             "reference": reference,
             "description": description,
             "statusType": statusType,
@@ -790,16 +863,18 @@ def testWideResiduals():
     )
 
     drift = wideResiduals(metrics, CALIB, (BOTH, UNFITTED), summary, kinds)
-    assert list(drift.columns[:7]) == [
+    assert list(drift.columns[:8]) == [
         "visit",
         "arm",
         "spectrograph",
         "cameraSet",
+        "obsType",
         "reference",
         "description",
         "statusType",
     ]
     assert len(drift) == 4  # 10 NeI, 10 Trace, 11 NeI, 12 NeI
+    assert (drift["obsType"] == "arc").all()  # stored by the task
     trace = drift[(drift["visit"] == 10) & (drift["description"] == TRACE)].iloc[0]
     assert trace["medianDeltaX"] == -0.1 and np.isnan(trace["medianDeltaY"])  # a trace measures x only
     assert (drift["seqName"] == "Arc: Neon").all() and (drift["calibFirstVisit"] == 11).all()
@@ -814,9 +889,22 @@ def testWideResiduals():
     assert wideResiduals(metrics, VISIT, (BOTH,)).empty
     with pytest.raises(ValueError, match="summary"):
         wideResiduals(metrics, CALIB, (BOTH,), excludeCalibInputs=True)
-
-
-SKY_SPECIES = ("OH", "O2", "OI", "NaI")
+    # A table stored before obsType was a column takes it from iqQaMetrics; stored values win.
+    older = metrics.drop(columns="obsType")
+    assert "obsType" not in wideResiduals(older, CALIB, (BOTH, UNFITTED), summary).columns
+    filled = wideResiduals(older, CALIB, (BOTH, UNFITTED), summary, kinds.assign(obsType="trace"))
+    assert (filled["obsType"] == "trace").all()
+    assert list(filled.columns[:5]) == [
+        *drift.columns[:4],
+        "reference",
+    ]  # filled at the end, not in the index
+    stored = wideResiduals(metrics, CALIB, (BOTH, UNFITTED), summary, kinds.assign(obsType="trace"))
+    assert (stored["obsType"] == "arc").all()
+    partial = addObsType(
+        metrics.assign(obsType=[None, *metrics["obsType"][1:]]), kinds.assign(obsType="trace")
+    )
+    assert partial["obsType"].iloc[0] == "trace" and (partial["obsType"].iloc[1:] == "arc").all()
+    assert addObsType(older, None) is older
 
 
 def _driftFixture() -> pd.DataFrame:
@@ -839,45 +927,74 @@ def testShippedScatterFileIsTheAdopted():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     source = Path(__file__).parent / "data" / "dmLineResidualThresholds-run25.yaml"
-    remade = module.adopt(yaml.safe_load(source.read_text()))
+    derivedDocument = yaml.safe_load(source.read_text())
+    remade = module.adopt(derivedDocument)
     assert remade == yaml.safe_load(thresholdsPath("dmLineResidualThresholds-run25.yaml").read_text())
+    assert len(remade["thresholds"]) == 75  # per arm, species, camera set and observation type
     judged = [e for e in remade["thresholds"] if e["warn"] is not None or e["fail"] is not None]
-    assert len(judged) == 11 and all(e["reliable"] for e in judged)
-    # Every arm's traces in x get WARN and FAIL; the b arm's bm lamps, 20 values from 5 visits, WARN only.
-    full = [e for e in judged if e["fail"] is not None]
+    # Trace centroids on quartz frames alone: b (bm, brn) and n with WARN and FAIL, r at WARN only
+    # (24 values from 6 visits); m's 8 values are below the floor.
+    assert [
+        (e["population"]["arm"], e["population"]["cameraSet"], e["population"]["obsType"], e["fail"] is None)
+        for e in judged
+    ] == [
+        ("b", "bm", "trace", False),
+        ("b", "brn", "trace", False),
+        ("n", "brn", "trace", False),
+        ("r", "brn", "trace", True),
+    ]
+    assert all(e["population"]["description"] == TRACE and e["metric"] == "robustRmsDeltaX" for e in judged)
+    assert all(e["reliable"] for e in judged)
     warnOnly = [e for e in judged if e["fail"] is None]
-    assert all(e["population"]["description"] == "Trace" and e["metric"] == "robustRmsDeltaX" for e in full)
-    assert {e["population"]["arm"] for e in full} == set("bmnr") and len(full) == 5
-    assert {
-        (e["population"]["arm"], e["population"]["description"], e["population"]["cameraSet"])
-        for e in warnOnly
-    } == {
-        ("b", "KrI", "bm"),
-        ("b", "NeI", "bm"),
-        ("b", "XeI", "bm"),
+    assert all(e["nGoodVisits"] < module.MIN_VISITS and e["warn"] is not None for e in warnOnly)
+    # Nothing else: sky species, trace centroids on arcs and twilights, lamp species, populations under 20.
+    unjudged = [e for e in remade["thresholds"] if e["warn"] is None and e["fail"] is None]
+    assert len(unjudged) == 71 and all(e["provenance"].startswith("Not judged (") for e in unjudged)
+    kinds = {
+        "sky": [e for e in unjudged if e["population"]["description"] in SKY_SPECIES],
+        "arcTraces": [
+            e
+            for e in unjudged
+            if e["population"]["description"] == TRACE and e["population"]["obsType"] != QUARTZ
+        ],
+        "lamps": [
+            e
+            for e in unjudged
+            if e["population"]["description"] != TRACE and e["population"]["description"] not in SKY_SPECIES
+        ],
+        "thin": [
+            e
+            for e in unjudged
+            if e["population"]["description"] == TRACE and e["population"]["obsType"] == QUARTZ
+        ],
     }
-    assert all(e["nGoodVisits"] < 10 and e["warn"] is not None for e in warnOnly) and len(warnOnly) == 6
-    assert not any(e["population"]["description"] in SKY_SPECIES for e in judged)
-    # Negative control: the derivation gave those six a FAIL; the WARN-only rule is the adoption's.
+    assert {k: len(v) for k, v in kinds.items()} == {"sky": 14, "arcTraces": 8, "lamps": 46, "thin": 3}
+    assert all("faint" in e["provenance"] for e in kinds["arcTraces"])
+    assert all("between observing runs" in e["provenance"] for e in kinds["lamps"])
+    assert all(not e["reliable"] for e in kinds["thin"])
+    # Negative control: the derivation gave the arc-frame traces and the bm lamps reliable thresholds, and
+    # r's quartz traces a FAIL; withholding them is the adoption's rule, not the data's.
     derived = {
-        (e["population"]["arm"], e["population"]["description"], e["population"]["cameraSet"], e["metric"]): e
-        for e in yaml.safe_load(source.read_text())["thresholds"]
-    }
-    for e in warnOnly:
-        key = (
+        (
             e["population"]["arm"],
             e["population"]["description"],
             e["population"]["cameraSet"],
+            e["population"]["obsType"],
             e["metric"],
-        )
-        assert derived[key]["fail"] is not None and derived[key]["reliable"]
+        ): e
+        for e in derivedDocument["thresholds"]
+    }
+    assert sum(derived[k]["reliable"] for k in derived if k[1] == TRACE and k[3] == "arc") == 5
+    assert derived[("b", "KrI", "bm", "arc", "robustRmsDeltaX")]["reliable"]
+    assert derived[("r", TRACE, "brn", "trace", "robustRmsDeltaX")]["fail"] is not None
 
 
 def testShippedScatterVerdicts():
     """The adopted file on the validation run (u/wtg/qa-thresholds/010).
 
-    Every arm's traces are judged in x, the b-arm bm lamps at WARN only in x and y; the other
-    lamp species and the sky species are not. Counts are the fixture's.
+    Trace centroids on quartz frames are judged in x (b and n with FAIL, r at WARN only); trace
+    centroids on arcs and twilights, the lamp species and the sky species are not. Counts are
+    the fixture's, whose ``obsType`` is imageQualityQa's.
     """
     from pfs.drp.qa.metrics.calibration import labelRows
     from pfs.drp.qa.metrics.gate import thresholdsPath
@@ -885,6 +1002,7 @@ def testShippedScatterVerdicts():
 
     rows = _driftFixture()
     reserved = rows[(rows["reference"] == VISIT) & (rows["statusType"] == RESERVED)].reset_index(drop=True)
+    assert reserved["obsType"].value_counts().to_dict() == {"arc": 1427, "twilight": 623, "trace": 576}
     thresholds = [
         thresholdsPath("dmLineResidualThresholds-run25.yaml"),
         residualThresholds(1.0, 2.0, 1.0, 2.0),
@@ -893,26 +1011,40 @@ def testShippedScatterVerdicts():
     visitSet = loadValidationVisits()
     sky = reserved["description"].isin(SKY_SPECIES)
     traces = reserved["description"] == TRACE
-    fullSets = reserved["cameraSet"].isin(["bm", "brn"])
-    bmLamps = (
-        (reserved["arm"] == "b")
-        & (reserved["cameraSet"] == "bm")
-        & reserved["description"].isin(["KrI", "NeI", "XeI"])
-    )
+    quartz = reserved["obsType"] == QUARTZ
+    lamps = ~traces & ~sky
     counts = {
         "robustRmsDeltaX": {
-            "traces": {"PASS": 1286, "FAIL": 89, "WARN": 46},
-            "bmLamps": {"PASS": 57, "WARN": 3},
-            "others": 681,
-            "goodTraces": {"PASS": 682, "WARN": 29, "FAIL": 15, "": 14},  # "": b traces read with r alone
-            "goodBmLamps": {"PASS": 57, "WARN": 3},
+            "quartzTraces": {
+                "PASS": 411,
+                "": 72,
+                "FAIL": 51,
+                "WARN": 41,
+            },  # "": m, and b or r read with r alone
+            "byPopulation": {
+                ("b", "bm", "PASS"): 56,
+                ("b", "br", ""): 8,
+                ("b", "brn", "PASS"): 116,
+                ("b", "brn", "FAIL"): 32,
+                ("m", "bm", ""): 56,
+                ("n", "brn", "PASS"): 124,
+                ("n", "brn", "FAIL"): 19,
+                ("r", "br", ""): 8,
+                ("r", "brn", "PASS"): 115,
+                ("r", "brn", "WARN"): 41,
+            },
+            "otherTraces": 862,
+            "lamps": 725,
+            "goodQuartzTraces": {"PASS": 133, "": 30, "WARN": 1},  # WARN: r4 at the p95 of its own run
+            "unconfirmedQuartzTraces": {"FAIL": 4, "PASS": 4, "WARN": 4},
         },
         "robustRmsDeltaY": {
-            "traces": {},  # traces measure x only
-            "bmLamps": {"PASS": 58, "WARN": 2},
-            "others": 665,
-            "goodTraces": {"": 740},
-            "goodBmLamps": {"PASS": 58, "WARN": 2},
+            "quartzTraces": {},  # traces measure x only
+            "byPopulation": {},
+            "otherTraces": 0,
+            "lamps": 725,
+            "goodQuartzTraces": {"": 164},
+            "unconfirmedQuartzTraces": {"": 12},
         },
     }
     for metric, expected in counts.items():
@@ -922,18 +1054,28 @@ def testShippedScatterVerdicts():
         # (423 rows), and by absence, the config's NaN, where it had none (8).
         assert sky.sum() == 431 and (status[sky] == "").all() and (layer[sky] == 0).sum() == 423
         measured = reserved[metric].notna()
-        assert status[traces & fullSets & measured].value_counts().to_dict() == expected["traces"]
-        assert status[bmLamps & measured].value_counts().to_dict() == expected["bmLamps"]
-        assert (layer[bmLamps & measured] == 0).all()  # WARN only: FAIL never appears above
-        others = ~(traces & fullSets) & ~bmLamps & ~sky & measured
-        assert others.sum() == expected["others"] and (status[others] == "").all()
+        quartzTraces = traces & quartz & measured
+        assert status[quartzTraces].value_counts().to_dict() == expected["quartzTraces"]
+        byPopulation = status[quartzTraces].groupby([reserved["arm"], reserved["cameraSet"]]).value_counts()
+        assert byPopulation.to_dict() == expected["byPopulation"]
+        otherTraces = traces & ~quartz & measured
+        assert otherTraces.sum() == expected["otherTraces"] and (status[otherTraces] == "").all()
+        assert (layer[otherTraces] == 0).all()  # by an entry with no thresholds, not by absence
+        assert (lamps & measured).sum() == expected["lamps"] and (status[lamps & measured] == "").all()
+        assert (layer[lamps & measured] == 0).all()
         labelled = labelRows(reserved, visitSet, metric)
         good = labelled.index[labelled["validation"] == "good"]
-        assert status.loc[good[traces[good]]].value_counts().to_dict() == expected["goodTraces"]
-        assert status.loc[good[bmLamps[good]]].value_counts().to_dict() == expected["goodBmLamps"]
-    # Negative control: a flat 0.05/0.10 px scatter threshold fails or warns most known-good traces.
-    strict = judge(reserved, [residualThresholds(1.0, 2.0, 1.0, 2.0, 0.05, 0.1, 0.05, 0.1)])
+        assert (
+            status.loc[good[(traces & quartz)[good]]].value_counts().to_dict() == expected["goodQuartzTraces"]
+        )
+        unconfirmed = labelled.index[labelled["validation"] == "unconfirmed"]
+        assert (
+            status.loc[unconfirmed[(traces & quartz)[unconfirmed]]].value_counts().to_dict()
+            == expected["unconfirmedQuartzTraces"]
+        )
+    # Negative control: a flat 0.03/0.04 px scatter threshold fails or warns most known-good quartz traces.
+    strict = judge(reserved, [residualThresholds(1.0, 2.0, 1.0, 2.0, 0.03, 0.04, 0.03, 0.04)])
     strictX = strict.set_index(["row", "metric"]).xs("robustRmsDeltaX", level="metric")["status"]
     labelled = labelRows(reserved, visitSet, "robustRmsDeltaX")
-    goodTraces = labelled.index[(labelled["validation"] == "good") & traces[labelled.index]]
-    assert strictX.loc[goodTraces].value_counts().to_dict() == {"WARN": 320, "FAIL": 271, "PASS": 149}
+    goodTraces = labelled.index[(labelled["validation"] == "good") & (traces & quartz)[labelled.index]]
+    assert strictX.loc[goodTraces].value_counts().to_dict() == {"FAIL": 82, "PASS": 64, "WARN": 18}

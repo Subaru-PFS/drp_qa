@@ -5,7 +5,7 @@ collection: u/wtg/qa-thresholds/010
 referenceRuns:
 - 25
 - 29
-drpQaVersion: w.2026.35-158-g3800b92-dirty
+drpQaVersion: w.2026.35-171-g9f920e5-dirty
 pipelineVersions:
   datamodel: w.2026.40
   obs_pfs: w.2026.40
@@ -18,6 +18,7 @@ thresholds:
     arm: b
     description: CdI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -29,8 +30,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=12 from 3 visits, below the 20-sample
-    floor; Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135838-135840
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135838-135840
     (n=12): WARN at p95, FAIL at p99. NOT RELIABLE: n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -40,6 +42,7 @@ thresholds:
     arm: b
     description: HgI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -51,8 +54,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: true
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=12 from 3 visits, below the 20-sample
-    floor; Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135838-135840
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135838-135840
     (n=12): WARN at p95, FAIL at p99. NOT RELIABLE: n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
@@ -63,10 +67,11 @@ thresholds:
     arm: b
     description: KrI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 0.0889
+  warn: null
   fail: null
   nGood: 20
   nGoodVisits: 5
@@ -74,10 +79,11 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted at WARN only (2026-10-20, PIPE2D-1956): n=20 from 5 visits, so a p99 FAIL would sit at the
-    sample maximum and flag one known-good image in twenty. Derived values were: Derived 2026-10-19 from validation
-    visits 133051-135848 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=20 cannot bound p99 at 95% confidence:
-    its interval is open, and FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 133051-135848
+    (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=20 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
   population:
     reference: visit
@@ -85,6 +91,7 @@ thresholds:
     arm: b
     description: KrI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -96,8 +103,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: true
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135836-135837
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135836-135837
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
@@ -108,6 +116,7 @@ thresholds:
     arm: b
     description: NaI
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -130,10 +139,11 @@ thresholds:
     arm: b
     description: NeI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 0.115
+  warn: null
   fail: null
   nGood: 20
   nGoodVisits: 5
@@ -141,10 +151,11 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted at WARN only (2026-10-20, PIPE2D-1956): n=20 from 5 visits, so a p99 FAIL would sit at the
-    sample maximum and flag one known-good image in twenty. Derived values were: Derived 2026-10-19 from validation
-    visits 133048-135846 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=20 cannot bound p99 at 95% confidence:
-    its interval is open, and FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 133048-135846
+    (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=20 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
   population:
     reference: visit
@@ -152,6 +163,7 @@ thresholds:
     arm: b
     description: NeI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -163,8 +175,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: true
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135834-135835
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135834-135835
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
@@ -175,6 +188,7 @@ thresholds:
     arm: b
     description: OH
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -197,6 +211,7 @@ thresholds:
     arm: b
     description: OI
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -219,20 +234,44 @@ thresholds:
     arm: b
     description: Trace
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 0.128
-  fail: 0.134
-  nGood: 82
-  nGoodVisits: 29
-  visitRange: 133045-145071
+  warn: null
+  fail: null
+  nGood: 60
+  nGoodVisits: 15
+  visitRange: 133045-135848
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133045-145071 (n=82):
-    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=82 cannot bound p99 at 95% confidence: its interval is open, and
-    FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on arc frames, where the continuum is faint
+    and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values were:
+    Derived 2026-10-19 from validation visits 133045-135848 (n=60): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=60
+    cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: bm
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.047
+  fail: 0.047
+  nGood: 22
+  nGoodVisits: 14
+  visitRange: 133054-145071
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133054-145071 (n=22):
+    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=22 cannot bound p99 at 95% confidence: its interval is open, and
+    FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: robustRmsDeltaX
   population:
     reference: visit
@@ -240,6 +279,7 @@ thresholds:
     arm: b
     description: Trace
     cameraSet: br
+    obsType: trace
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -251,11 +291,11 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: true
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=6 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 133536-133537
-    (n=6): WARN at p95, FAIL at p99. NOT RELIABLE: n=6 is below the 20-sample floor. FAIL UNBOUNDED: n=6 cannot
-    bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
-    WARN is not less severe than FAIL, so WARN can never fire.'
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=6 from 2 visits, below the 20-sample floor.
+    Derived values were: Derived 2026-10-19 from validation visits 133536-133537 (n=6): WARN at p95, FAIL at p99.
+    NOT RELIABLE: n=6 is below the 20-sample floor. FAIL UNBOUNDED: n=6 cannot bound p99 at 95% confidence: its
+    interval is open, and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL,
+    so WARN can never fire.'
 - metric: robustRmsDeltaX
   population:
     reference: visit
@@ -263,20 +303,67 @@ thresholds:
     arm: b
     description: Trace
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 0.134
-  fail: 0.147
-  nGood: 108
-  nGoodVisits: 33
-  visitRange: 133532-147747
+  warn: null
+  fail: null
+  nGood: 36
+  nGoodVisits: 9
+  visitRange: 135832-135840
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133532-147747 (n=108):
-    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=108 cannot bound p99 at 95% confidence: its interval is open, and
-    FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on arc frames, where the continuum is faint
+    and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values were:
+    Derived 2026-10-19 from validation visits 135832-135840 (n=36): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=36
+    cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: brn
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.0465
+  fail: 0.0465
+  nGood: 24
+  nGoodVisits: 12
+  visitRange: 133532-147747
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133532-147747 (n=24):
+    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=24 cannot bound p99 at 95% confidence: its interval is open, and
+    FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: b
+    description: Trace
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on twilight frames, where the continuum is
+    faint and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values
+    were: Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
   population:
     reference: visit
@@ -284,10 +371,11 @@ thresholds:
     arm: b
     description: XeI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 0.139
+  warn: null
   fail: null
   nGood: 20
   nGoodVisits: 5
@@ -295,10 +383,11 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted at WARN only (2026-10-20, PIPE2D-1956): n=20 from 5 visits, so a p99 FAIL would sit at the
-    sample maximum and flag one known-good image in twenty. Derived values were: Derived 2026-10-19 from validation
-    visits 133045-135844 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=20 cannot bound p99 at 95% confidence:
-    its interval is open, and FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 133045-135844
+    (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=20 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
   population:
     reference: visit
@@ -306,6 +395,7 @@ thresholds:
     arm: b
     description: XeI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -317,8 +407,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: true
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135832-135833
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135832-135833
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
@@ -329,6 +420,7 @@ thresholds:
     arm: m
     description: ArI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -340,8 +432,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135841-135842
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135841-135842
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -351,6 +444,7 @@ thresholds:
     arm: m
     description: KrI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -362,8 +456,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135847-135848
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135847-135848
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -373,6 +468,7 @@ thresholds:
     arm: m
     description: NeI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -384,8 +480,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135845-135846
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135845-135846
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -395,20 +492,46 @@ thresholds:
     arm: m
     description: Trace
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 0.207
-  fail: 0.226
-  nGood: 40
-  nGoodVisits: 10
-  visitRange: 135841-135850
+  warn: null
+  fail: null
+  nGood: 32
+  nGoodVisits: 8
+  visitRange: 135841-135848
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 135841-135850 (n=40):
-    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=40 cannot bound p99 at 95% confidence: its interval is open, and
-    FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on arc frames, where the continuum is faint
+    and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values were:
+    Derived 2026-10-19 from validation visits 135841-135848 (n=32): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=32
+    cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: m
+    description: Trace
+    cameraSet: bm
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 135849-135850
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor.
+    Derived values were: Derived 2026-10-19 from validation visits 135849-135850 (n=8): WARN at p95, FAIL at p99.
+    NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its
+    interval is open, and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL,
+    so WARN can never fire.'
 - metric: robustRmsDeltaX
   population:
     reference: visit
@@ -416,6 +539,7 @@ thresholds:
     arm: m
     description: XeI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -427,8 +551,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135843-135844
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135843-135844
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -438,6 +563,7 @@ thresholds:
     arm: n
     description: ArI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -449,8 +575,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: true
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135830-135831
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135830-135831
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
@@ -461,6 +588,7 @@ thresholds:
     arm: n
     description: HgI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -472,8 +600,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=12 from 3 visits, below the 20-sample
-    floor; Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135838-135840
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135838-135840
     (n=12): WARN at p95, FAIL at p99. NOT RELIABLE: n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -483,6 +612,7 @@ thresholds:
     arm: n
     description: KrI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -494,8 +624,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135836-135837
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135836-135837
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -505,6 +636,7 @@ thresholds:
     arm: n
     description: NeI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -516,8 +648,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135834-135835
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135834-135835
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -527,6 +660,7 @@ thresholds:
     arm: n
     description: O2
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -549,6 +683,7 @@ thresholds:
     arm: n
     description: OH
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -571,20 +706,67 @@ thresholds:
     arm: n
     description: Trace
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 0.2
-  fail: 0.235
-  nGood: 116
-  nGoodVisits: 35
-  visitRange: 133532-147747
+  warn: null
+  fail: null
+  nGood: 44
+  nGoodVisits: 11
+  visitRange: 135830-135840
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133532-147747 (n=116):
-    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=116 cannot bound p99 at 95% confidence: its interval is open, and
-    FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on arc frames, where the continuum is faint
+    and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values were:
+    Derived 2026-10-19 from validation visits 135830-135840 (n=44): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=44
+    cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: Trace
+    cameraSet: brn
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.09
+  fail: 0.09
+  nGood: 24
+  nGoodVisits: 12
+  visitRange: 133532-147747
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133532-147747 (n=24):
+    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=24 cannot bound p99 at 95% confidence: its interval is open, and
+    FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: n
+    description: Trace
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on twilight frames, where the continuum is
+    faint and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values
+    were: Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
   population:
     reference: visit
@@ -592,6 +774,7 @@ thresholds:
     arm: n
     description: XeI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -603,8 +786,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135832-135833
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135832-135833
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -614,6 +798,7 @@ thresholds:
     arm: r
     description: ArI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -625,8 +810,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135830-135831
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135830-135831
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -636,6 +822,7 @@ thresholds:
     arm: r
     description: CdI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -647,8 +834,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=12 from 3 visits, below the 20-sample
-    floor; Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135838-135840
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135838-135840
     (n=12): WARN at p95, FAIL at p99. NOT RELIABLE: n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -658,6 +846,7 @@ thresholds:
     arm: r
     description: HgI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -669,8 +858,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=12 from 3 visits, below the 20-sample
-    floor; Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135838-135840
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135838-135840
     (n=12): WARN at p95, FAIL at p99. NOT RELIABLE: n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -680,6 +870,7 @@ thresholds:
     arm: r
     description: KrI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -691,8 +882,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135836-135837
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135836-135837
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -702,6 +894,7 @@ thresholds:
     arm: r
     description: NeI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -713,8 +906,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135834-135835
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135834-135835
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
@@ -724,6 +918,7 @@ thresholds:
     arm: r
     description: O2
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -747,6 +942,7 @@ thresholds:
     arm: r
     description: OH
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -769,6 +965,7 @@ thresholds:
     arm: r
     description: Trace
     cameraSet: br
+    obsType: trace
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -780,10 +977,10 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 133536-133537
-    (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
-    bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor.
+    Derived values were: Derived 2026-10-19 from validation visits 133536-133537 (n=8): WARN at p95, FAIL at p99.
+    NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its
+    interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
   population:
     reference: visit
@@ -791,20 +988,68 @@ thresholds:
     arm: r
     description: Trace
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 0.173
-  fail: 0.209
-  nGood: 116
-  nGoodVisits: 29
-  visitRange: 133532-135840
+  warn: null
+  fail: null
+  nGood: 44
+  nGoodVisits: 11
+  visitRange: 135830-135840
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-20 (PIPE2D-1956). Derived 2026-10-19 from validation visits 133532-135840 (n=116):
-    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=116 cannot bound p99 at 95% confidence: its interval is open, and
-    FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on arc frames, where the continuum is faint
+    and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values were:
+    Derived 2026-10-19 from validation visits 135830-135840 (n=44): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=44
+    cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: Trace
+    cameraSet: brn
+    obsType: trace
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 0.05
+  fail: null
+  nGood: 24
+  nGoodVisits: 6
+  visitRange: 133532-135829
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Adopted at WARN only (2026-10-20, PIPE2D-1956): n=24 from 6 visits, so a p99 FAIL would sit at the
+    sample maximum and flag one known-good image in twenty. Derived values were: Derived 2026-10-19 from validation
+    visits 133532-135829 (n=24): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=24 cannot bound p99 at 95% confidence:
+    its interval is open, and FAIL may move a long way with more data.'
+- metric: robustRmsDeltaX
+  population:
+    reference: visit
+    statusType: RESERVED
+    arm: r
+    description: Trace
+    cameraSet: brn
+    obsType: twilight
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: null
+  fail: null
+  nGood: 48
+  nGoodVisits: 12
+  visitRange: 134880-135279
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): trace centroids on twilight frames, where the continuum is
+    faint and they scatter two to three times more than on a quartz; judged on quartz frames only. Derived values
+    were: Derived 2026-10-19 from validation visits 134880-135279 (n=48): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=48 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaX
   population:
     reference: visit
@@ -812,6 +1057,7 @@ thresholds:
     arm: r
     description: XeI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -823,8 +1069,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135832-135833
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135832-135833
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -834,6 +1081,7 @@ thresholds:
     arm: b
     description: CdI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -845,8 +1093,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=12 from 3 visits, below the 20-sample
-    floor; Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135838-135840
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135838-135840
     (n=12): WARN at p95, FAIL at p99. NOT RELIABLE: n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -856,6 +1105,7 @@ thresholds:
     arm: b
     description: HgI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -867,8 +1117,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=12 from 3 visits, below the 20-sample
-    floor; Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135838-135840
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135838-135840
     (n=12): WARN at p95, FAIL at p99. NOT RELIABLE: n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -878,10 +1129,11 @@ thresholds:
     arm: b
     description: KrI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 0.129
+  warn: null
   fail: null
   nGood: 20
   nGoodVisits: 5
@@ -889,10 +1141,11 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted at WARN only (2026-10-20, PIPE2D-1956): n=20 from 5 visits, so a p99 FAIL would sit at the
-    sample maximum and flag one known-good image in twenty. Derived values were: Derived 2026-10-19 from validation
-    visits 133051-135848 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=20 cannot bound p99 at 95% confidence:
-    its interval is open, and FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 133051-135848
+    (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=20 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -900,6 +1153,7 @@ thresholds:
     arm: b
     description: KrI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -911,8 +1165,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: true
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135836-135837
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135836-135837
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
@@ -923,6 +1178,7 @@ thresholds:
     arm: b
     description: NaI
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -945,10 +1201,11 @@ thresholds:
     arm: b
     description: NeI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 0.068
+  warn: null
   fail: null
   nGood: 20
   nGoodVisits: 5
@@ -956,11 +1213,12 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Adopted at WARN only (2026-10-20, PIPE2D-1956): n=20 from 5 visits, so a p99 FAIL would sit at the
-    sample maximum and flag one known-good image in twenty. Derived values were: Derived 2026-10-19 from validation
-    visits 133048-135846 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=20 cannot bound p99 at 95% confidence:
-    its interval is open, and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than
-    FAIL, so WARN can never fire.'
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 133048-135846
+    (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=20 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -968,6 +1226,7 @@ thresholds:
     arm: b
     description: NeI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -979,8 +1238,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135834-135835
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135834-135835
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -990,6 +1250,7 @@ thresholds:
     arm: b
     description: OH
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1012,6 +1273,7 @@ thresholds:
     arm: b
     description: OI
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1034,10 +1296,11 @@ thresholds:
     arm: b
     description: XeI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 0.143
+  warn: null
   fail: null
   nGood: 20
   nGoodVisits: 5
@@ -1045,10 +1308,11 @@ thresholds:
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted at WARN only (2026-10-20, PIPE2D-1956): n=20 from 5 visits, so a p99 FAIL would sit at the
-    sample maximum and flag one known-good image in twenty. Derived values were: Derived 2026-10-19 from validation
-    visits 133045-135844 (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=20 cannot bound p99 at 95% confidence:
-    its interval is open, and FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 133045-135844
+    (n=20): WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=20 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -1056,6 +1320,7 @@ thresholds:
     arm: b
     description: XeI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1067,8 +1332,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135832-135833
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135832-135833
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1078,6 +1344,7 @@ thresholds:
     arm: m
     description: ArI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1089,8 +1356,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135841-135842
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135841-135842
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1100,6 +1368,7 @@ thresholds:
     arm: m
     description: KrI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1111,8 +1380,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135847-135848
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135847-135848
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1122,6 +1392,7 @@ thresholds:
     arm: m
     description: NeI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1133,8 +1404,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135845-135846
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135845-135846
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1144,6 +1416,7 @@ thresholds:
     arm: m
     description: XeI
     cameraSet: bm
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1155,8 +1428,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135843-135844
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135843-135844
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1166,6 +1440,7 @@ thresholds:
     arm: n
     description: ArI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1177,8 +1452,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135830-135831
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135830-135831
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1188,6 +1464,7 @@ thresholds:
     arm: n
     description: HgI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1199,8 +1476,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=12 from 3 visits, below the 20-sample
-    floor; Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135838-135840
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135838-135840
     (n=12): WARN at p95, FAIL at p99. NOT RELIABLE: n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1210,6 +1488,7 @@ thresholds:
     arm: n
     description: KrI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1221,8 +1500,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135836-135837
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135836-135837
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1232,6 +1512,7 @@ thresholds:
     arm: n
     description: NeI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1243,8 +1524,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135834-135835
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135834-135835
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1254,6 +1536,7 @@ thresholds:
     arm: n
     description: O2
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1276,6 +1559,7 @@ thresholds:
     arm: n
     description: OH
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1298,6 +1582,7 @@ thresholds:
     arm: n
     description: XeI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1309,8 +1594,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135832-135833
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135832-135833
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1320,6 +1606,7 @@ thresholds:
     arm: r
     description: ArI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1331,8 +1618,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135830-135831
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135830-135831
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1342,6 +1630,7 @@ thresholds:
     arm: r
     description: CdI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1353,8 +1642,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=12 from 3 visits, below the 20-sample
-    floor; Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135838-135840
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135838-135840
     (n=12): WARN at p95, FAIL at p99. NOT RELIABLE: n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1364,6 +1654,7 @@ thresholds:
     arm: r
     description: HgI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1375,8 +1666,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=12 from 3 visits, below the 20-sample
-    floor; Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135838-135840
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135838-135840
     (n=12): WARN at p95, FAIL at p99. NOT RELIABLE: n=12 is below the 20-sample floor. FAIL UNBOUNDED: n=12 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1386,6 +1678,7 @@ thresholds:
     arm: r
     description: KrI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1397,8 +1690,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135836-135837
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135836-135837
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: robustRmsDeltaY
@@ -1408,6 +1702,7 @@ thresholds:
     arm: r
     description: NeI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1419,8 +1714,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: true
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135834-135835
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135834-135835
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'
@@ -1431,6 +1727,7 @@ thresholds:
     arm: r
     description: O2
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1454,6 +1751,7 @@ thresholds:
     arm: r
     description: OH
     cameraSet: brn
+    obsType: twilight
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1476,6 +1774,7 @@ thresholds:
     arm: r
     description: XeI
     cameraSet: brn
+    obsType: arc
   higherIsWorse: true
   absolute: false
   method: percentile
@@ -1487,8 +1786,9 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: true
-  provenance: 'Not judged (2026-10-20, PIPE2D-1956): the derivation has n=8 from 2 visits, below the 20-sample floor;
-    Run29''s arcs are not a reference. Derived values were: Derived 2026-10-19 from validation visits 135832-135833
+  provenance: 'Not judged (2026-10-20, PIPE2D-1956): a lamp species, whose scatter differs between observing runs
+    by more than it varies within one, so no fixed reference transfers (thresholds from Run29''s arcs flag 20-70
+    % of Runs 25-28''s healthy arcs). Derived values were: Derived 2026-10-19 from validation visits 135832-135833
     (n=8): WARN at p95, FAIL at p99. NOT RELIABLE: n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot
     bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data. DEGENERATE:
     WARN is not less severe than FAIL, so WARN can never fire.'

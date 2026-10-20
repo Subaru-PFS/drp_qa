@@ -17,13 +17,14 @@ def _module():
     return module
 
 
-def _long(visit, arm, species, rms, cameraSet="brn", reference=VISIT, statusType=RESERVED):
+def _long(visit, arm, species, rms, cameraSet="brn", reference=VISIT, statusType=RESERVED, obsType="arc"):
     return [
         {
             "visit": visit,
             "arm": arm,
             "spectrograph": 1,
             "cameraSet": cameraSet,
+            "obsType": obsType,
             "reference": reference,
             "description": species,
             "statusType": statusType,
@@ -55,6 +56,7 @@ def testScatterVerdictsAndSummary():
                 "arm": "r",
                 "description": "NeI",
                 "cameraSet": "brn",
+                "obsType": "arc",
                 "warn": 0.1,
                 "fail": 0.2,
                 "higherIsWorse": True,
@@ -69,7 +71,17 @@ def testScatterVerdictsAndSummary():
     assert (verdicts.loc[verdicts["metric"] == "robustRmsDeltaY", "status"] == "").all()  # y: no entry
     counts = module.summarize(verdicts)
     assert counts.to_dict("records") == [
-        {"arm": "r", "description": "NeI", "judged": 2, "WARN": 0, "FAIL": 1, "FAIL%": 50.0}
+        {"arm": "r", "obsType": "arc", "description": "NeI", "judged": 2, "WARN": 0, "FAIL": 1, "FAIL%": 50.0}
     ]
-    # Negative control: without the entry nothing is judged and the summary is empty.
+    # A table stored before obsType was a column takes it from iqQaMetrics beside the report.
+    older = metrics.drop(columns="obsType")
+    kinds = pd.DataFrame({"visit": [1, 2, 3, 4], "arm": "r", "spectrograph": 1, "obsType": "arc"})
+    assert (
+        module.scatterVerdicts(older, summary, thresholds, kinds)["status"].tolist()
+        == verdicts["status"].tolist()
+    )
+    # Negative control: without the entry nothing is judged and the summary is empty; and without
+    # the frame type the entry, which names one, matches nothing.
     assert module.summarize(module.scatterVerdicts(metrics, summary, thresholds.iloc[0:0])).empty
+    unknown = module.scatterVerdicts(older, summary, thresholds)
+    assert (unknown["status"] == "").all() and unknown["obsType"].isna().all()

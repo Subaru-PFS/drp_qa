@@ -5,9 +5,10 @@ The acceptance check for adopting scatter thresholds (PIPE2D-1956): the reserved
 RMS of every lamp arc and quartz of the runs compared must not fail in bulk, or the thresholds
 describe the reference visits' night rather than the instrument. Reads the
 ``dmLineResidualMetrics-<period>.parquet`` and ``dmLineResidualSummary-<period>.parquet`` that
-``qaComparison.py report`` writes beside each report, judges the ``RESERVED`` rows against the
-visit's detectorMap with the file (and the task's config fallback), and prints WARN and FAIL
-counts per run, arm and species. Stack-free.
+``qaComparison.py report`` writes beside each report (and ``iqQaMetrics-<period>.parquet`` there
+for the observation type of tables stored before ``obsType`` was a column), judges the
+``RESERVED`` rows against the visit's detectorMap with the file (and the task's config fallback),
+and prints WARN and FAIL counts per run, arm, observation type and species. Stack-free.
 
 Example::
 
@@ -28,7 +29,9 @@ from pfs.drp.qa.metrics.lineResiduals import RESERVED, VISIT, residualThresholds
 SCATTER = ("robustRmsDeltaX", "robustRmsDeltaY")
 
 
-def scatterVerdicts(metrics: pd.DataFrame, summary: pd.DataFrame, thresholds) -> pd.DataFrame:
+def scatterVerdicts(
+    metrics: pd.DataFrame, summary: pd.DataFrame, thresholds, kinds: pd.DataFrame | None = None
+) -> pd.DataFrame:
     """Return the scatter verdicts of one period's images, one row per image, species and metric.
 
     Parameters
@@ -40,18 +43,23 @@ def scatterVerdicts(metrics: pd.DataFrame, summary: pd.DataFrame, thresholds) ->
     thresholds
         A thresholds file path or table, judged before the task's config
         fallback (``pfs.drp.qa.metrics.lineResiduals.residualThresholds``).
+    kinds : `pandas.DataFrame`, optional
+        ``iqQaMetrics`` rows of the same images: their ``obsType``, for tables
+        stored before it was a column.
 
     Returns
     -------
     `pandas.DataFrame`
-        ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``description``,
-        ``metric``, ``value``, ``status`` (``PASS``, ``WARN``, ``FAIL`` or
-        empty for not judged).
+        ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``obsType``,
+        ``description``, ``metric``, ``value``, ``status`` (``PASS``, ``WARN``,
+        ``FAIL`` or empty for not judged).
     """
-    wide = wideResiduals(metrics, VISIT, (RESERVED,), summary=summary)
+    wide = wideResiduals(metrics, VISIT, (RESERVED,), summary=summary, kinds=kinds)
+    if "obsType" not in wide.columns:
+        wide["obsType"] = None
     judged = judge(wide, [thresholds, residualThresholds(1.0, 2.0, 1.0, 2.0)])
     judged = judged[judged["metric"].isin(SCATTER)]
-    keys = ["visit", "arm", "spectrograph", "cameraSet", "description"]
+    keys = ["visit", "arm", "spectrograph", "cameraSet", "obsType", "description"]
     rows = wide[keys].iloc[judged["row"].to_numpy()].reset_index(drop=True)
     return rows.assign(
         metric=judged["metric"].to_numpy(),
@@ -61,12 +69,12 @@ def scatterVerdicts(metrics: pd.DataFrame, summary: pd.DataFrame, thresholds) ->
 
 
 def summarize(verdicts: pd.DataFrame) -> pd.DataFrame:
-    """Count verdicts per arm and species: ``judged``, ``WARN``, ``FAIL`` and ``FAIL%``."""
-    columns = ["arm", "description", "judged", "WARN", "FAIL", "FAIL%"]
+    """Count verdicts per arm, observation type and species: ``judged``, ``WARN``, ``FAIL`` and ``FAIL%``."""
+    columns = ["arm", "obsType", "description", "judged", "WARN", "FAIL", "FAIL%"]
     judged = verdicts[verdicts["status"] != ""]
     if judged.empty:
         return pd.DataFrame(columns=columns)
-    counts = judged.groupby(["arm", "description"])["status"].agg(
+    counts = judged.groupby(["arm", "obsType", "description"], dropna=False)["status"].agg(
         judged="size", WARN=lambda s: int((s == "WARN").sum()), FAIL=lambda s: int((s == "FAIL").sum())
     )
     counts["FAIL%"] = (100 * counts["FAIL"] / counts["judged"]).round(1)
@@ -86,7 +94,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         for path in sorted(directory.glob("dmLineResidualMetrics-*.parquet")):
             period = path.stem.split("-", 1)[1]
             summary = directory / f"dmLineResidualSummary-{period}.parquet"
-            verdicts = scatterVerdicts(pd.read_parquet(path), pd.read_parquet(summary), args.thresholds)
+            iqQa = directory / f"iqQaMetrics-{period}.parquet"
+            kinds = pd.read_parquet(iqQa) if iqQa.exists() else None
+            verdicts = scatterVerdicts(
+                pd.read_parquet(path), pd.read_parquet(summary), args.thresholds, kinds
+            )
             counts = summarize(verdicts)
             print(f"\n== {period} ({directory})")
             print(counts.to_string(index=False))

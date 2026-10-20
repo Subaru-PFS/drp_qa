@@ -208,12 +208,13 @@ METRIC_SPECS = {
         ),
         # dmLineResidualMetrics (PIPE2D-1921, PIPE2D-1956): per line species and line set, against
         # each reference (the ``reference`` column). x from every species, y from lamp lines; b-arm
-        # offsets from the calibration depend on the camera set (PIPE2D-1927).
+        # offsets from the calibration depend on the camera set (PIPE2D-1927), and trace centroids
+        # scatter two to three times more on an arc's faint continuum than on a quartz (obsType).
         *(
             MetricSpec(
                 name,
                 absolute=name.startswith("median"),
-                groupBy=("reference", "statusType", "arm", "description", "cameraSet"),
+                groupBy=("reference", "statusType", "arm", "description", "cameraSet", "obsType"),
                 units="pixels",
                 reference=_LINE_REFERENCES,
                 label=f"|{name}|" if name.startswith("median") else "",

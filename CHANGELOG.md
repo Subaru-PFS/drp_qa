@@ -10,18 +10,22 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
-- **Metric-scoped known-good entries, and the scatter acceptance check** (PIPE2D-1956) — a `known_good` entry takes
-  `metrics`, the metrics it is a reference for, so Run29's 2026-07-14 and 07-23 arc sets (which built no calibration)
-  are reference values for the line scatter while the image-quality references stay Run25's.
-  `bin.src/judgeScatterThresholds.py` judges comparison mode's exported scatter with a thresholds file, run by run:
-  the check an adoption must pass.
-
-- **Scatter thresholds adopted for `dmLineResiduals`** (PIPE2D-1956) — `thresholdsFile` defaults to
-  `dmLineResidualThresholds-run25.yaml`, made by `makeLineResidualThresholds.py` from the notebook's derivation over
-  `u/wtg/qa-thresholds/010`: the robust RMS of `RESERVED` lines against the visit's detectorMap, judged at p95/p99 for
-  every arm's trace centroids in x (40–116 values from 10–35 visits), and at WARN only for the b arm's Krypton, Neon
-  and Xenon lines with the m camera set in x and y (20 values from 5 visits, where a p99 FAIL would sit at the sample
-  maximum): 11 of 67 populations. The other lamp species and the sky-line species on twilights are not judged.
+- **`dmLineResiduals` stores the frame type, and judges trace scatter on quartz frames** (PIPE2D-1956) —
+  `dmLineResidualMetrics` and `dmLineResidualSummary` gain `obsType`, the observation type from the pfsConfig
+  header's `W_SEQTYP` as `imageQualityQa` classifies it (`trace` for a quartz, `arc`, `twilight`, ...), a population
+  column of the thresholds file: trace centroids scatter two to three times more on an arc's faint continuum than on
+  a quartz, and one population with the quartz traces they failed 14–20 % of Runs 25–27's healthy arcs. The
+  line-residual thresholds are derived per observation type as well, and `thresholdsFile` defaults to
+  `dmLineResidualThresholds-run25.yaml`, made by `makeLineResidualThresholds.py` from the derivation over
+  `u/wtg/qa-thresholds/010`: trace centroids on quartz frames judged in x at p95/p99 (b and n, 22–24 values from
+  12–14 visits; r at WARN only, 24 values from 6 visits), 4 of 75 populations. Not judged, with the reason in each
+  entry's provenance: trace centroids on arcs and twilights; the lamp species, whose scatter differs between observing
+  runs by more than it varies within one (thresholds from Run29's arcs flag 20–70 % of Runs 25–28's healthy arcs and
+  about none of Runs 29–30's); and the sky-line species. A `known_good` entry takes `metrics`, the metrics it is a
+  reference for, so Run29's 2026-07-14 and 07-23 arc sets (which built no calibration) are reference values for the
+  line scatter while the image-quality references stay Run25's. `bin.src/judgeScatterThresholds.py` judges comparison
+  mode's exported scatter with a thresholds file, run by run: the acceptance check an adoption must pass. Comparison
+  mode's scatter table is by observation type, and tables stored before the column take it from `iqQaMetrics`.
 
 - **b2 and n4 quartz take their reference from Run29** (PIPE2D-1938) — reduced with one pipeline, Runs 25–30 agree
   with Run25 in `medFwhm` to within 3 % everywhere but b2 quartz (SM2's slit refocused on 2026-03-11) and n4 quartz

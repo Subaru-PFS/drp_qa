@@ -92,17 +92,20 @@ to these lines, whose `RESERVED` lines test how well it predicts lines it was no
 frame. The lines are those the visit's detectorMap fit marked `DETECTORMAP_USED` or `DETECTORMAP_RESERVED`, less
 `BAD` ones, with no other selection or clipping; trace centroids are kept on arcs. When the fit marked none, every
 good line is measured, as `UNFITTED`. Trace centroids measure x, lamp lines x and y, measured minus reference.
+Each row carries the frame's observation type (`obsType`, from the pfsConfig header's `W_SEQTYP` as `imageQualityQa`
+classifies it: `trace` for a quartz, `arc`, `twilight`, ...): trace centroids are measured on every frame, but on an
+arc's faint continuum they scatter two to three times more than on a quartz, so they are a population per frame type.
 
 Per reference, line species and line set (`statusType`: `BOTH`, `USED`, `RESERVED`, or `UNFITTED`): the median and
 robust RMS of the x and y residuals, `nLines` and `linesPerFiber`. Judged: against `calib`, over `BOTH` (or
 `UNFITTED`) lines, the median x offset of traces and median y offset of lamp lines (WARN 1 px, `APPLY_SHIFT`; FAIL 2
 px, `RECALIBRATE`); against `visit`, the robust RMS of `RESERVED` lines (`RECALIBRATE`), by the thresholds file
-`dmLineResidualThresholds-run25.yaml` (PIPE2D-1956): every arm's trace centroids in x, at the p95/p99 of the
-validation visits (40–116 values from 10–35 visits); the b arm's Krypton, Neon and Xenon lines read with the m camera
-set, in x and y, at WARN only (20 values from 5 visits, where a p99 FAIL would sit at the sample maximum); the other
-lamp species and the sky-line species on twilights are stored, not judged. The weighted RMS and the softening are drp_stella's, in
-`iqQaMetrics` and `iqQaSpeciesMetrics`, not recomputed. Logic in the stack-free `pfs.drp.qa.metrics.lineResiduals`.
-No plot is drawn as the task runs: plot `dmLineResidualData` afterwards.
+`dmLineResidualThresholds-run25.yaml` (PIPE2D-1956): trace centroids on quartz frames in x, at the p95/p99 of the
+validation visits (b and n, 22–24 values from 12–14 visits; r at WARN only, 24 values from 6 visits; m's 8 values are
+below the floor). Stored, not judged: trace centroids on arcs and twilights; the lamp species, whose scatter differs
+between observing runs by more than it varies within one; and the sky-line species on twilights. The weighted RMS and
+the softening are drp_stella's, in `iqQaMetrics` and `iqQaSpeciesMetrics`, not recomputed. Logic in the stack-free
+`pfs.drp.qa.metrics.lineResiduals`. No plot is drawn as the task runs: plot `dmLineResidualData` afterwards.
 
 It runs in `pipelines/qaThresholds.yaml` beside `imageQualityQa`, so the thresholds notebook and comparison mode
 measure it on every visit they judge: comparison mode reports its verdicts beside the gate's
@@ -117,8 +120,8 @@ measure it on every visit they judge: comparison mode reports its verdicts besid
 - `maxTraceRowsPerFiber`: most `USED` trace rows per fiber stored in `dmLineResidualData`, evenly spaced in y; `0`
   for all. Default `100`. Lamp and `RESERVED` lines are always stored; the statistics use every line.
 - `thresholdsFile`: a thresholds file judged before the fields below; entries may name `reference`, `statusType`,
-  `arm`, `spectrograph`, `description` and `cameraSet`. Default `dmLineResidualThresholds-run25.yaml`, adopted by
-  `makeLineResidualThresholds.py` beside it; empty for the fields alone.
+  `arm`, `spectrograph`, `description`, `cameraSet` and `obsType`. Default `dmLineResidualThresholds-run25.yaml`,
+  adopted by `makeLineResidualThresholds.py` beside it; empty for the fields alone.
 - `xWarnThreshold`, `xFailThreshold`, `yWarnThreshold`, `yFailThreshold`: on the median offsets from the
   calibration, in pixels. Defaults `1.0`, `2.0`, `1.0`, `2.0`.
 - `xRmsWarnThreshold`, `xRmsFailThreshold`, `yRmsWarnThreshold`, `yRmsFailThreshold`: on the robust RMS of
@@ -128,8 +131,8 @@ measure it on every visit they judge: comparison mode reports its verdicts besid
 
 | DataSet Type            | Dimensions                             | Description                                                                                                       |
 |-------------------------|----------------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| `dmLineResidualMetrics` | `instrument, visit, arm, spectrograph` | Long format: one row per reference, species, `statusType` and metric, with the metric's verdict.                  |
-| `dmLineResidualSummary` | `instrument, visit, arm, spectrograph` | One row: `qaStatus`, `qaDecidedBy`, `qaReason`, `recommendedAction`, `fitted`, and the calibration used.          |
+| `dmLineResidualMetrics` | `instrument, visit, arm, spectrograph` | Long format: one row per reference, species, `statusType` and metric, with `obsType` and the metric's verdict.    |
+| `dmLineResidualSummary` | `instrument, visit, arm, spectrograph` | One row: `qaStatus`, `qaDecidedBy`, `qaReason`, `recommendedAction`, `fitted`, `obsType`, and the calibration used. |
 | `dmLineResidualData`    | `instrument, visit, arm, spectrograph` | One row per line measured (`USED` traces sampled), with `dxCalib`, `dyCalib`, `dxVisit`, `dyVisit`.              |
 
 #### `dmResiduals`
@@ -535,13 +538,17 @@ verdict is known. The decisions behind the current set:
   median offsets from `detectorMap_calib` are judged at WARN 1 px and FAIL 2 px, a physical limit short of
   drp_stella's 3 px line-search radius: offsets from a calibration sit near zero in the run it came from, so no
   percentile applies. The robust RMS of `RESERVED` lines against the visit's own detectorMap is derived in the
-  notebook like the other percentile thresholds, per arm, species and camera set, from the known-good visits of each
-  arm's reference run less each calibration's own input visits (their adjusted maps are fitted to the lines the
-  calibration was), and adopted through the task's `thresholdsFile` (2026-10-20, from `u/wtg/qa-thresholds/010`):
-  judged for every arm's trace centroids, with 40–116 values from 10–35 visits, and at WARN only for the b arm's
-  lamps read with m (20 values from 5 visits); the other lamp species wait for a second reference run, and the
-  twilights' sky species are not judged.
-  `dmResiduals` runs beside it through Run31 for comparison.
+  notebook like the other percentile thresholds, per arm, species, camera set and observation type, from the
+  known-good visits of each arm's reference run less each calibration's own input visits (their adjusted maps are
+  fitted to the lines the calibration was), and adopted through the task's `thresholdsFile` (2026-10-20, from
+  `u/wtg/qa-thresholds/010`): judged for trace centroids on quartz frames (b and n with FAIL, r at WARN only). Not
+  judged, with the reasons in each entry's provenance: trace centroids on arcs and twilights, which scatter two to
+  three times more on the faint continuum (one population with the quartz traces, they failed 14–20 % of Runs
+  25–27's healthy arcs); the lamp species, whose scatter differs between observing runs by more than it varies within
+  one (thresholds from Run29's arcs flag 20–70 % of Runs 25–28's healthy arcs and about none of Runs 29–30's, so a
+  fixed reference does not transfer); and the twilights' sky species. `bin.src/judgeScatterThresholds.py` is the
+  acceptance check, run on the comparison exports of Runs 25–30 before any adoption; its findings are in
+  `docs/qa-domain-notes.md`. `dmResiduals` runs beside it through Run31 for comparison.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
 - **Thresholds hold for the pipeline that reduced their visits** (PIPE2D-1938). Two reductions of the same Run25
@@ -661,8 +668,8 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
 - **Line residuals are judged beside the gate** (PIPE2D-1956). `dmLineResiduals` runs in the same passes as
   `imageQualityQa`, and the report's *Line residuals* section has its verdicts per detector and night, the
   recommended actions by arm, its problems and findings (the reference, species and metric of each crossing), and the
-  scatter of the lines the fit held back, by arm and species, beside the reference run's: what a scatter threshold is
-  derived from. `dmLineResidualSummary-<period>.parquet`, `dmLineResidualMetrics-<period>.parquet` and
+  scatter of the lines the fit held back, by arm, observation type and species, beside the reference run's: what a
+  scatter threshold is derived from. Tables stored before `obsType` was a column take it from `iqQaMetrics`. `dmLineResidualSummary-<period>.parquet`, `dmLineResidualMetrics-<period>.parquet` and
   `lineResidualFindings-<period>.csv` are written beside the report. A collection judged before the task joined the
   pipeline has none, and the section says so.
 
@@ -722,9 +729,10 @@ Comparison mode; see [Comparison mode](#comparison-mode).
 ### `judgeScatterThresholds.py`
 
 The acceptance check for adopting line-scatter thresholds (PIPE2D-1956): judges the reserved-line scatter that
-comparison mode exported for each run (`dmLineResidualMetrics-<period>.parquet` beside the report) with a thresholds
-file, and prints WARN and FAIL counts per run, arm and species. Thresholds that fail a run's healthy arcs in bulk
-describe the reference visits' night, not the instrument. Stack-free.
+comparison mode exported for each run (`dmLineResidualMetrics-<period>.parquet` beside the report, with
+`iqQaMetrics-<period>.parquet` for the observation type of tables stored before `obsType` was a column) with a
+thresholds file, and prints WARN and FAIL counts per run, arm, observation type and species. Thresholds that fail a
+run's healthy frames in bulk describe the reference visits' night, not the instrument. Stack-free.
 
 ### `fiberNormsQa.py`
 
