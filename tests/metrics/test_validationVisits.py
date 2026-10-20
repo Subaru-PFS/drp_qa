@@ -440,7 +440,7 @@ class TestTables:
             sum(line.startswith("| ") and "---" not in line for line in text.splitlines())
             == len(visitSet) + 4
         ), "one row per entry plus a header per table"
-        assert "| 140005–140006 | 27 | scienceArc | b, r, n | 1 | Arc: Argon | FAIL | `medFwhm` |" in text
+        assert "| 140005–140006 | 27 | scienceArc | r, n | 1 | Arc: Argon | FAIL | `medFwhm` |" in text
 
     def testEveryRowHasTheHeadersColumns(self):
         """A cell added to the rows but not the header breaks the Markdown table."""

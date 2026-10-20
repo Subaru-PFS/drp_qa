@@ -492,7 +492,7 @@ known_bad:
   # listed; the visits between them carry no verdict. Run27 read no m arm.
   - visitRange: [140005, 140006]
     sequenceType: scienceArc
-    arms: [b, r, n]
+    arms: [r, n]  # b-arm Argon medFwhm is not judged (PIPE2D-1938): under a line per lit fiber
     spectrographs: [1]
     seqType: "Arc: Argon"
     expect: FAIL
@@ -525,7 +525,7 @@ known_bad:
     reason: "SM1 defocused (Run27). 30 s, az 336."
   - visitRange: [140124, 140126]
     sequenceType: scienceArc
-    arms: [b, r, n]
+    arms: [r, n]  # b-arm Argon medFwhm is not judged (PIPE2D-1938): under a line per lit fiber
     spectrographs: [1]
     seqType: "Arc: Argon"
     expect: FAIL
@@ -761,7 +761,8 @@ known_bad:
   # good, but SM3's medianDeltaY reaches the 1.0 px WARN. Unconfirmed until the
   # cause is known: reported, not judged, and known-good for every other metric.
   # An entry's visits are reduced and read, so these name the SM3 traces and twilights themselves
-  # (the known-good entries' visits), not a range that would sweep in every visit between them.
+  # (the visits of the known-good entries, and the cloudy twilight 134334-134337), not a range
+  # that would sweep in every visit between them.
   - visitRange: [133532, 133533]
     sequenceType: scienceTrace
     spectrographs: [3]

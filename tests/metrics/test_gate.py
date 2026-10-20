@@ -349,16 +349,21 @@ def testShippedFileVerdicts(stored):
     assert bArgon[good.index[good["status"] == ""]].all() and bArgon[good.index].sum() == 40
     bad = fwhm.loc[labelled.index[labelled["validation"] == "bad:FAIL"]]
     bad = bad[bad["value"].notna()]
-    assert len(bad) == 87 and (bad.loc[~bArgon[bad.index], "status"] == "FAIL").all()
-    assert bArgon[bad.index].sum() == 5 and (bad.loc[bArgon[bad.index], "status"] == "").all()
-    # The b2 and n4 quartz reference is Run29's set (PIPE2D-1938): its traces pass on those two cameras.
+    assert len(bad) == 82 and (bad["status"] == "FAIL").all()
+    assert not bArgon[bad.index].any()  # the set asserts nothing about b-arm Argon widths
+    # The b2 and n4 quartz reference is Run29's set (PIPE2D-1938): its traces pass on those two cameras,
+    # and Run25's own, narrower, pass as well.
+    camera = stored["arm"].add(stored["spectrograph"].astype(str))
     run29Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(144587, 147830)
-    moved = run29Quartz & stored["arm"].add(stored["spectrograph"].astype(str)).isin(["b2", "n4"])
+    moved = run29Quartz & camera.isin(["b2", "n4"])
     assert moved.sum() == 42 and (verdicts.loc[moved, "qaStatus"] == "PASS").all()
-    # Negative control: Run25's own b2 quartz, 5 % narrower, would fail against a Run25 reference but
-    # passes the adopted one; the derived file's per-arm quartz entries, which pool both runs, fail none either.
-    run25B2 = run25Quartz & (stored["arm"] == "b") & (stored["spectrograph"] == 2)
+    run25B2 = run25Quartz & (camera == "b2")
     assert run25B2.sum() == 14 and (verdicts.loc[run25B2, "qaStatus"] == "PASS").all()
+    # Negative control: against a tolerance on Run25's own b2 and n4 medians, Run29's b2 quartz
+    # would FAIL (5 % above) and n4's WARN (3 % above).
+    run25Median = stored.loc[run25Quartz & camera.isin(["b2", "n4"])].groupby(camera)["medFwhm"].median()
+    run29Median = stored.loc[moved].groupby(camera)["medFwhm"].median()
+    assert run29Median["b2"] > 1.05 * run25Median["b2"] and run29Median["n4"] > 1.03 * run25Median["n4"]
     # Negative control: the per-arm entries alone fail known-good arcs and quartz.
     perArm = readThresholds(thresholdsPath(configDefaults().thresholdsFile))[1]
     perArm = perArm[perArm["method"] != "tolerance"].drop(columns=["spectrograph", "species"])

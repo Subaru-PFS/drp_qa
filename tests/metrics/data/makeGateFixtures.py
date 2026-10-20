@@ -57,6 +57,10 @@ for stem, name, columns in (
 ):
     path = source / f"iqQaMetrics-{stem}.parquet"
     if not path.exists():
+        if stem == STEM:
+            raise SystemExit(
+                f"{name}: no {path}; the validation fixture and the derived file must come from one run"
+            )
         print(f"{name}: no {path}, kept as is")
         continue
     metrics = pd.read_parquet(path)[columns]
