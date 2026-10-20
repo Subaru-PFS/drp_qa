@@ -113,7 +113,8 @@ def labelRows(metrics: pd.DataFrame, visitSet: ValidationVisitSet, metric: str) 
     A ``known_bad`` entry asserts something only about the metric it names, or
     about every metric if it names none, and removes its rows from the good
     data of only those metrics: a b-arm arc whose flag rate is a pipeline
-    limitation still measures FWHM. Known-good rows are ``good``.
+    limitation still measures FWHM. Known-good rows are ``good``; a
+    ``known_good`` entry with ``metrics`` is good for those metrics only.
 
     Parameters
     ----------
@@ -139,7 +140,8 @@ def labelRows(metrics: pd.DataFrame, visitSet: ValidationVisitSet, metric: str) 
         return [entry for entry in entries if entry.metric in (None, metric)]
 
     label = np.full(len(metrics), None, dtype=object)
-    label[matchRows(metrics, visitSet.knownGood)] = GOOD
+    good = [entry for entry in visitSet.knownGood if not entry.metrics or metric in entry.metrics]
+    label[matchRows(metrics, good)] = GOOD
     label[matchRows(metrics, forMetric(visitSet.knownBad))] = None
     label[matchRows(metrics, forMetric(visitSet.unconfirmedBad))] = UNCONFIRMED
     for expect, value in (("WARN", BAD_WARN), ("FAIL", BAD_FAIL)):

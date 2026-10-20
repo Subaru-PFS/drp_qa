@@ -91,6 +91,11 @@ class ValidationVisit:
         Name of the metric expected to identify the fault. Only meaningful for
         ``known_bad`` entries, where failing for the *right* reason is part of
         the acceptance criterion.
+    metrics : `tuple` [`str`]
+        For a ``known_good`` entry, the metrics it is known good for; empty
+        means every metric. A visit can be a reference for one metric and not
+        another: Run29's arcs are reference values for the line scatter
+        (PIPE2D-1956) while the image-quality references stay Run25's.
     reason : `str` or `None`
         Why this verdict is expected.
     note : `str` or `None`
@@ -115,6 +120,7 @@ class ValidationVisit:
     excludeCameras: tuple[str, ...] = ()
     seqType: str | None = None
     metric: str | None = None
+    metrics: tuple[str, ...] = ()
     reason: str | None = None
     note: str | None = None
     unconfirmed: bool = False
@@ -554,12 +560,19 @@ def formatTables(visitSet: ValidationVisitSet) -> str:
                 ", ".join(str(s) for s in entry.spectrographs) or "all",
                 entry.seqType or "any",
                 entry.expect,
-                f"`{entry.metric}`" if entry.metric else "",
+                _metricCell(entry),
                 " ".join((getattr(entry, textField) or "").split()),
             )
             lines.append("| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks) + "\n"
+
+
+def _metricCell(entry: ValidationVisit) -> str:
+    """Return the metric a known-bad entry names, or the metrics a known-good one is scoped to."""
+    if entry.metric:
+        return f"`{entry.metric}`"
+    return ", ".join(f"`{name}`" for name in entry.metrics)
 
 
 def _armsCell(entry: ValidationVisit) -> str:
@@ -726,6 +739,7 @@ _ENTRY_KEYS = frozenset(
         "seqType",
         "expect",
         "metric",
+        "metrics",
         "reason",
         "note",
         "unconfirmed",
@@ -800,6 +814,7 @@ def _parseEntry(item: Any, defaultExpect: str | None, where: str) -> ValidationV
         excludeCameras=excludeCameras,
         seqType=_optionalStr(item.get("seqType")),
         metric=_optionalStr(item.get("metric")),
+        metrics=_parseSequence(item.get("metrics"), str, "metrics", where),
         reason=_optionalStr(item.get("reason")),
         note=_optionalStr(item.get("note")),
         unconfirmed=_asBool(item.get("unconfirmed", False), "unconfirmed", where),

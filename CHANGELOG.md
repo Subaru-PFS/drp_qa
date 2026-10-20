@@ -10,6 +10,12 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Metric-scoped known-good entries, and the scatter acceptance check** (PIPE2D-1956) — a `known_good` entry takes
+  `metrics`, the metrics it is a reference for, so Run29's 2026-07-14 and 07-23 arc sets (which built no calibration)
+  are reference values for the line scatter while the image-quality references stay Run25's.
+  `bin.src/judgeScatterThresholds.py` judges comparison mode's exported scatter with a thresholds file, run by run:
+  the check an adoption must pass.
+
 - **Scatter thresholds adopted for `dmLineResiduals`** (PIPE2D-1956) — `thresholdsFile` defaults to
   `dmLineResidualThresholds-run25.yaml`, made by `makeLineResidualThresholds.py` from the notebook's derivation over
   `u/wtg/qa-thresholds/010`: the robust RMS of `RESERVED` lines against the visit's detectorMap, judged at p95/p99 for

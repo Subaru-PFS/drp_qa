@@ -85,15 +85,16 @@ class TestCheckedInSet:
         # Run29 holds the b2 and n4 quartz references only (PIPE2D-1938).
         assert {entry.run for entry in visitSet.knownGood} == {25, 29}
         run29 = [entry for entry in visitSet.knownGood if entry.run == 29]
-        assert run29 and all(entry.sequenceType == "scienceTrace" for entry in run29)
-        assert set().union(*(entry.cameras for entry in run29)) == {"b2", "n4"}
+        traces = [entry for entry in run29 if entry.sequenceType == "scienceTrace"]
+        assert traces and set().union(*(entry.cameras for entry in traces)) == {"b2", "n4"}
+        assert all(entry.metrics for entry in run29 if entry.sequenceType == "scienceArc")  # scatter only
 
     def testKnownGoodIsPopulated(self):
         """The Run25 stable set; thresholds cannot be derived without it."""
         visitSet = loadValidationVisits()
         assert visitSet.knownGood, "no usable known_good entries"
         assert visitSet.goodVisits[0] == 133025
-        assert visitSet.goodVisits[-1] == 147747  # Run29's last trace set
+        assert visitSet.goodVisits[-1] == 147762  # Run29's last arc set
 
     def testQuartzReferenceOfB2AndN4IsRun29(self):
         """Run25's trace entries leave b2 and n4 out; Run29's hold them alone (PIPE2D-1938)."""
@@ -613,3 +614,42 @@ class TestCameraSelectors:
             bad = writeYaml(f"version: 1\nknown_good:\n  - {{visit: 1, sequenceType: scienceArc, {text}}}\n")
             with pytest.raises(ValueError, match=message):
                 loadValidationVisits(bad)
+
+
+class TestMetricScopedKnownGood:
+    def testScopedEntriesLabelOnlyTheirMetrics(self):
+        from pfs.drp.qa.metrics.calibration import GOOD, labelRows
+
+        visitSet = loadValidationVisits()
+        rows = pd.DataFrame(
+            {
+                "visit": [147748, 147748, 133031, 133031],
+                "arm": ["b", "b", "b", "b"],
+                "spectrograph": [1, 1, 1, 1],
+                "seqName": ["Arc: Argon", "Arc: Argon", "Arc: Neon", "Arc: Neon"],
+                "robustRmsDeltaX": [0.1, 0.1, 0.1, 0.1],
+                "medFwhm": [2.8, 2.8, 2.8, 2.8],
+            }
+        )
+        scatter = labelRows(rows, visitSet, "robustRmsDeltaX")
+        assert (scatter.loc[scatter["visit"] == 147748, "validation"] == GOOD).all()  # Run29 arc: scatter
+        width = labelRows(rows, visitSet, "medFwhm")
+        assert 147748 not in set(width["visit"])  # not an image-quality reference
+        # Negative control: an unscoped known-good visit labels every metric.
+        assert (scatter.loc[scatter["visit"] == 133031, "validation"] == GOOD).all()
+        assert (width.loc[width["visit"] == 133031, "validation"] == GOOD).all()
+
+    def testCheckedInScopedEntries(self):
+        visitSet = loadValidationVisits()
+        scoped = [entry for entry in visitSet.knownGood if entry.metrics]
+        assert len(scoped) == 9
+        assert all(entry.run == 29 and entry.sequenceType == "scienceArc" for entry in scoped)
+        assert all(entry.metrics == ("robustRmsDeltaX", "robustRmsDeltaY") for entry in scoped)
+        assert all(not entry.metrics for entry in visitSet.knownBad)
+
+    def testParseMetrics(self, writeYaml):
+        path = writeYaml(
+            "version: 1\nknown_good:\n  - {visit: 1, sequenceType: scienceArc, metrics: [robustRmsDeltaX]}\n"
+        )
+        entry = loadValidationVisits(path).knownGood[0]
+        assert entry.metrics == ("robustRmsDeltaX",) and entry.metric is None

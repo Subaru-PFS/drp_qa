@@ -55,6 +55,9 @@
 #   metric:   str, optional. The metric whose name should identify the fault.
 #             The full-rebuild acceptance criterion is that a known_bad visit
 #             fails *for the expected reason*, not merely that it fails.
+#   metrics:  list of str, optional, known_good only: the metrics the entry is
+#             known good for (every metric when omitted). A run's visits can be
+#             the reference for one metric and not another.
 #   reason:   str, why this verdict is expected.
 #   note:     str, free-form context.
 #
@@ -335,6 +338,74 @@ known_good:
     cameras: [b2, n4]
     seqType: "Trace"
     note: "Run29 detectorMap set, 2026-07-23. b2 and n4 quartz reference (PIPE2D-1938)."
+
+  # Run29's later arc sets, 2026-07-14 and 07-23, which built no calibration (its detectorMap_calib
+  # came from the 07-07 set): known good for the line scatter against the visit's detectorMap only
+  # (PIPE2D-1956), where Run25's arcs outside its own calibration inputs give 8-12 values per
+  # lamp. The image-quality references stay Run25's.
+  - visitRange: [146093, 146094]
+    sequenceType: scienceArc
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    metrics: [robustRmsDeltaX, robustRmsDeltaY]
+    note: "Run29 arc set, 2026-07-14, b/r/n arms. Line-scatter reference only (PIPE2D-1956)."
+  - visitRange: [147748, 147750]
+    sequenceType: scienceArc
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Argon"
+    metrics: [robustRmsDeltaX, robustRmsDeltaY]
+    note: "Run29 arc set, 2026-07-23, b/r/n arms. Line-scatter reference only (PIPE2D-1956)."
+  - visitRange: [146095, 146096]
+    sequenceType: scienceArc
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    metrics: [robustRmsDeltaX, robustRmsDeltaY]
+    note: "Run29 arc set, 2026-07-14, b/r/n arms. Line-scatter reference only (PIPE2D-1956)."
+  - visitRange: [147751, 147753]
+    sequenceType: scienceArc
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Xenon"
+    metrics: [robustRmsDeltaX, robustRmsDeltaY]
+    note: "Run29 arc set, 2026-07-23, b/r/n arms. Line-scatter reference only (PIPE2D-1956)."
+  - visitRange: [146097, 146098]
+    sequenceType: scienceArc
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    metrics: [robustRmsDeltaX, robustRmsDeltaY]
+    note: "Run29 arc set, 2026-07-14, b/r/n arms. Line-scatter reference only (PIPE2D-1956)."
+  - visitRange: [147754, 147756]
+    sequenceType: scienceArc
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Neon"
+    metrics: [robustRmsDeltaX, robustRmsDeltaY]
+    note: "Run29 arc set, 2026-07-23, b/r/n arms. Line-scatter reference only (PIPE2D-1956)."
+  - visitRange: [146099, 146100]
+    sequenceType: scienceArc
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    metrics: [robustRmsDeltaX, robustRmsDeltaY]
+    note: "Run29 arc set, 2026-07-14, b/r/n arms. Line-scatter reference only (PIPE2D-1956)."
+  - visitRange: [147757, 147759]
+    sequenceType: scienceArc
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: Krypton"
+    metrics: [robustRmsDeltaX, robustRmsDeltaY]
+    note: "Run29 arc set, 2026-07-23, b/r/n arms. Line-scatter reference only (PIPE2D-1956)."
+  - visitRange: [147760, 147762]
+    sequenceType: scienceArc
+    arms: [b, r, n]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "Arc: HgCd"
+    metrics: [robustRmsDeltaX, robustRmsDeltaY]
+    note: "Run29 arc set, 2026-07-23, b/r/n arms. Line-scatter reference only (PIPE2D-1956)."
 
 known_bad:
   # Run25 b-arm arcs of the faint and crowded lamps: most of their lines are

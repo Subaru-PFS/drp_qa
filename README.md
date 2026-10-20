@@ -719,6 +719,13 @@ python bin.src/<script>.py --help
 
 Comparison mode; see [Comparison mode](#comparison-mode).
 
+### `judgeScatterThresholds.py`
+
+The acceptance check for adopting line-scatter thresholds (PIPE2D-1956): judges the reserved-line scatter that
+comparison mode exported for each run (`dmLineResidualMetrics-<period>.parquet` beside the report) with a thresholds
+file, and prints WARN and FAIL counts per run, arm and species. Thresholds that fail a run's healthy arcs in bulk
+describe the reference visits' night, not the instrument. Stack-free.
+
 ### `fiberNormsQa.py`
 
 Thin entry point for `pfs.drp.qa.fiberNormsQa.main`, which plots fiber normalizations from a Butler collection.
