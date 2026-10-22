@@ -914,6 +914,11 @@ def testWideResiduals():
     )
     assert partial["obsType"].iloc[0] == "trace" and (partial["obsType"].iloc[1:] == "arc").all()
     assert addObsType(older, None) is older
+    # A task whose header lacked W_SEQTYP stored "unknown": as good as missing.
+    unknown = addObsType(metrics.assign(obsType="unknown"), kinds.assign(obsType="trace"))
+    assert (unknown["obsType"] == "trace").all()
+    # Negative control: without kinds "unknown" stays, so a thresholds entry naming a frame type never matches.
+    assert (addObsType(metrics.assign(obsType="unknown"), None)["obsType"] == "unknown").all()
 
 
 def _driftFixture() -> pd.DataFrame:
