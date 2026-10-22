@@ -949,38 +949,45 @@ def testShippedScatterFileIsTheAdopted():
     # its tolerance rows alone (quartz traces, lamp species but HgCd); the others keep their percentile rows.
     assert len(derivedDocument["thresholds"]) == 329
     assert len(remade["thresholds"]) == 168
-    methods = {e["method"] for e in remade["thresholds"]}
-    assert methods == {"percentile", "tolerance"}
+    assert {e["method"] for e in remade["thresholds"]} == {"percentile", "tolerance"}
     perDetector = [module.judgedByTolerance(e["population"]) for e in remade["thresholds"]]
     assert all(
         (e["method"] == "tolerance") == flag
         for e, flag in zip(remade["thresholds"], perDetector, strict=True)
     )
     judged = [e for e in remade["thresholds"] if e["warn"] is not None or e["fail"] is not None]
-    # Judged, per detector, WARN 20 % and FAIL 50 % above the detector's known-good median, in x: trace
-    # centroids on quartz frames and the Ar, Kr, Ne and Xe lines, on every arm that reads them.
-    assert len(judged) == 76
-    assert all(
-        e["method"] == "tolerance" and e["metric"] == "robustRmsDeltaX" and e["reliable"] for e in judged
-    )
-    assert all(e["warn"] / e["fail"] == pytest.approx(1.2 / 1.5, rel=0.03) for e in judged)
-    assert all("WARN 20% and FAIL 50% above the known-good median" in e["provenance"] for e in judged)
-    assert {(e["population"]["arm"], e["population"]["description"]) for e in judged} == {
+    # Judged, per detector, above the detector's known-good median: trace centroids on quartz frames and the
+    # Ar, Kr, Ne and Xe lines in x (WARN 20 %, FAIL 50 %), the lamp lines in y too (WARN 50 %, FAIL 150 %).
+    assert len(judged) == 136
+    assert all(e["method"] == "tolerance" and e["reliable"] for e in judged)
+    x = [e for e in judged if e["metric"] == "robustRmsDeltaX"]
+    y = [e for e in judged if e["metric"] == "robustRmsDeltaY"]
+    assert len(x) == 76 and len(y) == 60
+    assert all(e["warn"] / e["fail"] == pytest.approx(1.2 / 1.5, rel=0.03) for e in x)
+    assert all("WARN 20% and FAIL 50% above the known-good median" in e["provenance"] for e in x)
+    assert all(e["warn"] / e["fail"] == pytest.approx(1.5 / 2.5, rel=0.03) for e in y)
+    assert all("WARN 50% and FAIL 150% above the known-good median" in e["provenance"] for e in y)
+    lamps = {
         (arm, species)
         for arm in "bmnr"
-        for species in ("Trace", "ArI", "KrI", "NeI", "XeI")
+        for species in ("ArI", "KrI", "NeI", "XeI")
         if (arm, species) != ("b", "ArI")
     }  # the b arm's Argon has too few lines for a RESERVED set
+    assert {(e["population"]["arm"], e["population"]["description"]) for e in x} == lamps | {
+        (arm, TRACE) for arm in "bmnr"
+    }
+    assert {
+        (e["population"]["arm"], e["population"]["description"]) for e in y
+    } == lamps  # traces measure x only
     assert all(
         e["population"]["obsType"] == (QUARTZ if e["population"]["description"] == TRACE else "arc")
         for e in judged
     )
     assert {e["nGood"] for e in judged} == {4, 5, 8, 10, 14}  # the calibration's own inputs count
-    # Not judged, with the reason: lamp y, sky species, HgCd lines, trace centroids on arcs and twilights.
+    # Not judged, with the reason: sky species, HgCd lines, trace centroids on arcs and twilights.
     unjudged = [e for e in remade["thresholds"] if e["warn"] is None and e["fail"] is None]
-    assert len(unjudged) == 92 and all(e["provenance"].startswith("Not judged (") for e in unjudged)
+    assert len(unjudged) == 32 and all(e["provenance"].startswith("Not judged (") for e in unjudged)
     reasons = {
-        "lampY": [e for e in unjudged if e["metric"] == "robustRmsDeltaY" and e["method"] == "tolerance"],
         "sky": [e for e in unjudged if e["population"]["description"] in SKY_SPECIES],
         "hgcd": [e for e in unjudged if e["population"]["description"] in module.HGCD_SPECIES],
         "arcTraces": [
@@ -989,15 +996,14 @@ def testShippedScatterFileIsTheAdopted():
             if e["population"]["description"] == TRACE and e["population"]["obsType"] != QUARTZ
         ],
     }
-    assert {k: len(v) for k, v in reasons.items()} == {"lampY": 60, "sky": 14, "hgcd": 10, "arcTraces": 8}
-    assert all("y scatter" in e["provenance"] for e in reasons["lampY"])
+    assert {k: len(v) for k, v in reasons.items()} == {"sky": 14, "hgcd": 10, "arcTraces": 8}
     assert all("sky lines' fit" in e["provenance"] for e in reasons["sky"])
     assert all(
         "mercury or cadmium" in e["provenance"] and e["method"] == "percentile" for e in reasons["hgcd"]
     )
     assert all("faint" in e["provenance"] and e["method"] == "percentile" for e in reasons["arcTraces"])
     # Negative control: the derivation gave the arc-frame traces reliable percentile thresholds, the pooled
-    # quartz traces a FAIL and 80 lamp populations a reliable y tolerance; withholding them is the adoption's rule.
+    # quartz traces a FAIL and the HgCd lines reliable tolerances; withholding them is the adoption's rule.
     percentile = {
         (
             e["population"]["arm"],
@@ -1011,21 +1017,19 @@ def testShippedScatterFileIsTheAdopted():
     }
     assert sum(percentile[k]["reliable"] for k in percentile if k[1] == TRACE and k[3] == "arc") == 5
     assert percentile[("r", TRACE, "brn", "trace", "robustRmsDeltaX")]["fail"] is not None
-    lampY = [
+    hgcd = [
         e
         for e in derivedDocument["thresholds"]
-        if e["method"] == "tolerance"
-        and e["metric"] == "robustRmsDeltaY"
-        and e["population"]["description"] not in (TRACE, *SKY_SPECIES)
+        if e["method"] == "tolerance" and e["population"]["description"] in module.HGCD_SPECIES
     ]
-    assert sum(e["reliable"] for e in lampY) == 80
+    assert sum(e["reliable"] for e in hgcd) >= 10
 
 
 def testShippedScatterVerdicts():
     """The adopted file on the validation run (u/wtg/qa-thresholds/010).
 
-    Trace centroids on quartz frames and the Ar, Kr, Ne and Xe lines are judged in x per detector;
-    trace centroids on arcs and twilights, the lamps' y scatter, the HgCd lines and the sky species
+    Trace centroids on quartz frames and the Ar, Kr, Ne and Xe lines are judged in x per detector, the
+    lamp lines in y too; trace centroids on arcs and twilights, the HgCd lines and the sky species
     are not. Counts are the fixture's, whose ``obsType`` is imageQualityQa's.
     """
     from pfs.drp.qa.metrics.calibration import labelRows
@@ -1071,11 +1075,11 @@ def testShippedScatterVerdicts():
             "quartzTraces": {},  # traces measure x only
             "quartzByArm": {},
             "otherTraces": 0,
-            "lamps": {"": 554},  # measured, not judged
+            "lamps": {"PASS": 450, "FAIL": 55, "WARN": 49},
             "goodQuartzTraces": {"": 144},
-            "goodLamps": {"": 360},
+            "goodLamps": {"PASS": 358, "WARN": 2},  # two b-arm Krypton arcs at the 50 % WARN
             "unconfirmedQuartzTraces": {"": 12},
-            "unconfirmedLamps": {"": 12},
+            "unconfirmedLamps": {"PASS": 12},
         },
     }
     for metric, expected in counts.items():

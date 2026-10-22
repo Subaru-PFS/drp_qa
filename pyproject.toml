@@ -103,7 +103,7 @@ ignore = [
     "N813", # CamelCase imported as lowercase
     "N815", # mixedCase variable in class scope
     "N816", # mixedCase variable in global scope
-    "N999", # Invalid module name (e.g. dmResiduals.py, imageQualityQa.py)
+    "N999", # Invalid module name (e.g. dmLineResiduals.py, imageQualityQa.py)
     # Reserved for the EM/TRY rule sets, which are not selected above.
     "EM101",
     "TRY003",

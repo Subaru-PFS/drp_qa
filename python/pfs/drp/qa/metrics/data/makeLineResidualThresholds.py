@@ -22,13 +22,15 @@ calibration input is a visit like any other. Adopting it:
   one's cluster; the regular trace sets of Runs 26-30 sit within +12 % of Run25's
   per-detector median (+24 % at the end of Run26 on b1), the Run27 SM1 defocus at
   1.7-4x.
-- **Lamp-line species are judged per detector in x, by the same tolerance**, the
-  mercury and cadmium lines (`HGCD_SPECIES`) aside. Not in y: the HgCd species'
-  y scatter is intrinsically variable (medians 0.6-1.1 px on n and r) and a
-  tolerance on it failed 5-20 % of Runs 25-28's healthy arcs; the other species'
-  y waits for a check of its own. A fixed percentile over the run's arcs does not
-  transfer between runs (thresholds from Run29's arcs flagged 20-70 % of Runs
-  25-28's healthy arcs), the per-detector tolerance does.
+- **Lamp-line species are judged per detector in x and y, by the same kind of
+  tolerance**, the mercury and cadmium lines (`HGCD_SPECIES`) aside: their y
+  scatter is intrinsically variable (medians 0.6-1.1 px on n and r) and a
+  tolerance on it failed 5-20 % of Runs 25-28's healthy arcs. The y fractions are
+  wider, WARN 50 % and FAIL 150 %: against Run25's per-detector medians the
+  healthy runs' arcs reach 1.37x at the 95th percentile and 2.4x at worst in y
+  (Run26), 1.2x in x; Run27's y faults sit at 3-70x. A fixed percentile over the
+  run's arcs does not transfer between runs (thresholds from Run29's arcs flagged
+  20-70 % of Runs 25-28's healthy arcs), the per-detector tolerance does.
 - **Trace centroids on arcs and twilights are not judged.** The continuum is
   faint there, and the centroids scatter two to three times more than on a
   quartz (Runs 25-30 medians 0.10-0.13 px against 0.02-0.04): one population
@@ -116,11 +118,6 @@ def adopt(document: dict) -> dict:
             reason = (
                 "a mercury or cadmium line, whose scatter in y is intrinsically variable (medians 0.6-1.1 px on "
                 "the n and r arms): a per-detector tolerance failed 5-20 % of Runs 25-28's healthy arcs"
-            )
-        elif entry["metric"] == "robustRmsDeltaY":
-            reason = (
-                "the y scatter of a lamp species, not yet checked against later runs on its own; the x scatter "
-                "is judged"
             )
         elif not entry.get("reliable"):
             floor = 3 if tolerance else 20

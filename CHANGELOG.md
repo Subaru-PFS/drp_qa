@@ -8,6 +8,14 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ## [Unreleased]
 
+### Removed
+
+- **`dmResiduals` and `dmCombinedResiduals`** (PIPE2D-1956) — replaced by `dmLineResiduals`, which measures the same
+  lines against the calibration and the visit's detectorMap without re-selecting or clipping them. Retired after a
+  comparison on Run30's fresh reductions: medians agree to under 0.002 px, robust RMS to a few percent, and the two
+  tasks measure the same RMS on every image `dmLineResiduals` flagged. Their plots (`plotting.dmResiduals`,
+  `plotting.dmCombined`) and `metrics.fitStats` go with them; `dmLineResidualData` is plotted after the fact.
+
 ### Added
 
 - **`dmLineResiduals` stores the frame type, and judges trace scatter on quartz frames** (PIPE2D-1956) —
@@ -20,15 +28,17 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   per detector, species and observation type in the registry. `thresholdsFile` defaults to
   `dmLineResidualThresholds-run25.yaml`, made by `makeLineResidualThresholds.py` from the derivation over
   `u/wtg/qa-thresholds/010`: trace centroids on quartz frames and the Ar, Kr, Ne and Xe lines judged in x per
-  detector, WARN 20 % and FAIL 50 % above the detector's known-good median, 76 of 168 entries. A detector's quartz
+  detector, WARN 20 % and FAIL 50 % above the detector's known-good median, and the lamp lines in y at WARN 50 % and
+  FAIL 150 % (y moves more between runs: Run26's arcs reach 2.4× Run25's medians at worst, Run27's faults 3–70×),
+  136 of 168 entries. A detector's quartz
   trace scatter repeats to about 1 % within a run and differs 20 % between detectors, so a pooled percentile flagged
   regular trace sets 10 % above the reference maximum, and a percentile over one run's arcs does not transfer to the
   next (Run29's flagged 20–70 % of Runs 25–28's healthy arcs); against the per-detector median, Runs 25, 26 and
   28–30 fail at most one standard arc or trace set an image a run and warn on a few percent (b1 and r1 traces at the
   end of Run26, b-arm Xenon arcs), and Run27 fails the SM1 defocus (1.7–4×). The scatter derivation keeps the
   calibration's own input visits (zero against the calibration is the drift's concern). Not judged, with the reason
-  in each entry's provenance: the lamps' y scatter; the mercury and cadmium lines, whose y scatter is intrinsically
-  variable; trace centroids on arcs and twilights; and the sky-line species. A
+  in each entry's provenance: the mercury and cadmium lines, whose y scatter is intrinsically variable; trace
+  centroids on arcs and twilights; and the sky-line species. A
   `known_good` entry takes `metrics`, the metrics it is a reference for, and `excludeMetrics`: Run29's trace sets are
   b2 and n4's image-quality reference but not their scatter one, which Run25 gives like every other camera's.
   `bin.src/judgeScatterThresholds.py` judges comparison mode's exported

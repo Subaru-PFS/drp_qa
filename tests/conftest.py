@@ -31,9 +31,7 @@ import importlib.util
 from pathlib import Path
 
 # Test modules that import the LSST/PFS stack at module scope.
-_STACK_MODULES = [
-    "test_dmResiduals.py",
-]
+_STACK_MODULES: list[str] = []
 
 # Test directories whose conftest.py imports non-stdlib packages.
 _OPTIONAL_DIRS = [
