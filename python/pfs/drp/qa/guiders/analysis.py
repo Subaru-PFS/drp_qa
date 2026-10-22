@@ -129,7 +129,9 @@ def selectValidMatches(agcData: pd.DataFrame) -> np.ndarray:
     `pfs.drp.qa.guiders.queries.readAgcData` returns every match, whatever
     its flags; the fits and averages here use only the valid ones: those
     whose ``agc_match_flags`` (`SourceMatchingFlags`) are ``GOOD_MATCH`` and
-    nothing else. ics_agActor writes 1 (``GOOD_MATCH``) or 0 so far.
+    nothing else. ics_agActor 1.1.78 and later write the full bitmask, so the
+    other rows say why they are not valid; 1.1.67 to 1.1.77 wrote 1 or 0
+    (INSTRM-3038).
 
     Parameters
     ----------
