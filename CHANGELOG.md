@@ -13,8 +13,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **`dmLineResiduals` stores the frame type, and judges trace scatter on quartz frames** (PIPE2D-1956) —
   `dmLineResidualMetrics` and `dmLineResidualSummary` gain `obsType`, the observation type from the raw header's
   `W_SEQTYP` as `imageQualityQa` classifies it (`trace` for a quartz, `arc`, `twilight`, ...; the pfsConfig header
-  stands in, though Run25 and Run26 pfsConfigs lack the card, which left those runs' first judge pass at `unknown`), a population
-  column of the thresholds file: trace centroids scatter two to three times more on an arc's faint continuum than on
+  stands in when the raw's lacks the card: Run25 and Run26 pfsConfigs lack it, which left those runs' first judge
+  pass at `unknown`), a population column of the thresholds file: trace centroids scatter two to three times more on an arc's faint continuum than on
   a quartz, and one population with the quartz traces they failed 14–20 % of Runs 25–27's healthy arcs. The
   line-residual thresholds are derived per observation type as well, and the scatter metrics also get a tolerance
   per detector, species and observation type in the registry. `thresholdsFile` defaults to
@@ -33,7 +33,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   b2 and n4's image-quality reference but not their scatter one, which Run25 gives like every other camera's.
   `bin.src/judgeScatterThresholds.py` judges comparison mode's exported
   scatter with a thresholds file, run by run: the acceptance check an adoption must pass. Comparison mode's scatter
-  table is by observation type, and tables stored before the column take it from `iqQaMetrics`.
+  table is by observation type, and tables stored before the column, or that stored `unknown`, take it from
+  `iqQaMetrics`.
 
 - **Run25's period ends on its last science night, 2025-11-30** (PIPE2D-1956) — the IIS trace sequence of
   2025-12-02 (135903–135904), post-run engineering with no sequence name, is no longer judged as Run25.

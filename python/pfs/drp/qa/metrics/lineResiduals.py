@@ -85,6 +85,7 @@ __all__ = [
     "VISIT",
     "addObsType",
     "cameraSet",
+    "frameType",
     "lineResiduals",
     "lineTable",
     "longResiduals",
@@ -289,6 +290,34 @@ def observationType(header: Any) -> str | None:
             return "twilight"
         return "allsky" if seqName.startswith("sky") else "science"
     return "unknown"
+
+
+def frameType(rawHeader: Any, pfsConfigHeader: Any) -> str | None:
+    """Return the frame's observation type from the raw header, the pfsConfig's standing in.
+
+    The raw header always carries ``W_SEQTYP``; Run25 and Run26 pfsConfigs do
+    not. The pfsConfig's type is used when the raw's is missing or
+    ``unknown`` and the pfsConfig's is known.
+
+    Parameters
+    ----------
+    rawHeader, pfsConfigHeader : mapping or `None`
+        The raw exposure's header and ``PfsConfig.header``.
+
+    Returns
+    -------
+    `str` or `None`
+        As `observationType`: ``unknown`` when neither header says, `None`
+        only when neither header is at hand.
+    """
+    obsType = observationType(rawHeader)
+    if obsType not in (None, "unknown"):
+        return obsType
+    fallback = observationType(pfsConfigHeader)
+    if fallback not in (None, "unknown"):
+        return fallback
+    # Neither says: unknown when either header is at hand, None when neither is.
+    return obsType or fallback
 
 
 def addObsType(metrics: pd.DataFrame, kinds: pd.DataFrame | None) -> pd.DataFrame:

@@ -38,10 +38,10 @@ from pfs.drp.qa.metrics.lineResiduals import (
     UNFITTED,
     VISIT,
     cameraSet,
+    frameType,
     lineResiduals,
     lineTable,
     longResiduals,
-    observationType,
     residualThresholds,
     residualVerdict,
     speciesResiduals,
@@ -345,7 +345,7 @@ class DmLineResidualsTask(PipelineTask):
         lit, _ = litFibers(pfsConfig, np.asarray(detectorMapCalib.fiberId))
         species = speciesResiduals(residuals, self.config.minLines, lit)
         camera = cameraSet(pfsConfig, dataId.get("arm"))
-        obsType = frameType(rawMetadata, pfsConfig)
+        obsType = frameType(rawMetadata, getattr(pfsConfig, "header", None))
         judged, verdict = residualVerdict(
             species, dataId, self.thresholds, self.config.minLines, camera, obsType
         )
@@ -366,20 +366,6 @@ class DmLineResidualsTask(PipelineTask):
             dmLineResidualSummary=pd.DataFrame([summary]),
             dmLineResidualData=lineTable(residuals, dataId, self.config.maxTraceRowsPerFiber),
         )
-
-
-def frameType(rawMetadata: Any, pfsConfig: Any) -> str | None:
-    """Return the frame's observation type from the raw header, or the pfsConfig's when the raw's lacks it.
-
-    Run25 and Run26 pfsConfigs carry no ``W_SEQTYP``; the raw header always does.
-    `None` only when neither header is at hand.
-    """
-    obsType = observationType(rawMetadata)
-    if obsType in (None, "unknown"):
-        fallback = observationType(getattr(pfsConfig, "header", None))
-        if fallback not in (None, "unknown"):
-            return fallback
-    return obsType
 
 
 def _describe(species: pd.DataFrame) -> str:
