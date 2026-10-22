@@ -26,6 +26,7 @@ from pfs.drp.qa.metrics.lineResiduals import (
     VISIT,
     addObsType,
     cameraSet,
+    frameType,
     lineResiduals,
     lineTable,
     longResiduals,
@@ -367,6 +368,27 @@ def testObservationType(header, expected):
     assert observationType(None if header is None else Header(header)) == expected
     # Negative control: a quartz is never read as an arc, whatever its sequence name says.
     assert observationType(Header({"W_SEQTYP": "scienceTrace", "W_SEQNAM": "Arc: Neon"})) != "arc"
+
+
+@pytest.mark.parametrize(
+    "raw, config, expected",
+    [
+        ({"W_SEQTYP": "scienceTrace"}, {}, QUARTZ),  # a Run25/26 pfsConfig lacks the card
+        ({}, {"W_SEQTYP": "scienceArc"}, "arc"),  # the pfsConfig stands in for a raw without it
+        (None, {"W_SEQTYP": "scienceArc"}, "arc"),
+        ({"W_SEQTYP": "ditheredFlats"}, {"W_SEQTYP": "scienceArc"}, "arc"),
+        ({}, {}, "unknown"),
+        (None, {}, "unknown"),
+        ({}, None, "unknown"),
+        (None, None, None),
+    ],
+)
+def testFrameTypeReadsTheRawFirst(raw, config, expected):
+    """The raw header's type, the pfsConfig's when the raw's is missing or unknown."""
+    assert frameType(*(None if header is None else Header(header) for header in (raw, config))) == expected
+    # Negative control: when both say, the raw wins over the pfsConfig.
+    both = frameType(Header({"W_SEQTYP": "scienceArc"}), Header({"W_SEQTYP": "scienceTrace"}))
+    assert both == "arc" and both != QUARTZ
 
 
 def testTraceScatterIsJudgedPerFrame():

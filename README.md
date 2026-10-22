@@ -92,8 +92,8 @@ frame. The lines are those the visit's detectorMap fit marked `DETECTORMAP_USED`
 `BAD` ones, with no other selection or clipping; trace centroids are kept on arcs. When the fit marked none, every
 good line is measured, as `UNFITTED`. Trace centroids measure x, lamp lines x and y, measured minus reference.
 Each row carries the frame's observation type (`obsType`, from the raw header's `W_SEQTYP` as `imageQualityQa`
-classifies it, the pfsConfig header standing in when the raw's lacks the card; the Run25 and Run26 pfsConfigs lack it
-themselves, so the raw's is read first: `trace` for a quartz, `arc`, `twilight`, ...): trace centroids are measured on every frame, but on an
+classifies it: `trace` for a quartz, `arc`, `twilight`, ...; the pfsConfig header stands in when the raw's lacks the
+card): trace centroids are measured on every frame, but on an
 arc's faint continuum they scatter two to three times more than on a quartz, so they are a population per frame type.
 
 Per reference, line species and line set (`statusType`: `BOTH`, `USED`, `RESERVED`, or `UNFITTED`): the median and
@@ -641,7 +641,7 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
   `imageQualityQa`, and the report's *Line residuals* section has its verdicts per detector and night, the
   recommended actions by arm, its problems and findings (the reference, species and metric of each crossing), and the
   scatter of the lines the fit held back, by arm, observation type and species, beside the reference run's: what a
-  scatter threshold is derived from. Tables stored before `obsType` was a column take it from `iqQaMetrics`. `dmLineResidualSummary-<period>.parquet`, `dmLineResidualMetrics-<period>.parquet` and
+  scatter threshold is derived from. Tables stored before `obsType` was a column, or that stored `unknown`, take it from `iqQaMetrics`. `dmLineResidualSummary-<period>.parquet`, `dmLineResidualMetrics-<period>.parquet` and
   `lineResidualFindings-<period>.csv` are written beside the report. A collection judged before the task joined the
   pipeline has none, and the section says so.
 
@@ -702,7 +702,8 @@ Comparison mode; see [Comparison mode](#comparison-mode).
 
 The acceptance check for adopting line-scatter thresholds (PIPE2D-1956): judges the reserved-line scatter that
 comparison mode exported for each run (`dmLineResidualMetrics-<period>.parquet` beside the report, with
-`iqQaMetrics-<period>.parquet` for the observation type of tables stored before `obsType` was a column) with a
+`iqQaMetrics-<period>.parquet` for the observation type of tables stored before `obsType` was a column, or that
+stored `unknown`) with a
 thresholds file, and prints WARN and FAIL counts per run, arm, observation type and species. Thresholds that fail a
 run's healthy frames in bulk describe the reference visits' night, not the instrument. Stack-free.
 
