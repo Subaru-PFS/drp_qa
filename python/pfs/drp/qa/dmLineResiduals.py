@@ -38,10 +38,10 @@ from pfs.drp.qa.metrics.lineResiduals import (
     UNFITTED,
     VISIT,
     cameraSet,
+    frameType,
     lineResiduals,
     lineTable,
     longResiduals,
-    observationType,
     residualThresholds,
     residualVerdict,
     speciesResiduals,
@@ -71,6 +71,17 @@ class DmLineResidualsConnections(
         dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
 
+    rawMetadata = InputConnection(
+        name="raw.metadata",
+        doc=(
+            "The raw exposure's header: the frame's observation type (obsType) from W_SEQTYP and W_SEQNAM."
+            " The pfsConfig header stands in when the raw's lacks them; Run25 and Run26 pfsConfigs carry"
+            " neither, so the raw's is read first."
+        ),
+        storageClass="PropertyList",
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
+    )
+
     detectorMapCalib = PrerequisiteConnection(
         name="detectorMap_calib",
         doc="The calibration detectorMap the visit is reduced against: the ``calib`` reference.",
@@ -84,8 +95,8 @@ class DmLineResidualsConnections(
     pfsConfig = PrerequisiteConnection(
         name="pfsConfig",
         doc=(
-            "Fiber configuration: the lit fibers (linesPerFiber), the arms read (cameraSet) and the frame's"
-            " observation type (obsType, from its header's W_SEQTYP)."
+            "Fiber configuration: the lit fibers (linesPerFiber), the arms read (cameraSet) and, when the raw"
+            " header lacks it, the frame's observation type (obsType, from its header's W_SEQTYP)."
         ),
         storageClass="PfsConfig",
         dimensions=("instrument", "visit"),
@@ -97,8 +108,8 @@ class DmLineResidualsConnections(
         doc=(
             "Line residuals in long format, one row per reference, line species, line set and metric:"
             " ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``obsType`` (the frame's observation type"
-            " as imageQualityQa classifies it: ``trace`` for a quartz, ``arc``, ``twilight``, ...; null"
-            " without a pfsConfig), ``reference`` (``calib``:"
+            " as imageQualityQa classifies it, from the raw or the pfsConfig header: ``trace`` for a quartz,"
+            " ``arc``, ``twilight``, ...; ``unknown`` when neither header says), ``reference`` (``calib``:"
             " detectorMap_calib; ``visit``: the visit's adjusted detectorMap), ``description``,"
             " ``statusType`` (``BOTH``, ``USED``, ``RESERVED`` lines of the visit's detectorMap fit, or"
             " ``UNFITTED``, every good line, when the fit marked none), ``metric`` (``nLines``,"
@@ -131,7 +142,7 @@ class DmLineResidualsConnections(
     dmLineResidualData = OutputConnection(
         name="dmLineResidualData",
         doc=(
-            "One row per line measured (USED trace rows sampled: maxTraceRowsPerFiber), for plots drawn"
+            "One row per line measured (USED and RESERVED trace rows sampled: maxTraceRowsPerFiber), for plots drawn"
             " later (pfs.drp.qa.plotting): ``visit``, ``arm``,"
             " ``spectrograph``, ``fiberId``, ``wavelength``, ``x``, ``y``, ``xErr``, ``yErr``,"
             " ``description``, ``statusType``, and the residual against each reference, measured minus"
@@ -163,9 +174,10 @@ class DmLineResidualsConfig(PipelineTaskConfig, pipelineConnections=DmLineResidu
         dtype=int,
         default=100,
         doc=(
-            "Most USED trace rows per fiber stored in dmLineResidualData, evenly spaced in y; 0 for all."
-            " Lamp lines and RESERVED lines are always stored, and the statistics use every line: a fit can"
-            " keep millions of trace rows (twilight b3/b4 kept about 2 million)."
+            "Most USED, and most RESERVED, trace rows per fiber stored in dmLineResidualData, evenly spaced"
+            " in y; 0 for all. Lamp and sky lines and UNFITTED rows are always stored, and the statistics use"
+            " every line: a fit can keep millions of trace rows (twilight b3/b4 kept about 2 million), and"
+            " RESERVED trace rows were ~80% of a quartz or twilight visit's table before they were sampled."
         ),
     )
     thresholdsFile = Field(
@@ -299,6 +311,7 @@ class DmLineResidualsTask(PipelineTask):
         detectorMapCalib: DetectorMap,
         dataId: dict,
         pfsConfig: PfsConfig | None = None,
+        rawMetadata: Any = None,
     ) -> Struct:
         """Measure and judge the line residuals of one detector.
 
@@ -314,6 +327,8 @@ class DmLineResidualsTask(PipelineTask):
             ``visit``, ``arm``, ``spectrograph``.
         pfsConfig : `PfsConfig`, optional
             Fiber configuration of the visit.
+        rawMetadata : `lsst.daf.base.PropertyList`, optional
+            The raw exposure's header, for the observation type.
 
         Returns
         -------
@@ -330,7 +345,7 @@ class DmLineResidualsTask(PipelineTask):
         lit, _ = litFibers(pfsConfig, np.asarray(detectorMapCalib.fiberId))
         species = speciesResiduals(residuals, self.config.minLines, lit)
         camera = cameraSet(pfsConfig, dataId.get("arm"))
-        obsType = observationType(getattr(pfsConfig, "header", None))
+        obsType = frameType(rawMetadata, getattr(pfsConfig, "header", None))
         judged, verdict = residualVerdict(
             species, dataId, self.thresholds, self.config.minLines, camera, obsType
         )

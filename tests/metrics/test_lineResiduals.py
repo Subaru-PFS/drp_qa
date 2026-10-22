@@ -26,6 +26,7 @@ from pfs.drp.qa.metrics.lineResiduals import (
     VISIT,
     addObsType,
     cameraSet,
+    frameType,
     lineResiduals,
     lineTable,
     longResiduals,
@@ -367,6 +368,27 @@ def testObservationType(header, expected):
     assert observationType(None if header is None else Header(header)) == expected
     # Negative control: a quartz is never read as an arc, whatever its sequence name says.
     assert observationType(Header({"W_SEQTYP": "scienceTrace", "W_SEQNAM": "Arc: Neon"})) != "arc"
+
+
+@pytest.mark.parametrize(
+    "raw, config, expected",
+    [
+        ({"W_SEQTYP": "scienceTrace"}, {}, QUARTZ),  # a Run25/26 pfsConfig lacks the card
+        ({}, {"W_SEQTYP": "scienceArc"}, "arc"),  # the pfsConfig stands in for a raw without it
+        (None, {"W_SEQTYP": "scienceArc"}, "arc"),
+        ({"W_SEQTYP": "ditheredFlats"}, {"W_SEQTYP": "scienceArc"}, "arc"),
+        ({}, {}, "unknown"),
+        (None, {}, "unknown"),
+        ({}, None, "unknown"),
+        (None, None, None),
+    ],
+)
+def testFrameTypeReadsTheRawFirst(raw, config, expected):
+    """The raw header's type, the pfsConfig's when the raw's is missing or unknown."""
+    assert frameType(*(None if header is None else Header(header) for header in (raw, config))) == expected
+    # Negative control: when both say, the raw wins over the pfsConfig.
+    both = frameType(Header({"W_SEQTYP": "scienceArc"}), Header({"W_SEQTYP": "scienceTrace"}))
+    assert both == "arc" and both != QUARTZ
 
 
 def testTraceScatterIsJudgedPerFrame():
@@ -753,24 +775,28 @@ def testLineTable():
     assert empty.empty and list(empty.columns) == list(LINE_COLUMNS)
 
 
-def testLineTableSamplesUsedTraces():
+def testLineTableSamplesTraces():
     calib = FakeCalib()
     lines, marked = withReserved(makeLines(calib, traceRows=200))
     offsets = residuals(lines, calib)
     table = lineTable(offsets, DATA_ID, maxTraceRowsPerFiber=10)
-    usedTraces = table[(table["description"] == TRACE) & (table["statusType"] == USED)]
-    assert usedTraces.groupby("fiberId").size().max() <= 10
-    assert usedTraces.groupby("fiberId").size().min() >= 9
-    # Spread over the detector, not the first rows: the lowest and highest y of each fiber are kept.
-    first = offsets[(offsets["description"] == TRACE) & (offsets["statusType"] == USED)]
-    assert set(usedTraces.groupby("fiberId")["y"].max()) == set(first.groupby("fiberId")["y"].max())
-    assert set(usedTraces.groupby("fiberId")["y"].min()) == set(first.groupby("fiberId")["y"].min())
-    # Lamp lines and RESERVED lines are all kept.
-    assert (table["statusType"] == RESERVED).sum() == marked.sum()
-    assert (table["description"] == "NeI").sum() == (lines["description"] == "NeI").sum()
-    # Negative control: with no limit, every USED trace row is stored.
+    isTrace = (offsets["description"] == TRACE).to_numpy()
+    # Every fifth line is RESERVED: 40 trace rows per fiber, above the limit like the USED ones.
+    for statusType in (USED, RESERVED):
+        stored = table[(table["description"] == TRACE) & (table["statusType"] == statusType)]
+        assert (stored.groupby("fiberId").size() == 10).all()
+        # Spread over the detector, not the first rows: the lowest and highest y of each fiber are kept.
+        first = offsets[isTrace & (offsets["statusType"] == statusType).to_numpy()]
+        assert set(stored.groupby("fiberId")["y"].max()) == set(first.groupby("fiberId")["y"].max())
+        assert set(stored.groupby("fiberId")["y"].min()) == set(first.groupby("fiberId")["y"].min())
+    # Lamp lines, RESERVED ones included, are all kept.
+    lamp = table[table["description"] == "NeI"]
+    assert len(lamp) == (lines["description"] == "NeI").sum()
+    assert (lamp["statusType"] == RESERVED).sum() == (marked & ~isTrace).sum()
+    # Negative control: with no limit, every trace row is stored, RESERVED ones included.
     whole = lineTable(offsets, DATA_ID)
     assert len(whole) == len(offsets) > len(table)
+    assert (whole["statusType"] == RESERVED).sum() == marked.sum() > (table["statusType"] == RESERVED).sum()
     # The statistics do not depend on it: speciesResiduals reads lineResiduals, not the table.
     assert both(speciesResiduals(offsets, 10)).loc[TRACE, "nLines"] == (lines["description"] == TRACE).sum()
 
@@ -778,13 +804,18 @@ def testLineTableSamplesUsedTraces():
 @pytest.mark.parametrize("limit", [1, 2, 7])
 def testLineTableSamplingNeverExceedsTheLimit(limit):
     calib = FakeCalib(numFibers=3)
-    offsets = residuals(makeLines(calib, traceRows=50, lampLines=0), calib)
+    lines, _ = withReserved(makeLines(calib, traceRows=50, lampLines=0))
+    offsets = residuals(lines, calib)
     table = lineTable(offsets, DATA_ID, maxTraceRowsPerFiber=limit)
-    perFiber = table.groupby("fiberId").size()
-    assert (perFiber == limit).all()
+    # Both status types have more rows per fiber than any limit: each keeps exactly the limit.
+    assert (offsets.groupby(["fiberId", "statusType"]).size() > max(limit, 7)).all()
+    perGroup = table.groupby(["fiberId", "statusType"]).size()
+    assert set(perGroup.index.get_level_values("statusType")) == {USED, RESERVED}
+    assert (perGroup == limit).all()
     if limit == 1:
         # As np.linspace(0, n - 1, 1): the lowest row only.
-        assert (table.groupby("fiberId")["y"].min() == offsets["y"].min()).all()
+        lowest = offsets.groupby(["fiberId", "statusType"])["y"].min()
+        assert table.groupby(["fiberId", "statusType"])["y"].min().equals(lowest)
 
 
 def testVisitVerdictStandsWhenTheCalibrationMeasuresNothing():
@@ -905,6 +936,11 @@ def testWideResiduals():
     )
     assert partial["obsType"].iloc[0] == "trace" and (partial["obsType"].iloc[1:] == "arc").all()
     assert addObsType(older, None) is older
+    # A task whose header lacked W_SEQTYP stored "unknown": as good as missing.
+    unknown = addObsType(metrics.assign(obsType="unknown"), kinds.assign(obsType="trace"))
+    assert (unknown["obsType"] == "trace").all()
+    # Negative control: without kinds "unknown" stays, so a thresholds entry naming a frame type never matches.
+    assert (addObsType(metrics.assign(obsType="unknown"), None)["obsType"] == "unknown").all()
 
 
 def _driftFixture() -> pd.DataFrame:
