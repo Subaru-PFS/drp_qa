@@ -559,7 +559,7 @@ verdict is known. The decisions behind the current set:
   apart; its findings are in `docs/qa-domain-notes.md`. `dmResiduals` runs beside it through Run31 for comparison.
 - **b-arm populations are not split by camera set** (PIPE2D-1927). The camera set (`cameraSet`, the arms a visit
   read) is stored with `dmLineResiduals`' rows and is a population column of the scatter thresholds, but its one effect
-  is the b arm's offset from `detectorMap_calib` when read with m (+0.45 to +0.52 px in Run25), which
+  is the b arm's offset from `detectorMap_calib` when read with m (−0.45 to −0.47 px in Runs 25 and 28–30), which
   `medianDeltaX` measures and the 1 px drift WARN absorbs. The b-arm trace scatter does not depend on it (0.047 px read
   with m, 0.0465 px with n and r), so the per-detector scatter tolerances are not split by it. `iqQaMetrics`'
   `medDxCenter` is superseded by `dmLineResiduals`' `medianDeltaX`.

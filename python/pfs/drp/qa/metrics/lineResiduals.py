@@ -226,8 +226,8 @@ def robustRms(values: Any) -> float:
 def cameraSet(pfsConfig: Any, arm: str | None = None) -> str | None:
     """Return the arms a visit read, e.g. ``"brn"``, ``"bmn"``, ``"br"`` or ``"bm"``.
 
-    b-arm offsets from the calibration depend on it: in Run25 the b cameras sit
-    +0.45 to +0.52 px from ``detectorMap_calib`` when read with m, and about 0
+    b-arm offsets from the calibration depend on it: in Runs 25 and 28–30 the b cameras sit
+    −0.45 to −0.47 px from ``detectorMap_calib`` when read with m, and about 0
     with r (PIPE2D-1927). It is a population column, nothing more.
 
     Parameters
