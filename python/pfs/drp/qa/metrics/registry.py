@@ -216,7 +216,7 @@ METRIC_SPECS = {
         # best one's cluster. In x the regular trace sets and arcs of Runs 25-30 sit within
         # +12 % of Run25's per-detector median (+24 % at the end of Run26 on b1), the Run27 SM1
         # defocus at 1.7-4x: WARN 20 %, FAIL 50 %. In y the lamp lines move more between runs
-        # (Run26's p95 at 1.37x, its worst 2.4x; Run27's faults 3-70x): WARN 50 %, FAIL 150 %.
+        # (healthy runs' p95 at 1.37x, Run26's worst 2.4x; Run27's faults 3-70x): WARN 50 %, FAIL 150 %.
         *(
             MetricSpec(
                 name,

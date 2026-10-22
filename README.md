@@ -78,7 +78,8 @@ See [documentation](https://pipelines.lsst.io/modules/lsst.pipe.base/creating-a-
 
 Also see the example notebook [`examples/QA Pipelines.ipynb`](examples/QA%20Pipelines.ipynb).
 
-`drpQA.yaml` currently wires up `dmLineResiduals`, `extractionQa`, `extractionQaCombined`, and `imageQualityQa`. The remaining tasks below are implemented and importable
+`drpQA.yaml` currently wires up `dmLineResiduals`, `extractionQa`, `extractionQaCombined`, and `imageQualityQa`. The
+remaining tasks below are implemented and importable
 but are not registered in the pipeline; run them by referencing their task class directly.
 
 ### Tasks
@@ -517,9 +518,9 @@ verdict is known. The decisions behind the current set:
   intrinsically variable; trace centroids on arcs and twilights, which scatter two to
   three times more on the faint continuum; and the twilights' sky species. `bin.src/judgeScatterThresholds.py` is
   the acceptance check, run on the comparison exports of Runs 25–30 before any adoption, engineering sequences set
-  apart; its findings are in `docs/qa-domain-notes.md`. `dmResiduals`, which it replaced, was retired on 2026-10-22 after a comparison on Run30's fresh
-  reductions: medians agree to under 0.002 px and robust RMS to a few percent (`dmResiduals` clipped), and the two
-  tasks measure the same RMS on every image `dmLineResiduals` flagged.
+  apart; its findings are in `docs/qa-domain-notes.md`. `dmResiduals`, which it replaced, was retired on 2026-10-22
+  after a comparison on Run30's fresh reductions: medians agree to under 0.002 px and robust RMS to 5–14 %
+  (`dmResiduals` clipped), and the two tasks measure the same RMS on every image `dmLineResiduals` flagged.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
 - **Thresholds hold for the pipeline that reduced their visits** (PIPE2D-1938). Two reductions of the same Run25

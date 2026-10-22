@@ -42,7 +42,7 @@ without re-running the pipeline over the pixels, which is what makes R2 practica
 
 Before adding a metric, look in `dmLineResidualMetrics` and `iqQaMetrics` for a column that
 measures the same thing. `dmLineResiduals` already gives the median and robust RMS of every
-species against both references, and `iqQaSpeciesMetrics` drp_stella's weighted RMS and
+species against both references, and `iqQaSpeciesMetrics` carries drp_stella's weighted RMS and
 softening; a reimplementation is a regression, not an addition.
 
 ### R5 — Robust statistics only

@@ -22,7 +22,7 @@ matplotlib.use("Agg")
 
 
 def makeArcData(numFibers: int = 8, numLines: int = 6, seed: int = 1) -> pd.DataFrame:
-    """Make a synthetic ``dmQaResidualData`` frame for one detector, b1.
+    """Make a synthetic per-line residual frame for one detector, b1, for `scatterplot_with_outliers`.
 
     Parameters
     ----------

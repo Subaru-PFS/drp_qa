@@ -1025,7 +1025,7 @@ def testShippedScatterFileIsTheAdopted():
     )
     assert all("faint" in e["provenance"] and e["method"] == "percentile" for e in reasons["arcTraces"])
     # Negative control: the derivation gave the arc-frame traces reliable percentile thresholds, the pooled
-    # quartz traces a FAIL and the HgCd lines reliable tolerances; withholding them is the adoption's rule.
+    # quartz traces a FAIL and the HgCd lines 40 reliable tolerances; withholding them is the adoption's rule.
     percentile = {
         (
             e["population"]["arm"],
@@ -1044,7 +1044,7 @@ def testShippedScatterFileIsTheAdopted():
         for e in derivedDocument["thresholds"]
         if e["method"] == "tolerance" and e["population"]["description"] in module.HGCD_SPECIES
     ]
-    assert sum(e["reliable"] for e in hgcd) >= 10
+    assert sum(e["reliable"] for e in hgcd) == 40
 
 
 def testShippedScatterVerdicts():

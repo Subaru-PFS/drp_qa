@@ -76,8 +76,8 @@ the pipeline/config glue to run them.
 - **Plotting (`python/pfs/drp/qa/plotting/`)** — the QA plots: DataFrames in, figures
   out (`iqQa`, `comparison`, `thresholds`, and `palettes` for the shared
   palettes and `scatterplot_with_outliers`). It imports no Butler, stack or task module, so plots can
-  be drawn from stored data; `tests/plotting/test_imports.py` enforces this. The task
-  modules, `iqQaPlots` and `utils.plotting` re-export the names they used to define.
+  be drawn from stored data; `tests/plotting/test_imports.py` enforces this. `iqQaPlots`
+  and `utils.plotting` re-export the names they used to define.
 - **Metrics (`python/pfs/drp/qa/metrics/`)** — the stack-free measurement and verdict of
   `dmLineResiduals` (`lineResiduals`), and the threshold
   machinery: `validationVisits` loads `data/validationVisits.yaml` (package data; visits
@@ -305,8 +305,8 @@ Tasks are scoped by their `dimensions`:
 
 - Per-detector: `("instrument", "visit", "arm", "spectrograph")`
 - Per-visit: `("instrument", "visit")`
-- Combined/aggregate: `("instrument",)` — these use `multiple=True` inputs to consume
-  outputs from per-detector tasks
+- Combined/aggregate: `("instrument", "visit", "arm")` (`extractionQaCombined`) — these use
+  `multiple=True` inputs to consume outputs from per-detector tasks
 
 ### Pipeline YAML
 
