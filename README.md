@@ -92,8 +92,9 @@ to these lines, whose `RESERVED` lines test how well it predicts lines it was no
 frame. The lines are those the visit's detectorMap fit marked `DETECTORMAP_USED` or `DETECTORMAP_RESERVED`, less
 `BAD` ones, with no other selection or clipping; trace centroids are kept on arcs. When the fit marked none, every
 good line is measured, as `UNFITTED`. Trace centroids measure x, lamp lines x and y, measured minus reference.
-Each row carries the frame's observation type (`obsType`, from the pfsConfig header's `W_SEQTYP` as `imageQualityQa`
-classifies it: `trace` for a quartz, `arc`, `twilight`, ...): trace centroids are measured on every frame, but on an
+Each row carries the frame's observation type (`obsType`, from the raw header's `W_SEQTYP` as `imageQualityQa`
+classifies it, the pfsConfig header standing in when the raw's lacks the card; the Run25 and Run26 pfsConfigs lack it
+themselves, so the raw's is read first: `trace` for a quartz, `arc`, `twilight`, ...): trace centroids are measured on every frame, but on an
 arc's faint continuum they scatter two to three times more than on a quartz, so they are a population per frame type.
 
 Per reference, line species and line set (`statusType`: `BOTH`, `USED`, `RESERVED`, or `UNFITTED`): the median and

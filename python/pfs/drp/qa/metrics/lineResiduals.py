@@ -292,10 +292,12 @@ def observationType(header: Any) -> str | None:
 
 
 def addObsType(metrics: pd.DataFrame, kinds: pd.DataFrame | None) -> pd.DataFrame:
-    """Return ``metrics`` with ``obsType`` filled from ``kinds`` where it is missing or null.
+    """Return ``metrics`` with ``obsType`` filled from ``kinds`` where it is missing, null or ``unknown``.
 
-    Tables stored before ``obsType`` was a column (PIPE2D-1956) have it from
-    ``iqQaMetrics``, which classifies the same header.
+    Tables stored before ``obsType`` was a column (PIPE2D-1956), or by a task
+    whose header lacked ``W_SEQTYP`` (Run25 and Run26 pfsConfigs, before the
+    raw header was read), have it from ``iqQaMetrics``, which classifies the
+    same frame from the calexp's header.
 
     Parameters
     ----------
@@ -312,7 +314,8 @@ def addObsType(metrics: pd.DataFrame, kinds: pd.DataFrame | None) -> pd.DataFram
     merged = metrics.merge(lookup, on=keys, how="left")
     merged.index = metrics.index
     if "obsType" in merged.columns:
-        merged["obsType"] = merged["obsType"].where(merged["obsType"].notna(), merged["_obsType"])
+        known = merged["obsType"].notna() & (merged["obsType"] != "unknown")
+        merged["obsType"] = merged["obsType"].where(known, merged["_obsType"])
     else:
         merged["obsType"] = merged["_obsType"]
     return merged.drop(columns="_obsType")

@@ -11,8 +11,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 ### Added
 
 - **`dmLineResiduals` stores the frame type, and judges trace scatter on quartz frames** (PIPE2D-1956) —
-  `dmLineResidualMetrics` and `dmLineResidualSummary` gain `obsType`, the observation type from the pfsConfig
-  header's `W_SEQTYP` as `imageQualityQa` classifies it (`trace` for a quartz, `arc`, `twilight`, ...), a population
+  `dmLineResidualMetrics` and `dmLineResidualSummary` gain `obsType`, the observation type from the raw header's
+  `W_SEQTYP` as `imageQualityQa` classifies it (`trace` for a quartz, `arc`, `twilight`, ...; the pfsConfig header
+  stands in, though Run25 and Run26 pfsConfigs lack the card, which left those runs' first judge pass at `unknown`), a population
   column of the thresholds file: trace centroids scatter two to three times more on an arc's faint continuum than on
   a quartz, and one population with the quartz traces they failed 14–20 % of Runs 25–27's healthy arcs. The
   line-residual thresholds are derived per observation type as well, and the scatter metrics also get a tolerance
