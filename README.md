@@ -721,6 +721,27 @@ the pipeline writes (not the comparison driver, its report, tests or docs), so a
 collection; uncommitted changes to the rest are refused. Report the reference
 (`--period run25`) first: its stored metrics are what each other run is compared with.
 
+## QA dashboard (prototype)
+
+`pfs.drp.qa.dashboard` (PIPE2D-1924) serves QA results in a browser without a Butler in the request path: a post-run
+export writes one Tier 1 Parquet file, and a Panel app reads it with DuckDB. Stack-free; the app needs panel,
+holoviews, datashader and duckdb, which are not package dependencies.
+
+```bash
+# Per-detector tables from each collection, where the Butler is (repeat per collection)
+python bin.src/exportMetrics.py -c <collection> -t iqQaMetrics dmLineResidualSummary dmLineResidualMetrics \
+    --visits 0 999999 -o <dir>
+# One Tier 1 file from one or more collections, with the opdb listing and notes if read
+python bin.src/exportDashboardTier1.py -c <collection> [<collection> ...] -d <dir> [<dir> ...] \
+    [--visit-times <listing.parquet> ...] [--notes <notes.parquet> ...] -o tier1.parquet
+# Serve it; --detail-dir/<visit>/ may hold fetched PDFs and dmLineResidualData
+python bin.src/qaDashboard.py tier1.parquet [--detail-dir <dir>] [--start-visit <visit>] \
+    [--address 0.0.0.0 --allow-origin '*']
+```
+
+The opdb listing and notes are `comparison.queries`' readers restricted to the file's visits. The page itself reads
+no database: the live feed is meant to come from qadb once PIPE2D-1385's tables exist.
+
 ## Command-line tools
 
 Scripts live in `bin.src/` and are run directly — there is no SCons step to copy them into a `bin/` directory on `PATH`:
