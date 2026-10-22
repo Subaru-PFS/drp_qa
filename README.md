@@ -683,7 +683,7 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
 - **Line residuals are judged beside the gate** (PIPE2D-1956). `dmLineResiduals` runs in the same passes as
   `imageQualityQa`, and the report's *Line residuals* section has its verdicts per detector and night, the
   recommended actions by arm, its problems and findings (the reference, species and metric of each crossing), and the
-  scatter of the lines the fit held back, by arm, camera set, observation type and species, beside the reference run's: what a
+  scatter of the lines the fit held back, by arm, observation type and species (the b arm split by whether it was read with m or with r), beside the reference run's: what a
   scatter threshold is derived from. Tables stored before `obsType` was a column, or that stored `unknown`, take it from `iqQaMetrics`. `dmLineResidualSummary-<period>.parquet`, `dmLineResidualMetrics-<period>.parquet` and
   `lineResidualFindings-<period>.csv` are written beside the report. A collection judged before the task joined the
   pipeline has none, and the section says so.

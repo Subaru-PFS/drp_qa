@@ -828,9 +828,15 @@ def _residualSection(inputs: ReportInputs, judgedImages: pd.DataFrame) -> list[s
             labels=(inputs.period, inputs.referenceName or "reference"),
         )
         if not table.empty:
+            by = [
+                "arm",
+                *(["the camera b was read with"] if "bReadWith" in table else []),
+                *(["observation type"] if "obsType" in table else []),
+            ]
             parts.append(
                 _details(
-                    "Scatter of the lines held back, against the visit's detectorMap, by arm, camera set and species (px)",
+                    "Scatter of the lines held back, against the visit's detectorMap, "
+                    f"by {', '.join(by)} and species (px)",
                     _table(table),
                 )
             )
