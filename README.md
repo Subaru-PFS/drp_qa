@@ -557,6 +557,12 @@ verdict is known. The decisions behind the current set:
   three times more on the faint continuum; and the twilights' sky species. `bin.src/judgeScatterThresholds.py` is
   the acceptance check, run on the comparison exports of Runs 25–30 before any adoption, engineering sequences set
   apart; its findings are in `docs/qa-domain-notes.md`. `dmResiduals` runs beside it through Run31 for comparison.
+- **b-arm populations are not split by camera set** (PIPE2D-1927). The camera set (`cameraSet`, the arms a visit
+  read) is stored with `dmLineResiduals`' rows and is a population column of the scatter thresholds, but its one effect
+  is the b arm's offset from `detectorMap_calib` when read with m (+0.45 to +0.52 px in Run25), which
+  `medianDeltaX` measures and the 1 px drift WARN absorbs. The b-arm trace scatter does not depend on it (0.047 px read
+  with m, 0.0465 px with n and r), so the per-detector scatter tolerances are not split by it. `iqQaMetrics`'
+  `medDxCenter` is superseded by `dmLineResiduals`' `medianDeltaX`.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
 - **Thresholds hold for the pipeline that reduced their visits** (PIPE2D-1938). Two reductions of the same Run25
@@ -677,7 +683,7 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
 - **Line residuals are judged beside the gate** (PIPE2D-1956). `dmLineResiduals` runs in the same passes as
   `imageQualityQa`, and the report's *Line residuals* section has its verdicts per detector and night, the
   recommended actions by arm, its problems and findings (the reference, species and metric of each crossing), and the
-  scatter of the lines the fit held back, by arm, observation type and species, beside the reference run's: what a
+  scatter of the lines the fit held back, by arm, camera set, observation type and species, beside the reference run's: what a
   scatter threshold is derived from. Tables stored before `obsType` was a column, or that stored `unknown`, take it from `iqQaMetrics`. `dmLineResidualSummary-<period>.parquet`, `dmLineResidualMetrics-<period>.parquet` and
   `lineResidualFindings-<period>.csv` are written beside the report. A collection judged before the task joined the
   pipeline has none, and the section says so.

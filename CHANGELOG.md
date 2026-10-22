@@ -10,6 +10,12 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Comparison mode's scatter table is by camera set** (PIPE2D-1927) — the scatter of the lines held back is
+  grouped by `cameraSet` as well, so each run's report shows the b arm read with m beside the b arm read with r. The
+  gate does not split b-arm populations by camera set: the b-arm trace scatter does not depend on it, and its one
+  effect, the b arm's offset from `detectorMap_calib` when read with m, is `dmLineResiduals`' `medianDeltaX`, which
+  supersedes `iqQaMetrics`' `medDxCenter`.
+
 - **`dmLineResiduals` stores the frame type, and judges trace scatter on quartz frames** (PIPE2D-1956) —
   `dmLineResidualMetrics` and `dmLineResidualSummary` gain `obsType`, the observation type from the raw header's
   `W_SEQTYP` as `imageQualityQa` classifies it (`trace` for a quartz, `arc`, `twilight`, ...; the pfsConfig header

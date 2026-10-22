@@ -131,3 +131,16 @@ def testScatterTable():
     ]
     pooled = scatterTable(traces, reference, labels=("run2", "run1"))
     assert "obsType" not in pooled.columns and list(pooled["images run2"]) == [3]
+    # The b arm read with m and with r are separate rows (PIPE2D-1927), each beside the reference's
+    # of the same camera set; a set the reference never read has no reference values.
+    traces = traces.drop(columns="obsType").assign(cameraSet=["bm", "br", "br"])
+    traceReference = _metrics([(7, "b", 1, "visit", "Trace", "RESERVED", "robustRmsDeltaX", 0.05, "")])
+    bySet = scatterTable(traces, traceReference, labels=("run2", "run1"))
+    assert list(bySet[["arm", "cameraSet", "images run2", "median run1"]].itertuples(index=False, name=None))[
+        1
+    ] == ("b", "br", 2, 0.05)
+    assert bySet.iloc[0][["cameraSet", "images run2"]].tolist() == ["bm", 1]
+    assert pd.isna(bySet.iloc[0]["median run1"])
+    # Negative control: a reference without the column keeps the table pooled over camera sets.
+    unsplit = scatterTable(traces, traceReference.drop(columns="cameraSet"), labels=("run2", "run1"))
+    assert "cameraSet" not in unsplit.columns and list(unsplit["images run2"]) == [3]

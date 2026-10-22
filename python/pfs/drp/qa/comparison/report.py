@@ -830,7 +830,7 @@ def _residualSection(inputs: ReportInputs, judgedImages: pd.DataFrame) -> list[s
         if not table.empty:
             parts.append(
                 _details(
-                    "Scatter of the lines held back, against the visit's detectorMap, by arm and species (px)",
+                    "Scatter of the lines held back, against the visit's detectorMap, by arm, camera set and species (px)",
                     _table(table),
                 )
             )

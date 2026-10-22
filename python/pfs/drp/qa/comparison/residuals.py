@@ -154,10 +154,11 @@ def scatterTable(
     reference: pd.DataFrame | None = None,
     labels: tuple[str, str] = ("run", "reference"),
 ) -> pd.DataFrame:
-    """Summarize the scatter the adjusted map leaves, by arm and species, beside a reference run's.
+    """Summarize the scatter the adjusted map leaves, by arm, camera set and species, beside a reference run's.
 
     The robust RMS of ``RESERVED`` lines against the visit's ``detectorMap``:
-    what a threshold on it would be derived from (PIPE2D-1956).
+    what a threshold on it would be derived from (PIPE2D-1956). Split by
+    camera set to show that the b arm's does not depend on it (PIPE2D-1927).
 
     Parameters
     ----------
@@ -171,14 +172,20 @@ def scatterTable(
     Returns
     -------
     `pandas.DataFrame`
-        ``arm``, ``obsType`` (when both tables carry it: trace centroids
-        scatter differently on a quartz and on an arc), ``description``,
+        ``arm``, ``cameraSet`` and ``obsType`` (each when both tables carry
+        it: trace centroids scatter differently on a quartz and on an arc;
+        a reference read with other camera sets leaves its columns empty),
+        ``description``,
         ``component`` (``x`` or ``y``), and per run ``images <label>``,
         ``median <label>`` and ``p95 <label>`` (px, rounded to 3 decimals);
         empty when nothing was measured.
     """
-    byType = "obsType" in metrics.columns and (reference is None or "obsType" in reference.columns)
-    groups = ["arm", *(["obsType"] if byType else []), "description", "component"]
+    optional = [
+        column
+        for column in ("cameraSet", "obsType")
+        if column in metrics.columns and (reference is None or column in reference.columns)
+    ]
+    groups = ["arm", *optional, "description", "component"]
 
     def stats(frame: pd.DataFrame, label: str) -> pd.DataFrame:
         rows = frame[
