@@ -10,13 +10,6 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
-- **Comparison mode's scatter table splits the b arm by camera** (PIPE2D-1927) — the scatter of the lines held back
-  has a `bReadWith` column, `m` or `r` for the camera the b arm was read with (from `cameraSet`) and empty for the
-  other arms, so each run's report shows the b arm read with m beside the b arm read with r. The
-  gate does not split b-arm populations by camera set: the b-arm trace scatter does not depend on it, and its one
-  effect, the b arm's offset from `detectorMap_calib` when read with m, is `dmLineResiduals`' `medianDeltaX`, which
-  supersedes `iqQaMetrics`' `medDxCenter`.
-
 - **`dmLineResiduals` stores the frame type, and judges trace scatter on quartz frames** (PIPE2D-1956) —
   `dmLineResidualMetrics` and `dmLineResidualSummary` gain `obsType`, the observation type from the raw header's
   `W_SEQTYP` as `imageQualityQa` classifies it (`trace` for a quartz, `arc`, `twilight`, ...; the pfsConfig header
@@ -357,6 +350,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   This needs matplotlib 3.10, now the minimum in `pyproject.toml` (PIPE2D-1916).
 
 ### Changed
+
+- **Comparison mode's scatter table splits the b arm by camera** (PIPE2D-1927) — the scatter of the lines held back
+  has a `bReadWith` column, `m` or `r` for the camera the b arm was read with (from `cameraSet`) and empty for the
+  other arms, so each run's report shows the b arm read with m beside the b arm read with r, and its heading names
+  the groups the table has. The gate does not split b-arm populations by camera set: the b-arm trace scatter does
+  not depend on it, and its one effect, the b arm's offset from `detectorMap_calib` when read with m, is
+  `dmLineResiduals`' `medianDeltaX`, which supersedes `iqQaMetrics`' `medDxCenter`.
 
 - **`dmLineResidualData` samples `RESERVED` trace rows too** (PIPE2D-1956) — `maxTraceRowsPerFiber` (100) now caps
   each fiber's `RESERVED` trace rows as well as its `USED` ones, evenly in y. `RESERVED` trace rows were kept whole

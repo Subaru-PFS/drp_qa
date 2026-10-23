@@ -830,7 +830,7 @@ def _residualSection(inputs: ReportInputs, judgedImages: pd.DataFrame) -> list[s
         if not table.empty:
             by = [
                 "arm",
-                *(["the camera b was read with"] if "bReadWith" in table else []),
+                *(["b-arm camera (m or r)"] if "bReadWith" in table else []),
                 *(["observation type"] if "obsType" in table else []),
             ]
             parts.append(
