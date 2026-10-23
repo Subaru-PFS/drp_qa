@@ -21,8 +21,6 @@ import pfs.drp.qa.plotting
 FORBIDDEN = (
     "lsst",
     "pfs.drp.stella",
-    "pfs.drp.qa.dmResiduals",
-    "pfs.drp.qa.dmCombinedResiduals",
     "pfs.drp.qa.extractionQa",
     "pfs.drp.qa.extractionQaCombined",
     "pfs.drp.qa.fiberNormsQa",
@@ -65,8 +63,8 @@ def testNoForbiddenImportStatements(package):
 
 
 def testForbiddenImportsAreFound():
-    # Negative control: the task module the plots came from imports the stack.
-    source = Path(pfs.drp.qa.plotting.__file__).parents[1] / "dmResiduals.py"
+    # Negative control: a task module imports the stack.
+    source = Path(pfs.drp.qa.plotting.__file__).parents[1] / "dmLineResiduals.py"
     bad = forbiddenImports(source)
     assert "pfs.drp.stella" in bad
     assert any(name.startswith("lsst.") for name in bad)
@@ -75,11 +73,11 @@ def testForbiddenImportsAreFound():
 def testNothingForbiddenIsLoaded():
     code = (
         "import json, sys\n"
-        "import pfs.drp.qa.plotting, pfs.drp.qa.metrics.fitStats\n"
+        "import pfs.drp.qa.plotting, pfs.drp.qa.metrics.lineResiduals\n"
         "print(json.dumps(sorted(sys.modules)))\n"
     )
     env = {**os.environ, "PYTHONPATH": os.pathsep.join(path for path in sys.path if path)}
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True, env=env)
     loaded = json.loads(result.stdout)
-    assert "pfs.drp.qa.plotting.dmResiduals" in loaded
+    assert "pfs.drp.qa.plotting.iqQa" in loaded
     assert [name for name in loaded if isForbidden(name)] == []

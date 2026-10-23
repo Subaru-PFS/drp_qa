@@ -213,14 +213,16 @@ METRIC_SPECS = {
         # The scatter also gets a tolerance per detector, species and frame type: a detector's
         # quartz trace scatter repeats to about 1 % within a run and differs 20 % between
         # detectors, so a pooled percentile is set by the worst detector and cuts through the
-        # best one's cluster. Regular trace sets of Runs 26-30 sit within +12 % of Run25's
-        # per-detector median (+24 % at the end of Run26 on b1), the Run27 SM1 defocus at 1.7-4x.
+        # best one's cluster. In x the regular trace sets and arcs of Runs 25-30 sit within
+        # +12 % of Run25's per-detector median (+24 % at the end of Run26 on b1), the Run27 SM1
+        # defocus at 1.7-4x: WARN 20 %, FAIL 50 %. In y the lamp lines move more between runs
+        # (healthy runs' p95 at 1.37x, Run26's worst 2.4x; Run27's faults 3-70x): WARN 50 %, FAIL 150 %.
         *(
             MetricSpec(
                 name,
                 absolute=name.startswith("median"),
                 groupBy=("reference", "statusType", "arm", "description", "cameraSet", "obsType"),
-                tolerance=None if name.startswith("median") else (0.2, 0.5),
+                tolerance={"robustRmsDeltaX": (0.2, 0.5), "robustRmsDeltaY": (0.5, 1.5)}.get(name),
                 toleranceBy=()
                 if name.startswith("median")
                 else ("reference", "statusType", "arm", "spectrograph", "description", "obsType"),

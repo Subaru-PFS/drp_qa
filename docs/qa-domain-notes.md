@@ -180,26 +180,20 @@ narrow it to 1-3. Those are lit, measuring as many lamp lines as the driven ones
 
 ### DM residual metrics
 
-`dmResiduals` is deprecated (PIPE2D-1956) in favour of `dmLineResiduals`, below; both run
-through the next observing run so the two can be compared. `dmResiduals` re-selects lines
-with its own copy of drp_stella's rules, sigma-clips them, and drops trace centroids on arcs,
-so its statistics are not those of the lines the fit used.
+`dmResiduals` and `dmCombinedResiduals` were retired on 2026-10-22 (PIPE2D-1956), replaced by
+`dmLineResiduals`, below. `dmResiduals` re-selected lines with its own copy of drp_stella's
+rules, sigma-clipped them, dropped trace centroids on arcs, and wrote `dmQaResidualStats` per
+`(status_type, description)` with error-weighted and robust RMS values (`FitStats`); the
+combined task aggregated them into `dmQaDetectorStats` and a multi-page plot. Neither ran in
+drpActor's live reductions.
 
-`dmResiduals` writes `dmQaResidualData`, `dmQaResidualStats` and `dmQaResidualPlot`.
-`get_fit_stats` builds `dmQaResidualStats` **per `(status_type, description)`** — that
-is, separately for `RESERVED` and `USED` lines of each species — via the `FitStats` /
-`FitStat` dataclasses (`pfs.drp.qa.metrics.fitStats`). Each row carries `dof`, `chi2X`, `chi2Y`, and a `spatial.` and
-`wavelength.` block of `median`, `robustRms`, `weightedRms`, `softenFit`, `dof`,
-`num_fibers`, `num_lines`. The RMS values are **error-weighted** (`getWeightedRMS`) with
-a robust variant (`robustRms`); `softenFit` is solved by bisection, and is NaN when it
-can't be (more than `maxSoften` needed, or zero dof). Prefer these over
-adding parallel unweighted metrics.
+The retiring comparison, both tasks on Run30's fresh reductions (`u/wtg/comparison/run30/...`
+and `u/wtg/comparison/run30/dmResiduals`, 1016 species rows): medians agree to under 0.002 px,
+the robust RMS to 5–14 % (`dmLineResiduals` the higher, `dmResiduals` having clipped), and the
+two give the same RMS on every image `dmLineResiduals` flagged. `dmResiduals` had no trace rows
+on arcs (312 detectors) and counted lines per fiber, so `linesPerFiber` has no counterpart.
 
-`dmCombinedResiduals` aggregates across detectors into `dmQaDetectorStats` and renders a
-multi-page `dmQaCombinedResidualPlot` via `make_report`, whose pages are drawn by
-`pfs.drp.qa.plotting.dmCombined.reportFigures`.
-
-The task writes **data only**. Plotting lives in `plotting/iqQa.py` and is driven after the
+`imageQualityQa` writes **data only**. Plotting lives in `plotting/iqQa.py` and is driven after the
 fact by `bin.src/plotIqQaTimeSeries.py`; there is no `iqQaPlot` dataset.
 
 ### Line residuals: drift against `detectorMap_calib` (PIPE2D-1921)
@@ -320,10 +314,17 @@ checked with `bin.src/judgeScatterThresholds.py` on comparison mode's exports of
   which gives 4–10 values per detector and species. On the standard arcs of Runs 25, 26 and 28–30
   it fails at most one image a run; b-arm Xenon, with 60–110 lines per detector and weakening
   (b1: 89 in Run25, 65 in Run29), warns on 15–25 % of its arcs in every run, the one noisy
-  population. Not adopted: y, where the HgCd species' scatter is intrinsically variable (medians
-  0.6–1.1 px on n and r) and a tolerance failed 5–20 % of Runs 25–28's healthy arcs, and the HgCd
-  lines in x with it. `LineCheck` and `DetectorMap test` arcs, taken off the calibration recipe,
-  fail in bulk on the r arm (40–60 % in Runs 28–29) and are unvalidated by name.
+  population. In y the lamp lines move more between runs: against Run25's per-detector medians
+  the healthy runs' standard arcs reach 1.37× at the 95th percentile and 2.4× at worst (Run26's
+  b and r Krypton), where x stays within 1.2×, and the 20 %/50 % tolerance failed 8–14 % of
+  Run26's b Krypton, b Neon and r Krypton arcs. Adopted for y instead (2026-10-22; the file
+  keeps its 2026-10-20 adoption date): WARN 50 %, FAIL 150 %, which fails no standard arc of
+  Runs 25, 26 and 28–30, warns on one arc in each of Runs 25 and 28 and on 4 % of Run26's
+  (b Krypton and Neon, r Krypton), and fails Run27's faults at 3–70×. The SM1 defocus barely shows
+  in y (b 1.0×, r 1.3×, n 1.4×): x is the defocus detector. Not adopted: the HgCd lines, whose y
+  scatter is intrinsically variable (medians 0.6–1.1 px on n and r) and failed 5–20 % of Runs
+  25–28's healthy arcs, in x with it. `LineCheck` and `DetectorMap test` arcs, taken off the
+  calibration recipe, fail in bulk on the r arm (40–60 % in Runs 28–29) and are unvalidated by name.
 - **The two unnamed Run25 quartz 135903–135904** are an IIS trace sequence (`IIS trace z=0`,
   `noLampCtl`, in the sequence comment; the name is empty) taken on 2025-12-02, after Run25's last
   science night (11-30); Run25's period now ends there, so they are outside every period and not
