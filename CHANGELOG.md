@@ -351,6 +351,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
+- **Comparison mode's scatter table splits the b arm by camera** (PIPE2D-1927) — the scatter of the lines held back
+  has a `bReadWith` column, `m` or `r` for the camera the b arm was read with (from `cameraSet`) and empty for the
+  other arms, so each run's report shows the b arm read with m beside the b arm read with r, and its heading names
+  the groups the table has. The gate does not split b-arm populations by camera set: the b-arm trace scatter does
+  not depend on it, and its one effect, the b arm's offset from `detectorMap_calib` when read with m, is
+  `dmLineResiduals`' `medianDeltaX`, which supersedes `iqQaMetrics`' `medDxCenter`.
+
 - **`dmLineResidualData` samples `RESERVED` trace rows too** (PIPE2D-1956) — `maxTraceRowsPerFiber` (100) now caps
   each fiber's `RESERVED` trace rows as well as its `USED` ones, evenly in y. `RESERVED` trace rows were kept whole
   and made up 77–79 % of the rows on a quartz or twilight visit (~350–400 per fiber; 140141 and 134336 in

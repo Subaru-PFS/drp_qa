@@ -136,6 +136,10 @@ def testLineResidualSection(periods, visit, listing):
     assert "<h2>Line residuals</h2>" in page and "Line residuals: worst verdict per night" in page
     assert "calib Trace medianDeltaX" in page and "APPLY_SHIFT" in page
     assert "Scatter of the lines held back" in page and "median run1" in page
+    # The heading names the groups the table has: the b arm's camera, and no observation type here.
+    assert "detectorMap, by arm, b-arm camera (m or r) and species (px)" in page  # the apostrophe is escaped
+    # Negative control: a heading that names a group the table lacks is not drawn.
+    assert "by arm, b-arm camera (m or r), observation type and species" not in page
     assert "have no line residuals" not in page
     # One judged image without a summary row is counted; without the task's output the section says so.
     page = buildReport(ReportInputs(**common, residualSummary=summary.iloc[1:], residualFindings=found))

@@ -537,6 +537,14 @@ verdict is known. The decisions behind the current set:
   apart; its findings are in `docs/qa-domain-notes.md`. `dmResiduals`, which it replaced, was retired on 2026-10-22
   after a comparison on Run30's fresh reductions: medians agree to under 0.002 px and robust RMS to 5–14 %
   (`dmResiduals` clipped), and the two tasks measure the same RMS on every image `dmLineResiduals` flagged.
+- **b-arm populations are not split by camera set** (PIPE2D-1927). The camera set (`cameraSet`, the arms a visit
+  read) is stored with `dmLineResiduals`' rows and is a population column of the scatter thresholds, but its one effect
+  is the b arm's offset from `detectorMap_calib` when read with m (−0.45 to −0.47 px in Runs 25 and 28–30), which
+  `medianDeltaX` measures and the 1 px drift WARN absorbs. The b-arm trace scatter does not depend on it: on quartz
+  frames, b read with m and with r agree within 3 % per detector within a run (Runs 25, 26, 28 and 29; Run30 +13 %, on
+  5 images read with m), so the per-detector scatter tolerances are not split by it. Pooled over runs the two differ,
+  because the scatter moves twofold between runs (0.025–0.054 px) and the camera sets are not spread evenly over them:
+  compare them within a run. `iqQaMetrics`' `medDxCenter` is superseded by `dmLineResiduals`' `medianDeltaX`.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
 - **Thresholds hold for the pipeline that reduced their visits** (PIPE2D-1938). Two reductions of the same Run25
@@ -657,8 +665,8 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
 - **Line residuals are judged beside the gate** (PIPE2D-1956). `dmLineResiduals` runs in the same passes as
   `imageQualityQa`, and the report's *Line residuals* section has its verdicts per detector and night, the
   recommended actions by arm, its problems and findings (the reference, species and metric of each crossing), and the
-  scatter of the lines the fit held back, by arm, observation type and species, beside the reference run's: what a
-  scatter threshold is derived from. Tables stored before `obsType` was a column, or that stored `unknown`, take it from `iqQaMetrics`. `dmLineResidualSummary-<period>.parquet`, `dmLineResidualMetrics-<period>.parquet` and
+  scatter of the lines the fit held back, by arm, observation type and species (the b arm split by whether it was
+  read with m or with r), beside the reference run's: what a scatter threshold is derived from. Tables stored before `obsType` was a column, or that stored `unknown`, take it from `iqQaMetrics`. `dmLineResidualSummary-<period>.parquet`, `dmLineResidualMetrics-<period>.parquet` and
   `lineResidualFindings-<period>.csv` are written beside the report. A collection judged before the task joined the
   pipeline has none, and the section says so.
 

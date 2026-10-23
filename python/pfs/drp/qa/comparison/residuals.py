@@ -14,7 +14,7 @@ from pfs.drp.qa.comparison.findings import describeImages
 from pfs.drp.qa.metrics.gate import STATUS_ORDER
 from pfs.drp.qa.metrics.lineResiduals import RESERVED, VISIT
 
-__all__ = ["describeCrossing", "residualFindings", "residualProblems", "scatterTable"]
+__all__ = ["bReadWith", "describeCrossing", "residualFindings", "residualProblems", "scatterTable"]
 
 #: The keys of a detector image.
 KEYS = ["visit", "arm", "spectrograph"]
@@ -149,6 +149,34 @@ def residualProblems(findings: pd.DataFrame) -> pd.DataFrame:
     return result.sort_values(["rank", "images"], ascending=[True, False])[columns].reset_index(drop=True)
 
 
+def bReadWith(arm: pd.Series, cameraSet: pd.Series) -> pd.Series:
+    """Return which camera the b arm was read with: ``m``, ``r``, or empty.
+
+    The one camera-set effect found is the b arm's offset from the
+    calibration when read with m (PIPE2D-1927), so only the b arm is labelled.
+
+    Parameters
+    ----------
+    arm : `pandas.Series`
+        Each row's arm.
+    cameraSet : `pandas.Series`
+        Each row's ``cameraSet`` (`pfs.drp.qa.metrics.lineResiduals.cameraSet`),
+        `None` without a pfsConfig.
+
+    Returns
+    -------
+    `pandas.Series`
+        ``m`` or ``r`` for a b-arm row whose visit read that arm; empty for
+        every other arm, and for a b-arm row read with neither or of unknown
+        camera set.
+    """
+    arms = cameraSet.fillna("").astype(str)
+    label = (
+        pd.Series("", index=arms.index).mask(arms.str.contains("r"), "r").mask(arms.str.contains("m"), "m")
+    )
+    return label.where(arm == "b", "")
+
+
 def scatterTable(
     metrics: pd.DataFrame,
     reference: pd.DataFrame | None = None,
@@ -157,7 +185,9 @@ def scatterTable(
     """Summarize the scatter the adjusted map leaves, by arm and species, beside a reference run's.
 
     The robust RMS of ``RESERVED`` lines against the visit's ``detectorMap``:
-    what a threshold on it would be derived from (PIPE2D-1956).
+    what a threshold on it would be derived from (PIPE2D-1956). The b arm is
+    split by whether it was read with m or with r, to show that its scatter
+    does not depend on it (PIPE2D-1927); no other arm is split by camera set.
 
     Parameters
     ----------
@@ -171,14 +201,28 @@ def scatterTable(
     Returns
     -------
     `pandas.DataFrame`
-        ``arm``, ``obsType`` (when both tables carry it: trace centroids
+        ``arm``, ``bReadWith`` (`bReadWith`; when both tables carry
+        ``cameraSet``), ``obsType`` (when both carry it: trace centroids
         scatter differently on a quartz and on an arc), ``description``,
         ``component`` (``x`` or ``y``), and per run ``images <label>``,
         ``median <label>`` and ``p95 <label>`` (px, rounded to 3 decimals);
         empty when nothing was measured.
     """
-    byType = "obsType" in metrics.columns and (reference is None or "obsType" in reference.columns)
-    groups = ["arm", *(["obsType"] if byType else []), "description", "component"]
+
+    def carried(column: str) -> bool:
+        """Return whether the run, and a reference to join, both carry ``column``."""
+        return column in metrics.columns and (
+            reference is None or reference.empty or column in reference.columns
+        )
+
+    byCameras = carried("cameraSet")
+    groups = [
+        "arm",
+        *(["bReadWith"] if byCameras else []),
+        *(["obsType"] if carried("obsType") else []),
+        "description",
+        "component",
+    ]
 
     def stats(frame: pd.DataFrame, label: str) -> pd.DataFrame:
         rows = frame[
@@ -188,6 +232,8 @@ def scatterTable(
             & frame["value"].notna()
         ]
         rows = rows.assign(component=rows["metric"].map(_SCATTER))
+        if byCameras:
+            rows = rows.assign(bReadWith=bReadWith(rows["arm"], rows["cameraSet"]))
         table = rows.groupby(groups, dropna=False)["value"].agg(
             ["size", "median", lambda v: v.quantile(0.95)]
         )
