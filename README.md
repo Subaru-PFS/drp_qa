@@ -78,8 +78,8 @@ See [documentation](https://pipelines.lsst.io/modules/lsst.pipe.base/creating-a-
 
 Also see the example notebook [`examples/QA Pipelines.ipynb`](examples/QA%20Pipelines.ipynb).
 
-`drpQA.yaml` currently wires up `dmLineResiduals`, `dmResiduals`, `dmCombinedResiduals`,
-`extractionQa`, `extractionQaCombined`, and `imageQualityQa`. The remaining tasks below are implemented and importable
+`drpQA.yaml` currently wires up `dmLineResiduals`, `extractionQa`, `extractionQaCombined`, and `imageQualityQa`. The
+remaining tasks below are implemented and importable
 but are not registered in the pipeline; run them by referencing their task class directly.
 
 ### Tasks
@@ -102,9 +102,9 @@ robust RMS of the x and y residuals, `nLines` and `linesPerFiber`. Judged: again
 `UNFITTED`) lines, the median x offset of traces and median y offset of lamp lines (WARN 1 px, `APPLY_SHIFT`; FAIL 2
 px, `RECALIBRATE`); against `visit`, the robust RMS of `RESERVED` lines (`RECALIBRATE`), by the thresholds file
 `dmLineResidualThresholds-run25.yaml` (PIPE2D-1956): trace centroids on quartz frames and the Ar, Kr, Ne and Xe
-lines in x, per detector, at WARN 20 % and FAIL 50 % above the detector's known-good median in Run25. Stored, not
-judged: the lamps' y scatter; the mercury and cadmium lines, whose y scatter is intrinsically variable; trace
-centroids on arcs and twilights; and the sky-line species on twilights. The weighted RMS and
+lines in x, per detector, at WARN 20 % and FAIL 50 % above the detector's known-good median in Run25, and the lamp
+lines in y at WARN 50 % and FAIL 150 %. Stored, not judged: the mercury and cadmium lines, whose y scatter is
+intrinsically variable; trace centroids on arcs and twilights; and the sky-line species on twilights. The weighted RMS and
 the softening are drp_stella's, in `iqQaMetrics` and `iqQaSpeciesMetrics`, not recomputed. Logic in the stack-free
 `pfs.drp.qa.metrics.lineResiduals`. No plot is drawn as the task runs: plot `dmLineResidualData` afterwards.
 
@@ -137,45 +137,21 @@ measure it on every visit they judge: comparison mode reports its verdicts besid
 | `dmLineResidualSummary` | `instrument, visit, arm, spectrograph` | One row: `qaStatus`, `qaDecidedBy`, `qaReason`, `recommendedAction`, `fitted`, `obsType`, and the calibration used. |
 | `dmLineResidualData`    | `instrument, visit, arm, spectrograph` | One row per line measured (`USED` and `RESERVED` traces sampled), with `dxCalib`, `dyCalib`, `dxVisit`, `dyVisit`. |
 
-#### `dmResiduals`
+##### Coming from `dmResiduals`
 
-**Deprecated** (PIPE2D-1956): replaced by `dmLineResiduals`. Both run through the next observing run, for comparison;
-then it is removed.
+`dmResiduals` and `dmCombinedResiduals` were retired on 2026-10-22 (PIPE2D-1956). Where their outputs went:
 
-Measures the residuals in the spatial and wavelength directions between the detector map and the arcline centroids. The
-residuals are measured for each visit.
-
-##### Options
-
-- `dmResiduals:useSigmaRange`: Use the sigma range for the color scale in the residual plots. Default is `False`.
-- `dmResiduals:spatialRange`: The range of the x-center (i.e. spatial) in the residual plots. Default is `0.1`.
-- `dmResiduals:wavelengthRange`: The range of the y-center (i.e. wavelength) in the residual plots. Default is `0.1`.
-- `dmResiduals:binWavelength`: The bin size in wavelength for the residual plots in nm. Default is `0.1`.
-
-##### Outputs
-
-| DataSet Type        | Dimensions                             | Description                                                                                 |
-|---------------------|----------------------------------------|---------------------------------------------------------------------------------------------|
-| `dmQaResidualData`  | `instrument, visit, arm, spectrograph` | Residual data for the given detector and visit.                                             | 
-| `dmQaResidualStats` | `instrument, visit, arm, spectrograph` | Summary statistics for the given detector and visit.                                        | 
-| `dmQaResidualPlot`  | `instrument, visit, arm, spectrograph` | 1D and 2D plots of the residual between the detectormap and the arclines for a given visit. |
-
-#### `dmCombinedResiduals`
-
-**Deprecated** with `dmResiduals` (PIPE2D-1956).
-
-Determines the aggregate statistics for all detectors across all given visits.
-
-##### Options
-
-N/A
-
-##### Outputs
-
-| DataSet Type               | Dimensions   | Description                                                                                       |
-|----------------------------|--------------|---------------------------------------------------------------------------------------------------|
-| `dmQaCombinedResidualPlot` | `instrument` | 1D and 2D plots of the residual between the detectormap and the arclines for the entire detector. |
-| `dmQaDetectorStats`        | `instrument` | Statistics of the residual analysis per detector.                                                 |
+| Before                                            | Now                                                                                                      |
+|---------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| `dmQaResidualStats`, a row per `status_type` and species | `dmLineResidualMetrics`, long format; `lineResiduals.wideResiduals` gives a column per metric. `reference` `visit` is what `dmResiduals` measured against; `calib` is new. |
+| `spatial.median`, `spatial.robustRms`             | `medianDeltaX`, `robustRmsDeltaX`                                                                        |
+| `wavelength.median`, `wavelength.robustRms`       | `medianDeltaY`, `robustRmsDeltaY`                                                                        |
+| `weightedRms`, `softenFit`                        | not recomputed: drp_stella's own, in `iqQaSpeciesMetrics`                                                |
+| `num_lines`, per fiber                            | `nLines` (lines of the species) and `linesPerFiber`                                                      |
+| the verdict                                       | `dmLineResidualSummary`: `qaStatus`, `qaDecidedBy`, `qaReason`, `recommendedAction`, the calibration used |
+| `dmQaResidualData`                                | `dmLineResidualData`, with a residual against each reference                                             |
+| `dmQaResidualPlot`                                | nothing per quantum: drawn from `dmLineResidualData` after the fact (PIPE2D-1920)                        |
+| `dmQaDetectorStats`, `dmQaCombinedResidualPlot`   | comparison mode's report, *Line residuals* section; `bin.src/exportMetrics.py` for the tables           |
 
 #### `imageQualityQa`
 
@@ -544,7 +520,9 @@ verdict is known. The decisions behind the current set:
   tolerance per detector, from the known-good visits of each arm's reference run, and adopted through the task's
   `thresholdsFile` (2026-10-20, from
   `u/wtg/qa-thresholds/010`): trace centroids on quartz frames and the Ar, Kr, Ne and Xe lines are judged in x per
-  detector by a tolerance, WARN 20 % and FAIL 50 % above the detector's known-good median, as `medFwhm` is. A
+  detector by a tolerance, WARN 20 % and FAIL 50 % above the detector's known-good median, as `medFwhm` is, and the
+  lamp lines in y at WARN 50 % and FAIL 150 % (their y moves more between runs: the healthy runs' arcs reach 1.4×
+  Run25's medians at the 95th percentile and 2.4× at worst, Run27's faults 3–70×). A
   detector's quartz trace scatter repeats to about 1 % within a run and differs 20 % between detectors, so a
   percentile over the pooled detectors is set by the worst one and cuts through the best one's cluster, and a
   percentile over one run's arcs does not transfer to the next (thresholds from Run29's arcs flagged 20–70 % of Runs
@@ -552,11 +530,13 @@ verdict is known. The decisions behind the current set:
   fail at most one image a run and warn on a few percent (b1 and r1 traces at +24 % at the end of Run26, b-arm
   Xenon arcs), and the Run27 SM1 defocus fails at 1.7–4×. The calibration's own input visits are kept in the scatter
   derivation (they sit at zero against the calibration, which is the drift's concern, not against the visit's own
-  map). Not judged, with the reasons in each entry's provenance: the lamps' y scatter; the mercury and cadmium
-  lines, whose y scatter is intrinsically variable; trace centroids on arcs and twilights, which scatter two to
+  map). Not judged, with the reasons in each entry's provenance: the mercury and cadmium lines, whose y scatter is
+  intrinsically variable; trace centroids on arcs and twilights, which scatter two to
   three times more on the faint continuum; and the twilights' sky species. `bin.src/judgeScatterThresholds.py` is
   the acceptance check, run on the comparison exports of Runs 25–30 before any adoption, engineering sequences set
-  apart; its findings are in `docs/qa-domain-notes.md`. `dmResiduals` runs beside it through Run31 for comparison.
+  apart; its findings are in `docs/qa-domain-notes.md`. `dmResiduals`, which it replaced, was retired on 2026-10-22
+  after a comparison on Run30's fresh reductions: medians agree to under 0.002 px and robust RMS to 5–14 %
+  (`dmResiduals` clipped), and the two tasks measure the same RMS on every image `dmLineResiduals` flagged.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
 - **Thresholds hold for the pipeline that reduced their visits** (PIPE2D-1938). Two reductions of the same Run25

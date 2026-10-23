@@ -34,16 +34,13 @@ the pipeline/config glue to run them.
 ### Key components
 
 - **QA pipeline (`pipelines/drpQA.yaml`)** — defines the sequence of QA tasks. It
-  currently registers **six** task labels, and only these run under `pipetask`:
-  `dmResiduals`, `dmCombinedResiduals`, `extractionQa`, `extractionQaCombined`,
-  `imageQualityQa`, `dmLineResiduals`.
+  currently registers **four** task labels, and only these run under `pipetask`:
+  `extractionQa`, `extractionQaCombined`, `imageQualityQa`, `dmLineResiduals`.
 - **Threshold pipeline (`pipelines/qaThresholds.yaml`)** — drp_stella's `reduceExposure`
   (less `mergeArms`) plus `imageQualityQa`, so `docs/qa-thresholds.ipynb` reduces the
   validation visits from raw data. The notebook applies `drpActor`'s per-sequence-type config.
 - **Tasks in the pipeline (`python/pfs/drp/qa/`)**:
   - `imageQualityQa.py` — image quality (FWHM, flag rates); plots in `plotting/iqQa.py`
-  - `dmResiduals.py`, `dmCombinedResiduals.py` — detector map residuals (per-detector
-    and cross-visit combined); deprecated by `dmLineResiduals` (PIPE2D-1956)
   - `extractionQa.py`, `extractionQaCombined.py` — fiber extraction quality
     (per-detector, and combined per `(instrument, visit, arm)`)
   - `dmLineResiduals.py` — per-species residuals of `lines` against `detectorMap_calib`
@@ -77,12 +74,12 @@ the pipeline/config glue to run them.
   `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its replacement
   (needs the opdb; committed without outputs): keep it in step with renamed arguments.
 - **Plotting (`python/pfs/drp/qa/plotting/`)** — the QA plots: DataFrames in, figures
-  out (`dmResiduals`, `dmCombined`, `iqQa`, `thresholds`, and `palettes` for the shared
+  out (`iqQa`, `comparison`, `thresholds`, and `palettes` for the shared
   palettes and `scatterplot_with_outliers`). It imports no Butler, stack or task module, so plots can
-  be drawn from stored data; `tests/plotting/test_imports.py` enforces this. The task
-  modules, `iqQaPlots` and `utils.plotting` re-export the names they used to define.
-- **Metrics (`python/pfs/drp/qa/metrics/`)** — stack-free metric containers
-  (`fitStats`: `FitStat`/`FitStats`, the rows of `dmQaResidualStats`), and the threshold
+  be drawn from stored data; `tests/plotting/test_imports.py` enforces this. `iqQaPlots`
+  and `utils.plotting` re-export the names they used to define.
+- **Metrics (`python/pfs/drp/qa/metrics/`)** — the stack-free measurement and verdict of
+  `dmLineResiduals` (`lineResiduals`), and the threshold
   machinery: `validationVisits` loads `data/validationVisits.yaml` (package data; visits
   with known verdicts), `thresholds` derives WARN/FAIL from a distribution (or as a
   tolerance about its median), `calibration` turns stored `iqQaMetrics` into a table of
@@ -179,7 +176,7 @@ pytest tests/
 pytest tests/test_fitDetectorMapLogQa.py
 
 # Single test
-pytest tests/plotting/test_dmResiduals.py::testPlotResidual
+pytest tests/metrics/test_lineResiduals.py::testZeroOffsetPasses
 ```
 
 `pyproject.toml` sets `addopts = "-ra --import-mode=importlib"`. Note the `importlib`
@@ -308,8 +305,8 @@ Tasks are scoped by their `dimensions`:
 
 - Per-detector: `("instrument", "visit", "arm", "spectrograph")`
 - Per-visit: `("instrument", "visit")`
-- Combined/aggregate: `("instrument",)` — these use `multiple=True` inputs to consume
-  outputs from per-detector tasks
+- Combined/aggregate: `("instrument", "visit", "arm")` (`extractionQaCombined`) — these use
+  `multiple=True` inputs to consume outputs from per-detector tasks
 
 ### Pipeline YAML
 
@@ -317,7 +314,7 @@ Tasks are scoped by their `dimensions`:
 `#taskName` fragment syntax:
 
 ```bash
-pipetask run -p pipelines/drpQA.yaml#dmResiduals -b /path/to/butler -i input/coll -o output/coll
+pipetask run -p pipelines/drpQA.yaml#dmLineResiduals -b /path/to/butler -i input/coll -o output/coll
 ```
 
 ### Custom storage classes & formatters
@@ -363,8 +360,8 @@ not crash the pipeline. Only write outputs when `run()` succeeds.
   it via `storageClass="Plot"` using `PdfMatplotlibFormatter`.
 - Multi-page tasks: return a `MultipagePdfFigure`; call `.append(fig)` for each page.
 - Draw in `pfs.drp.qa.plotting`, never in the task module: the task binds the figures
-  to the storage class (as `dmCombinedResiduals.make_report` wraps
-  `plotting.dmCombined.reportFigures`).
+  to the storage class, or, as `dmLineResiduals` does, writes data only and leaves the
+  plots to be drawn after the fact.
 
 ### Shared plotting utilities (`plotting/palettes.py`)
 
@@ -451,16 +448,8 @@ drpQA.yaml#imageQualityQa            dims: (instrument, visit, arm, spectrograph
              isr_log, cosmicray_log, reduceExposure_log (optional)
     → writes: iqQaData, iqQaMetrics, iqQaSpeciesMetrics
 
-drpQA.yaml#dmResiduals               dims: (instrument, visit, arm, spectrograph)
-    ← reads: raw.visitInfo, detectorMap, lines, reduceExposure_config
-    → writes: dmQaResidualData, dmQaResidualStats, dmQaResidualPlot
-
-drpQA.yaml#dmCombinedResiduals       dims: (instrument,)   [multiple=True inputs]
-    ← reads: detectorMap, dmQaResidualData, dmQaResidualStats
-    → writes: dmQaDetectorStats, dmQaCombinedResidualPlot
-
 drpQA.yaml#dmLineResiduals           dims: (instrument, visit, arm, spectrograph)
-    ← reads: lines, detectorMap, detectorMap_calib (calibration), pfsConfig (optional)
+    ← reads: lines, detectorMap, raw.metadata, detectorMap_calib (calibration), pfsConfig (optional)
     → writes: dmLineResidualMetrics (long format), dmLineResidualSummary (one row),
               dmLineResidualData (one row per line)
 

@@ -4,7 +4,7 @@ collection: u/wtg/qa-thresholds/010
 referenceRuns:
 - 25
 - 29
-drpQaVersion: w.2026.35-173-g12b9ea8-dirty
+drpQaVersion: w.2026.35-185-ga341f02-dirty
 pipelineVersions:
   datamodel: w.2026.40
   obs_pfs: w.2026.40
@@ -4745,15 +4745,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.09
-  fail: 0.113
+  warn: 0.113
+  fail: 0.188
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.07484px.'
 - metric: robustRmsDeltaY
   population:
@@ -4766,15 +4766,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.077
-  fail: 0.097
+  warn: 0.097
+  fail: 0.161
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.06406px.'
 - metric: robustRmsDeltaY
   population:
@@ -4787,16 +4787,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.094
-  fail: 0.117
+  warn: 0.117
+  fail: 0.195
   nGood: 10
   nGoodVisits: 10
   visitRange: 133034-135848
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 20% and FAIL 50% above the known-good
-    median, 0.07786px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 50% and FAIL 150% above the
+    known-good median, 0.07786px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -4808,15 +4808,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.225
-  fail: 0.281
+  warn: 0.281
+  fail: 0.468
   nGood: 8
   nGoodVisits: 8
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 50% and FAIL 150% above the known-good
     median, 0.187px.'
 - metric: robustRmsDeltaY
   population:
@@ -4829,16 +4829,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.0535
-  fail: 0.0669
+  warn: 0.067
+  fail: 0.112
   nGood: 10
   nGoodVisits: 10
   visitRange: 133031-135846
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 20% and FAIL 50% above the known-good
-    median, 0.04454px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 50% and FAIL 150% above the
+    known-good median, 0.04454px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -4850,15 +4850,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.32
-  fail: 4.14
+  warn: 4.2
+  fail: 6.9
   nGood: 7
   nGoodVisits: 7
   visitRange: 134880-134886
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-134886 (n=7): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 134880-134886 (n=7): WARN 50% and FAIL 150% above the known-good
     median, 2.76px.'
 - metric: robustRmsDeltaY
   population:
@@ -4871,16 +4871,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.266
-  fail: 0.332
+  warn: 0.34
+  fail: 0.56
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.221px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.221px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -4892,16 +4892,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.14
-  fail: 0.175
+  warn: 0.175
+  fail: 0.291
   nGood: 10
   nGoodVisits: 10
   visitRange: 133028-135844
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 20% and FAIL 50% above the known-good
-    median, 0.116px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 50% and FAIL 150% above the
+    known-good median, 0.116px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -4913,15 +4913,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.099
-  fail: 0.124
+  warn: 0.124
+  fail: 0.207
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.08246px.'
 - metric: robustRmsDeltaY
   population:
@@ -4934,15 +4934,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.09
-  fail: 0.112
+  warn: 0.112
+  fail: 0.187
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.0746px.'
 - metric: robustRmsDeltaY
   population:
@@ -4955,16 +4955,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.123
-  fail: 0.153
+  warn: 0.153
+  fail: 0.255
   nGood: 10
   nGoodVisits: 10
   visitRange: 133034-135848
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 20% and FAIL 50% above the known-good
-    median, 0.1018px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 50% and FAIL 150% above the
+    known-good median, 0.1018px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -4976,15 +4976,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.169
-  fail: 0.211
+  warn: 0.211
+  fail: 0.351
   nGood: 7
   nGoodVisits: 7
   visitRange: 134881-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134881-135279 (n=7): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 134881-135279 (n=7): WARN 50% and FAIL 150% above the known-good
     median, 0.1401px.'
 - metric: robustRmsDeltaY
   population:
@@ -4997,16 +4997,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.067
-  fail: 0.083
+  warn: 0.083
+  fail: 0.139
   nGood: 10
   nGoodVisits: 10
   visitRange: 133031-135846
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 20% and FAIL 50% above the known-good
-    median, 0.05524px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 50% and FAIL 150% above the
+    known-good median, 0.05524px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -5018,15 +5018,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.4
-  fail: 4.25
+  warn: 4.3
+  fail: 7.1
   nGood: 8
   nGoodVisits: 8
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 50% and FAIL 150% above the known-good
     median, 2.828px.'
 - metric: robustRmsDeltaY
   population:
@@ -5039,16 +5039,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.198
-  fail: 0.247
+  warn: 0.247
+  fail: 0.411
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.1642px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.1642px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -5060,16 +5060,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.142
-  fail: 0.177
+  warn: 0.177
+  fail: 0.295
   nGood: 10
   nGoodVisits: 10
   visitRange: 133028-135844
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 20% and FAIL 50% above the known-good
-    median, 0.1177px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 50% and FAIL 150% above the
+    known-good median, 0.1177px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -5081,15 +5081,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.084
-  fail: 0.105
+  warn: 0.105
+  fail: 0.175
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.06965px.'
 - metric: robustRmsDeltaY
   population:
@@ -5102,15 +5102,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.104
-  fail: 0.13
+  warn: 0.13
+  fail: 0.217
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.08666px.'
 - metric: robustRmsDeltaY
   population:
@@ -5123,16 +5123,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.095
-  fail: 0.118
+  warn: 0.118
+  fail: 0.197
   nGood: 10
   nGoodVisits: 10
   visitRange: 133034-135848
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 20% and FAIL 50% above the known-good
-    median, 0.07854px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 50% and FAIL 150% above the
+    known-good median, 0.07854px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -5144,15 +5144,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.378
-  fail: 0.472
+  warn: 0.48
+  fail: 0.79
   nGood: 9
   nGoodVisits: 9
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=9): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=9): WARN 50% and FAIL 150% above the known-good
     median, 0.3145px.'
 - metric: robustRmsDeltaY
   population:
@@ -5165,16 +5165,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.077
-  fail: 0.097
+  warn: 0.097
+  fail: 0.161
   nGood: 10
   nGoodVisits: 10
   visitRange: 133031-135846
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 20% and FAIL 50% above the known-good
-    median, 0.06401px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 50% and FAIL 150% above the
+    known-good median, 0.06401px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -5186,15 +5186,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.97
-  fail: 4.96
+  warn: 5.0
+  fail: 8.3
   nGood: 8
   nGoodVisits: 8
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 50% and FAIL 150% above the known-good
     median, 3.306px.'
 - metric: robustRmsDeltaY
   population:
@@ -5207,16 +5207,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.475
-  fail: 0.593
+  warn: 0.6
+  fail: 0.99
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.3953px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.3953px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -5228,16 +5228,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.147
-  fail: 0.184
+  warn: 0.184
+  fail: 0.307
   nGood: 10
   nGoodVisits: 10
   visitRange: 133028-135844
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 20% and FAIL 50% above the known-good
-    median, 0.1224px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 50% and FAIL 150% above the
+    known-good median, 0.1224px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -5249,15 +5249,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.114
-  fail: 0.143
+  warn: 0.143
+  fail: 0.238
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.09482px.'
 - metric: robustRmsDeltaY
   population:
@@ -5270,15 +5270,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.07
-  fail: 0.087
+  warn: 0.087
+  fail: 0.145
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.05766px.'
 - metric: robustRmsDeltaY
   population:
@@ -5291,16 +5291,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.097
-  fail: 0.121
+  warn: 0.121
+  fail: 0.201
   nGood: 10
   nGoodVisits: 10
   visitRange: 133034-135848
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 20% and FAIL 50% above the known-good
-    median, 0.08009px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135848 (n=10): WARN 50% and FAIL 150% above the
+    known-good median, 0.08009px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -5312,15 +5312,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.359
-  fail: 0.449
+  warn: 0.45
+  fail: 0.75
   nGood: 8
   nGoodVisits: 8
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 50% and FAIL 150% above the known-good
     median, 0.2987px.'
 - metric: robustRmsDeltaY
   population:
@@ -5333,16 +5333,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.068
-  fail: 0.085
+  warn: 0.085
+  fail: 0.141
   nGood: 10
   nGoodVisits: 10
   visitRange: 133031-135846
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 20% and FAIL 50% above the known-good
-    median, 0.0563px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135846 (n=10): WARN 50% and FAIL 150% above the
+    known-good median, 0.0563px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -5354,15 +5354,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 3.42
-  fail: 4.27
+  warn: 4.3
+  fail: 7.2
   nGood: 8
   nGoodVisits: 8
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=8): WARN 50% and FAIL 150% above the known-good
     median, 2.846px.'
 - metric: robustRmsDeltaY
   population:
@@ -5375,16 +5375,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.204
-  fail: 0.254
+  warn: 0.254
+  fail: 0.424
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.1693px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.1693px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -5396,16 +5396,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.144
-  fail: 0.18
+  warn: 0.18
+  fail: 0.299
   nGood: 10
   nGoodVisits: 10
   visitRange: 133028-135844
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 20% and FAIL 50% above the known-good
-    median, 0.1196px.'
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135844 (n=10): WARN 50% and FAIL 150% above the
+    known-good median, 0.1196px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -5417,15 +5417,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.125
-  fail: 0.157
+  warn: 0.157
+  fail: 0.261
   nGood: 5
   nGoodVisits: 5
   visitRange: 133042-135842
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1042px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5438,15 +5438,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.137
-  fail: 0.172
+  warn: 0.172
+  fail: 0.286
   nGood: 5
   nGoodVisits: 5
   visitRange: 133051-135848
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1141px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5459,15 +5459,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.18
-  fail: 0.225
+  warn: 0.225
+  fail: 0.374
   nGood: 5
   nGoodVisits: 5
   visitRange: 133048-135846
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1495px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5480,15 +5480,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.153
-  fail: 0.191
+  warn: 0.191
+  fail: 0.319
   nGood: 5
   nGoodVisits: 5
   visitRange: 133045-135844
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1272px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5501,15 +5501,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.0478
-  fail: 0.0597
+  warn: 0.06
+  fail: 0.1
   nGood: 5
   nGoodVisits: 5
   visitRange: 133042-135842
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.03977px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5522,15 +5522,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.0429
-  fail: 0.0536
+  warn: 0.054
+  fail: 0.09
   nGood: 5
   nGoodVisits: 5
   visitRange: 133051-135848
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.03568px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5543,15 +5543,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.091
-  fail: 0.113
+  warn: 0.113
+  fail: 0.189
   nGood: 5
   nGoodVisits: 5
   visitRange: 133048-135846
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.0752px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5564,15 +5564,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.094
-  fail: 0.117
+  warn: 0.117
+  fail: 0.194
   nGood: 5
   nGoodVisits: 5
   visitRange: 133045-135844
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.07755px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5585,15 +5585,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.0415
-  fail: 0.0519
+  warn: 0.052
+  fail: 0.087
   nGood: 5
   nGoodVisits: 5
   visitRange: 133042-135842
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.03454px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5606,15 +5606,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.087
-  fail: 0.109
+  warn: 0.109
+  fail: 0.181
   nGood: 5
   nGoodVisits: 5
   visitRange: 133051-135848
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.07206px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5627,15 +5627,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.086
-  fail: 0.108
+  warn: 0.108
+  fail: 0.18
   nGood: 5
   nGoodVisits: 5
   visitRange: 133048-135846
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.07165px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5648,15 +5648,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.104
-  fail: 0.13
+  warn: 0.13
+  fail: 0.216
   nGood: 5
   nGoodVisits: 5
   visitRange: 133045-135844
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.08612px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5669,15 +5669,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.138
-  fail: 0.172
+  warn: 0.172
+  fail: 0.286
   nGood: 5
   nGoodVisits: 5
   visitRange: 133042-135842
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133042-135842 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1143px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5690,15 +5690,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.155
-  fail: 0.194
+  warn: 0.194
+  fail: 0.322
   nGood: 5
   nGoodVisits: 5
   visitRange: 133051-135848
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133051-135848 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1288px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5711,15 +5711,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.195
-  fail: 0.243
+  warn: 0.243
+  fail: 0.405
   nGood: 5
   nGoodVisits: 5
   visitRange: 133048-135846
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133048-135846 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1617px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5732,15 +5732,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.174
-  fail: 0.218
+  warn: 0.218
+  fail: 0.362
   nGood: 5
   nGoodVisits: 5
   visitRange: 133045-135844
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133045-135844 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1447px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5753,15 +5753,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.291
-  fail: 0.364
+  warn: 0.37
+  fail: 0.61
   nGood: 5
   nGoodVisits: 5
   visitRange: 133025-135831
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.2424px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5774,15 +5774,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.72
-  fail: 0.9
+  warn: 0.9
+  fail: 1.5
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.5961px.'
 - metric: robustRmsDeltaY
   population:
@@ -5795,15 +5795,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.199
-  fail: 0.249
+  warn: 0.249
+  fail: 0.415
   nGood: 5
   nGoodVisits: 5
   visitRange: 133034-135837
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1658px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5816,15 +5816,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.144
-  fail: 0.18
+  warn: 0.18
+  fail: 0.299
   nGood: 5
   nGoodVisits: 5
   visitRange: 133031-135835
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1196px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5837,16 +5837,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.31
-  fail: 0.387
+  warn: 0.39
+  fail: 0.65
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.2579px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.2579px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -5858,16 +5858,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.184
-  fail: 0.23
+  warn: 0.23
+  fail: 0.383
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.1529px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.1529px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -5879,15 +5879,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.21
-  fail: 0.262
+  warn: 0.262
+  fail: 0.437
   nGood: 5
   nGoodVisits: 5
   visitRange: 133028-135833
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1744px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5900,15 +5900,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.139
-  fail: 0.173
+  warn: 0.173
+  fail: 0.288
   nGood: 5
   nGoodVisits: 5
   visitRange: 133025-135831
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1152px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5921,15 +5921,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.536
-  fail: 0.669
+  warn: 0.67
+  fail: 1.12
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.446px.'
 - metric: robustRmsDeltaY
   population:
@@ -5942,15 +5942,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.11
-  fail: 0.137
+  warn: 0.137
+  fail: 0.228
   nGood: 5
   nGoodVisits: 5
   visitRange: 133034-135837
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.09093px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5963,15 +5963,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.108
-  fail: 0.135
+  warn: 0.135
+  fail: 0.225
   nGood: 5
   nGoodVisits: 5
   visitRange: 133031-135835
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.08987px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -5984,16 +5984,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.227
-  fail: 0.284
+  warn: 0.284
+  fail: 0.473
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.1888px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.1888px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -6005,16 +6005,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.121
-  fail: 0.151
+  warn: 0.151
+  fail: 0.251
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.1px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.1px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -6026,15 +6026,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.147
-  fail: 0.184
+  warn: 0.184
+  fail: 0.306
   nGood: 5
   nGoodVisits: 5
   visitRange: 133028-135833
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1221px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6047,15 +6047,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.101
-  fail: 0.126
+  warn: 0.126
+  fail: 0.21
   nGood: 5
   nGoodVisits: 5
   visitRange: 133025-135831
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.08371px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6068,15 +6068,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.387
-  fail: 0.484
+  warn: 0.49
+  fail: 0.81
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.3224px.'
 - metric: robustRmsDeltaY
   population:
@@ -6089,15 +6089,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.108
-  fail: 0.134
+  warn: 0.134
+  fail: 0.223
   nGood: 5
   nGoodVisits: 5
   visitRange: 133034-135837
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.08918px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6110,15 +6110,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.118
-  fail: 0.147
+  warn: 0.147
+  fail: 0.245
   nGood: 5
   nGoodVisits: 5
   visitRange: 133031-135835
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.09798px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6131,15 +6131,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.82
-  fail: 1.02
+  warn: 1.02
+  fail: 1.7
   nGood: 4
   nGoodVisits: 4
   visitRange: 134885-135277
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134885-135277 (n=4): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 134885-135277 (n=4): WARN 50% and FAIL 150% above the known-good
     median, 0.678px. MEDIAN UNBOUNDED: n=4 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6152,16 +6152,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.105
-  fail: 0.132
+  warn: 0.132
+  fail: 0.219
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.08736px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.08736px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -6173,15 +6173,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.114
-  fail: 0.142
+  warn: 0.142
+  fail: 0.237
   nGood: 5
   nGoodVisits: 5
   visitRange: 133028-135833
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.09449px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6194,15 +6194,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.102
-  fail: 0.128
+  warn: 0.128
+  fail: 0.212
   nGood: 5
   nGoodVisits: 5
   visitRange: 133025-135831
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.08472px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6215,15 +6215,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.465
-  fail: 0.582
+  warn: 0.59
+  fail: 0.97
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.3874px.'
 - metric: robustRmsDeltaY
   population:
@@ -6236,15 +6236,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.115
-  fail: 0.144
+  warn: 0.144
+  fail: 0.239
   nGood: 5
   nGoodVisits: 5
   visitRange: 133034-135837
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.09557px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6257,15 +6257,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.11
-  fail: 0.138
+  warn: 0.138
+  fail: 0.229
   nGood: 5
   nGoodVisits: 5
   visitRange: 133031-135835
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.09149px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6278,16 +6278,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.36
-  fail: 0.449
+  warn: 0.45
+  fail: 0.75
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.2993px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.2993px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -6299,16 +6299,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.102
-  fail: 0.127
+  warn: 0.127
+  fail: 0.212
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.08447px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.08447px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -6320,15 +6320,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.112
-  fail: 0.139
+  warn: 0.139
+  fail: 0.232
   nGood: 5
   nGoodVisits: 5
   visitRange: 133028-135833
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.09252px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6341,15 +6341,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.0556
-  fail: 0.0695
+  warn: 0.07
+  fail: 0.116
   nGood: 5
   nGoodVisits: 5
   visitRange: 133025-135831
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.04629px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6362,15 +6362,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.0446
-  fail: 0.0557
+  warn: 0.056
+  fail: 0.093
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.03712px.'
 - metric: robustRmsDeltaY
   population:
@@ -6383,15 +6383,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.149
-  fail: 0.186
+  warn: 0.186
+  fail: 0.31
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.1238px.'
 - metric: robustRmsDeltaY
   population:
@@ -6404,15 +6404,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.0473
-  fail: 0.0591
+  warn: 0.06
+  fail: 0.099
   nGood: 5
   nGoodVisits: 5
   visitRange: 133034-135837
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.0394px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6425,15 +6425,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.103
-  fail: 0.129
+  warn: 0.129
+  fail: 0.215
   nGood: 5
   nGoodVisits: 5
   visitRange: 133031-135835
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.08578px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6446,16 +6446,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.406
-  fail: 0.508
+  warn: 0.51
+  fail: 0.85
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.3382px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.3382px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -6467,15 +6467,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.094
-  fail: 0.117
+  warn: 0.117
+  fail: 0.195
   nGood: 5
   nGoodVisits: 5
   visitRange: 133028-135833
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.07775px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6488,15 +6488,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.0312
-  fail: 0.039
+  warn: 0.039
+  fail: 0.065
   nGood: 5
   nGoodVisits: 5
   visitRange: 133025-135831
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.02597px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6509,15 +6509,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.0378
-  fail: 0.0472
+  warn: 0.048
+  fail: 0.079
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.03143px.'
 - metric: robustRmsDeltaY
   population:
@@ -6530,15 +6530,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.169
-  fail: 0.211
+  warn: 0.211
+  fail: 0.352
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.1406px.'
 - metric: robustRmsDeltaY
   population:
@@ -6551,15 +6551,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.0383
-  fail: 0.0479
+  warn: 0.048
+  fail: 0.08
   nGood: 5
   nGoodVisits: 5
   visitRange: 133034-135837
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.03187px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6572,15 +6572,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.069
-  fail: 0.086
+  warn: 0.086
+  fail: 0.142
   nGood: 5
   nGoodVisits: 5
   visitRange: 133031-135835
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.05678px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6593,16 +6593,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.183
-  fail: 0.229
+  warn: 0.229
+  fail: 0.381
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.1521px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.1521px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -6614,15 +6614,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.08
-  fail: 0.1
+  warn: 0.1
+  fail: 0.166
   nGood: 5
   nGoodVisits: 5
   visitRange: 133028-135833
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.06634px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6635,15 +6635,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.072
-  fail: 0.09
+  warn: 0.09
+  fail: 0.15
   nGood: 5
   nGoodVisits: 5
   visitRange: 133025-135831
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.05986px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6656,15 +6656,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.078
-  fail: 0.097
+  warn: 0.097
+  fail: 0.162
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.06464px.'
 - metric: robustRmsDeltaY
   population:
@@ -6677,15 +6677,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.215
-  fail: 0.268
+  warn: 0.268
+  fail: 0.446
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.1784px.'
 - metric: robustRmsDeltaY
   population:
@@ -6698,15 +6698,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.0514
-  fail: 0.0642
+  warn: 0.065
+  fail: 0.107
   nGood: 5
   nGoodVisits: 5
   visitRange: 133034-135837
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.04276px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6719,15 +6719,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.133
-  fail: 0.166
+  warn: 0.166
+  fail: 0.276
   nGood: 5
   nGoodVisits: 5
   visitRange: 133031-135835
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1102px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6740,16 +6740,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.72
-  fail: 0.9
+  warn: 0.9
+  fail: 1.5
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.5994px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.5994px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -6761,15 +6761,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.104
-  fail: 0.13
+  warn: 0.13
+  fail: 0.216
   nGood: 5
   nGoodVisits: 5
   visitRange: 133028-135833
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.08613px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6782,15 +6782,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.067
-  fail: 0.084
+  warn: 0.084
+  fail: 0.139
   nGood: 5
   nGoodVisits: 5
   visitRange: 133025-135831
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133025-135831 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.05559px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6803,15 +6803,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.079
-  fail: 0.098
+  warn: 0.098
+  fail: 0.163
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.06506px.'
 - metric: robustRmsDeltaY
   population:
@@ -6824,15 +6824,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.166
-  fail: 0.208
+  warn: 0.208
+  fail: 0.346
   nGood: 6
   nGoodVisits: 6
   visitRange: 133037-135840
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133037-135840 (n=6): WARN 50% and FAIL 150% above the known-good
     median, 0.1381px.'
 - metric: robustRmsDeltaY
   population:
@@ -6845,15 +6845,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.0491
-  fail: 0.0614
+  warn: 0.062
+  fail: 0.103
   nGood: 5
   nGoodVisits: 5
   visitRange: 133034-135837
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133034-135837 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.0409px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6866,15 +6866,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.141
-  fail: 0.177
+  warn: 0.177
+  fail: 0.294
   nGood: 5
   nGoodVisits: 5
   visitRange: 133031-135835
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133031-135835 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.1174px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
 - metric: robustRmsDeltaY
   population:
@@ -6887,15 +6887,15 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.128
-  fail: 0.159
+  warn: 0.159
+  fail: 0.265
   nGood: 1
   nGoodVisits: 1
   visitRange: 134880-134880
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-134880 (n=1): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 134880-134880 (n=1): WARN 50% and FAIL 150% above the known-good
     median, 0.1058px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
     at 95% confidence.'
 - metric: robustRmsDeltaY
@@ -6909,16 +6909,16 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.62
-  fail: 0.77
+  warn: 0.77
+  fail: 1.28
   nGood: 12
   nGoodVisits: 12
   visitRange: 134880-135279
   reliable: true
   failBounded: true
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 20% and FAIL 50% above the known-good
-    median, 0.5097px.'
+  provenance: 'Derived 2026-10-19 from validation visits 134880-135279 (n=12): WARN 50% and FAIL 150% above the
+    known-good median, 0.5097px.'
 - metric: robustRmsDeltaY
   population:
     reference: visit
@@ -6930,13 +6930,13 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: tolerance
-  warn: 0.106
-  fail: 0.133
+  warn: 0.133
+  fail: 0.221
   nGood: 5
   nGoodVisits: 5
   visitRange: 133028-135833
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 20% and FAIL 50% above the known-good
+  provenance: 'Derived 2026-10-19 from validation visits 133028-135833 (n=5): WARN 50% and FAIL 150% above the known-good
     median, 0.08822px. MEDIAN UNBOUNDED: n=5 cannot bound the median at 95% confidence.'
