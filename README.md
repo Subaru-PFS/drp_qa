@@ -137,6 +137,22 @@ measure it on every visit they judge: comparison mode reports its verdicts besid
 | `dmLineResidualSummary` | `instrument, visit, arm, spectrograph` | One row: `qaStatus`, `qaDecidedBy`, `qaReason`, `recommendedAction`, `fitted`, `obsType`, and the calibration used. |
 | `dmLineResidualData`    | `instrument, visit, arm, spectrograph` | One row per line measured (`USED` and `RESERVED` traces sampled), with `dxCalib`, `dyCalib`, `dxVisit`, `dyVisit`. |
 
+##### Coming from `dmResiduals`
+
+`dmResiduals` and `dmCombinedResiduals` were retired on 2026-10-22 (PIPE2D-1956). Where their outputs went:
+
+| Before                                            | Now                                                                                                      |
+|---------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| `dmQaResidualStats`, a row per `status_type` and species | `dmLineResidualMetrics`, long format; `lineResiduals.wideResiduals` gives a column per metric. `reference` `visit` is what `dmResiduals` measured against; `calib` is new. |
+| `spatial.median`, `spatial.robustRms`             | `medianDeltaX`, `robustRmsDeltaX`                                                                        |
+| `wavelength.median`, `wavelength.robustRms`       | `medianDeltaY`, `robustRmsDeltaY`                                                                        |
+| `weightedRms`, `softenFit`                        | not recomputed: drp_stella's own, in `iqQaSpeciesMetrics`                                                |
+| `num_lines`, per fiber                            | `nLines` (lines of the species) and `linesPerFiber`                                                      |
+| the verdict                                       | `dmLineResidualSummary`: `qaStatus`, `qaDecidedBy`, `qaReason`, `recommendedAction`, the calibration used |
+| `dmQaResidualData`                                | `dmLineResidualData`, with a residual against each reference                                             |
+| `dmQaResidualPlot`                                | nothing per quantum: drawn from `dmLineResidualData` after the fact (PIPE2D-1920)                        |
+| `dmQaDetectorStats`, `dmQaCombinedResidualPlot`   | comparison mode's report, *Line residuals* section; `bin.src/exportMetrics.py` for the tables           |
+
 #### `imageQualityQa`
 
 Measures image quality (FWHM), spatial flexure, and arc-line flag rates on a per-detector quantum
