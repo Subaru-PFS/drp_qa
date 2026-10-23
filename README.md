@@ -540,8 +540,11 @@ verdict is known. The decisions behind the current set:
 - **b-arm populations are not split by camera set** (PIPE2D-1927). The camera set (`cameraSet`, the arms a visit
   read) is stored with `dmLineResiduals`' rows and is a population column of the scatter thresholds, but its one effect
   is the b arm's offset from `detectorMap_calib` when read with m (−0.45 to −0.47 px in Runs 25 and 28–30), which
-  `medianDeltaX` measures and the 1 px drift WARN absorbs. The b-arm trace scatter does not depend on it (0.047 px read
-  with m, 0.0465 px with n and r), so the per-detector scatter tolerances are not split by it. `iqQaMetrics`'
+  `medianDeltaX` measures and the 1 px drift WARN absorbs. The b-arm trace scatter does not depend on it: on quartz
+  frames, b read with m and with r agree within 3 % per detector within a run (Runs 25, 26, 28 and 29; Run30 +13 %, on
+  5 images read with m), so the per-detector scatter tolerances are not split by it. Pooled over runs the two differ,
+  because the scatter moves twofold between runs (0.025–0.054 px) and the camera sets are not spread evenly over them:
+  compare them within a run. `iqQaMetrics`'
   `medDxCenter` is superseded by `dmLineResiduals`' `medianDeltaX`.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
