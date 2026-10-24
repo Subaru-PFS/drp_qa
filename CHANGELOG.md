@@ -12,8 +12,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 - **`readAgcData` reads `camera_enabled`** (INSTRM-3057) — `agc_match.camera_enabled`, a nullable boolean: False for a
   spot from a camera that ics_agActor left out of its fit (INSTRM-2919), NA for rows written before the column.
-  `selectEnabledCameras` selects the rest, taking NA as enabled. Needs the opdb migration `f3a8d61c2b57`
-  (spt_operational_database) on the database read.
+  `selectEnabledCameras` selects the rest, taking NA (or no column) as enabled. The fits that combine the cameras
+  leave disabled ones out, as the guider did: the boresight fit of `fitGuiderModel`, the exposure terms of
+  `fitGlobalModel`, `guideErrorsByExposure`, the rates of `fitDriftRate` and the exposure focus errors of
+  `estimateFocusErrors`. Per-camera results keep them, with a `camera_enabled` column. Needs the opdb migration
+  `f3a8d61c2b57` (spt_operational_database) on the database read.
 - **`dmLineResiduals` stores the frame type, and judges trace scatter on quartz frames** (PIPE2D-1956) —
   `dmLineResidualMetrics` and `dmLineResidualSummary` gain `obsType`, the observation type from the raw header's
   `W_SEQTYP` as `imageQualityQa` classifies it (`trace` for a quartz, `arc`, `twilight`, ...; the pfsConfig header
