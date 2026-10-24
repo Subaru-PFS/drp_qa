@@ -218,17 +218,17 @@ class TestUnconfirmedVerdicts:
         """They are real visits; hiding them defeats the point of recording them."""
         visitSet = loadValidationVisits()
         suspect = {entry.visits[0] for entry in visitSet.knownBad if entry.unconfirmed}
-        # Run25 SM3's y offset from its calibration (PIPE2D-1921): its traces, arcs and twilights
-        # after the calibration block, named visit by visit (an entry's visits are reduced, so a
-        # range here would sweep in every visit between them).
-        sm3 = {133532, 133536, 134338, 135828, 135849, 135830, 134334, 134880, 135275}
-        assert suspect == {149883, 150661} | sm3
+        # Run25 SM3's y offset from its calibration (PIPE2D-1921): its arcs and twilights after the
+        # calibration block, named visit by visit (an entry's visits are reduced, so a range here
+        # would sweep in every visit between them). Not its traces, which measure no y (PIPE2D-1934).
+        sm3 = {135830, 134334, 134880, 135275}
+        assert suspect == sm3
         assert len(visitSet.visits) < 200  # negative control: no entry spans a run
 
     def testConfirmedBadExcludesThem(self):
         """A guess must not decide whether a threshold separates the bad data."""
         visitSet = loadValidationVisits()
-        assert len(visitSet.confirmedBad) == len(visitSet.knownBad) - 11
+        assert len(visitSet.confirmedBad) == len(visitSet.knownBad) - 4
         assert all(not entry.unconfirmed for entry in visitSet.confirmedBad)
 
     def testTheyStillCarryAVerdictAndAReason(self):
@@ -328,12 +328,39 @@ class TestParsing:
                 "version: 1\nknown_bad:\n  - {visit: 1, sequenceType: scienceArc, expect: FAIL, unconfirmed: yes please}\n",
                 "must be true or false",
             ),
+            (
+                "version: 1\nknown_bad:\n  - {visit: 1, sequenceType: scienceArc, expect: FAIL, unchecked: ' '}\n",
+                "must give the reason",
+            ),
+            (
+                "version: 1\nknown_bad:\n  - {visit: 1, sequenceType: scienceArc, expect: FAIL, unconfirmed: true,"
+                " unchecked: why}\n",
+                "cannot be 'unchecked'",
+            ),
+            (
+                "version: 1\nknown_good:\n  - {visit: 1, sequenceType: scienceArc, unchecked: why}\n",
+                "'unchecked' is for known_bad",
+            ),
         ],
     )
     def testMalformedEntriesRaise(self, writeYaml, body, message):
         """Validation is strict: a dropped entry stops being a reference."""
         with pytest.raises(ValueError, match=message):
             loadValidationVisits(writeYaml(body))
+
+    def testUnchecked(self, writeYaml):
+        """An entry no check can run says why; the others leave the field out."""
+        path = writeYaml(
+            """
+            version: 1
+            known_bad:
+              - {visit: 1, sequenceType: scienceArc, expect: FAIL, metric: nLines, unchecked: "not judged"}
+              - {visit: 2, sequenceType: scienceArc, expect: FAIL, metric: medFwhm}
+            """
+        )
+        unchecked, checked = loadValidationVisits(path).knownBad
+        assert unchecked.unchecked == "not judged"
+        assert checked.unchecked is None
 
     def testMissingFileRaises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
@@ -462,6 +489,19 @@ class TestTables:
             rows = [line for line in block.splitlines() if line.startswith("|")]
             widths = {line.count(" | ") for line in rows if "---" not in line}
             assert len(widths) == 1, block.splitlines()[0]
+
+    def testUncheckedIsShown(self):
+        """The metric cell says unchecked and the reason cell says why."""
+        entry = ValidationVisit(
+            visits=(1,), expect="FAIL", metric="nLines", reason="Unlit.", unchecked="Not judged."
+        )
+        text = formatTables(ValidationVisitSet(knownBad=(entry,)))
+        assert "| `nLines` (unchecked) | Unlit. *Unchecked:* Not judged. |" in text
+        # Negative control: an entry without the field shows neither.
+        checked = formatTables(
+            ValidationVisitSet(knownBad=(ValidationVisit(visits=(1,), expect="FAIL", metric="nLines"),))
+        )
+        assert "unchecked" not in checked.lower()
 
     def testPipesAreEscaped(self):
         entry = ValidationVisit(visits=(1,), expect="PASS", note="a | b")
