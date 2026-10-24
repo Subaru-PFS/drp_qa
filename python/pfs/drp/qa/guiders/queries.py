@@ -58,6 +58,7 @@ AGC_DATA_COLUMNS = {
     "agc_center_x_mm": "measured position of the star (mm, hardware coordinates)",
     "agc_center_y_mm": "measured position of the star (mm, hardware coordinates)",
     "agc_match_flags": "agc_match.flags (SourceMatchingFlags); GOOD_MATCH (1) alone for a valid match",
+    "camera_enabled": "agc_match.camera_enabled; False if agActor left the camera out of its fit, NA before INSTRM-3057",
     "agc_data_flags": "agc_data.flags (SourceDetectionFlags); if NULL, RIGHT from centroid_x_pix, as agActor",
     "guide_star_flag": "pfs_design_agc.guide_star_flag (SourceCatalogFlags); 0 if missing",
     "image_moment_00_pix": "zeroth image moment (flux)",
@@ -111,6 +112,7 @@ SELECT
     agc_match.agc_center_x_mm,
     agc_match.agc_center_y_mm,
     agc_match.flags AS agc_match_flags,
+    agc_match.camera_enabled,
     -- Older rows have no flags; infer RIGHT from the centroid, as agActor's query_agc_data does.
     COALESCE(agc_data.flags, CAST(agc_data.centroid_x_pix >= 511.5 + 24 AS INTEGER)) AS agc_data_flags,
     pfs_design_agc.guide_star_flag,
@@ -317,6 +319,7 @@ def readAgcData(
     agcData = agcData.merge(telStatus, on="agc_exposure_id", how="left", validate="many_to_one")
 
     agcData["guide_star_flag"] = agcData.guide_star_flag.fillna(0).astype(int)
+    agcData["camera_enabled"] = agcData.camera_enabled.astype("boolean")
     agcData["inst_pa"] = np.nan
     if butler is not None:
         agcData = _addButlerColumns(agcData, agcExposures, butler, rawDataId)

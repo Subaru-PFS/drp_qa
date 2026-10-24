@@ -29,6 +29,7 @@ from pfs.drp.qa.guiders.analysis import (
     fitTransform,
     guideErrorsByExposure,
     momentDifferenceToPiston,
+    selectEnabledCameras,
     selectGoodDetections,
     selectIsolatedGaiaStars,
     selectStars,
@@ -203,6 +204,16 @@ def testSelectFlags():
     np.testing.assert_array_equal(selectGoodDetections(flags), [True, True, False])
     np.testing.assert_array_equal(selectIsolatedGaiaStars(flags), [True, False, False])
     np.testing.assert_array_equal(selectValidMatches(flags), [True, False, False])
+
+
+def testSelectEnabledCameras():
+    """A disabled camera's spots are dropped; rows from before the column count as enabled."""
+    agcData = pd.DataFrame({"camera_enabled": pd.array([True, False, pd.NA], dtype="boolean")})
+    enabled = selectEnabledCameras(agcData)
+    np.testing.assert_array_equal(enabled, [True, False, True])
+    assert enabled.dtype == bool
+    # Negative control: a plain cast treats NA (rows before INSTRM-3057) as disabled.
+    assert not np.array_equal(agcData.camera_enabled.fillna(False).to_numpy(dtype=bool), enabled)
 
 
 # Boresight and per-camera transforms

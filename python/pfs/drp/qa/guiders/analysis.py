@@ -65,6 +65,7 @@ __all__ = [
     "fitTransform",
     "guideErrorsByExposure",
     "momentDifferenceToPiston",
+    "selectEnabledCameras",
     "selectGoodDetections",
     "selectIsolatedGaiaStars",
     "selectStars",
@@ -144,6 +145,27 @@ def selectValidMatches(agcData: pd.DataFrame) -> np.ndarray:
         One element per row.
     """
     return agcData.agc_match_flags.to_numpy() == int(SourceMatchingFlags.GOOD_MATCH)
+
+
+def selectEnabledCameras(agcData: pd.DataFrame) -> np.ndarray:
+    """Select the spots from cameras that the guider fitted.
+
+    ics_agActor can disable a camera (INSTRM-2919): its spots are still
+    matched, and may be ``GOOD_MATCH``, but don't drive the guide offsets or
+    the focus. ``camera_enabled`` is False for them. Rows written before
+    INSTRM-3057 have no value (NA) and are taken as enabled.
+
+    Parameters
+    ----------
+    agcData : `pandas.DataFrame`
+        AG data with ``camera_enabled``.
+
+    Returns
+    -------
+    enabled : `numpy.ndarray` of `bool`
+        One element per row.
+    """
+    return agcData.camera_enabled.astype("boolean").fillna(True).to_numpy(dtype=bool)
 
 
 def selectIsolatedGaiaStars(agcData: pd.DataFrame) -> np.ndarray:

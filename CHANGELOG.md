@@ -10,6 +10,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **`readAgcData` reads `camera_enabled`** (INSTRM-3057) — `agc_match.camera_enabled`, a nullable boolean: False for a
+  spot from a camera that ics_agActor left out of its fit (INSTRM-2919), NA for rows written before the column.
+  `selectEnabledCameras` selects the rest, taking NA as enabled. Needs the opdb migration `f3a8d61c2b57`
+  (spt_operational_database) on the database read.
 - **`dmLineResiduals` stores the frame type, and judges trace scatter on quartz frames** (PIPE2D-1956) —
   `dmLineResidualMetrics` and `dmLineResidualSummary` gain `obsType`, the observation type from the raw header's
   `W_SEQTYP` as `imageQualityQa` classifies it (`trace` for a quartz, `arc`, `twilight`, ...; the pfsConfig header
