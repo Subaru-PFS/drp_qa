@@ -21,6 +21,12 @@ Positions are in hardware coordinates and offsets are a center minus a
 reference, in microns, as `pfs.drp.qa.guiders.coordinates` says. AG cameras
 are identified by ``agc_camera_id``, 0-5 (AG1 is 0), and drawn in the colours
 ``C0``-``C5``. 1 AG pixel is 13 µm (0.14 arcsec).
+
+A camera that ics_agActor disabled (``camera_enabled`` False; see
+`pfs.drp.qa.guiders.analysis.selectEnabledCameras`) is drawn with crosses,
+named "AGn (disabled)" in legends, labels and titles, and a panel of its own
+is greyed. A plot that averages over the cameras leaves it out, as the
+guider did, and its title says so.
 """
 
 import itertools
@@ -44,6 +50,7 @@ from matplotlib.patheffects import AbstractPathEffect
 from matplotlib.ticker import MaxNLocator, ScalarFormatter
 from matplotlib.transforms import IdentityTransform
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+from numpy.typing import ArrayLike
 
 from pfs.drp.qa.guiders import analysis
 from pfs.drp.qa.guiders.analysis import (
@@ -55,6 +62,7 @@ from pfs.drp.qa.guiders.analysis import (
     correctAgActorFocus,
     estimateFocusErrors,
     fitGlobalModel,
+    selectEnabledCameras,
     selectGoodDetections,
     selectIsolatedGaiaStars,
     selectValidMatches,
@@ -94,6 +102,10 @@ __all__ = [
 
 # The colours of the AG cameras, by agc_camera_id.
 _CAMERA_COLORS = [f"C{cid}" for cid in range(6)]
+
+# The marker of a disabled camera's points, and the background of a panel of its own.
+_DISABLED_MARKER = "x"
+_DISABLED_PANEL_COLOR = "0.9"
 
 # Half the width of the PFI plots of each kind (mm).
 _GUIDER_ERRORS_LIMIT_MM = 350
@@ -233,10 +245,102 @@ def _colorbar(
     return colorbar
 
 
-def _cameraLegend(ax: Axes, agcCameraIds: Iterable[int], **kwargs) -> None:
-    """Add a legend naming the cameras by colour."""
+# Disabled cameras
+
+
+def _disabledCameras(data: pd.DataFrame) -> frozenset[int]:
+    """Return the cameras disabled in any row of ``data``; see `selectEnabledCameras`."""
+    if "agc_camera_id" not in data:
+        return frozenset()
+    disabled = ~selectEnabledCameras(data)
+
+    return frozenset(int(cid) for cid in data.agc_camera_id[disabled].unique())
+
+
+def _cameraName(cid: int, disabled: Iterable[int] = ()) -> str:
+    """Return a camera's name, AG1 to AG6, saying if it was disabled."""
+    return f"AG{int(cid) + 1}" + (" (disabled)" if int(cid) in disabled else "")
+
+
+def _cameraNames(
+    agcCameraIds: Iterable[int], disabled: Iterable[int] = (), leftOutOf: str | None = None
+) -> str:
+    """Return the names of some cameras, in order, for a title.
+
+    If any of them is disabled and ``leftOutOf`` is given, say they were left out of it.
+    """
+    agcCameraIds = sorted({int(cid) for cid in agcCameraIds})
+    names = ", ".join(_cameraName(cid, disabled) for cid in agcCameraIds)
+    if leftOutOf and set(agcCameraIds) & set(disabled):
+        names += f"; disabled left out of {leftOutOf}"
+
+    return names
+
+
+def _leftOut(disabled: Iterable[int], what: str) -> str:
+    """Return a title line saying the disabled cameras are left out of ``what``; empty if there are none."""
+    disabled = sorted(disabled)
+    if not disabled:
+        return ""
+
+    return ", ".join(f"AG{cid + 1}" for cid in disabled) + f" disabled: left out of {what}"
+
+
+def _disabledNote(disabled: Iterable[int]) -> str:
+    """Return a title line naming the disabled cameras, drawn as crosses; empty if there are none."""
+    disabled = sorted(disabled)
+    if not disabled:
+        return ""
+
+    return ", ".join(f"AG{cid + 1}" for cid in disabled) + " disabled (crosses)"
+
+
+def _markDisabledPanel(ax: Axes, cid: int, disabled: Iterable[int]) -> None:
+    """Grey a panel showing one camera, if it was disabled."""
+    if cid in disabled:
+        ax.set_facecolor(_DISABLED_PANEL_COLOR)
+
+
+def _scatterByCamera(
+    ax: Axes, x: ArrayLike, y: ArrayLike, enabled: ArrayLike, **kwargs
+) -> list[PathCollection]:
+    """Scatter points, those of disabled cameras (not ``enabled``) as crosses; return the scatters.
+
+    ``c`` and ``s`` are split with the points when they are arrays of them.
+    With no disabled camera this is a single `Axes.scatter`.
+    """
+    enabled = np.asarray(enabled, dtype=bool)
+    if enabled.all():
+        return [ax.scatter(x, y, **kwargs)]
+
+    x, y = np.asarray(x), np.asarray(y)
+    marker = kwargs.pop("marker", None)
+    scatters = []
+    for rows, rowsMarker in [(enabled, marker), (~enabled, _DISABLED_MARKER)]:
+        if not rows.any():
+            continue
+        split = {
+            key: np.asarray(value)[rows]
+            if key in ("c", "s") and np.ndim(value) > 0 and len(value) == len(enabled)
+            else value
+            for key, value in kwargs.items()
+        }
+        scatters.append(ax.scatter(x[rows], y[rows], marker=rowsMarker, **split))
+
+    return scatters
+
+
+def _cameraLegend(ax: Axes, agcCameraIds: Iterable[int], disabled: Iterable[int] = (), **kwargs) -> None:
+    """Add a legend naming the cameras by colour, disabled ones with a cross."""
     handles = [
-        Line2D([], [], marker="o", ls="", color=_CAMERA_COLORS[int(cid)], label=f"AG{int(cid) + 1}")
+        Line2D(
+            [],
+            [],
+            marker=_DISABLED_MARKER if int(cid) in disabled else "o",
+            ls="",
+            color=_CAMERA_COLORS[int(cid)],
+            label=_cameraName(cid, disabled),
+        )
         for cid in sorted(agcCameraIds)
     ]
     if handles:
@@ -257,11 +361,12 @@ class _StrikeThrough(AbstractPathEffect):
         line.restore()
 
 
-def _focusCameraLegend(ax: Axes, agcCameraIds: Iterable[int], **kwargs) -> None:
+def _focusCameraLegend(ax: Axes, agcCameraIds: Iterable[int], disabled: Iterable[int] = (), **kwargs) -> None:
     """Name every camera in a focus-error panel's legend, striking out those with no data in it.
 
     A camera can be disabled or broken, and the reader should see that it is missing rather than not
-    listed. Other labelled artists (the PFI focus line) follow the cameras.
+    listed. A disabled camera's handle is a cross. Other labelled artists (the PFI focus line) follow the
+    cameras.
     """
     handles, labels = ax.get_legend_handles_labels()
     drawn = {label for label in labels if label.startswith("AG")}
@@ -269,11 +374,11 @@ def _focusCameraLegend(ax: Axes, agcCameraIds: Iterable[int], **kwargs) -> None:
         Line2D(
             [],
             [],
-            marker="o",
+            marker=_DISABLED_MARKER if cid in disabled else "o",
             ls="",
             color=_CAMERA_COLORS[cid],
-            label=f"AG{cid + 1}",
-            alpha=1 if f"AG{cid + 1}" in drawn else 0.3,
+            label=_cameraName(cid, disabled),
+            alpha=1 if _cameraName(cid, disabled) in drawn else 0.3,
         )
         for cid in agcCameraIds
     ]
@@ -396,6 +501,7 @@ def showAGCameraCartoon(
     showUp: bool = False,
     lookingAtHardware: bool = True,
     insrot_deg: float | None = None,
+    disabledCameras: Iterable[int] = (),
 ) -> Axes:
     """Draw a cartoon of the AG cameras in the bottom left corner of a plot.
 
@@ -413,6 +519,8 @@ def showAGCameraCartoon(
     insrot_deg : `float`, optional
         Rotate the cameras by minus this rotator angle (degrees), as the plots
         do with ``rotateToAG1Down``.
+    disabledCameras : iterable of `int`
+        Grey and strike out these cameras.
 
     Returns
     -------
@@ -430,7 +538,12 @@ def showAGCameraCartoon(
             x, y = rotXY(-np.deg2rad(insrot_deg), x, y)
         if not lookingAtHardware:
             y = -y
-        cartoon.text(x, y, f"{cid + 1}", ha="center", va="center", color=_CAMERA_COLORS[cid])
+        if cid in disabledCameras:
+            cartoon.text(
+                x, y, f"{cid + 1}", ha="center", va="center", color="0.5", path_effects=[_StrikeThrough()]
+            )
+        else:
+            cartoon.text(x, y, f"{cid + 1}", ha="center", va="center", color=_CAMERA_COLORS[cid])
 
     if showInstrot:
         _drawCircularArrow(cartoon, 100, (0, 10), (0, 250), clockwise=lookingAtHardware)
@@ -462,6 +575,8 @@ def showAgcErrorsForVisits(
     The guide error is the mean offset of the exposure's valid matches
     (`pfs.drp.qa.guiders.analysis.selectValidMatches`) from their
     ``reference`` positions, center minus reference; ``r`` is its length.
+    Disabled cameras are left out, as the guider left them out, and the
+    title names them.
     Each visit has its own colour, and AG exposures taken with the
     spectrograph shutters open (``shutter_open == 1``) are drawn larger.
 
@@ -508,7 +623,8 @@ def showAgcErrorsForVisits(
         data = data[data.pfs_visit_id.isin(list(pfsVisitIds))]
     if agcExposureIds is not None:
         data = data[data.agc_exposure_id.isin(list(agcExposureIds))]
-    data = data[selectValidMatches(data)]
+    disabled = _disabledCameras(data)
+    data = data[selectValidMatches(data) & selectEnabledCameras(data)]
     if data.empty:
         raise ValueError("No valid matches to plot")
 
@@ -543,7 +659,10 @@ def showAgcErrorsForVisits(
     if showLegend:
         axes[0, 0].legend(ncol=6)
 
-    _finish(fig, axes, ownPanels, f"pfs_visit_id {_visitRange(visits)}  (center - {reference})")
+    title = f"pfs_visit_id {_visitRange(visits)}  (center - {reference})"
+    if disabled:
+        title += "\n" + _leftOut(disabled, "the guide errors")
+    _finish(fig, axes, ownPanels, title)
 
     return GuiderPlot(fig=fig, axes=axes, artists=artists, data=errors)
 
@@ -562,7 +681,8 @@ def _cameraOffsets(
     The valid matches without bad detection flags, taken while the shutters
     weren't closed, are averaged. Each camera's median is then subtracted,
     as the cameras' positions aren't known well, and then each exposure's
-    mean, which is the telescope's pointing error.
+    mean over the enabled cameras, which is the telescope's pointing error.
+    ``camera_enabled`` says which cameras were.
     """
     use = (agcData.shutter_open > 0).to_numpy() & selectGoodDetections(agcData) & selectValidMatches(agcData)
     data = agcData[use].reset_index(drop=True)
@@ -594,6 +714,7 @@ def _cameraOffsets(
         dx_um=dx,
         dy_um=dy,
         focus_error_um=mmToUm(agActorFocus[np.arange(len(data)), cameraId]),
+        camera_enabled=selectEnabledCameras(data),
     )
 
     offsets = data.groupby(["agc_exposure_id", "agc_camera_id"], as_index=False).agg(
@@ -603,10 +724,12 @@ def _cameraOffsets(
         focus_error_um=("focus_error_um", "first"),
         dx_um=("dx_um", "mean"),
         dy_um=("dy_um", "mean"),
+        camera_enabled=("camera_enabled", "all"),
     )
     for d in ("dx_um", "dy_um"):
         offsets[d] -= offsets.groupby("agc_camera_id")[d].transform("median")
-        offsets[d] -= offsets.groupby("agc_exposure_id")[d].transform("mean")
+        pointing = offsets[d].where(offsets.camera_enabled).groupby(offsets.agc_exposure_id).transform("mean")
+        offsets[d] -= pointing
 
     return offsets
 
@@ -674,7 +797,9 @@ def showAgcErrorsForVisitsByCamera(
     minus a fitted model) has the camera's median subtracted, as the
     cameras' positions aren't known well, and then the exposure's mean,
     which is the telescope's pointing error. Only valid matches without bad
-    detection flags, taken while the shutters weren't closed, are used.
+    detection flags, taken while the shutters weren't closed, are used. A
+    disabled camera is left out of the exposure's mean, as the guider left
+    it out, and its points are crosses.
 
     There are three kinds of plot:
 
@@ -756,8 +881,9 @@ def showAgcErrorsForVisitsByCamera(
     -------
     plot : `GuiderPlot`
         ``data`` has the offsets plotted, one row per AG exposure and camera
-        (or visit and camera): ``dx_um`` and ``dy_um``, and
-        ``focus_error_um``, the AG actor's focus error of the camera.
+        (or visit and camera): ``dx_um`` and ``dy_um``,
+        ``focus_error_um``, the AG actor's focus error of the camera, and
+        ``camera_enabled``.
     """
     _checkChoice("plotBy", plotBy, _PLOT_BY)
     _checkChoice("colorBy", colorBy, _COLOR_BY)
@@ -770,6 +896,7 @@ def showAgcErrorsForVisitsByCamera(
         agcData, rotateToZenith, fitPfiModel, fitPfiRotation, fitPfiScale, fitAgcOffsets, fitAgcRotation
     )
     offsets = offsets[offsets.agc_camera_id.isin(agcCameraIds)].reset_index(drop=True)
+    disabled = _disabledCameras(offsets)
     if plotXY and plotXYStride is None:
         offsets = offsets.groupby(["pfs_visit_id", "agc_camera_id"], as_index=False).agg(
             agc_exposure_id=("agc_exposure_id", "mean"),
@@ -778,6 +905,7 @@ def showAgcErrorsForVisitsByCamera(
             focus_error_um=("focus_error_um", "mean"),
             dx_um=("dx_um", "mean"),
             dy_um=("dy_um", "mean"),
+            camera_enabled=("camera_enabled", "all"),
             nAgcExposures=("agc_exposure_id", "count"),
         )
         offsets = offsets[offsets.nAgcExposures > nVisitMin].reset_index(drop=True)
@@ -818,10 +946,12 @@ def showAgcErrorsForVisitsByCamera(
             ax = axes.flat[j] if plotPerCamera else axes[0, 0]
             sel = (offsets.agc_camera_id == cid).to_numpy()
             dx, dy, c = offsets.dx_um[sel], offsets.dy_um[sel], colors[sel]
+            enabled = offsets.camera_enabled[sel]
             if stride > 1:
-                dx, dy, c = dx[::stride], dy[::stride], c[::stride]
-            mappable = ax.scatter(dx, dy, c=c, **scatterKwargs)
-            artists.append(mappable)
+                dx, dy, c, enabled = dx[::stride], dy[::stride], c[::stride], enabled[::stride]
+            scatters = _scatterByCamera(ax, dx, dy, enabled, c=c, **scatterKwargs)
+            mappable = scatters[0]
+            artists += scatters
             if connectDxDy:
                 artists += ax.plot(dx, dy, color=_CAMERA_COLORS[cid], alpha=alpha)
             if showCovariance:
@@ -829,7 +959,10 @@ def showAgcErrorsForVisitsByCamera(
                 if ellipse is not None:
                     ax.add_patch(ellipse)
             if plotPerCamera:
-                ax.text(0.03, 0.9, f"AG{cid + 1}", transform=ax.transAxes, color=_CAMERA_COLORS[cid])
+                ax.text(
+                    0.03, 0.9, _cameraName(cid, disabled), transform=ax.transAxes, color=_CAMERA_COLORS[cid]
+                )
+                _markDisabledPanel(ax, cid, disabled)
         for ax in axes.flat[nCameras:]:
             ax.set_visible(False)
         for ax in axes.flat[:nCameras]:
@@ -848,9 +981,10 @@ def showAgcErrorsForVisitsByCamera(
             for j, cameras in enumerate(panelCameras):
                 ax = axes[i, j]
                 sel = offsets.agc_camera_id.isin(cameras).to_numpy()
+                enabled = offsets.camera_enabled[sel]
                 if plotDzDfocus:
-                    mappable = ax.scatter(
-                        dFocus[sel], offsets[f"d{z}_um"][sel], c=colors[sel], **scatterKwargs
+                    scatters = _scatterByCamera(
+                        ax, dFocus[sel], offsets[f"d{z}_um"][sel], enabled, c=colors[sel], **scatterKwargs
                     )
                 elif showAltInsrot:
                     vlim = (-yLimit_um, yLimit_um) if yLimit_um > 0 else (None, None)
@@ -861,17 +995,32 @@ def showAgcErrorsForVisitsByCamera(
                         vmin=vlim[0],
                         vmax=vlim[1],
                     )
+                    scatters = [mappable]
                     colorbarLabel = "mean offset (µm)"
                     ax.text(0.03, 0.9, f"{z} offset", transform=ax.transAxes)
                 else:
-                    mappable = ax.scatter(
-                        offsets[plotBy][sel], offsets[f"d{z}_um"][sel], c=colors[sel], **scatterKwargs
+                    scatters = _scatterByCamera(
+                        ax,
+                        offsets[plotBy][sel],
+                        offsets[f"d{z}_um"][sel],
+                        enabled,
+                        c=colors[sel],
+                        **scatterKwargs,
                     )
                     ax.axhline(0, color="black", alpha=0.5, zorder=10)
-                artists.append(mappable)
-                if plotPerCamera and i == 0:
+                mappable = scatters[0]
+                artists += scatters
+                if plotPerCamera:
                     cid = cameras[0]
-                    ax.text(0.1, 1.025, f"AG{cid + 1}", transform=ax.transAxes, color=_CAMERA_COLORS[cid])
+                    _markDisabledPanel(ax, cid, disabled)
+                    if i == 0:
+                        ax.text(
+                            0.1,
+                            1.025,
+                            _cameraName(cid, disabled),
+                            transform=ax.transAxes,
+                            color=_CAMERA_COLORS[cid],
+                        )
                 if j == 0:
                     ax.set_ylabel("insrot" if showAltInsrot else f"{z} offset (µm)")
             if plotDzDfocus and xLimit_um > 0:
@@ -897,7 +1046,7 @@ def showAgcErrorsForVisitsByCamera(
     if mappable is not None:
         if colorBy == "camera" and showCamerasAsLegend and not showAltInsrot:
             if not plotPerCamera:
-                _cameraLegend(axes[0, 0], offsets.agc_camera_id.unique(), ncol=6)
+                _cameraLegend(axes[0, 0], offsets.agc_camera_id.unique(), disabled, ncol=6)
         else:
             colorbar = _colorbar(
                 fig,
@@ -909,7 +1058,7 @@ def showAgcErrorsForVisitsByCamera(
                 orientation="vertical" if axes.shape[0] > 1 else "horizontal",
             )
             if colorBy == "camera" and not showAltInsrot:
-                colorbar.set_ticks(range(1, 7), labels=[f"AG{cid + 1}" for cid in range(6)])
+                colorbar.set_ticks(range(1, 7), labels=[_cameraName(cid, disabled) for cid in range(6)])
             newColorbars = (colorbar,)
 
     title = f"pfs_visit_id {_visitRange(offsets.pfs_visit_id)}"
@@ -921,7 +1070,7 @@ def showAgcErrorsForVisitsByCamera(
         )
         if fitAgcOffsets:
             title += " Fit AGC offsets" + (" rotations" if fitAgcRotation else "")
-    title += "\n" + ", ".join(f"AG{cid + 1}" for cid in sorted(offsets.agc_camera_id.unique()))
+    title += "\n" + _cameraNames(offsets.agc_camera_id.unique(), disabled, "each exposure's mean")
     _finish(fig, axes, ownPanels, title)
 
     return GuiderPlot(fig=fig, axes=axes, artists=artists, colorbars=newColorbars, data=offsets)
@@ -1036,6 +1185,9 @@ def _guiderErrorsTitle(data: pd.DataFrame, fit: GuiderFit, config: GuiderPlotCon
     ]
     if removed:
         lines.append(f"{' and '.join(removed)} offset and rotation/scale removed")
+    disabled = _disabledCameras(fit.agcData)
+    if disabled and fitConfig.modelBoresightOffset:
+        lines.append(_leftOut(disabled, "the boresight fit"))
 
     cuts = []
     if fitConfig.maxGuideError_um > 0:
@@ -1123,7 +1275,8 @@ def showGuiderErrors(
     there: ``dx_model_um`` and ``dy_model_um`` of
     `pfs.drp.qa.guiders.analysis.fitGuiderModel`. The stars are those the
     fit selected (``selected``: valid matches passing the shutter, guide
-    error, stride and visit cuts) without bad detection flags.
+    error, stride and visit cuts) without bad detection flags. A disabled
+    camera's stars are crosses, and it is named where it is drawn.
 
     Parameters
     ----------
@@ -1165,6 +1318,7 @@ def showGuiderErrors(
     )
     data = data.assign(xPos=xPos, yPos=yPos, xOff=xOff, yOff=yOff)
     use = data.selected.to_numpy(dtype=bool) & selectGoodDetections(data)
+    disabled = _disabledCameras(data)
     vmin, vmax = data.agc_exposure_id.min(), data.agc_exposure_id.max()
     means = (
         _cameraMeans(fit, config)
@@ -1206,6 +1360,17 @@ def showGuiderErrors(
             xbar = np.full(len(stars), stars.xPos.mean())
             ybar = np.full(len(stars), stars.yPos.mean())
             ax.plot(xbar[:1], ybar[:1], "+", color=crossColor, zorder=10)
+        if cid in disabled:
+            ax.annotate(
+                _cameraName(cid, disabled),
+                (xbar[0], ybar[0]),
+                xytext=(0, 15),
+                textcoords="offset points",
+                color=color,
+                ha="center",
+                va="bottom",
+                zorder=11,
+            )
 
         if config.showGuideStarPositions:
             xStart = xbar + (stars.xPos.to_numpy() - xbar) * config.gstarExpansion
@@ -1217,9 +1382,11 @@ def showGuiderErrors(
         if config.showGuideStars:
             if config.showGuideStarsAsPoints:
                 if config.showByVisit:
-                    scatter = ax.scatter(
+                    scatters = _scatterByCamera(
+                        ax,
                         xEnd,
                         yEnd,
+                        selectEnabledCameras(stars),
                         s=config.markerSize,
                         alpha=config.alpha,
                         vmin=vmin,
@@ -1227,21 +1394,28 @@ def showGuiderErrors(
                         c=stars.agc_exposure_id,
                         cmap=config.colormap,
                     )
-                    artists.append(scatter)
+                    scatter = scatters[0]
+                    artists += scatters
                 else:
                     artists += ax.plot(
                         xEnd,
                         yEnd,
-                        ".",
+                        _DISABLED_MARKER if cid in disabled else ".",
                         color=color,
-                        label=f"AG{cid + 1}",
+                        label=_cameraName(cid, disabled),
                         alpha=config.alpha,
                         markersize=config.markerSize,
                     )
                     labelled = True
             elif config.showGuideStarsAsArrows:
                 quiver = ax.quiver(
-                    xStart, yStart, xEnd - xStart, yEnd - yStart, alpha=0.5, color=color, label=f"AG{cid + 1}"
+                    xStart,
+                    yStart,
+                    xEnd - xStart,
+                    yEnd - yStart,
+                    alpha=0.5,
+                    color=color,
+                    label=_cameraName(cid, disabled),
                 )
                 artists.append(quiver)
                 labelled = True
@@ -1255,9 +1429,11 @@ def showGuiderErrors(
                 )
                 artists += ax.plot(camera.xPlot, camera.yPlot, "-", color="black", alpha=0.25, zorder=-10)
             if config.showAverageGuideStarPos:
-                scatter = ax.scatter(
+                scatters = _scatterByCamera(
+                    ax,
                     camera.xPlot,
                     camera.yPlot,
+                    selectEnabledCameras(camera),
                     s=config.markerSize,
                     alpha=config.alpha,
                     vmin=vmin,
@@ -1265,7 +1441,8 @@ def showGuiderErrors(
                     c=camera.agc_exposure_id,
                     cmap=config.colormap,
                 )
-                artists.append(scatter)
+                scatter = scatters[0]
+                artists += scatters
 
     newColorbars = ()
     if scatter is not None:
@@ -1281,7 +1458,7 @@ def showGuiderErrors(
         )
 
     if not config.showGuideStarsAsArrows:
-        showAGCameraCartoon(ax, showInstrot=True, showUp=config.rotateToAG1Down)
+        showAGCameraCartoon(ax, showInstrot=True, showUp=config.rotateToAG1Down, disabledCameras=disabled)
     elif labelled:
         legend = ax.legend(loc="lower right", markerscale=1)
         for handle in legend.legend_handles:
@@ -1318,7 +1495,7 @@ def showGuiderErrorsByParams(
 
     The means are `pfs.drp.qa.guiders.analysis.GuiderFit.guideErrorByCamera`,
     drawn as `showGuiderErrors` draws them with ``showAverageGuideStarPos``,
-    one panel per quantity.
+    one panel per quantity; a disabled camera's are crosses.
 
     Parameters
     ----------
@@ -1362,9 +1539,11 @@ def showGuiderErrorsByParams(
     for i, (ax, param) in enumerate(zip(axes.flat, params, strict=False)):
         column = param if param in means and f"{param}_param" not in means else f"{param}_param"
         vmin, vmax = np.nanpercentile(means[column], [1, 99])
-        scatter = ax.scatter(
+        scatters = _scatterByCamera(
+            ax,
             means.xPlot,
             means.yPlot,
+            selectEnabledCameras(means),
             s=config.markerSize,
             alpha=config.alpha,
             vmin=vmin,
@@ -1372,13 +1551,13 @@ def showGuiderErrorsByParams(
             c=means[column],
             cmap=config.colormap,
         )
-        artists.append(scatter)
+        artists += scatters
         newColorbars.append(
-            _colorbar(fig, scatter, param, colorbars, i, ax=ax, shrink=1 / nCols if nRows == 1 else 1)
+            _colorbar(fig, scatters[0], param, colorbars, i, ax=ax, shrink=1 / nCols if nRows == 1 else 1)
         )
         _pfiPanel(ax, config)
         if not config.rotateToAG1Down:
-            showAGCameraCartoon(ax, showInstrot=True)
+            showAGCameraCartoon(ax, showInstrot=True, disabledCameras=_disabledCameras(means))
     for ax in axes.flat[len(params) :]:
         ax.set_visible(False)
     _xLabel(fig, axes, ownPanels, r"$\delta$x (µm)")
@@ -1525,7 +1704,9 @@ def plotDriftRate(
         Plot against minutes since the first AG exposure, rather than
         ``agc_exposure_id``.
     showCamera : `bool`
-        Colour the points by camera; needs a fit with ``byCamera``.
+        Colour the points by camera; needs a fit with ``byCamera``. A
+        disabled camera's points are crosses, with or without it; they
+        aren't in the rates.
     fitTrend : `bool`
         Draw the fitted lines and rates.
     name : `str`, optional
@@ -1541,6 +1722,8 @@ def plotDriftRate(
     """
     offsets, rates = fit.offsets, fit.rates
     showCamera &= "agc_camera_id" in offsets
+    disabled = _disabledCameras(offsets)
+    enabled = selectEnabledCameras(offsets)
     components = ["radial", "tangential"] if "dradial_um" in offsets else ["y", "x"]
 
     fig, axes, ownPanels = _panels(2, 1, fig, axes, sharex=True, sharey=True)
@@ -1551,11 +1734,21 @@ def plotDriftRate(
         if showCamera:
             for cid in range(6):
                 rows = (offsets.agc_camera_id == cid).to_numpy()
-                if rows.any():
-                    artists += ax.plot(x[rows], y[rows], "o", color=_CAMERA_COLORS[cid], label=f"AG{cid + 1}")
+                for use, marker in [(rows & enabled, "o"), (rows & ~enabled, _DISABLED_MARKER)]:
+                    if use.any():
+                        label = (
+                            _cameraName(cid, disabled)
+                            if marker == "o" or not (rows & enabled).any()
+                            else None
+                        )
+                        artists += ax.plot(
+                            x[use], y[use], marker, ls="", color=_CAMERA_COLORS[cid], label=label
+                        )
             ax.legend(ncol=6, loc="upper right", fontsize="small")
         else:
-            artists += ax.plot(x, y, "o")
+            artists += ax.plot(x[enabled], y[enabled], "o")
+            if not enabled.all():
+                artists += ax.plot(x[~enabled], y[~enabled], _DISABLED_MARKER, color=artists[-1].get_color())
         ax.set_ylabel(component)
 
         if fitTrend:
@@ -1576,6 +1769,8 @@ def plotDriftRate(
 
     title = f"visit {int(rates.pfs_visit_id)}" + (f" {name}" if name else "")
     title += f"\nalt, az ({rates.altitude:.1f}, {rates.azimuth:.1f}) insrot {rates.insrot:.1f}"
+    if disabled:
+        title += "\n" + _leftOut(disabled, "the rates")
     _finish(fig, axes, ownPanels, title)
 
     return GuiderPlot(fig=fig, axes=axes, artists=artists)
@@ -1602,7 +1797,8 @@ def plotGuideErrors(
 
     drp_stella's ``estimateGuideErrors(plot=True)``. Each camera's guide
     errors (microns) are drawn about its median position (mm), and their
-    mean over the cameras about the boresight.
+    mean over the cameras about the boresight. A disabled camera's errors
+    are crosses, and are left out of the mean, as the guider left them out.
 
     Parameters
     ----------
@@ -1654,14 +1850,20 @@ def plotGuideErrors(
     xCamera = data.agc_camera_id.map(centers.agc_nominal_x_mm).to_numpy() / expand
     yCamera = data.agc_camera_id.map(centers.agc_nominal_y_mm).to_numpy() / expand
     insrot = np.deg2rad(data.insrot.mean())
+    disabled = _disabledCameras(data)
+    enabled = selectEnabledCameras(data)
 
-    means = data.groupby("agc_exposure_id", as_index=False).agg(
-        pfs_visit_id=("pfs_visit_id", "first"),
-        dx_um=("dx_um", "mean"),
-        dy_um=("dy_um", "mean"),
-        shutter_open=("shutter_open", "first"),
-        time=("time", "mean"),
-        insrot=("insrot", "mean"),
+    means = (
+        data[enabled]
+        .groupby("agc_exposure_id", as_index=False)
+        .agg(
+            pfs_visit_id=("pfs_visit_id", "first"),
+            dx_um=("dx_um", "mean"),
+            dy_um=("dy_um", "mean"),
+            shutter_open=("shutter_open", "first"),
+            time=("time", "mean"),
+            insrot=("insrot", "mean"),
+        )
     )
     norm = matplotlib.colors.Normalize(data[colorBy].min(), data[colorBy].max())
 
@@ -1678,8 +1880,11 @@ def plotGuideErrors(
     scatter = None
     for rows, meanRows, size in sets:
         rows, meanRows = rows.to_numpy(), meanRows.to_numpy()
-        scatter = ax.scatter(x[rows], y[rows], marker="o", s=size, c=data[colorBy][rows], norm=norm)
-        artists.append(scatter)
+        scatters = _scatterByCamera(
+            ax, x[rows], y[rows], enabled[rows], marker="o", s=size, c=data[colorBy][rows], norm=norm
+        )
+        scatter = scatters[0]
+        artists += scatters
         if drawTrack:
             for cid in range(6):
                 track = rows & (data.agc_camera_id == cid).to_numpy()
@@ -1731,7 +1936,10 @@ def plotGuideErrors(
             showInstrot=not rotateToAG1Down,
             showUp=True,
             insrot_deg=np.rad2deg(insrot) if rotateToAG1Down else None,
+            disabledCameras=disabled,
         )
+    if disabled:
+        title.append(_leftOut(disabled, "the mean") if showAGMean else _disabledNote(disabled))
     _finish(fig, axes, ownPanels, "\n".join(title))
 
     return GuiderPlot(fig=fig, axes=axes, artists=artists, colorbars=newColorbars)
@@ -1753,7 +1961,8 @@ def plotPfsUtilsComparison(
 
     Each camera's stars are drawn at their positions about the camera, with
     the cameras ``compress`` times closer to the boresight: pfs_utils's as
-    circles, the guider's as crosses.
+    circles, the guider's as plus signs. Disabled cameras are greyed in the
+    cartoon and named in the title.
 
     Parameters
     ----------
@@ -1810,8 +2019,9 @@ def plotPfsUtilsComparison(
     ax.set_aspect(1)
     ax.set_xlabel("x (mm)")
     ax.set_ylabel("y (mm)")
+    disabled = _disabledCameras(stars)
     if showCartoon:
-        showAGCameraCartoon(ax)
+        showAGCameraCartoon(ax, disabledCameras=disabled)
 
     title = [f"visit: {int(stars.pfs_visit_id.iloc[0])}"] if "pfs_visit_id" in stars and len(stars) else []
     title.append(
@@ -1822,6 +2032,8 @@ def plotPfsUtilsComparison(
         title[-1] += (
             f"  (dx, dy) = ({comparison.alignOffset_um[0]:.0f}, {comparison.alignOffset_um[1]:.0f}) µm"
         )
+    if disabled:
+        title.append(", ".join(f"AG{cid + 1}" for cid in sorted(disabled)) + " disabled")
     _finish(fig, axes, ownPanels, "\n".join(title))
 
     return GuiderPlot(fig=fig, axes=axes, artists=artists, colorbars=newColorbars)
@@ -1944,7 +2156,9 @@ def plotFocus(
     the stars' sizes on the two halves of the detectors
     (`pfs.drp.qa.guiders.analysis.estimateFocusErrors`); and the stars' FWHM,
     left half red and right half green unless ``showCameraId``. Only valid
-    matches without bad detection flags are used.
+    matches without bad detection flags are used. A disabled camera's focus
+    errors are crosses, and its own panels are greyed; it is left out of the
+    exposures' focus errors from the stars, as the guider left it out.
 
     Parameters
     ----------
@@ -2072,6 +2286,7 @@ def plotFocus(
     data["agc_camera_id"] = data.agc_camera_id.astype(int)
     data["focus_position_mm"] = data.m2_off3 if useM2Off3 else data.m2_pos3
     focusColumn = "m2_off3" if useM2Off3 else "m2_pos3"
+    disabled = _disabledCameras(data)
 
     nCols = len(agcCameraIds) if plotPerCamera else 1
     heights = {"agActor": 2, "opdb": 2, "fwhm": 3}
@@ -2082,11 +2297,13 @@ def plotFocus(
         fig.subplots_adjust(hspace=0.025, wspace=0.025)
     panelCameras = [[cid] for cid in agcCameraIds] if plotPerCamera else [agcCameraIds]
 
-    byCamera = data.groupby(["agc_exposure_id", "agc_camera_id"], as_index=False).agg(
+    enabledStars = data.assign(enabled=selectEnabledCameras(data))
+    byCamera = enabledStars.groupby(["agc_exposure_id", "agc_camera_id"], as_index=False).agg(
         pfs_visit_id=("pfs_visit_id", "first"),
         altitude=("altitude", "mean"),
         insrot=("insrot", "mean"),
         focus_position_mm=("focus_position_mm", "mean"),
+        camera_enabled=("enabled", "all"),
         guide_delta_z=("guide_delta_z", "first"),
         **{f"guide_delta_z{cid + 1}": (f"guide_delta_z{cid + 1}", "first") for cid in range(6)},
     )
@@ -2104,16 +2321,28 @@ def plotFocus(
     nPerCamera = len(byCamera) / max(1, byCamera.agc_camera_id.nunique())
     marker, alpha = ("o", 1) if averageByFocusPosition else _markerAndAlpha(nPerCamera, forceAlpha)
 
-    def drawFocusErrors(ax, x, y, c, color, label) -> list[Artist]:
-        """Draw focus errors, as points coloured by ``c`` or in ``color``, and their medians at each x."""
+    def drawFocusErrors(ax, x, y, c, color, label, enabled=True) -> list[Artist]:
+        """Draw focus errors, as points coloured by ``c`` or in ``color``, and their medians at each x.
+
+        The points where ``enabled`` (one per point, or one for all) is False are crosses.
+        """
         drawn = []
+        enabled = np.broadcast_to(np.asarray(enabled, dtype=bool), np.shape(x))
         if not showOnlyMedian:
-            if c is None:
+            if c is not None:
+                drawn += _scatterByCamera(
+                    ax, x, y, enabled, c=c, norm=norm, marker=marker, s=scatterMarkerSize, alpha=alpha
+                )
+            elif enabled.all():
                 drawn += ax.plot(x, y, marker, alpha=alpha, color=color, label=label)
             else:
-                drawn.append(
-                    ax.scatter(x, y, c=c, norm=norm, marker=marker, s=scatterMarkerSize, alpha=alpha)
-                )
+                xArray, yArray = np.asarray(x), np.asarray(y)
+                for rows, rowsMarker in [(enabled, marker), (~enabled, _DISABLED_MARKER)]:
+                    if rows.any():
+                        drawn += ax.plot(
+                            xArray[rows], yArray[rows], rowsMarker, alpha=alpha, color=color, label=label
+                        )
+                        label = None
         if showMedian and len(x):
             xm, ym = _medianByX(x, y, resolution)
             drawn += ax.plot(
@@ -2145,13 +2374,18 @@ def plotFocus(
                         if cam.empty:
                             continue
                         x = cam[what].to_numpy()
+                        enabled = selectEnabledCameras(cam)
                         if averageByFocusPosition:
                             x, y = analysis.averageByFocusPosition(cam.focus_position_mm, x, y)
-                        artists += drawFocusErrors(ax, x, y, None, _CAMERA_COLORS[cid], f"AG{cid + 1}")
+                            enabled = cid not in disabled
+                        artists += drawFocusErrors(
+                            ax, x, y, None, _CAMERA_COLORS[cid], _cameraName(cid, disabled), enabled
+                        )
                 else:
                     if row == "opdb":
+                        # One camera's own, even disabled; or the exposure's, without the disabled cameras.
                         stars = data[data.agc_camera_id.isin(cameras)]
-                        points = estimateFocusErrors(stars, byCamera=False, focusColumn=focusColumn)
+                        points = estimateFocusErrors(stars, byCamera=plotPerCamera, focusColumn=focusColumn)
                         y = points.focus_error_um
                     elif plotPerCamera:
                         points = byCamera[byCamera.agc_camera_id == cameras[0]]
@@ -2159,12 +2393,16 @@ def plotFocus(
                     else:
                         points = byCamera.groupby("agc_exposure_id", as_index=False).first()
                         y = points.exposure_focus_error_um
-                    newArtists = drawFocusErrors(ax, points[what], y, points[colorColumn], "black", None)
+                    newArtists = drawFocusErrors(
+                        ax, points[what], y, points[colorColumn], "black", None, selectEnabledCameras(points)
+                    )
                     mappable = next((a for a in newArtists if isinstance(a, PathCollection)), mappable)
                     artists += newArtists
                 ylabel = "AG actor focus error" if row == "agActor" else r"$\Delta$ focus"
             else:
                 stars = data[data.agc_camera_id.isin(cameras)]
+                if plotPerCamera:
+                    _markDisabledPanel(ax, cameras[0], disabled)
                 artists += _plotFwhm(
                     ax,
                     stars,
@@ -2178,6 +2416,7 @@ def plotFocus(
                     forceAlpha,
                     scatterMarkerSize,
                     resolution,
+                    disabled,
                 )
                 ax.set_ylim(minFWHM_arcsec, maxFWHM_arcsec)
                 if j == 0:
@@ -2189,14 +2428,22 @@ def plotFocus(
                 pfiFocus_um = 0 if row == "agActor" else mmToUm(FOCUS_PISTON_OFFSET_MM)
                 ax.axhline(pfiFocus_um, color="red", label="PFI")
             if colorBy == "camera" and not plotPerCamera:
-                _focusCameraLegend(ax, agcCameraIds, ncols=7 if showPfiFocusPosition else 6, fontsize="small")
+                _focusCameraLegend(
+                    ax, agcCameraIds, disabled, ncols=7 if showPfiFocusPosition else 6, fontsize="small"
+                )
             elif showPfiFocusPosition:
                 ax.legend(ncols=7)
             if yLimits_um is not None:
                 ax.set_ylim(yLimits_um)
+            if plotPerCamera:
+                _markDisabledPanel(ax, cameras[0], disabled)
             if plotPerCamera and i == 0:
                 ax.text(
-                    0.1, 0.95, f"AG{cameras[0] + 1}", transform=ax.transAxes, color=_CAMERA_COLORS[cameras[0]]
+                    0.1,
+                    0.95,
+                    _cameraName(cameras[0], disabled),
+                    transform=ax.transAxes,
+                    color=_CAMERA_COLORS[cameras[0]],
                 )
             if j == 0:
                 ax.set_ylabel(f"{ylabel}\n(µm)")
@@ -2241,7 +2488,10 @@ def plotFocus(
     elif magMax is not None:
         magLimits = f"mag < {magMax}"
     title = f"pfs_visit_id {_visitRange(data.pfs_visit_id)}" + (" only GAIA stars" if onlyGuideStars else "")
-    title += "\n" + ", ".join(f"AG{cid + 1}" for cid in sorted(data.agc_camera_id.unique()))
+    pooled = "opdb" in rows and colorBy != "camera" and not plotPerCamera
+    title += "\n" + _cameraNames(
+        data.agc_camera_id.unique(), disabled, "the exposures' focus errors" if pooled else None
+    )
     title += (
         (f"  {magLimits}" if magLimits else "") + "  " + ("traceRadius" if useTraceRadius else "detRadius")
     )
@@ -2263,8 +2513,9 @@ def _plotFwhm(
     forceAlpha: float | None,
     scatterMarkerSize: float | None,
     resolution: float,
+    disabled: Iterable[int] = (),
 ) -> list[Artist]:
-    """Plot the stars' FWHM for `plotFocus`; return the artists."""
+    """Plot the stars' FWHM for `plotFocus`; return the artists. The legend names the ``disabled`` cameras."""
     artists = []
     if not showOnlyMedian and len(stars):
         if plotFrac < 1:
@@ -2297,10 +2548,15 @@ def _plotFwhm(
                     )
                 )
         else:
-            artists.append(
-                ax.scatter(
-                    x, y, c=np.where(left, "red", "green"), s=scatterMarkerSize, marker=marker, alpha=alpha
-                )
+            artists += _scatterByCamera(
+                ax,
+                x,
+                y,
+                selectEnabledCameras(stars),
+                c=np.where(left, "red", "green"),
+                s=scatterMarkerSize,
+                marker=marker,
+                alpha=alpha,
             )
 
     if showMedian and len(stars):
@@ -2338,7 +2594,7 @@ def _plotFwhm(
             Line2D([], [], marker="*", ls="", color="black", label="right"),
         ]
         handles += [
-            Line2D([], [], marker="o", ls="", color=_CAMERA_COLORS[cid], label=f"AG{cid + 1}")
+            Line2D([], [], marker="o", ls="", color=_CAMERA_COLORS[cid], label=_cameraName(cid, disabled))
             for cid in np.sort(stars.agc_camera_id.unique())
         ]
         ax.legend(handles=handles, ncol=8, columnspacing=1.3)
@@ -2371,7 +2627,8 @@ def plotFocusByAG(
     sizes (`pfs.drp.qa.guiders.analysis.estimateFocusErrors`). Each camera's
     median in each visit (or AG exposure) has the mean of the other cameras
     but AG1 subtracted, and then the overall mean, and is negated to match
-    Kawanomoto-san's plots.
+    Kawanomoto-san's plots. Disabled cameras are left out of that mean, and
+    drawn with crosses.
 
     Parameters
     ----------
@@ -2429,9 +2686,12 @@ def plotFocusByAG(
         focus_error_um=("focus_error_um", "median"),
         focus_position_mm=("focus_position_mm", "median"),
         nAgcExposures=("agc_exposure_id", "count"),
+        camera_enabled=("camera_enabled", "all"),
     )
-    # The mean of the cameras but AG1 at each x.
-    others = relative[relative.agc_camera_id != 0].groupby(xName).focus_error_um.mean()
+    disabled = _disabledCameras(relative)
+    # The mean of the enabled cameras but AG1 at each x.
+    reference = (relative.agc_camera_id != 0) & relative.camera_enabled
+    others = relative[reference].groupby(xName).focus_error_um.mean()
     relative["focus_error_um"] -= relative[xName].map(others)
     relative["focus_error_um"] -= relative.focus_error_um.mean()
     relative["focus_error_um"] *= -1
@@ -2443,6 +2703,11 @@ def plotFocusByAG(
         for value in np.sort(relative[xName].unique()):
             rows = relative[relative[xName] == value]
             artists += ax.plot(rows.agc_camera_id + 1, rows.focus_error_um, "-o", label=f"{value}", alpha=0.5)
+            crosses = rows[~rows.camera_enabled]
+            if len(crosses):
+                artists += ax.plot(
+                    crosses.agc_camera_id + 1, crosses.focus_error_um, _DISABLED_MARKER, color="black", ms=10
+                )
 
     perCamera = np.full(6, np.nan)
     for cid in range(6):
@@ -2450,22 +2715,29 @@ def plotFocusByAG(
         if rows.empty:
             continue
         color = _CAMERA_COLORS[cid]
+        name = _cameraName(cid, disabled)
         if not byCamera:
-            artists += ax.plot(rows[xName], rows.focus_error_um, "-o", color=color, label=f"AG{cid + 1}")
+            style = f"-{_DISABLED_MARKER}" if cid in disabled else "-o"
+            artists += ax.plot(rows[xName], rows.focus_error_um, style, color=color, label=name)
         perCamera[cid] = np.nanmean(rows.focus_error_um)
-        ax.axhline(perCamera[cid], color=color, label=f"AG{cid + 1}" if byCamera else None)
+        ax.axhline(
+            perCamera[cid], color=color, label=name if byCamera else None, ls="--" if cid in disabled else "-"
+        )
     if byCamera:
         artists += ax.plot(range(1, 7), perCamera, marker="*", markersize=10, color="black")
 
     if showLegend:
         ax.legend(ncols=2)
     if byCamera:
-        ax.set_xticks(range(1, 7))
+        ax.set_xticks(range(1, 7), labels=[_cameraName(cid, disabled).replace(" ", "\n") for cid in range(6)])
+        for cid, label in enumerate(ax.get_xticklabels()):
+            if cid in disabled:
+                label.set_color(_CAMERA_COLORS[cid])
     ax.set_xlabel("AG camera" if byCamera else xName)
     ax.set_ylabel(r"$\Delta$ focus AG (µm)")
 
     title = f"{xName} {_visitRange(relative[xName])}" + (" only GAIA" if onlyGuideStars else "")
-    title += "\n" + ", ".join(f"AG{cid + 1}" for cid in sorted(relative.agc_camera_id.unique()))
+    title += "\n" + _cameraNames(relative.agc_camera_id.unique(), disabled, "the reference mean")
     _finish(fig, axes, ownPanels, title)
 
     return GuiderPlot(fig=fig, axes=axes, artists=artists, data=relative)

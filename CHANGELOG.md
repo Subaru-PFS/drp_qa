@@ -15,7 +15,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `selectEnabledCameras` selects the rest, taking NA (or no column) as enabled. The fits that combine the cameras
   leave disabled ones out, as the guider did: the boresight fit of `fitGuiderModel`, the exposure terms of
   `fitGlobalModel`, `guideErrorsByExposure`, the rates of `fitDriftRate` and the exposure focus errors of
-  `estimateFocusErrors`. Per-camera results keep them, with a `camera_enabled` column. Needs the opdb migration
+  `estimateFocusErrors`. Per-camera results keep them, with a `camera_enabled` column. Every guider plot draws a
+  disabled camera's points as crosses, names it "AGn (disabled)" in labels, legends and titles, greys a panel of its
+  own and strikes it out in the camera cartoon; the averages the plots take over the cameras (each exposure's guide
+  error and pointing mean, the mean at the boresight, the exposures' focus errors, `plotFocusByAG`'s reference)
+  leave it out, and the title says so. `docs/guider-plots.ipynb` has a sample. Needs the opdb migration
   `f3a8d61c2b57` (spt_operational_database) on the database read.
 - **`dmLineResiduals` stores the frame type, and judges trace scatter on quartz frames** (PIPE2D-1956) —
   `dmLineResidualMetrics` and `dmLineResidualSummary` gain `obsType`, the observation type from the raw header's
