@@ -97,7 +97,7 @@ def testEveryKnownBadEntryIsCaughtOrUnchecked(sources):
         "medFwhm": 82,  # SM1 defocused, Run27
         "medianDeltaX": 88,  # Run27 against a later calibration, SM3
         "medianDeltaY": 36,  # and SM2
-        "robustRmsDeltaX": 4,  # 150661, the screen in the wrong position, b arm
+        "robustRmsDeltaX": 70,  # SM1 defocused, in the line scatter
     }
     unchecked = confirmed[confirmed["unchecked"] != ""]
     assert unchecked["result"].value_counts().to_dict() == {

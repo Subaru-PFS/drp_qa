@@ -17,8 +17,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `tests/metrics/test_coverage.py` fails on a confirmed entry that is neither caught nor unchecked, or both. Before
   it, entries naming a metric that had stopped being judged (`nLines`, `pctFlagged`) went unnoticed. Unchecked: the
   16 b-arm `pctFlagged` baselines, the 5 Run27 unlit-spectrograph `ImageQuality` arcs (IIS frames, PIPE2D-1954) and
-  the Run25 cloudy twilight, whose metric is now `skyFluxUniformity`, a check still to be written: nothing measured
-  on a twilight sees cloud, and FWHM is not measured there.
+  the Run25 cloudy twilight, whose metric is now `skyFluxUniformity`, a check still to be written (PIPE2D-1973):
+  nothing measured on a twilight sees cloud, and FWHM is not measured there.
 
 - **`dmLineResiduals` stores the frame type, and judges trace scatter on quartz frames** (PIPE2D-1956) —
   `dmLineResidualMetrics` and `dmLineResidualSummary` gain `obsType`, the observation type from the raw header's
@@ -361,9 +361,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
-- **Validation set** (PIPE2D-1934) — 150661 (Run30, screen in the wrong position) is known-bad for
-  `robustRmsDeltaX` on the b arm, where every detector fails at 1.5–1.6× its Run25 median; r and n, mixed, carry no
-  verdict. 149883 ("Home"), which every metric passes, is removed, as are the five unconfirmed Run25 SM3
+- **Validation set** (PIPE2D-1934) — the Run27 SM1 defocus is known-bad for the line scatter, `robustRmsDeltaX`,
+  as well as `medFwhm`: the trace sets and the Ar, Ne, Kr and r/n Xe arcs, which fail at 1.7–4× each detector's
+  Run25 median (not HgCd, whose scatter is not judged, nor b-arm Xenon, the one noisy population). Removed: the
+  suspected faults 149883 ("Home"), which every metric passes, and 150661 (screen in the wrong position), whose
+  b-arm trace scatter fails but for which no metric can be named; and the five unconfirmed Run25 SM3
   `medianDeltaY` entries on traces, which measure no y.
 
 - **Comparison mode's scatter table splits the b arm by camera** (PIPE2D-1927) — the scatter of the lines held back

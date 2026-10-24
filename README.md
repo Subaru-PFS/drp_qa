@@ -552,7 +552,7 @@ verdict is known. The decisions behind the current set:
   must reach its verdict. An entry no check can catch carries `unchecked: <reason>` in the YAML, and one that is
   caught must not; `tests/metrics/test_coverage.py` runs it on the stored validation metrics. Unchecked today: the
   b-arm `pctFlagged` baselines (flag rates not judged), the Run27 unlit-spectrograph IIS arcs (no science fiber
-  lit; PIPE2D-1954) and the Run25 cloudy twilight (nothing measured on twilights sees cloud).
+  lit; PIPE2D-1954) and the Run25 cloudy twilight (nothing measured on twilights sees cloud; PIPE2D-1973).
 - **Thresholds hold for the pipeline that reduced their visits** (PIPE2D-1938). Two reductions of the same Run25
   exposures put n-arm quartz widths up to 53 % apart, so a verdict can follow the reduction rather than the
   instrument. The thresholds file records that pipeline (`pipelineVersions`: datamodel, obs_pfs and drp_stella, as

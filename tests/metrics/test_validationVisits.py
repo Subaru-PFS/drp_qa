@@ -52,14 +52,22 @@ class TestCheckedInSet:
         assert visitSet.path == defaultValidationVisitsPath()
 
     def testSm1DefocusIsKnownBad(self):
-        """The Run27 SM1-defocused sequences: spectrograph 1 only, caught by medFwhm."""
+        """The Run27 SM1-defocused sequences: spectrograph 1 only, caught by medFwhm and the line scatter."""
         visitSet = loadValidationVisits()
         sm1 = [entry for entry in visitSet.knownBad if entry.reason and "SM1 defocused" in entry.reason]
-        assert len(sm1) == 9
+        byMetric = {metric: [e for e in sm1 if e.metric == metric] for metric in {e.metric for e in sm1}}
+        assert {metric: len(entries) for metric, entries in byMetric.items()} == {
+            "medFwhm": 9,
+            "robustRmsDeltaX": 8,  # not HgCd, whose scatter is not judged (PIPE2D-1934)
+        }
         visits = {visit for entry in sm1 for visit in entry.visits}
         assert visits >= {140005, 140032, 140035, 140138, 140139, 140148}
         assert not visits & {140033, 140034}, "no raw data"
-        assert all(entry.spectrographs == (1,) and entry.metric == "medFwhm" for entry in sm1)
+        assert all(entry.spectrographs == (1,) for entry in sm1)
+        # The scatter entries leave out b-arm Xenon, the one noisy population, and HgCd.
+        xenon = [e for e in byMetric["robustRmsDeltaX"] if e.seqType == "Arc: Xenon"]
+        assert [e.arms for e in xenon] == [("r", "n")]
+        assert not any(e.seqType == "Arc: HgCd" for e in byMetric["robustRmsDeltaX"])
         assert visitSet.expectationFor(140130, arm="b", spectrograph=1, seqType="Arc: Neon") == "FAIL"
         assert visitSet.expectationFor(140130, arm="b", spectrograph=4, seqType="Arc: Neon") is None
         # SM2 has a verdict of its own: drift against a later calibration (PIPE2D-1921).
@@ -80,7 +88,7 @@ class TestCheckedInSet:
             if entry.reason
             and any(text in entry.reason for text in ("SM1 defocused", "No light", "didn't turn on"))
         ]
-        assert len(faults) == 14 and {entry.run for entry in faults} == {27}
+        assert len(faults) == 22 and {entry.run for entry in faults} == {27}
         assert {entry.run for entry in visitSet.confirmedBad} == {25, 27, 30}
         # Run29 holds the b2 and n4 quartz references only (PIPE2D-1938).
         assert {entry.run for entry in visitSet.knownGood} == {25, 29}

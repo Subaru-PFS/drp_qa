@@ -104,10 +104,13 @@ identified by visit number, with no observer, target or design names.
   twilight sees cloud. FWHM is not measured on twilights (PIPE2D-1917), and cloud need not
   widen the lines; their `nLines` sit within the clear twilights' range. The check that
   would see it, the uniformity of the sky's flux across the fibers against `fiberNorms`,
-  is not written yet, and the entry names it (`skyFluxUniformity`).
+  is not written yet (PIPE2D-1973), and the entry names it (`skyFluxUniformity`).
 - **SM1 defocused (Run27, 2026-03-09/10, spectrograph 1):** the eight arc and trace
   sequences noted "SM1 defocused", with FWHM 3.83–4.86 px across every lamp type;
-  `medFwhm`. See "SM1 exception" in [`qa-domain-notes.md`](qa-domain-notes.md). The
+  `medFwhm`. The same visits are known-bad for the line scatter, `robustRmsDeltaX`, at
+  1.7–4× each detector's Run25 median, except HgCd (scatter not judged) and b-arm Xenon (the
+  one noisy population; two of its three defocused images pass). See "SM1 exception" in
+  [`qa-domain-notes.md`](qa-domain-notes.md). The
   other visits in 140005–140138 carry no verdict and are not included: darks, the
   `sky1540+3500` frames, and visits the summary does not list (among them the raster
   scans 140106–140112 and 140115–140121).
@@ -119,16 +122,17 @@ identified by visit number, with no observer, target or design names.
 - **Obstructed frames (Run30):** taken with the M1 cover or the top screen closed. Less
   light reaches the detectors, so each lit fiber measures fewer lines (a quarter of the lamp
   lines on an arc, nine tenths of the trace centroids on a quartz); `linesPerFiber`, `FAIL`.
-- **Screen in the wrong position (Run30, 150661):** a trace noted "Mirror cover open, but
-  screen is wrong position". Its trace scatter against its own detectorMap is 1.5–1.6× each
-  b detector's Run25 median, where healthy trace sets of Runs 25–30 stay within +28 %;
-  `robustRmsDeltaX`, `FAIL`, b arm only. r reaches WARN or FAIL on three detectors of four
-  (r3 0.4 % under WARN) and n is mixed, so neither carries a verdict (PIPE2D-1934).
 - **Partial slit illumination (Run30)** is no longer known-bad (PIPE2D-1935): with one fiber
   group lit, each lit fiber measures the lines a full slit's does, and `linesPerFiber`
   passes it. Comparison mode judges these daily arcs with every other.
 - **149883 ("Home", Run30)** was a suspected fault and is removed: every metric passes it,
   and as a Run30 visit it cannot be known-good (PIPE2D-1934).
+- **150661 (Run30, "Mirror cover open, but screen is wrong position")** was a suspected fault
+  and is removed (PIPE2D-1934). Something is off: its trace scatter against its own
+  detectorMap is 1.5–1.6× each b detector's Run25 median, r reaches WARN or FAIL on three of
+  four and n is mixed. But no metric can be named for it: nobody has shown why a misplaced
+  screen would scatter the trace centroids, its `linesPerFiber` is within 3 % of normal, and it
+  is one visit.
 - **Off-zenith Helium detectorMap tests (Run30, 150779 and 150782, alt 45–49)** were listed
   as the flexure case, `WARN` provisionally, and are removed: against `detectorMap_calib`
   they sit within 0.2 px in y and −0.33 to −0.51 px in x on b, as b read with m does at the
@@ -219,7 +223,7 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 135843–135844 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Xenon | WARN | `pctFlagged` (unchecked) | b-arm Xenon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
 | 135845–135846 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Neon | WARN | `pctFlagged` (unchecked) | b-arm Neon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
 | 135847–135848 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Krypton | WARN | `pctFlagged` (unchecked) | b-arm Krypton (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
-| 134334–134337 | 25 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | FAIL | `skyFluxUniformity` (unchecked) | Cloudy; 180 s twilight sky taken through cloud. *Unchecked:* No metric measured on twilights sees cloud; the sky-uniformity check is still to be written. |
+| 134334–134337 | 25 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | FAIL | `skyFluxUniformity` (unchecked) | Cloudy; 180 s twilight sky taken through cloud. *Unchecked:* No metric measured on twilights sees cloud; the sky-uniformity check is PIPE2D-1973. |
 | 140005–140006 | 27 | scienceArc | r, n | 1 | Arc: Argon | FAIL | `medFwhm` | SM1 defocused (Run27). 15 s, az 90. |
 | 140032 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
 | 140035 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
@@ -229,6 +233,14 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 140130–140132 | 27 | scienceArc | b, r, n | 1 | Arc: Neon | FAIL | `medFwhm` | SM1 defocused (Run27). 5 s, az 336. |
 | 140133–140135 | 27 | scienceArc | b, r, n | 1 | Arc: Krypton | FAIL | `medFwhm` | SM1 defocused (Run27). 70 s, az 336. |
 | 140136–140138 | 27 | scienceArc | b, r, n | 1 | Arc: HgCd | FAIL | `medFwhm` | SM1 defocused (Run27). 45 s, az 336. |
+| 140005–140006 | 27 | scienceArc | r, n | 1 | Arc: Argon | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 15 s, az 90. |
+| 140032 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 30 s, az 226. |
+| 140035 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 30 s, az 226. |
+| 140139–140148 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 30 s, az 336. |
+| 140124–140126 | 27 | scienceArc | r, n | 1 | Arc: Argon | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 15 s, az 336. |
+| 140127–140129 | 27 | scienceArc | r, n | 1 | Arc: Xenon | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 45 s, az 336. |
+| 140130–140132 | 27 | scienceArc | b, r, n | 1 | Arc: Neon | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 5 s, az 336. |
+| 140133–140135 | 27 | scienceArc | b, r, n | 1 | Arc: Krypton | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 70 s, az 336. |
 | 139971 | 27 | scienceArc | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
 | 140005–140006 | 27 | scienceArc | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
 | 140124–140138 | 27 | scienceArc | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
@@ -247,7 +259,6 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 150116 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | M1 cover closed. |
 | 150641 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
 | 150642 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
-| 150661 | 30 | scienceTrace | b | 1, 2, 3, 4 | Trace | FAIL | `robustRmsDeltaX` | Noted "Mirror cover open, but screen is wrong position" in the calibration summary. |
 
 ### Unconfirmed
 

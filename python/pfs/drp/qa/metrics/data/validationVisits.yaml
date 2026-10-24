@@ -520,7 +520,7 @@ known_bad:
   # is not measured there (PIPE2D-1917), cloud need not widen the lines anyway,
   # and their nLines sit within the clear twilights' (PIPE2D-1934). The metric
   # named is the check that would: the uniformity of the sky's flux across the
-  # fibers, against fiberNorms. It does not exist yet.
+  # fibers, against fiberNorms. It does not exist yet (PIPE2D-1973).
   - visitRange: [134334, 134337]
     sequenceType: scienceObject
     arms: [b, r, n]
@@ -529,7 +529,7 @@ known_bad:
     expect: FAIL
     metric: skyFluxUniformity
     reason: "Cloudy; 180 s twilight sky taken through cloud."
-    unchecked: "No metric measured on twilights sees cloud; the sky-uniformity check is still to be written."
+    unchecked: "No metric measured on twilights sees cloud; the sky-uniformity check is PIPE2D-1973."
 
   # Run27, 2026-03-09/10: SM1 defocused, noted on every sequence below.
   # FWHM 3.83-4.86 px across every lamp, independent of species, which rules out
@@ -609,6 +609,77 @@ known_bad:
     expect: FAIL
     metric: medFwhm
     reason: "SM1 defocused (Run27). 45 s, az 336."
+
+  # The same SM1 defocus in the line scatter (PIPE2D-1934): the broadened profiles
+  # scatter the RESERVED trace centroids and lamp lines against the visit's own
+  # detectorMap, 1.7-4x each detector's Run25 median (PIPE2D-1956). Not listed:
+  # HgCd, whose scatter is not judged (intrinsically variable), and b-arm Xenon,
+  # the one noisy population (weakening lines; 15-25 % WARN in every healthy run):
+  # two of its three defocused images pass.
+  - visitRange: [140005, 140006]
+    sequenceType: scienceArc
+    arms: [r, n]  # b-arm Argon has too few lines to fit
+    spectrographs: [1]
+    seqType: "Arc: Argon"
+    expect: FAIL
+    metric: robustRmsDeltaX
+    reason: "SM1 defocused (Run27). 15 s, az 90."
+  - visit: 140032
+    sequenceType: scienceTrace
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "Trace"
+    expect: FAIL
+    metric: robustRmsDeltaX
+    reason: "SM1 defocused (Run27). 30 s, az 226."
+  - visit: 140035
+    sequenceType: scienceTrace
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "Trace"
+    expect: FAIL
+    metric: robustRmsDeltaX
+    reason: "SM1 defocused (Run27). 30 s, az 226."
+  - visitRange: [140139, 140148]
+    sequenceType: scienceTrace
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "Trace"
+    expect: FAIL
+    metric: robustRmsDeltaX
+    reason: "SM1 defocused (Run27). 30 s, az 336."
+  - visitRange: [140124, 140126]
+    sequenceType: scienceArc
+    arms: [r, n]  # b-arm Argon has too few lines to fit
+    spectrographs: [1]
+    seqType: "Arc: Argon"
+    expect: FAIL
+    metric: robustRmsDeltaX
+    reason: "SM1 defocused (Run27). 15 s, az 336."
+  - visitRange: [140127, 140129]
+    sequenceType: scienceArc
+    arms: [r, n]  # b-arm Xenon: see above
+    spectrographs: [1]
+    seqType: "Arc: Xenon"
+    expect: FAIL
+    metric: robustRmsDeltaX
+    reason: "SM1 defocused (Run27). 45 s, az 336."
+  - visitRange: [140130, 140132]
+    sequenceType: scienceArc
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "Arc: Neon"
+    expect: FAIL
+    metric: robustRmsDeltaX
+    reason: "SM1 defocused (Run27). 5 s, az 336."
+  - visitRange: [140133, 140135]
+    sequenceType: scienceArc
+    arms: [b, r, n]
+    spectrographs: [1]
+    seqType: "Arc: Krypton"
+    expect: FAIL
+    metric: robustRmsDeltaX
+    reason: "SM1 defocused (Run27). 70 s, az 336."
 
   # Run27 against its own detectorMap_calib, built from 140502-140526, after these
   # visits: the reference case for a calibration from another epoch (PIPE2D-1921).
@@ -771,21 +842,13 @@ known_bad:
     expect: FAIL
     metric: linesPerFiber
     reason: "Mirror cover and top screen both closed; noted in the calibration summary as to be ignored."
-  # Taken with the screen in the wrong position. Its RESERVED trace scatter against
-  # its own detectorMap is 1.5-1.6x each b detector's Run25 median, where every
-  # healthy trace set of Runs 25-30 stays within +28 % and Run29's sit at
-  # 0.5-0.6x; r reaches WARN or FAIL on r1, r2 and r4 but r3 sits 0.4 % under its
-  # WARN, and n is mixed (n3, n4 FAIL; n1, n2 pass), so only b is asserted. Its
-  # linesPerFiber is 3 % low on b1, b2 and n2 (WARN), and r reads 4-7 % narrower:
-  # signs of the same fault too small to name (PIPE2D-1934).
-  - visit: 150661
-    sequenceType: scienceTrace
-    arms: [b]
-    spectrographs: [1, 2, 3, 4]
-    seqType: "Trace"
-    expect: FAIL
-    metric: robustRmsDeltaX
-    reason: 'Noted "Mirror cover open, but screen is wrong position" in the calibration summary.'
+  # 150661 ("Mirror cover open, but screen is wrong position") was listed as a
+  # suspected fault and is removed: something is off, but no metric can be named
+  # for it (PIPE2D-1934). Its RESERVED trace scatter is 1.5-1.6x each b detector's
+  # Run25 median (FAIL), r WARN or FAIL on three of four, n mixed; its
+  # linesPerFiber is within 3 % of normal and r reads 4-7 % narrower. Nobody has
+  # shown why a misplaced screen would scatter the trace centroids, and it is one
+  # visit; as a Run30 visit it cannot be known_good.
   # 149883 ("Home" in the calibration summary, an unsettled note) was listed as a
   # suspected fault and is removed: every metric passes it (PIPE2D-1934), and as
   # a Run30 visit it cannot be known_good.
