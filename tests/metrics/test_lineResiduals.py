@@ -1090,8 +1090,10 @@ def testShippedScatterVerdicts():
             "lamps": {"PASS": 468, "FAIL": 63, "WARN": 23},
             "goodQuartzTraces": {"PASS": 144},  # every known-good quartz trace passes
             "goodLamps": {"PASS": 357, "WARN": 3},  # three b-arm Xenon arcs at the 20 % WARN
-            "unconfirmedQuartzTraces": {"FAIL": 7, "PASS": 3, "WARN": 2},  # 150661, Run30
-            "unconfirmedLamps": {"PASS": 12},
+            # The SM1 defocus (Run27), known-bad in the scatter too (PIPE2D-1934): every quartz
+            # trace and every lamp it names fails.
+            "badQuartzTraces": {"FAIL": 36},
+            "badLamps": {"FAIL": 34},
         },
         "robustRmsDeltaY": {
             "quartzTraces": {},  # traces measure x only
@@ -1100,8 +1102,8 @@ def testShippedScatterVerdicts():
             "lamps": {"PASS": 450, "FAIL": 55, "WARN": 49},
             "goodQuartzTraces": {"": 144},
             "goodLamps": {"PASS": 358, "WARN": 2},  # two b-arm Krypton arcs at the 50 % WARN
-            "unconfirmedQuartzTraces": {"": 12},
-            "unconfirmedLamps": {"PASS": 12},
+            "badQuartzTraces": {},  # the defocus is known-bad in x only
+            "badLamps": {},
         },
     }
     for metric, expected in counts.items():
@@ -1130,15 +1132,10 @@ def testShippedScatterVerdicts():
             status.loc[good[(traces & quartz)[good]]].value_counts().to_dict() == expected["goodQuartzTraces"]
         )
         assert status.loc[good[lamps[good]]].value_counts().to_dict() == expected["goodLamps"]
-        unconfirmed = labelled.index[labelled["validation"] == "unconfirmed"]
-        assert (
-            status.loc[unconfirmed[(traces & quartz)[unconfirmed]]].value_counts().to_dict()
-            == expected["unconfirmedQuartzTraces"]
-        )
-        assert (
-            status.loc[unconfirmed[lamps[unconfirmed]]].value_counts().to_dict()
-            == expected["unconfirmedLamps"]
-        )
+        assert not (labelled["validation"] == "unconfirmed").any()  # no scatter verdict is a suspicion
+        bad = labelled.index[labelled["validation"].str.startswith("bad")]
+        assert status.loc[bad[(traces & quartz)[bad]]].value_counts().to_dict() == expected["badQuartzTraces"]
+        assert status.loc[bad[lamps[bad]]].value_counts().to_dict() == expected["badLamps"]
     # Negative control: a flat 0.03/0.04 px scatter threshold fails or warns most known-good quartz traces.
     strict = judge(reserved, [residualThresholds(1.0, 2.0, 1.0, 2.0, 0.03, 0.04, 0.03, 0.04)])
     strictX = strict.set_index(["row", "metric"]).xs("robustRmsDeltaX", level="metric")["status"]

@@ -103,6 +103,11 @@ class ValidationVisit:
         Run25's like every other camera's.
     reason : `str` or `None`
         Why this verdict is expected.
+    unchecked : `str` or `None`
+        For a confirmed ``known_bad`` entry, why no check gives its verdict:
+        the metric it names is not judged, or not measured, on these images.
+        `pfs.drp.qa.metrics.coverage.knownBadCoverage` requires every other
+        confirmed entry to be caught, and an entry with this field not to be.
     note : `str` or `None`
         Free-form context.
     unconfirmed : `bool`
@@ -128,6 +133,7 @@ class ValidationVisit:
     metrics: tuple[str, ...] = ()
     excludeMetrics: tuple[str, ...] = ()
     reason: str | None = None
+    unchecked: str | None = None
     note: str | None = None
     unconfirmed: bool = False
     placeholder: bool = False
@@ -577,7 +583,7 @@ def formatTables(visitSet: ValidationVisitSet) -> str:
                 entry.seqType or "any",
                 entry.expect,
                 _metricCell(entry),
-                " ".join((getattr(entry, textField) or "").split()),
+                _textCell(entry, textField),
             )
             lines.append("| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |")
         blocks.append("\n".join(lines))
@@ -587,11 +593,19 @@ def formatTables(visitSet: ValidationVisitSet) -> str:
 def _metricCell(entry: ValidationVisit) -> str:
     """Return the metric a known-bad entry names, or the metrics a known-good one is scoped to."""
     if entry.metric:
-        return f"`{entry.metric}`"
+        return f"`{entry.metric}`" + (" (unchecked)" if entry.unchecked else "")
     text = ", ".join(f"`{name}`" for name in entry.metrics)
     if entry.excludeMetrics:
         text += ("; " if text else "") + "not " + ", ".join(f"`{name}`" for name in entry.excludeMetrics)
     return text
+
+
+def _textCell(entry: ValidationVisit, textField: str) -> str:
+    """Return an entry's note or reason for its table row, and why it is unchecked, if it is."""
+    text = " ".join((getattr(entry, textField) or "").split())
+    if entry.unchecked:
+        text += f" *Unchecked:* {' '.join(entry.unchecked.split())}"
+    return text.strip()
 
 
 def _armsCell(entry: ValidationVisit) -> str:
@@ -682,6 +696,8 @@ def loadValidationVisits(
                 entry = replace(entry, run=_runOf(entry.visits, runs, where))
             if section == "known_good" and entry.expect != "PASS":
                 raise ValueError(f"{where}: a known_good entry must expect PASS")
+            if section == "known_good" and entry.unchecked:
+                raise ValueError(f"{where}: 'unchecked' is for known_bad entries")
             if section == "known_good" and referenceRuns and entry.visits and entry.run not in referenceRuns:
                 raise ValueError(
                     f"{where}: known_good entries must lie in referenceRuns {list(referenceRuns)}, "
@@ -761,6 +777,7 @@ _ENTRY_KEYS = frozenset(
         "metrics",
         "excludeMetrics",
         "reason",
+        "unchecked",
         "note",
         "unconfirmed",
         "placeholder",
@@ -828,6 +845,12 @@ def _parseEntry(item: Any, defaultExpect: str | None, where: str) -> ValidationV
     both = sorted(set(metrics) & set(excludeMetrics))
     if both:
         raise ValueError(f"{where}: metrics both selected and excluded: {', '.join(both)}")
+    unconfirmed = _asBool(item.get("unconfirmed", False), "unconfirmed", where)
+    unchecked = _optionalStr(item.get("unchecked"))
+    if "unchecked" in item and not (unchecked or "").strip():
+        raise ValueError(f"{where}: 'unchecked' must give the reason no check runs")
+    if unchecked and unconfirmed:
+        raise ValueError(f"{where}: an unconfirmed entry decides nothing, so it cannot be 'unchecked'")
 
     return ValidationVisit(
         visits=visits,
@@ -842,8 +865,9 @@ def _parseEntry(item: Any, defaultExpect: str | None, where: str) -> ValidationV
         metrics=metrics,
         excludeMetrics=excludeMetrics,
         reason=_optionalStr(item.get("reason")),
+        unchecked=unchecked,
         note=_optionalStr(item.get("note")),
-        unconfirmed=_asBool(item.get("unconfirmed", False), "unconfirmed", where),
+        unconfirmed=unconfirmed,
         placeholder=placeholder,
     )
 
