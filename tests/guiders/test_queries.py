@@ -146,6 +146,24 @@ def testReadAgcDataGuideStarFlag(makeOpdb):
     assert (data[data.guide_star_id != 1].guide_star_flag > 0).all()
 
 
+def testReadAgcDataCameraEnabled(makeOpdb):
+    """camera_enabled is a nullable boolean: NULL, from rows before INSTRM-3057, stays NA."""
+    opdb, _ = makeOpdb(nVisit=1)
+    rows = opdb.tables["agc_data"].astype({"camera_enabled": object})
+    rows.loc[rows.agc_camera_id == 0, "camera_enabled"] = False
+    rows.loc[rows.agc_camera_id == 1, "camera_enabled"] = None  # as psycopg returns NULL
+    opdb.tables["agc_data"] = rows
+
+    data = readAgcData(opdb, VISITS[0])
+
+    assert data.camera_enabled.dtype == "boolean"
+    assert data[data.agc_camera_id == 1].camera_enabled.isna().all()
+    assert not data[data.agc_camera_id == 0].camera_enabled.any()
+    assert data[data.agc_camera_id > 1].camera_enabled.all()
+    # Negative control: NULL hasn't been read as False, which would mark the camera disabled.
+    assert not (data[data.agc_camera_id == 1].camera_enabled == False).any()  # noqa: E712
+
+
 def testReadAgcDataEmpty(makeOpdb, caplog):
     opdb, _ = makeOpdb(nVisit=1)
 
