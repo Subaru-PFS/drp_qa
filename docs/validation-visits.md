@@ -202,6 +202,48 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 134338–134339 | 25 | scienceTrace | b, n; cameras b2, n4 | 2, 4 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
 | 135828–135829 | 25 | scienceTrace | b, n; cameras b2, n4 | 2, 4 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
 | 135849–135850 | 25 | scienceTrace | b; cameras b2 | 2 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
+| 148548 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 148549 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 148550 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 148686 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 148687 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 148688 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 148828 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 148829 | 30 | scienceArc | all; not n4 | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 148830 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 148971 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 148972 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 148973 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 149132 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 149133 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 149134 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 149320 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 149321 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 149322 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 149797 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 149798 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 149799 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 149940 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 149941 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 149942 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150079 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150080 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150081 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150226 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150227 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150228 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150284 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150285 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150286 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150471 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150472 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150473 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150621 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150622 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150623 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150719 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150720 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150721 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
 
 ### Known bad
 
@@ -259,6 +301,7 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 150116 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | M1 cover closed. |
 | 150641 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
 | 150642 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
+| 148829 | 30 | scienceArc | all; cameras n4 | all | ImageQuality (Kr) | WARN | `medDxCenter` | IIS Kr lamp header off on n4: reduced against the sky line list; lines 2 px from detectorMap_calib. |
 
 ### Unconfirmed
 

@@ -11,7 +11,7 @@ from typing import Any
 import lsst.afw.image
 import numpy as np
 import pandas as pd
-from lsst.pex.config import DictField, Field
+from lsst.pex.config import DictField, Field, ListField
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -441,6 +441,20 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " its provenance."
         ),
     )
+    extraThresholdsFiles = ListField(
+        dtype=str,
+        default=["iqQaThresholds-iis-run30.yaml"],
+        doc=(
+            "Further thresholds files, judged after ``thresholdsFile`` and before the config fields, named as"
+            " it is. The default is the IIS frames' file (PIPE2D-1954): every entry names"
+            " ``illumination: iis``, so it judges IIS frames alone, and an entry of any file that doesn't name"
+            " the column is for full-slit frames (`pfs.drp.qa.metrics.gate.DEFAULT_POPULATION`). Derived by"
+            " ``makeIisThresholds.py`` beside it from Run30's nightly IIS frames reduced afresh"
+            " (u/wtg/qa-iis/003b): medFwhm 3/5 % above each detector and lamp's median (the n-arm Ne arc and the"
+            " m arm not judged), linesPerFiber 25/50 % (arcs) and 2.5/5 % (quartz) below each arm and sequence's"
+            " median, medDxCenter at the config's 1/2 px, no pctFlagged."
+        ),
+    )
     dxCenterWarnThreshold = Field(
         dtype=float,
         default=1.0,
@@ -477,6 +491,7 @@ class ImageQualityQaTask(PipelineTask):
         super().__init__(**kwargs)
         # Highest priority first; see pfs.drp.qa.metrics.gate.
         files = [thresholdsPath(self.config.thresholdsFile)] if self.config.thresholdsFile else []
+        files.extend(thresholdsPath(name) for name in self.config.extraThresholdsFiles)
         self.thresholds = [*loadThresholds(files), configThresholds(self.config)]
 
     def runQuantum(

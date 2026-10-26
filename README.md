@@ -258,15 +258,28 @@ New thresholds are derived from the validation visits: see
 [QA thresholds and the validation visit set](#qa-thresholds-and-the-validation-visit-set).
 
 Verdicts come from `pfs.drp.qa.metrics.gate.gate`, the one gating path, which also re-judges stored `iqQaMetrics`.
-Each metric is judged by the `thresholdsFile` entry for its population, and by the config fields below where the file
-has none. `thresholdsFile` is an absolute path, or one relative to `pfs/drp/qa/metrics/data`; empty, the config fields
-judge alone.
+Each metric is judged by the `thresholdsFile` entry for its population, then by an `extraThresholdsFiles` entry, and
+by the config fields below where the files have none. A file name is an absolute path, or one relative to
+`pfs/drp/qa/metrics/data`; with no files, the config fields judge alone. `illumination` is a population column with a
+default (`gate.DEFAULT_POPULATION`): an entry that doesn't name it is for full-slit frames, and an IIS frame
+(`illumination` `iis`, the 16 engineering fibers) is judged only by an entry naming `illumination: iis`, so neither the
+Run25 file nor the config fields ever judge one.
 
 The default, `iqQaThresholds-run25.yaml`, holds the thresholds derived from the validation visits, as adopted
 (PIPE2D-1917, PIPE2D-1918, PIPE2D-1942, PIPE2D-1938) by `makeRun25Thresholds.py` beside it; each entry records its
 provenance. They were derived from `u/wtg/qa-thresholds/010`, every validation visit reduced afresh with the pipeline
 the file records (datamodel w.2026.40, obs_pfs w.2026.40, drp_stella w.2026.41-6-ge56938d2). The reference is Run25,
 except that b2 and n4 quartz take Run29's detectorMap set (see [QA thresholds](#qa-thresholds-and-the-validation-visit-set)).
+
+The default `extraThresholdsFiles`, `iqQaThresholds-iis-run30.yaml`, holds the IIS frames' thresholds (PIPE2D-1954),
+derived and adopted by `makeIisThresholds.py` beside it from Run30's nightly "ImageQuality" sequences (the IIS Ne and
+Kr arcs and halogen quartz, 2026-09-01 to 09-15) reduced afresh on one pipeline (`u/wtg/qa-iis/003b`): `medFwhm` 3 %/5 %
+above each detector and lamp's known-good median (the IIS fibers measure about 1.8 px against the science fibers'
+2.5–3.3 px; the n-arm Ne arc, with about 15 faint lines per fiber, and the m arm, taken one night, are not judged),
+`linesPerFiber` 25 %/50 % (arcs) and 2.5 %/5 % (quartz) below each arm and sequence's median, `medDxCenter` at the
+config's physical 1/2 px, and no `pctFlagged` (54–96 % of the IIS lamps' lines are flagged on every night). The 14
+known-good nights pass; the known-bad 148829 n4, whose lamp header read off so it was reduced against the sky line list,
+warns on `medDxCenter` (1.98 px).
 
 - `medFwhm` per detector and lamp: WARN 3 % and FAIL 5 % above the reference known-good median of the image's arm,
   spectrograph, `obsType` and lamp (`species`), on arcs and quartz (from the calexp width), every arm included.
@@ -340,6 +353,8 @@ does not exist in `drp_stella`, so the permissive thresholds above are the curre
 - `imageQualityQa:flagRateFailThreshold`: `pctFlagged` (%) threshold for `FAIL`, keyed by `arm` or `arm:species`. See
   the threshold table above for defaults.
 - `imageQualityQa:thresholdsFile`: Thresholds file judged before the fields above. Default `iqQaThresholds-run25.yaml`; empty for the fields alone.
+- `imageQualityQa:extraThresholdsFiles`: further files, judged after it. Default `["iqQaThresholds-iis-run30.yaml"]`,
+  the IIS frames' thresholds (PIPE2D-1954).
 
 `DictField` values cannot be set with dot notation on the command line; assign the whole dict as a Python literal:
 
@@ -504,7 +519,8 @@ verdict is known. The decisions behind the current set:
 - **`imageQualityQa` judges by the adopted Run25 file** (`iqQaThresholds-run25.yaml`): `medFwhm` on arcs and
   quartz, and `linesPerFiber`. Flag rates (`pctFlagged`) are not judged until there is a valid reference; quartz `medFwhm` is
   measured from the calexp width (PIPE2D-1918); twilight is not measured. Details under
-  [Pass/Warn/Fail Thresholds](#passwarnfail-thresholds).
+  [Pass/Warn/Fail Thresholds](#passwarnfail-thresholds). IIS frames are judged by their own file,
+  `iqQaThresholds-iis-run30.yaml`, derived from Run30's nightly IIS frames (PIPE2D-1954).
 - **`medFwhm` is judged against each detector's own Run25 width, per lamp** (PIPE2D-1942): WARN 3 % and FAIL 5 %
   above the known-good median of its arm, spectrograph, `obsType` and lamp. Per-arm percentiles put each arm's widest
   spectrograph, or broadest lamp, at FAIL, and per detector and lamp there are only 4–14 known-good values, too few

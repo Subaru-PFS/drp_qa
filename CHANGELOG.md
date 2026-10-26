@@ -25,6 +25,17 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   goes by (`engineeringLit`: the spectrograph's engineering fibers all `GOOD`), since 7 n-arm calexps of Run30
   lack the lamp headers. `addSpecies` reads the lamp of an IIS sequence from its parentheses ("ImageQuality
   (Ne)" gives `Ne`), so IIS populations split by lamp like the PFI arcs.
+- **IIS thresholds** (PIPE2D-1954) — `iqQaThresholds-iis-run30.yaml`, the default of the new `extraThresholdsFiles`
+  config field (further files judged after `thresholdsFile`), derived and adopted by `makeIisThresholds.py` from
+  Run30's nightly IIS frames (the IIS Ne and Kr arcs and halogen quartz, 15 nights) reduced afresh on one pipeline
+  (`u/wtg/qa-iis/003b`; the metrics are `tests/metrics/data/iqQaMetrics-iis-run30.parquet`). Run30 joins the
+  validation set's reference runs for the IIS frames alone: 42 known-good entries, less 148829 n4 (its IIS lamp
+  header read off, so drp_stella fitted the sky line list; known bad on `medDxCenter`, 1.98 px) and the night of
+  149593–149595 (SM2 and SM4 moved). Every entry names `illumination: iis`: `medFwhm` 3/5 % above each detector
+  and lamp's median (not judged: the n-arm Ne arc, whose 15 faint lines per fiber scatter 2–4 %, and the m arm,
+  taken one night), `linesPerFiber` 25/50 % (arcs) and 2.5/5 % (quartz) below each arm and sequence's median,
+  `medDxCenter` at the config's 1/2 px, and no `pctFlagged`. The 14 known-good nights pass; the two faults warn.
+  `taskPipeline` requires the files to record one pipeline.
 
 - **Known-bad coverage** (PIPE2D-1934) — `pfs.drp.qa.metrics.coverage.knownBadCoverage` reports, for each
   known-bad validation entry, whether every image it covers with its metric measured is judged and reaches its

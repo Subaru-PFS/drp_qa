@@ -181,7 +181,9 @@ def iisPfsConfig(fakes, detectorMap):
     """Return an IIS frame's pfsConfig: the engineering fibers GOOD, the science fibers UNILLUMINATED (5)."""
     fiberId = detectorMap.fiberId
     engineering = np.isin(fiberId, ENGINEERING)
-    return fakes.PfsConfig(fiberId, status=np.where(engineering, 1, 5), targetType=np.where(engineering, 5, 9))
+    return fakes.PfsConfig(
+        fiberId, status=np.where(engineering, 1, 5), targetType=np.where(engineering, 5, 9)
+    )
 
 
 @pytest.fixture

@@ -17,6 +17,7 @@ allow for it; metrics written before then (no ``nLitFibers``) aren't judged on t
 """
 
 import re
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -131,10 +132,17 @@ def taskThresholds(config) -> list[pd.DataFrame]:
     Returns
     -------
     `list` [`pandas.DataFrame`]
-        The thresholds file's table, if any, then the config's.
+        The thresholds files' tables, if any (``thresholdsFile``, then
+        ``extraThresholdsFiles``), then the config's.
     """
+    return [*loadThresholds(thresholdsFiles(config)), configThresholds(config)]
+
+
+def thresholdsFiles(config) -> list[Path]:
+    """Return the thresholds files an ``imageQualityQa`` config names, in the order the task judges them."""
     files = [thresholdsPath(config.thresholdsFile)] if config.thresholdsFile else []
-    return [*loadThresholds(files), configThresholds(config)]
+    files.extend(thresholdsPath(name) for name in getattr(config, "extraThresholdsFiles", None) or [])
+    return files
 
 
 def taskPipeline(config) -> dict[str, str]:
@@ -148,14 +156,23 @@ def taskPipeline(config) -> dict[str, str]:
     Returns
     -------
     `dict` [`str`, `str`]
-        The thresholds file's ``pipelineVersions``; empty when it records
+        The thresholds files' ``pipelineVersions``; empty when they record
         none, or the config names no file (its own thresholds record no
         origin).
+
+    Raises
+    ------
+    ValueError
+        If the files record different pipelines: one pipeline is what the
+        provisional marking compares a reduction with.
     """
-    if not config.thresholdsFile:
+    pipelines = [readThresholds(path)[0]["pipelineVersions"] for path in thresholdsFiles(config)]
+    pipelines = [pipeline for pipeline in pipelines if pipeline]
+    if not pipelines:
         return {}
-    metadata, _ = readThresholds(thresholdsPath(config.thresholdsFile))
-    return metadata["pipelineVersions"]
+    if any(pipeline != pipelines[0] for pipeline in pipelines[1:]):
+        raise ValueError(f"The thresholds files record different pipelines: {pipelines}")
+    return pipelines[0]
 
 
 def judgeImages(metrics: pd.DataFrame, visits: pd.DataFrame, thresholds) -> pd.DataFrame:

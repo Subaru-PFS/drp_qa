@@ -90,8 +90,10 @@ class TestCheckedInSet:
         ]
         assert len(faults) == 22 and {entry.run for entry in faults} == {27}
         assert {entry.run for entry in visitSet.confirmedBad} == {25, 27, 30}
-        # Run29 holds the b2 and n4 quartz references only (PIPE2D-1938).
-        assert {entry.run for entry in visitSet.knownGood} == {25, 29}
+        # Run29 holds the b2 and n4 quartz references only (PIPE2D-1938); Run30 the IIS frames' (PIPE2D-1954).
+        assert {entry.run for entry in visitSet.knownGood} == {25, 29, 30}
+        run30 = [entry for entry in visitSet.knownGood if entry.run == 30]
+        assert len(run30) == 42 and all(entry.seqType.startswith("ImageQuality (") for entry in run30)
         run29 = [entry for entry in visitSet.knownGood if entry.run == 29]
         traces = [entry for entry in run29 if entry.sequenceType == "scienceTrace"]
         assert traces and set().union(*(entry.cameras for entry in traces)) == {"b2", "n4"}
@@ -102,7 +104,7 @@ class TestCheckedInSet:
         visitSet = loadValidationVisits()
         assert visitSet.knownGood, "no usable known_good entries"
         assert visitSet.goodVisits[0] == 133025
-        assert visitSet.goodVisits[-1] == 147747  # Run29's last trace set
+        assert visitSet.goodVisits[-1] == 150721  # Run30's last nightly IIS quartz (PIPE2D-1954)
 
     def testQuartzReferenceOfB2AndN4IsRun29(self):
         """Run25's trace entries leave b2 and n4 out; Run29's hold them alone (PIPE2D-1938).
@@ -586,8 +588,8 @@ class TestRuns:
 
     def testCheckedInSetDerivesFromRun25AndRun29(self):
         visitSet = loadValidationVisits()
-        assert visitSet.referenceRuns == (25, 29)  # Run29 for b2 and n4 quartz (PIPE2D-1938)
-        assert {entry.run for entry in visitSet.knownGood} == {25, 29}
+        assert visitSet.referenceRuns == (25, 29, 30)  # Run29 for b2 and n4 quartz; Run30 for IIS frames
+        assert {entry.run for entry in visitSet.knownGood} == {25, 29, 30}
 
     def testBArmFlagRatesAreRecordedAsBad(self):
         """The baseline for drp_stella's adjustDetectorMap work: bad for pctFlagged only."""

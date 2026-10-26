@@ -61,12 +61,17 @@ def sources() -> list[CoverageSource]:
     iq = configDefaults("imageQualityQa.py", "ImageQualityQaConfig")
     dm = configDefaults("dmLineResiduals.py", "DmLineResidualsConfig")
     lines = pd.read_parquet(DATA / "dmDriftMetrics-validation.parquet")
-    return [
-        CoverageSource(
+    # Run30's nightly IIS frames (PIPE2D-1954) join the validation visits' metrics: the IIS
+    # thresholds file judges them, and one table answers for each metric.
+    imageQuality = pd.concat(
+        [
             pd.read_parquet(DATA / "iqQaMetrics-validation.parquet"),
-            taskThresholds(iq),
-            IMAGE_QUALITY_METRICS,
-        ),
+            pd.read_parquet(DATA / "iqQaMetrics-iis-run30.parquet"),
+        ],
+        ignore_index=True,
+    )
+    return [
+        CoverageSource(imageQuality, taskThresholds(iq), IMAGE_QUALITY_METRICS),
         # A species with fewer than minLines lines is stored as NaN: not measured.
         CoverageSource(judgedRows(lines), residualTaskThresholds(dm), LINE_RESIDUAL_METRICS),
     ]
@@ -89,6 +94,7 @@ def testEveryKnownBadEntryIsCaughtOrUnchecked(sources):
     assert (caught["unchecked"] == "").all() and (caught["reached"] == caught["measured"]).all()
     assert caught.groupby("metric")["reached"].sum().to_dict() == {
         "linesPerFiber": 48,  # the obstructed Run30 frames
+        "medDxCenter": 1,  # the IIS Kr arc whose lamp header read off, 148829 n4
         "medFwhm": 82,  # SM1 defocused, Run27
         "medianDeltaX": 88,  # Run27 against a later calibration, SM3
         "medianDeltaY": 36,  # and SM2

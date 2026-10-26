@@ -186,10 +186,13 @@ def testClassifyVisit(iqqa, fakes, seqType, seqName, obsType):
 
 
 def testDefaultConfigJudgesByTheShippedFile(iqqa):
-    """The default config puts the Run25 file ahead of its own fields."""
+    """The default config puts the Run25 file, then the IIS file, ahead of its own fields."""
     task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
-    assert len(task.thresholds) == 2
+    assert len(task.thresholds) == 3
     shipped = task.thresholds[0]
+    iis = task.thresholds[1]
+    assert (iis["illumination"] == "iis").all() and "illumination" not in shipped.columns
+    assert set(iis["metric"]) == {"medFwhm", "linesPerFiber", "medDxCenter", "pctFlagged"}
     assert set(shipped["metric"]) == {"medFwhm", "linesPerFiber", "pctFlagged"}
     flags = shipped[shipped["metric"] == "pctFlagged"]
     assert len(flags) == 1 and flags[["warn", "fail"]].isna().all(axis=None)  # not judged
@@ -215,6 +218,7 @@ def testRunQuantumRecordsTheCalexpRun(iqqa, monkeypatch):
 
     config = iqqa.ImageQualityQaConfig()
     config.thresholdsFile = ""
+    config.extraThresholdsFiles = []
     task = iqqa.ImageQualityQaTask(config=config)
     outputs = SimpleNamespace(iqQaData=pd.DataFrame(), iqQaSpeciesMetrics=pd.DataFrame())
     monkeypatch.setattr(

@@ -73,8 +73,21 @@ regular arc or quartz path on its engineering fibers (`litFibers(..., engineerin
 (fiberStatus 5; Run30's designs, `reports/PIPE2D-1954/pfsConfigCounts-003b.parquet`), so
 `litFibers` on the science fibers finds none lit and `linesPerFiber` would be unmeasured. Thresholds: an entry that doesn't name `illumination` is for full-slit
 frames, and an IIS frame is judged only by one naming `illumination: iis`
-(`pfs.drp.qa.metrics.gate.DEFAULT_POPULATION`); none exist until they are derived from Run30's
-nightly IIS frames ("ImageQuality (Ne)", "(Kr)", "(Halogen)": 148548–150721, 15 of each).
+(`pfs.drp.qa.metrics.gate.DEFAULT_POPULATION`). They are `iqQaThresholds-iis-run30.yaml`
+(`extraThresholdsFiles`), derived by `makeIisThresholds.py` from Run30's nightly IIS frames
+("ImageQuality (Ne)", "(Kr)", "(Halogen)": 148548–150721, 15 of each) reduced afresh
+(`u/wtg/qa-iis/003b`; `tests/metrics/data/iqQaMetrics-iis-run30.parquet`), Run30 being the IIS
+reference run in the validation set. What the 15 nights showed: per camera and lamp, `medFwhm`
+within about 1 % and `linesPerFiber` within 2 % on b and r; the IIS fibers measure about 1.8 px
+FWHM (b2 quartz 2.03 px, a camera property); the n-arm Ne arc has about 15 faint lines per fiber
+and its median width scatters 2–4 % night to night, so it is not judged (Kr judges the n arm);
+148829 n4's lamp header read off, so drp_stella fitted the sky line list to an IIS arc (known
+bad, `medDxCenter` 1.98 px); on 2026-09-08 (149593–149595) SM2 and SM4 sat 0.26–0.39 px from
+`detectorMap_calib` on every arm and b2's quartz width was 3.5 % high, so that night is no
+reference; drpActor's 2026-09-02 reduction of the first night differed on the n arm (FWHM 24 %
+low, 2–3× the lines), which the fresh reduction removed, so the data were fine and the day's
+pipeline was not; and one engineering fiber per spectrograph (316, 967, 1618, 2269) is faint on
+every quartz.
 
 ### Key config fields
 
@@ -461,7 +474,7 @@ From engineering run data:
 | `medDxCenter` ≈ 0 but `dxCenterRms` large | Distortion rather than bulk shift | Look at the `dxCenter` distribution in `iqQaData`, not just the summary |
 | `traceOnly=True` for all arc visits | `arcLines` connection missing or `minGoodLines` not satisfied | Check `fitDetectorMap` ran and produced `lines` |
 | No `medFwhm` for IIS arc or IIS quartz frames | Metrics stored before PIPE2D-1954, which reported IIS frames sparse on the belief that the arc catalog did not match the engineering fibers. From PIPE2D-1954 they are measured on the engineering fibers | Judge the collection again with the current `imageQualityQa` |
-| `medFwhm` measured on an IIS frame but `qaStatus` `UNKNOWN` | No threshold names `illumination: iis`; full-slit thresholds don't apply to IIS frames (`gate.DEFAULT_POPULATION`) | Derive IIS thresholds (PIPE2D-1954) |
+| `medFwhm` measured on an IIS frame but `qaStatus` `UNKNOWN` | `extraThresholdsFiles` doesn't name the IIS file, or the population has no entry (m arm, n-arm Ne arc); full-slit thresholds don't apply to IIS frames (`gate.DEFAULT_POPULATION`) | Expected for the m arm and n Ne; otherwise check the config |
 | All `fit*` metric columns are `NaN`/0 | The `*_log` connections were absent from the input collection | Expected when `reduceExposure` hasn't run; the IQ metrics themselves are unaffected |
 | `ValueError: f(a) = NaN` in bisect during `fitDetectorMap` | Per-fiber dof=0 when very few arc lines remain after S/N cut | Proposed `dof <= 0` guard in `calculateSoftening` is **not** committed (see above), so relaxing per-species S/N is not yet safe |
 

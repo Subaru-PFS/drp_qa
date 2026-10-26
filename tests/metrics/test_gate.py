@@ -27,6 +27,7 @@ from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 ROOT = Path(__file__).parents[2]
 DATA = Path(__file__).parent / "data"
 RUN25 = DATA / "iqQaThresholds-run25.yaml"
+IIS = DATA / "iqQaThresholds-iis-run30.yaml"
 
 
 def configDefaults() -> SimpleNamespace:
@@ -328,6 +329,59 @@ def testShippedFileIsTheAdoptedRun25(stored):
         yaml.safe_load(RUN25.read_text()), pd.read_parquet(DATA / "iqQaMetrics-validation.parquet")
     )
     assert remade == yaml.safe_load(thresholdsPath("iqQaThresholds-run25.yaml").read_text())
+
+
+def loadScript(name: str):
+    """Return the thresholds-making script ``name`` beside the shipped files, imported as a module."""
+    spec = importlib.util.spec_from_file_location(name, thresholdsPath(f"{name}.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture(scope="module")
+def iisStored() -> pd.DataFrame:
+    """Return Run30's nightly IIS frames' ``iqQaMetrics``, reduced afresh (u/wtg/qa-iis/003b)."""
+    return pd.read_parquet(DATA / "iqQaMetrics-iis-run30.parquet")
+
+
+def testShippedIisFileIsTheAdoptedRun30(iisStored, tmp_path):
+    """The IIS file is what its script derives from the Run30 IIS frames and adopts (PIPE2D-1954)."""
+    module = loadScript("makeIisThresholds")
+    derived = module.derive(iisStored, tmp_path / "derived.yaml")
+    assert yaml.safe_load(derived.read_text()) == yaml.safe_load(IIS.read_text())
+    remade = module.adopt(yaml.safe_load(IIS.read_text()), iisStored)
+    assert remade == yaml.safe_load(thresholdsPath("iqQaThresholds-iis-run30.yaml").read_text())
+    assert all(entry["population"]["illumination"] == "iis" for entry in remade["thresholds"])
+
+
+def testShippedIisFileVerdicts(iisStored):
+    """IIS frames are judged by the IIS file alone: the known-good nights pass, the two faults warn."""
+    files = [thresholdsPath(configDefaults().thresholdsFile)]
+    files += [thresholdsPath(name) for name in configDefaults().extraThresholdsFiles]
+    thresholds = [*files, configThresholds(configDefaults())]
+    metrics = iisStored.drop(columns=list(VERDICT_COLUMNS))
+    verdicts = gate(metrics, thresholds, default="UNKNOWN")
+    judged = judge(metrics, thresholds)
+    assert (metrics["illumination"] == "iis").all()
+    # Neither the Run25 file (layer 0) nor the config (layer 2) judges an IIS image.
+    assert set(judged.loc[judged["status"] != "", "layer"]) == {1}
+    flagged = metrics.assign(qaStatus=verdicts["qaStatus"], qaDecidedBy=verdicts["qaDecidedBy"])
+    flagged = flagged[flagged["qaStatus"] != "PASS"]
+    assert flagged[["visit", "arm", "spectrograph", "qaStatus", "qaDecidedBy"]].to_records(
+        index=False
+    ).tolist() == [
+        (148829, "n", 4, "WARN", "medDxCenter"),  # IIS lamp header off: reduced against the sky line list
+        (149595, "b", 2, "WARN", "medFwhm"),  # the night SM2 and SM4 moved; not a known-good night
+    ]
+    # Every known-good image has its FWHM judged, the n-arm Ne arcs and the m arm excepted.
+    fwhm = judged[judged["metric"] == "medFwhm"].merge(metrics[["seqName"]], left_on="row", right_index=True)
+    unjudged = fwhm[fwhm["status"] == ""]
+    assert set(unjudged["arm"]) == {"m", "n"}
+    assert set(unjudged.loc[unjudged["arm"] == "n", "seqName"]) == {"ImageQuality (Ne)"}
+    # Negative control: a full-slit image is not judged by the IIS file.
+    full = image(medFwhm=1.0, linesPerFiber=1.0, medDxCenter=0.0)
+    assert (judge(full, [IIS])["status"] == "").all()
 
 
 def testShippedFileVerdicts(stored):
