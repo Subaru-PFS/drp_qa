@@ -680,6 +680,34 @@ def testShowTelescopeErrorsTheta(realAgcData):
     assert not np.allclose(expected, theta)
 
 
+def testShowTelescopeErrorsAzimuthCosAlt(realAgcData):
+    """The azimuth offset is plotted on-sky, as δaz·cos(alt), against the on-sky δalt.
+
+    ``guide_delta_azimuth`` is a coordinate offset (PIPE2D-1971); plotted as
+    read with equal aspect, the δaz axis was stretched by 1/cos(alt).
+    """
+    agcData = realAgcData("raster")
+    shutterOpen = agcData[agcData.shutter_open > 0]
+    exposures = shutterOpen.groupby("agc_exposure_id").agg(
+        altitude=("altitude", "mean"),
+        daz=("guide_delta_azimuth", "mean"),
+        dalt=("guide_delta_altitude", "mean"),
+    )
+    expected = exposures.daz * np.cos(np.deg2rad(exposures.altitude))
+
+    plot = showTelescopeErrors(agcData, fig=Figure())
+    points = plot.axes[0, 1].collections[0].get_offsets()
+    np.testing.assert_allclose(points[:, 0], exposures.dalt)
+    np.testing.assert_allclose(points[:, 1], expected)
+    np.testing.assert_allclose(plot.data.daz_cosalt_arcsec, expected)
+    np.testing.assert_allclose(plot.data.daz_arcsec, exposures.daz)  # the column as read is kept
+    assert "cos" in plot.axes[0, 1].get_ylabel()
+    assert plot.axes[0, 1].get_aspect() == 1
+    # Negative control: the raw azimuth offset is 1.45-1.58 times larger at these altitudes.
+    assert not np.allclose(points[:, 1], exposures.daz, atol=1e-3)
+    assert (exposures.daz.abs() > 1.4 * np.abs(expected)).all()
+
+
 def testShowTelescopeErrorsColorbars(realAgcData):
     """ics_pfsPlotActor-style redraws update the four colorbars."""
     agcData = realAgcData("raster")
