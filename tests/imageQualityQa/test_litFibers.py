@@ -178,10 +178,10 @@ IIS_ARC = ("scienceArc", "ImageQuality (Ne)")
 
 
 def iisPfsConfig(fakes, detectorMap):
-    """Return an IIS frame's pfsConfig: the engineering fibers GOOD, the science fibers at home."""
+    """Return an IIS frame's pfsConfig: the engineering fibers GOOD, the science fibers UNILLUMINATED (5)."""
     fiberId = detectorMap.fiberId
     engineering = np.isin(fiberId, ENGINEERING)
-    return fakes.PfsConfig(fiberId, targetType=np.where(engineering, 5, 9))
+    return fakes.PfsConfig(fiberId, status=np.where(engineering, 1, 5), targetType=np.where(engineering, 5, 9))
 
 
 @pytest.fixture
@@ -239,8 +239,8 @@ def testIisQuartzIsMeasuredOnTheEngineeringFibers(iqqa, runTask, fakes, oldGetLa
     assert metrics["linesPerFiber"] == 380
     assert metrics["medFwhm"] == pytest.approx(2.3548 * 1.3, rel=0.05) and not metrics["traceOnly"]
     assert metrics["pctFlagged"] == 0.0  # the calexp samples' flag rate, as on any quartz
-    # Negative control: on the science fibers nothing is lit, and the 18 at home would be counted.
-    assert iqqa.litFibers(pfsConfig, detectorMap.fiberId) == (set(detectorMap.fiberId) - set(ENGINEERING), 18)
+    # Negative control: on the science fibers nothing is lit, so linesPerFiber would go unmeasured.
+    assert iqqa.litFibers(pfsConfig, detectorMap.fiberId) == (set(), 0)
 
     # Judged only by a threshold naming illumination=iis: the full-slit one leaves it UNKNOWN.
     fullSlit = lowerIsWorse("linesPerFiber", warn=390, fail=385, seqName=IIS_QUARTZ[1])

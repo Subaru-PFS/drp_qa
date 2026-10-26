@@ -69,9 +69,9 @@ pfsConfig (every ENGINEERING fiber GOOD) and measures lines and traces on those 
 160 lines per fiber on r, 560 on b, 130 on n) plus trace centroids that follow the light
 (13–98 rows on a spectrograph whose lamp gave no light, 5–17k lit). So an IIS frame takes the
 regular arc or quartz path on its engineering fibers (`litFibers(..., engineering=True)`), and
-`iqQaMetrics.illumination` is `iis`. The science fibers of an IIS design are at home and GOOD
-(Run30: about 2,300 lit, 0 hidden), so `litFibers` on the science fibers would count them though
-nothing lights them. Thresholds: an entry that doesn't name `illumination` is for full-slit
+`iqQaMetrics.illumination` is `iis`. An IIS design records the science fibers as `UNILLUMINATED`
+(fiberStatus 5; Run30's designs, `reports/PIPE2D-1954/pfsConfigCounts-003b.parquet`), so
+`litFibers` on the science fibers finds none lit and `linesPerFiber` would be unmeasured. Thresholds: an entry that doesn't name `illumination` is for full-slit
 frames, and an IIS frame is judged only by one naming `illumination: iis`
 (`pfs.drp.qa.metrics.gate.DEFAULT_POPULATION`); none exist until they are derived from Run30's
 nightly IIS frames ("ImageQuality (Ne)", "(Kr)", "(Halogen)": 148548–150721, 15 of each).
