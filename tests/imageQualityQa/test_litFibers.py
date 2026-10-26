@@ -202,6 +202,27 @@ def testIisQuartzIsClassifiedFromItsLampHeaders(iqqa, fakes, oldGetLamps):
     assert _getLamps(iis) == {"Quartz"}
 
 
+def testPfsConfigAlsoSaysIis(iqqa, fakes, oldGetLamps):
+    """A calexp whose lamp headers are missing is IIS when the engineering fibers are GOOD."""
+    task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
+    detectorMap = fakes.DetectorMap(numFibers=20)
+    noLampKeys = fakes.Exposure(np.zeros((2, 2)), {"DATA-TYP": "COMPARISON", **fakes.header(*IIS_ARC)})
+    assert task._classifyVisit(noLampKeys, None)[:2] == ("arc", False)
+    assert task._classifyVisit(noLampKeys, iisPfsConfig(fakes, detectorMap))[:2] == ("arc", True)
+    # Per spectrograph, as reduceExposure: SM2's engineering fibers GOOD, SM1's not.
+    pfsConfig = fakes.PfsConfig([1, 2, 3, 4], status=[1, 2, 1, 1], targetType=[9, 5, 9, 5])
+    pfsConfig.spectrograph = np.array([1, 1, 2, 2])
+    assert iqqa.engineeringLit(pfsConfig, 2) and not iqqa.engineeringLit(pfsConfig, 1)
+    assert (
+        task._classifyVisit(noLampKeys, pfsConfig, 2)[1]
+        and not task._classifyVisit(noLampKeys, pfsConfig, 1)[1]
+    )
+    # Negative controls: a design without engineering fibers, or with them not GOOD, is not IIS.
+    assert not iqqa.engineeringLit(fakes.PfsConfig(detectorMap.fiberId))
+    assert not iqqa.engineeringLit(fakes.PfsConfig([1, 2], status=[1, 2], targetType=[9, 5]))
+    assert task._classifyVisit(noLampKeys, fakes.PfsConfig(detectorMap.fiberId))[:2] == ("arc", False)
+
+
 def testIisQuartzIsMeasuredOnTheEngineeringFibers(iqqa, runTask, fakes, oldGetLamps):
     """An IIS quartz is judged like a quartz on its engineering fibers, by IIS thresholds (PIPE2D-1954)."""
     detectorMap = fakes.DetectorMap(numFibers=20)

@@ -55,6 +55,11 @@ Returns `(obs_type, is_iis, seq_nam)`:
   Run30's nightly "ImageQuality (Halogen)" IIS quartz (`W_IISQTH`) for a full-slit quartz, so
   its calexp failed and it fell back to `fiberProfiles`. obs_pfs reads the IIS headers on a
   FLAT from PIPE2D-1953; the workaround stays for the obs_pfs the processing servers run.
+  The pfsConfig is the second witness, and the one `reduceExposure.isIIS` goes by: the
+  spectrograph's engineering fibers all `GOOD` (`engineeringLit`). Either makes the frame IIS.
+  Needed: 7 of Run30's 180 n-arm IIS images (148829 n4, 148973 n4, 149134 n2 and n4, 149322 n2
+  and n4, 149799 n4) have calexps without the IIS lamp headers, and by the headers alone they took
+  the full-slit path (`u/wtg/qa-iis/002`; `reports/PIPE2D-1954/checkHeaders.py`).
 - `seq_nam`: raw `W_SEQNAM` string
 
 **IIS vs regular** (PIPE2D-1954): an IIS frame lights the 16 engineering fibers of each

@@ -21,7 +21,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   frames, so every existing threshold keeps its meaning, and an IIS frame is judged only by an entry naming
   `illumination: iis`. None exist yet; the five Run27 unlit-spectrograph IIS arcs of the validation set name
   `linesPerFiber` and stay `unchecked` until they do. The comparison report says "FWHM not measured (before
-  PIPE2D-1954)" for IIS rows stored without one.
+  PIPE2D-1954)" for IIS rows stored without one. The pfsConfig is a second witness of IIS, the one drp_stella
+  goes by (`engineeringLit`: the spectrograph's engineering fibers all `GOOD`), since 7 n-arm calexps of Run30
+  lack the lamp headers. `addSpecies` reads the lamp of an IIS sequence from its parentheses ("ImageQuality
+  (Ne)" gives `Ne`), so IIS populations split by lamp like the PFI arcs.
 
 - **Known-bad coverage** (PIPE2D-1934) — `pfs.drp.qa.metrics.coverage.knownBadCoverage` reports, for each
   known-bad validation entry, whether every image it covers with its metric measured is judged and reaches its

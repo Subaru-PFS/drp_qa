@@ -39,7 +39,37 @@ from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
 from pfs.drp.stella.utils.stability import addTraceLambdaToArclines
 
-__all__ = ["ImageQualityQaTask", "litFibers"]
+__all__ = ["ImageQualityQaTask", "engineeringLit", "litFibers"]
+
+
+def engineeringLit(pfsConfig: PfsConfig, spectrograph: int | None = None) -> bool:
+    """Return whether the pfsConfig says the IIS is on: its engineering fibers are all ``GOOD``.
+
+    What drp_stella's ``reduceExposure.isIIS`` decides by, and so what decides which
+    fibers ``lines`` holds: a design that doesn't light the IIS records the engineering
+    fibers as not ``GOOD``. The lamp headers are the other witness (`getLamps`), and some
+    n-arm calexps lack them (Run30: 148829 n4, 149134 n2, 149322 n2, ...; PIPE2D-1954).
+
+    Parameters
+    ----------
+    pfsConfig : `pfs.datamodel.PfsConfig`
+        Fiber configuration of the visit.
+    spectrograph : `int` or `None`, optional
+        Judge this spectrograph's engineering fibers alone, as reduceExposure does;
+        every engineering fiber when `None` or the pfsConfig has no ``spectrograph``.
+
+    Returns
+    -------
+    `bool`
+        Whether the engineering fibers (there must be some) are all ``GOOD``.
+    """
+    engineering = np.asarray(pfsConfig.targetType) == TargetType.ENGINEERING
+    spectrographs = getattr(pfsConfig, "spectrograph", None)
+    if spectrograph is not None and spectrographs is not None:
+        engineering &= np.asarray(spectrographs) == spectrograph
+    if not engineering.any():
+        return False
+    return bool(np.all(np.asarray(pfsConfig.fiberStatus)[engineering] == FiberStatus.GOOD))
 
 
 def litFibers(
@@ -565,7 +595,7 @@ class ImageQualityQaTask(PipelineTask):
         # Classify the observation type from FITS header metadata so that the
         # task can route each visit to the correct measurement path explicitly
         # rather than relying on heuristics like the arc-line count.
-        obs_type, is_iis, seq_nam = self._classifyVisit(calexp, pfsConfig)
+        obs_type, is_iis, seq_nam = self._classifyVisit(calexp, pfsConfig, dataId.get("spectrograph"))
         self.log.debug(
             "Visit classification: obs_type=%r is_iis=%s seq_nam=%r for %s", obs_type, is_iis, seq_nam, dataId
         )
@@ -1254,13 +1284,15 @@ class ImageQualityQaTask(PipelineTask):
         self,
         calexp: lsst.afw.image.Exposure | None,
         pfsConfig: PfsConfig | None,
+        spectrograph: int | None = None,
     ) -> tuple[str, bool, str]:
         """Classify the observation type from FITS header metadata.
 
         Reads ``W_SEQTYP`` and ``W_SEQNAM`` from either ``calexp`` metadata or
         ``pfsConfig.header``, and determines whether the illumination is IIS
-        (engineering fibers) or regular (all 600 science fibers) by inspecting
-        lamp headers via `~lsst.obs.pfs.utils.getLamps`.
+        (engineering fibers) or regular (all 600 science fibers) from the lamp
+        headers (`~lsst.obs.pfs.utils.getLamps`) or the pfsConfig
+        (`engineeringLit`): either witness makes it IIS.
 
         Parameters
         ----------
@@ -1268,6 +1300,8 @@ class ImageQualityQaTask(PipelineTask):
             Post-ISR calibrated image for this quantum.
         pfsConfig : `PfsConfig` or `None`
             Fiber configuration for this visit.
+        spectrograph : `int` or `None`, optional
+            The quantum's spectrograph, for `engineeringLit`.
 
         Returns
         -------
@@ -1278,7 +1312,8 @@ class ImageQualityQaTask(PipelineTask):
             absent or unrecognised).
         is_iis : `bool`
             True when the illumination comes from the 16 IIS engineering
-            fibers (lamp names end with ``"_eng"``).
+            fibers: a lamp name ends with ``"_eng"``, or the pfsConfig records
+            the spectrograph's engineering fibers as ``GOOD``.
         seq_nam : `str`
             Raw ``W_SEQNAM`` header value (e.g. ``"Arc: HgCd"``), or an
             empty string when the header is absent.
@@ -1329,6 +1364,11 @@ class ImageQualityQaTask(PipelineTask):
             is_iis = any(name.endswith("_eng") for name in lamps)
         except Exception:
             pass  # obs_pfs unavailable or headers missing; assume regular
+        # The pfsConfig is the witness reduceExposure goes by, so it decides which fibers
+        # ``lines`` holds; some n-arm calexps lack the lamp headers (PIPE2D-1954).
+        if not is_iis and pfsConfig is not None and engineeringLit(pfsConfig, spectrograph):
+            is_iis = True
+            self.log.info("IIS by the pfsConfig (engineering fibers GOOD); the lamp headers don't say so.")
 
         return obs_type, is_iis, seq_nam
 
