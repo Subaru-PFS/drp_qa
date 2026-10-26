@@ -63,6 +63,7 @@ from pfs.drp.qa.guiders.analysis import (
     estimateFocusErrors,
     fitGlobalModel,
     selectEnabledCameras,
+    selectFittedMatches,
     selectGoodDetections,
     selectIsolatedGaiaStars,
     selectValidMatches,
@@ -624,7 +625,7 @@ def showAgcErrorsForVisits(
     if agcExposureIds is not None:
         data = data[data.agc_exposure_id.isin(list(agcExposureIds))]
     disabled = _disabledCameras(data)
-    data = data[selectValidMatches(data) & selectEnabledCameras(data)]
+    data = data[selectFittedMatches(data)]
     if data.empty:
         raise ValueError("No valid matches to plot")
 

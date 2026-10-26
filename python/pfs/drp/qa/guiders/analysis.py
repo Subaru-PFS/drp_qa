@@ -66,6 +66,7 @@ __all__ = [
     "guideErrorsByExposure",
     "momentDifferenceToPiston",
     "selectEnabledCameras",
+    "selectFittedMatches",
     "selectGoodDetections",
     "selectIsolatedGaiaStars",
     "selectStars",
@@ -155,13 +156,8 @@ def selectEnabledCameras(agcData: pd.DataFrame) -> np.ndarray:
     the focus. ``camera_enabled`` is False for them. Rows written before
     INSTRM-3057 have no value (NA) and are taken as enabled, as is every row
     of data with no ``camera_enabled`` (e.g. read before drp_qa did).
-
-    The fits that combine the cameras into one answer (the boresight fit of
-    `fitGuiderModel`, the exposure terms of `fitGlobalModel`,
-    `guideErrorsByExposure`, the rates of `fitDriftRate` and the exposure
-    focus errors of `estimateFocusErrors`) use only these spots, as the
-    guider did. Per-camera results keep the disabled cameras, with
-    ``camera_enabled`` saying which they are.
+    Per-camera results keep the disabled cameras, with ``camera_enabled``
+    saying which they are; see `selectFittedMatches` for the fits.
 
     Parameters
     ----------
@@ -177,6 +173,29 @@ def selectEnabledCameras(agcData: pd.DataFrame) -> np.ndarray:
         return np.ones(len(agcData), dtype=bool)
 
     return agcData.camera_enabled.astype("boolean").fillna(True).to_numpy(dtype=bool)
+
+
+def selectFittedMatches(agcData: pd.DataFrame) -> np.ndarray:
+    """Select the matches the guider fitted: valid ones on enabled cameras.
+
+    `selectValidMatches` and `selectEnabledCameras` together. The fits that
+    combine the cameras into one answer use only these, as the guider did:
+    the boresight fit of `fitGuiderModel`, the exposure terms of
+    `fitGlobalModel`, `guideErrorsByExposure`, and without ``byCamera`` the
+    rates of `fitDriftRate` and the focus errors of `estimateFocusErrors`.
+
+    Parameters
+    ----------
+    agcData : `pandas.DataFrame`
+        AG data with ``agc_match_flags``, and ``camera_enabled`` if read
+        since INSTRM-3057.
+
+    Returns
+    -------
+    fitted : `numpy.ndarray` of `bool`
+        One element per row.
+    """
+    return selectValidMatches(agcData) & selectEnabledCameras(agcData)
 
 
 def selectIsolatedGaiaStars(agcData: pd.DataFrame) -> np.ndarray:
@@ -262,9 +281,8 @@ class GuiderFitConfig:
 def guideErrorsByExposure(agcData: pd.DataFrame, reference: str = "nominal") -> pd.Series:
     """Return the guide error of each AG exposure.
 
-    The guide error is the mean distance of the exposure's valid matches
-    (`selectValidMatches`) on enabled cameras (`selectEnabledCameras`) from
-    their reference positions.
+    The guide error is the mean distance of the exposure's valid matches on
+    enabled cameras (`selectFittedMatches`) from their reference positions.
 
     Parameters
     ----------
@@ -282,8 +300,7 @@ def guideErrorsByExposure(agcData: pd.DataFrame, reference: str = "nominal") -> 
         with no valid match on an enabled camera has none.
     """
     dx, dy = offsetColumns(reference)
-    use = selectValidMatches(agcData) & selectEnabledCameras(agcData)
-    data = addOffsets(agcData[use], reference).reset_index(drop=True)
+    data = addOffsets(agcData[selectFittedMatches(agcData)], reference).reset_index(drop=True)
     dr = pd.Series(np.hypot(data[dx], data[dy]), name="guide_error_um")
 
     return dr.groupby(data.agc_exposure_id).mean()
@@ -488,7 +505,7 @@ def fitGuiderModel(
     These are the fits of drp_stella's ``showGuiderErrors``. With
     ``modelBoresightOffset``, a transform is fitted to each AG exposure's
     valid matches without bad detection flags on enabled cameras
-    (`selectEnabledCameras`), taking their centers to their nominal
+    (`selectFittedMatches`), taking their centers to their nominal
     positions. With ``modelCCDOffset``, a transform is then fitted to
     each camera's selected stars (`selectStars`), taking their centers to the
     boresight model. Each star's model position is its nominal position moved
@@ -529,7 +546,7 @@ def fitGuiderModel(
     yCenter = data.agc_center_y_mm.to_numpy(dtype=float)
     xModel = data.agc_nominal_x_mm.to_numpy(dtype=float, copy=True)
     yModel = data.agc_nominal_y_mm.to_numpy(dtype=float, copy=True)
-    good = selectGoodDetections(data) & selectValidMatches(data) & selectEnabledCameras(data)
+    good = selectGoodDetections(data) & selectFittedMatches(data)
 
     exposureTransforms = {}
     if config.modelBoresightOffset:
@@ -1031,10 +1048,8 @@ def fitDriftRate(
     data = addReferencePositions(data, reference, stat)
     for xy, column in zip("xy", referenceColumns(reference), strict=True):
         data[f"d{xy}_um"] = mmToUm(data[f"agc_{position}_{xy}_mm"] - data[column])
-    use = (data.shutter_open == 1).to_numpy() & selectValidMatches(data)
-    if not byCamera:
-        use &= selectEnabledCameras(data)
-    data = data[use]
+    matches = selectValidMatches(data) if byCamera else selectFittedMatches(data)
+    data = data[(data.shutter_open == 1).to_numpy() & matches]
     if data.empty:
         raise ValueError(f"No AG exposures with the shutters open to fit, from visit {visit}")
     means = data[["altitude", "azimuth", "insrot", "exptime"]].mean()
@@ -1408,9 +1423,7 @@ def estimateFocusErrors(
         ``focusColumn``, ``rms_left_pix`` and ``rms_right_pix``,
         ``focus_error_um`` and, with ``byCamera``, ``camera_enabled``.
     """
-    use = selectValidMatches(agcData)
-    if not byCamera:
-        use &= selectEnabledCameras(agcData)
+    use = selectValidMatches(agcData) if byCamera else selectFittedMatches(agcData)
     agcData = agcData[use].assign(camera_enabled=lambda d: selectEnabledCameras(d))
     halves = agcData.groupby(["agc_exposure_id", "agc_camera_id", "left"]).rms_pix.median()
     keys = ["agc_exposure_id", "agc_camera_id"] if byCamera else ["agc_exposure_id"]

@@ -30,6 +30,7 @@ from pfs.drp.qa.guiders.analysis import (
     guideErrorsByExposure,
     momentDifferenceToPiston,
     selectEnabledCameras,
+    selectFittedMatches,
     selectGoodDetections,
     selectIsolatedGaiaStars,
     selectStars,
@@ -948,6 +949,19 @@ def disableCamera(agcData, cid=2, shift_mm=0.1):
     agcData["camera_enabled"] = pd.array(~disabled, dtype="boolean")
     agcData.loc[disabled, "agc_center_x_mm"] += shift_mm
     return agcData, disabled
+
+
+def testSelectFittedMatches():
+    """Valid matches on enabled cameras; NA (rows before INSTRM-3057) counts as enabled."""
+    agcData = pd.DataFrame(
+        {
+            "agc_match_flags": [1, 0, 1, 1],
+            "camera_enabled": pd.array([True, True, False, pd.NA], dtype="boolean"),
+        }
+    )
+    np.testing.assert_array_equal(selectFittedMatches(agcData), [True, False, False, True])
+    # Negative control: valid matches alone keep the disabled camera's.
+    np.testing.assert_array_equal(selectValidMatches(agcData), [True, False, True, True])
 
 
 def testGuideErrorsByExposureDisabledCamera(makeAgcData):
