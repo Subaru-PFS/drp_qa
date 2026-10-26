@@ -184,6 +184,34 @@ def testMostSpecificEntryWins():
     assert list(judged["status"]) == ["PASS", "FAIL", "FAIL"]
 
 
+def testIlluminationDefaultsToFull():
+    """An entry without ``illumination`` judges full-slit images only; an IIS image needs one naming it."""
+    full = table({"metric": "medFwhm", "arm": "b", "warn": 3.0, "fail": 3.5})
+    assert gate(image(medFwhm=4.0), full)["qaStatus"].iloc[0] == "FAIL"
+    assert gate(image(medFwhm=4.0, illumination="full"), full)["qaStatus"].iloc[0] == "FAIL"
+    assert (
+        gate(image(medFwhm=4.0, illumination="iis"), full, default="UNKNOWN")["qaStatus"].iloc[0] == "UNKNOWN"
+    )
+
+    both = table(
+        {"metric": "medFwhm", "illumination": "iis", "warn": 5.0, "fail": 6.0},
+        {"metric": "medFwhm", "arm": "b", "warn": 3.0, "fail": 3.5},
+    )
+    images = pd.concat(
+        [image(medFwhm=4.0), image(visit=2, medFwhm=4.0, illumination="iis")], ignore_index=True
+    )
+    judged = judge(images, both)
+    assert judged["population"].tolist() == ["arm=b", "illumination=iis"]
+    assert judged["status"].tolist() == ["FAIL", "PASS"]
+    # Negative control: by specificity alone the arm=b entry (1 column) ties the IIS one, which
+    # would be an error, and an entry naming two columns would take the IIS image.
+    specific = table(
+        {"metric": "medFwhm", "illumination": "iis", "warn": 5.0, "fail": 6.0},
+        {"metric": "medFwhm", "arm": "b", "obsType": "arc", "warn": 3.0, "fail": 3.5},
+    )
+    assert judge(images, specific)["population"].tolist() == ["arm=b obsType=arc", "illumination=iis"]
+
+
 def testEarlierTableWins():
     """A table's match, however general, beats any match in a later table."""
     first = table({"metric": "medFwhm", "warn": 2.0, "fail": 2.5})

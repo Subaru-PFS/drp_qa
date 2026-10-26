@@ -19,6 +19,13 @@ one means "any value". For each image and metric, the entry used is
 An entry with neither ``warn`` nor ``fail`` stops the search: the metric is
 deliberately not judged in that population.
 
+One population column has a default, `DEFAULT_POPULATION`: ``illumination``,
+``full`` for the science fibers and ``iis`` for the 16 engineering fibers lit
+by the IIS lamps (PIPE2D-1954). An entry that doesn't name it applies to
+``full`` images only, since every threshold derived before the column existed
+was from full-slit frames; an IIS image is judged only by an entry naming
+``illumination: iis``. An image without the column has the default.
+
 A missing (NaN) value, one with no thresholds, or one its `MetricSpec` marks
 as not measured (a FWHM read from ``fiberProfiles``) gets no verdict; an
 infinite one is judged, and fails a higher-is-worse metric. A value at a
@@ -44,6 +51,7 @@ from pfs.drp.qa.metrics.registry import specFor
 from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS, PIPELINE_PRODUCTS, knownVersion
 
 __all__ = [
+    "DEFAULT_POPULATION",
     "PROVISIONAL_COLUMNS",
     "STATUS_ORDER",
     "VERDICT_COLUMNS",
@@ -85,6 +93,12 @@ PROVISIONAL_COLUMNS = ("qaProvisional", "qaPipeline")
 
 #: Columns identifying an image, copied to `judge`'s output when present.
 _ID_COLUMNS = ("visit", "arm", "spectrograph")
+
+#: Population columns with a default: an entry that doesn't name the column applies
+#: to images with the default value only, and an image without the column has it.
+#: ``illumination`` is ``imageQualityQa``'s: ``full`` (the science fibers, every
+#: threshold derived before PIPE2D-1954) or ``iis`` (the 16 engineering fibers).
+DEFAULT_POPULATION: dict[str, str] = {"illumination": "full"}
 
 #: Fallback flag-rate thresholds of ``imageQualityQa`` for an arm with no entry.
 _FLAG_RATE_FALLBACK = (15.0, 20.0)
@@ -453,6 +467,17 @@ def _choose(metrics: pd.DataFrame, tables: list[pd.DataFrame], name: str) -> lis
                     match[:, index] &= metrics[column].to_numpy(dtype=object) == wanted[index]
                 else:
                     match[:, index] = False
+        for column, default in DEFAULT_POPULATION.items():
+            # An entry that doesn't name the column is for the default population alone.
+            if column not in metrics.columns:
+                continue
+            values = metrics[column].to_numpy(dtype=object)
+            isDefault = np.array([_isNull(value) or value == default for value in values], dtype=bool)
+            if column in entries.columns:
+                unnamed = np.array([_isNull(value) for value in entries[column].to_numpy(dtype=object)])
+            else:
+                unnamed = np.ones(len(entries), dtype=bool)
+            match[:, unnamed] &= isDefault[:, None]
         score = np.where(match, specificity, -1)
         best = score.max(axis=1)
         ties = ((score == best[:, None]).sum(axis=1) > 1) & (best >= 0) & pending
