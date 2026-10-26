@@ -45,10 +45,12 @@ __all__ = ["ImageQualityQaTask", "engineeringLit", "litFibers"]
 def engineeringLit(pfsConfig: PfsConfig, spectrograph: int | None = None) -> bool:
     """Return whether the pfsConfig says the IIS is on: its engineering fibers are all ``GOOD``.
 
-    What drp_stella's ``reduceExposure.isIIS`` decides by, and so what decides which
-    fibers ``lines`` holds: a design that doesn't light the IIS records the engineering
-    fibers as not ``GOOD``. The lamp headers are the other witness (`getLamps`), and some
-    n-arm calexps lack them (Run30: 148829 n4, 149134 n2, 149322 n2, ...; PIPE2D-1954).
+    What drp_stella's ``reduceExposure`` decides by (``checkPfsConfig`` selects the quantum's
+    spectrograph from the pfsConfig, then ``isIIS`` asks whether its engineering fibers are
+    all ``GOOD``), and so what decides which fibers ``lines`` holds: a design that doesn't
+    light the IIS records the engineering fibers as not ``GOOD``. The lamp headers are the
+    other witness (`getLamps`), and some n-arm raws record the IIS lamp off (Run30: 148829
+    n4, 149134 n2, 149322 n2, ...; PIPE2D-1954).
 
     Parameters
     ----------
@@ -544,8 +546,10 @@ class ImageQualityQaTask(PipelineTask):
           a calexp cross-dispersion fallback is attempted.
         * **IIS arc** (``scienceArc``, the IIS lamps): as a regular arc, on the
           16 engineering fibers per spectrograph that reduceExposure measures
-          lines on (PIPE2D-1954). ``illumination`` is ``iis``, and only a
-          threshold naming it judges the frame (`pfs.drp.qa.metrics.gate`).
+          lines on (PIPE2D-1954); the pfsConfig says whether it did
+          (`engineeringLit`), the lamp headers without one. ``illumination`` is
+          ``iis``, and only a threshold naming it judges the frame
+          (`pfs.drp.qa.metrics.gate`).
         * **Regular trace/quartz** (``scienceTrace``, all fibers): calexp
           trace widths are the primary path. When they are absent
           or unusable, the fiber profile calibration widths are reported with
@@ -1307,7 +1311,7 @@ class ImageQualityQaTask(PipelineTask):
         ``pfsConfig.header``, and determines whether the illumination is IIS
         (engineering fibers) or regular (all 600 science fibers) from the lamp
         headers (`~lsst.obs.pfs.utils.getLamps`) or the pfsConfig
-        (`engineeringLit`): either witness makes it IIS.
+        (`engineeringLit`), which decides when present.
 
         Parameters
         ----------
@@ -1327,8 +1331,10 @@ class ImageQualityQaTask(PipelineTask):
             absent or unrecognised).
         is_iis : `bool`
             True when the illumination comes from the 16 IIS engineering
-            fibers: a lamp name ends with ``"_eng"``, or the pfsConfig records
-            the spectrograph's engineering fibers as ``GOOD``.
+            fibers. The pfsConfig decides when there is one (`engineeringLit`:
+            the spectrograph's engineering fibers all ``GOOD``), since it is
+            what reduceExposure went by and so says which fibers ``lines``
+            holds; otherwise a lamp name ending in ``"_eng"``.
         seq_nam : `str`
             Raw ``W_SEQNAM`` header value (e.g. ``"Arc: HgCd"``), or an
             empty string when the header is absent.
@@ -1380,10 +1386,18 @@ class ImageQualityQaTask(PipelineTask):
         except Exception:
             pass  # obs_pfs unavailable or headers missing; assume regular
         # The pfsConfig is the witness reduceExposure goes by, so it decides which fibers
-        # ``lines`` holds; some n-arm calexps lack the lamp headers (PIPE2D-1954).
-        if not is_iis and pfsConfig is not None and engineeringLit(pfsConfig, spectrograph):
-            is_iis = True
-            self.log.info("IIS by the pfsConfig (engineering fibers GOOD); the lamp headers don't say so.")
+        # ``lines`` holds and which are lit; the headers decide only without one. Some n-arm
+        # raws record the IIS lamp off (PIPE2D-1954).
+        if pfsConfig is not None:
+            byConfig = engineeringLit(pfsConfig, spectrograph)
+            if byConfig != is_iis:
+                self.log.info(
+                    "The pfsConfig says %s (engineering fibers %sGOOD); the lamp headers say %s. Taking the pfsConfig.",
+                    "IIS" if byConfig else "not IIS",
+                    "" if byConfig else "not all ",
+                    "IIS" if is_iis else "not IIS",
+                )
+            is_iis = byConfig
 
         return obs_type, is_iis, seq_nam
 

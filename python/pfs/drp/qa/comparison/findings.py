@@ -38,6 +38,7 @@ __all__ = [
     "judgeImages",
     "lampsOf",
     "taskPipeline",
+    "taskPipelines",
     "taskThresholds",
 ]
 
@@ -146,6 +147,24 @@ def thresholdsFiles(config) -> list[Path]:
     files = [thresholdsPath(config.thresholdsFile)] if config.thresholdsFile else []
     files.extend(thresholdsPath(name) for name in getattr(config, "extraThresholdsFiles", None) or [])
     return files
+
+
+def taskPipelines(config) -> list[dict[str, str] | None]:
+    """Return the pipeline each of an ``imageQualityQa`` config's thresholds layers was derived with.
+
+    Parameters
+    ----------
+    config : `Any`
+        An ``ImageQualityQaConfig``; duck-typed.
+
+    Returns
+    -------
+    `list` [`dict` [`str`, `str`] or `None`]
+        One per layer of `taskThresholds`: each file's ``pipelineVersions``
+        (empty when it records none), and `None` for the config's own fields,
+        which are physical limits with no reduction to compare.
+    """
+    return [*(readThresholds(path)[0]["pipelineVersions"] for path in thresholdsFiles(config)), None]
 
 
 def taskPipeline(config) -> dict[str, str]:

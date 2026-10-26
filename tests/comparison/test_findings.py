@@ -256,6 +256,11 @@ def testTaskPipeline(tmp_path):
     }
     both = SimpleNamespace(thresholdsFile="iqQaThresholds-run25.yaml", extraThresholdsFiles=[str(path)])
     assert taskPipeline(both)["obs_pfs"] == "w.2026.40"
+    # Per layer, for the provisional mark against the layer that judged an image; the config's is None.
+    from pfs.drp.qa.comparison.findings import taskPipelines
+
+    assert [p and p["obs_pfs"] for p in taskPipelines(both)] == ["w.2026.40", "b", None]
+    assert taskPipelines(SimpleNamespace(thresholdsFile="")) == [None]
     assert taskPipeline(SimpleNamespace(thresholdsFile=str(path))) == {
         "datamodel": "a",
         "obs_pfs": "b",

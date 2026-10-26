@@ -55,7 +55,7 @@ def testLitFibers(iqqa, fakes):
     assert lit == {1, 2}
     assert possible == 4  # 1, 2 and the hidden 3, 4
     assert iqqa.litFibers(None, detectorMap.fiberId) == (None, None)
-    # On an IIS frame the engineering fibers are the lit ones, GOOD or not (PIPE2D-1954).
+    # On an IIS frame the GOOD engineering fibers are the lit ones; the others count as possible (PIPE2D-1954).
     assert iqqa.litFibers(pfsConfig, detectorMap.fiberId, engineering=True) == ({6}, 1)
     broken = fakes.PfsConfig([1, 6], status=[1, 2], targetType=[9, 5])
     assert iqqa.litFibers(broken, detectorMap.fiberId, engineering=True) == (set(), 1)
@@ -223,6 +223,12 @@ def testPfsConfigAlsoSaysIis(iqqa, fakes, oldGetLamps):
     assert not iqqa.engineeringLit(fakes.PfsConfig(detectorMap.fiberId))
     assert not iqqa.engineeringLit(fakes.PfsConfig([1, 2], status=[1, 2], targetType=[9, 5]))
     assert task._classifyVisit(noLampKeys, fakes.PfsConfig(detectorMap.fiberId))[:2] == ("arc", False)
+    # The pfsConfig decides when present: lamp headers saying IIS over a design whose engineering
+    # fibers are not GOOD means reduceExposure measured the science fibers, so the frame is not IIS.
+    header = {"DATA-TYP": "COMPARISON", "W_IISNEO": True, **fakes.header(*IIS_ARC)}
+    iisHeaders = fakes.Exposure(np.zeros((2, 2)), header)
+    assert task._classifyVisit(iisHeaders, None)[1]
+    assert not task._classifyVisit(iisHeaders, fakes.PfsConfig([1, 2], status=[1, 5], targetType=[9, 5]))[1]
 
 
 def testIisQuartzIsMeasuredOnTheEngineeringFibers(iqqa, runTask, fakes, oldGetLamps):

@@ -22,8 +22,10 @@ file beside them and `adopt` turns it into the shipped one:
   Not judged: the n-arm Ne arc, whose 15 faint IIS lines per fiber give a
   median width that scatters 2-4 % night to night and crossed WARN on 1-3 of 14
   known-good nights per camera (the Kr arc judges the n arm's focus nightly);
-  and the m arm, taken on one night (4 values). The per-arm percentiles judge
-  only an image whose detector and lamp have no entry.
+  and the m arm, taken on one night (4 values). The per-arm percentiles are
+  not judged either: they would judge only an IIS lamp with no entry of its own
+  (an Ar, HgAr, He or H IIS arc), for which Ne and Kr pooled are no reference,
+  and their FAIL sits 0.01 px above WARN. Such a lamp is UNKNOWN until derived.
 - **linesPerFiber** is a tolerance below each arm and sequence's known-good median:
   arcs 25 %/50 %, quartz 2.5 %/5 % (as PIPE2D-1935). The m arm is not judged.
 - **medDxCenter** keeps the task config's physical limits, WARN 1 px and FAIL 2 px:
@@ -114,7 +116,14 @@ def adopt(document: dict, metrics: pd.DataFrame) -> dict:
         assert population.get("illumination") == ILLUMINATION, population
         if entry["metric"] != "medFwhm":
             continue
-        if entry["nGood"] < MIN_SAMPLES:
+        if entry["method"] == "percentile":
+            entry |= {"warn": None, "fail": None}
+            entry["provenance"] = (
+                f"Not judged ({DERIVED_ON.isoformat()}, PIPE2D-1954): this per-arm percentile would judge only an "
+                "IIS lamp with no entry of its own, for which the Ne and Kr arcs (or the halogen quartz) pooled "
+                f"are no reference. Derived values were: {entry['provenance']}"
+            )
+        elif entry["nGood"] < MIN_SAMPLES:
             entry |= {"warn": None, "fail": None}
             entry["provenance"] = (
                 f"Not judged ({DERIVED_ON.isoformat()}, PIPE2D-1954): {entry['nGood']} known-good values, from "

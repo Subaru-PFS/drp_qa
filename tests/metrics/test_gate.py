@@ -18,6 +18,7 @@ from pfs.drp.qa.metrics.gate import (
     configThresholds,
     gate,
     judge,
+    layerPipelineMismatch,
     loadThresholds,
     pipelineMismatch,
     thresholdsPath,
@@ -382,6 +383,17 @@ def testShippedIisFileVerdicts(iisStored):
     # Negative control: a full-slit image is not judged by the IIS file.
     full = image(medFwhm=1.0, linesPerFiber=1.0, medDxCenter=0.0)
     assert (judge(full, [IIS])["status"] == "").all()
+    # An IIS lamp with no entry of its own (an IIS Ar arc) has no FWHM reference: not judged, not failed.
+    argon = image(
+        seqName="ImageQuality (Ar)",
+        illumination="iis",
+        medFwhm=1.95,
+        linesPerFiber=50.0,
+        medDxCenter=0.0,
+        pctFlagged=np.nan,
+    )
+    judgedArgon = judge(argon, thresholds).set_index("metric")
+    assert judgedArgon.loc["medFwhm", "status"] == "" and judgedArgon.loc["medDxCenter", "status"] == "PASS"
 
 
 def testShippedFileVerdicts(stored):
@@ -514,6 +526,40 @@ def testPipelineMismatchWithoutAReference():
     ]
     # No version columns at all, as in iqQaMetrics read without its pfsArm.
     assert pipelineMismatch(metrics[["medFwhm"]], PIPELINE)["qaProvisional"].all()
+
+
+def testLayerPipelineMismatch():
+    """Each image is provisional against the pipeline of the layer that judged it (PIPE2D-1954)."""
+    run25 = table({"metric": "medFwhm", "warn": 3.0, "fail": 4.0})
+    iis = table({"metric": "medFwhm", "illumination": "iis", "warn": 2.0, "fail": 2.5})
+    iisPipeline = PIPELINE | {"obs_pfs": "w.2026.43"}
+    images = pd.concat(
+        [image(medFwhm=2.0), image(visit=2, medFwhm=1.9, illumination="iis"), image(visit=3, medFwhm=np.nan)],
+        ignore_index=True,
+    )
+    for column, value in (("versionDatamodel", "w.2026.40"), ("versionDrpStella", "w.2026.41-6-ge56938d2")):
+        images[column] = value
+    images["versionObsPfs"] = [
+        "w.2026.40",
+        "w.2026.43",
+        "w.2026.43",
+    ]  # each reduced on its own file's pipeline
+    judged = judge(images, [run25, iis])
+    assert judged.loc[judged["status"] != "", "layer"].tolist() == [0, 1]  # the third image's FWHM is NaN
+    mismatch = layerPipelineMismatch(images, judged, [PIPELINE, iisPipeline])
+    # The full-slit and IIS images match their own layers; the unjudged image is compared with the first.
+    assert mismatch["qaProvisional"].tolist() == [False, False, True]
+    assert mismatch["qaPipeline"].iloc[2] == "obs_pfs w.2026.43 (thresholds w.2026.40)"
+    # Negative control: against one pipeline, as before, the IIS image reads as provisional.
+    assert pipelineMismatch(images, PIPELINE)["qaProvisional"].tolist() == [False, True, True]
+    # Through gate, and a layer without a pipeline (the config's) checks nothing.
+    verdicts = gate(images, [run25, iis], default="UNKNOWN", pipeline=[PIPELINE, iisPipeline, None])
+    assert verdicts["qaProvisional"].tolist() == [False, False, True]
+    assert gate(images, [run25, iis], pipeline=[None, None])["qaProvisional"].tolist() == [
+        False,
+        False,
+        False,
+    ]
 
 
 def testGateMarksProvisionalOnlyWhenAsked():

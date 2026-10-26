@@ -953,8 +953,9 @@ known_bad:
   # centroids, which follow the light (unlit spectrograph 13-98 trace rows, lit
   # 5-17k; PIPE2D-1934). From PIPE2D-1954 linesPerFiber is taken on the
   # engineering fibers (illumination: iis), and the unlit spectrograph measures
-  # about 0; it is judged once IIS thresholds exist, derived from Run30's nightly
-  # IIS frames (Run27 is not a reference run).
+  # about 0. Still unchecked: Run27 named these sequences "ImageQuality" without
+  # the lamp, so no linesPerFiber entry, keyed by arm and sequence name, matches
+  # them, and their stored metrics predate the IIS measurement.
   - visit: 139971
     sequenceType: scienceArc
     arms: [b, r, n]
@@ -963,7 +964,7 @@ known_bad:
     expect: FAIL
     metric: linesPerFiber
     reason: "SM1 lamp didn't turn on. (Run27, 1 s arc)"
-    unchecked: "IIS frame: linesPerFiber on the engineering fibers has no IIS thresholds yet (PIPE2D-1954)."
+    unchecked: "IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954)."
   - visit: 140477
     sequenceType: scienceArc
     arms: [b, r, n]
@@ -972,7 +973,7 @@ known_bad:
     expect: FAIL
     metric: linesPerFiber
     reason: "No light on SM1. (Run27, 1 s arc)"
-    unchecked: "IIS frame: linesPerFiber on the engineering fibers has no IIS thresholds yet (PIPE2D-1954)."
+    unchecked: "IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954)."
   - visit: 140640
     sequenceType: scienceArc
     arms: [b, r, n]
@@ -981,7 +982,7 @@ known_bad:
     expect: FAIL
     metric: linesPerFiber
     reason: "No light on SM2. (Run27, 1 s arc)"
-    unchecked: "IIS frame: linesPerFiber on the engineering fibers has no IIS thresholds yet (PIPE2D-1954)."
+    unchecked: "IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954)."
   - visit: 140649
     sequenceType: scienceArc
     arms: [b, r, n]
@@ -990,7 +991,7 @@ known_bad:
     expect: FAIL
     metric: linesPerFiber
     reason: "No light on SM1 or SM2. (Run27, 1 s arc)"
-    unchecked: "IIS frame: linesPerFiber on the engineering fibers has no IIS thresholds yet (PIPE2D-1954)."
+    unchecked: "IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954)."
   - visit: 140651
     sequenceType: scienceArc
     arms: [b, r, n]
@@ -999,7 +1000,7 @@ known_bad:
     expect: FAIL
     metric: linesPerFiber
     reason: "No light on SM2. (Run27, 1 s arc)"
-    unchecked: "IIS frame: linesPerFiber on the engineering fibers has no IIS thresholds yet (PIPE2D-1954)."
+    unchecked: "IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954)."
 
   # ---- Run30 -------------------------------------------------------------
   # Frames taken with the light path obstructed. These are mis-taken frames

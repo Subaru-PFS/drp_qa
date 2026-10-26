@@ -18,17 +18,18 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 1.811
-  fail: 1.821
+  warn: null
+  fail: null
   nGood: 112
   nGoodVisits: 28
   visitRange: 148548-150720
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-26 (PIPE2D-1954). Derived 2026-10-26 from validation visits 148548-150720 (n=112):
-    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=112 cannot bound p99 at 95% confidence: its interval is open, and
-    FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-26, PIPE2D-1954): this per-arm percentile would judge only an IIS lamp with no
+    entry of its own, for which the Ne and Kr arcs (or the halogen quartz) pooled are no reference. Derived values
+    were: Derived 2026-10-26 from validation visits 148548-150720 (n=112): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=112 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
     arm: b
@@ -37,17 +38,19 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 2.04
-  fail: 2.04
+  warn: null
+  fail: null
   nGood: 56
   nGoodVisits: 14
   visitRange: 148550-150721
   reliable: true
   failBounded: false
   degenerate: true
-  provenance: 'Adopted 2026-10-26 (PIPE2D-1954). Derived 2026-10-26 from validation visits 148550-150721 (n=56):
-    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=56 cannot bound p99 at 95% confidence: its interval is open, and
-    FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+  provenance: 'Not judged (2026-10-26, PIPE2D-1954): this per-arm percentile would judge only an IIS lamp with no
+    entry of its own, for which the Ne and Kr arcs (or the halogen quartz) pooled are no reference. Derived values
+    were: Derived 2026-10-26 from validation visits 148550-150721 (n=56): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=56 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
 - metric: medFwhm
   population:
     arm: m
@@ -64,7 +67,8 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: false
-  provenance: 'Not judged (2026-10-26, PIPE2D-1954): 8 known-good values, from one night of the m arm. Derived values
+  provenance: 'Not judged (2026-10-26, PIPE2D-1954): this per-arm percentile would judge only an IIS lamp with no
+    entry of its own, for which the Ne and Kr arcs (or the halogen quartz) pooled are no reference. Derived values
     were: Derived 2026-10-26 from validation visits 148971-148972 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
     n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
     and FAIL may move a long way with more data.'
@@ -84,7 +88,8 @@ thresholds:
   reliable: false
   failBounded: false
   degenerate: true
-  provenance: 'Not judged (2026-10-26, PIPE2D-1954): 4 known-good values, from one night of the m arm. Derived values
+  provenance: 'Not judged (2026-10-26, PIPE2D-1954): this per-arm percentile would judge only an IIS lamp with no
+    entry of its own, for which the Ne and Kr arcs (or the halogen quartz) pooled are no reference. Derived values
     were: Derived 2026-10-26 from validation visits 148973-148973 (n=4): WARN at p95, FAIL at p99. NOT RELIABLE:
     n=4 is below the 20-sample floor. FAIL UNBOUNDED: n=4 cannot bound p99 at 95% confidence: its interval is open,
     and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
@@ -97,17 +102,18 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 1.96
-  fail: 1.98
+  warn: null
+  fail: null
   nGood: 111
   nGoodVisits: 28
   visitRange: 148548-150720
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-26 (PIPE2D-1954). Derived 2026-10-26 from validation visits 148548-150720 (n=111):
-    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=111 cannot bound p99 at 95% confidence: its interval is open, and
-    FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-26, PIPE2D-1954): this per-arm percentile would judge only an IIS lamp with no
+    entry of its own, for which the Ne and Kr arcs (or the halogen quartz) pooled are no reference. Derived values
+    were: Derived 2026-10-26 from validation visits 148548-150720 (n=111): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=111 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
     arm: n
@@ -116,17 +122,18 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 1.725
-  fail: 1.728
+  warn: null
+  fail: null
   nGood: 56
   nGoodVisits: 14
   visitRange: 148550-150721
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-26 (PIPE2D-1954). Derived 2026-10-26 from validation visits 148550-150721 (n=56):
-    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=56 cannot bound p99 at 95% confidence: its interval is open, and
-    FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-26, PIPE2D-1954): this per-arm percentile would judge only an IIS lamp with no
+    entry of its own, for which the Ne and Kr arcs (or the halogen quartz) pooled are no reference. Derived values
+    were: Derived 2026-10-26 from validation visits 148550-150721 (n=56): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=56 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
     arm: r
@@ -135,17 +142,18 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 1.889
-  fail: 1.893
+  warn: null
+  fail: null
   nGood: 104
   nGoodVisits: 26
   visitRange: 148548-150720
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-26 (PIPE2D-1954). Derived 2026-10-26 from validation visits 148548-150720 (n=104):
-    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=104 cannot bound p99 at 95% confidence: its interval is open, and
-    FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-26, PIPE2D-1954): this per-arm percentile would judge only an IIS lamp with no
+    entry of its own, for which the Ne and Kr arcs (or the halogen quartz) pooled are no reference. Derived values
+    were: Derived 2026-10-26 from validation visits 148548-150720 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=104 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
     arm: r
@@ -154,17 +162,18 @@ thresholds:
   higherIsWorse: true
   absolute: false
   method: percentile
-  warn: 1.867
-  fail: 1.868
+  warn: null
+  fail: null
   nGood: 52
   nGoodVisits: 13
   visitRange: 148550-150721
   reliable: true
   failBounded: false
   degenerate: false
-  provenance: 'Adopted 2026-10-26 (PIPE2D-1954). Derived 2026-10-26 from validation visits 148550-150721 (n=52):
-    WARN at p95, FAIL at p99. FAIL UNBOUNDED: n=52 cannot bound p99 at 95% confidence: its interval is open, and
-    FAIL may move a long way with more data.'
+  provenance: 'Not judged (2026-10-26, PIPE2D-1954): this per-arm percentile would judge only an IIS lamp with no
+    entry of its own, for which the Ne and Kr arcs (or the halogen quartz) pooled are no reference. Derived values
+    were: Derived 2026-10-26 from validation visits 148550-150721 (n=52): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=52 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
 - metric: medFwhm
   population:
     arm: b

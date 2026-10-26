@@ -19,9 +19,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   engineering fiber on r. `iqQaMetrics` gains `illumination` (`full` or `iis`), and the gate treats it as a
   population column with a default (`gate.DEFAULT_POPULATION`): an entry that doesn't name it is for full-slit
   frames, so every existing threshold keeps its meaning, and an IIS frame is judged only by an entry naming
-  `illumination: iis`. None exist yet; the five Run27 unlit-spectrograph IIS arcs of the validation set name
-  `linesPerFiber` and stay `unchecked` until they do. The comparison report says "FWHM not measured (before
-  PIPE2D-1954)" for IIS rows stored without one. The pfsConfig is a second witness of IIS, the one drp_stella
+  `illumination: iis` (the IIS file below). The five Run27 unlit-spectrograph IIS arcs of the validation set name
+  `linesPerFiber` and stay `unchecked`: their sequence name, "ImageQuality", names no lamp, so no entry keyed by
+  sequence matches them, and their stored metrics predate the IIS measurement. The comparison report says "FWHM
+  not measured (before PIPE2D-1954)" for IIS rows stored without one. The pfsConfig is a second witness of IIS, the one drp_stella
   goes by (`engineeringLit`: the spectrograph's engineering fibers all `GOOD`), since 7 n-arm calexps of Run30
   lack the lamp headers. `addSpecies` reads the lamp of an IIS sequence from its parentheses ("ImageQuality
   (Ne)" gives `Ne`), so IIS populations split by lamp like the PFI arcs.
@@ -35,8 +36,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   and lamp's median (not judged: the n-arm Ne arc, whose 15 faint lines per fiber scatter 2–4 %, and the m arm,
   taken one night), `linesPerFiber` 25/50 % (arcs) and 2.5/5 % (quartz) below each arm and sequence's median,
   `medDxCenter` at the config's 1/2 px, and no `pctFlagged`. The 14 known-good nights pass; the two faults warn.
-  `taskPipeline` takes the first file's pipeline and logs a disagreement between files: the two were derived from
-  different collections, so their obs_pfs versions differ (w.2026.40 and w.2026.43).
+  The per-arm percentile entries are not judged either: they would judge only an IIS lamp with no entry of its own,
+  for which Ne and Kr pooled are no reference. The two files record different pipelines (obs_pfs w.2026.40 and
+  w.2026.43), so comparison mode marks an image provisional against the pipeline of the layer that judged it
+  (`gate.layerPipelineMismatch`, `findings.taskPipelines`); `taskPipeline` keeps returning the first file's.
 - **`readAgcData` reads `camera_enabled`** (INSTRM-3057) — `agc_match.camera_enabled`, a nullable boolean: False for a
   spot from a camera that ics_agActor left out of its fit (INSTRM-2919), NA for rows written before the column.
   `selectEnabledCameras` selects the rest, taking NA (or no column) as enabled, and `selectFittedMatches` the valid

@@ -58,6 +58,7 @@ __all__ = [
     "configThresholds",
     "gate",
     "judge",
+    "layerPipelineMismatch",
     "loadThresholds",
     "pipelineMismatch",
     "thresholdsPath",
@@ -307,7 +308,7 @@ def gate(
     metrics: pd.DataFrame,
     thresholds: ThresholdsLike | Sequence[ThresholdsLike],
     default: str = "PASS",
-    pipeline: Mapping[str, str] | None = None,
+    pipeline: Mapping[str, str] | Sequence[Mapping[str, str] | None] | None = None,
 ) -> pd.DataFrame:
     """Give each image a verdict, and the metric that decided it.
 
@@ -319,10 +320,12 @@ def gate(
         Threshold tables or files, highest priority first.
     default : `str`, optional
         The verdict for an image with no metric judged.
-    pipeline : mapping [`str`, `str`], optional
+    pipeline : mapping [`str`, `str`], or a sequence of them, optional
         The pipeline the thresholds were derived with, as the thresholds
-        file's ``pipelineVersions`` (empty when it records none). When given,
-        `PROVISIONAL_COLUMNS` are added from `pipelineMismatch`.
+        file's ``pipelineVersions`` (empty when it records none), or one per
+        table of ``thresholds`` (`None` for a table with no origin, such as
+        the config's). When given, `PROVISIONAL_COLUMNS` are added from
+        `pipelineMismatch` or `layerPipelineMismatch`.
 
     Returns
     -------
@@ -356,10 +359,61 @@ def gate(
     )
     if pipeline is not None:
         # By position: an index join would multiply rows that share a label.
-        mismatch = pipelineMismatch(metrics, pipeline)
+        if isinstance(pipeline, Mapping):
+            mismatch = pipelineMismatch(metrics, pipeline)
+        else:
+            mismatch = layerPipelineMismatch(metrics, judged, pipeline)
         for column in PROVISIONAL_COLUMNS:
             verdicts[column] = mismatch[column].to_numpy()
     return verdicts
+
+
+def layerPipelineMismatch(
+    metrics: pd.DataFrame, judged: pd.DataFrame, pipelines: Sequence[Mapping[str, str] | None]
+) -> pd.DataFrame:
+    """Say which images were reduced with another pipeline than the thresholds that judged them.
+
+    Thresholds files derived from different collections record different
+    pipelines (the Run25 file obs_pfs w.2026.40, the IIS file w.2026.43;
+    PIPE2D-1954), and each image is judged by some of the layers: it is
+    provisional when its reduction differs from the pipeline of any layer that
+    gave it a verdict. An image no layer judged is compared with the first
+    pipeline recorded, as `pipelineMismatch` would.
+
+    Parameters
+    ----------
+    metrics : `pandas.DataFrame`
+        One row per image, as for `pipelineMismatch`.
+    judged : `pandas.DataFrame`
+        `judge`'s table for ``metrics``: ``row`` is the image's position,
+        ``layer`` the table that judged it and ``status`` its verdict.
+    pipelines : sequence of mapping [`str`, `str`] or `None`
+        One per thresholds layer: its ``pipelineVersions``, or `None` for a
+        layer with no origin to check (the config's fields).
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        Indexed like ``metrics``, with `PROVISIONAL_COLUMNS`; the reasons of
+        every differing layer, joined by ``"; "``.
+    """
+    byLayer = {
+        layer: pipelineMismatch(metrics, pipeline)
+        for layer, pipeline in enumerate(pipelines)
+        if pipeline is not None
+    }
+    first = min(byLayer) if byLayer else None
+    verdicts = judged[judged["status"] != ""]
+    judgedLayers = verdicts.groupby("row")["layer"].agg(lambda layers: sorted(set(layers)))
+    reasons = []
+    for position in range(len(metrics)):
+        layers = [layer for layer in judgedLayers.get(position, []) if layer in byLayer]
+        if not layers and first is not None:
+            layers = [first]
+        found = [byLayer[layer]["qaPipeline"].iloc[position] for layer in layers]
+        reasons.append("; ".join(dict.fromkeys(reason for reason in found if reason)))
+    reason = pd.Series(reasons, index=metrics.index, dtype=object)
+    return pd.DataFrame({"qaProvisional": reason != "", "qaPipeline": reason}, index=metrics.index)
 
 
 def pipelineMismatch(metrics: pd.DataFrame, pipeline: Mapping[str, str]) -> pd.DataFrame:
