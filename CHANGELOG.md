@@ -10,6 +10,19 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **IIS frames judged on the engineering fibers** (PIPE2D-1954) — an IIS arc or quartz ("ImageQuality (Ne)",
+  "(Kr)", "(Halogen)": the IIS lamps through the 16 engineering fibers per spectrograph) takes the regular arc or
+  quartz path on those fibers, which drp_stella's `reduceExposure` measures lines and traces on: `litFibers(...,
+  engineering=True)` gives the lit fibers, so `medFwhm`, `linesPerFiber` and `pctFlagged` are measured, and the
+  calexp widths are fitted on the engineering fibers. Before, both IIS branches reported sparse, on the belief that
+  the arc catalogue did not match those fibers; a Run27 IIS arc's `lines` holds about 160 lamp lines per
+  engineering fiber on r. `iqQaMetrics` gains `illumination` (`full` or `iis`), and the gate treats it as a
+  population column with a default (`gate.DEFAULT_POPULATION`): an entry that doesn't name it is for full-slit
+  frames, so every existing threshold keeps its meaning, and an IIS frame is judged only by an entry naming
+  `illumination: iis`. None exist yet; the five Run27 unlit-spectrograph IIS arcs of the validation set name
+  `linesPerFiber` and stay `unchecked` until they do. The comparison report says "FWHM not measured (before
+  PIPE2D-1954)" for IIS rows stored without one.
+
 - **Known-bad coverage** (PIPE2D-1934) — `pfs.drp.qa.metrics.coverage.knownBadCoverage` reports, for each
   known-bad validation entry, whether every image it covers with its metric measured is judged and reaches its
   verdict under the thresholds the gate uses, per image (a `dmLineResiduals` table's rows per species count as one

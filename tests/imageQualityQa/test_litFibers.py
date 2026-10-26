@@ -18,8 +18,8 @@ TRACE = ("scienceTrace", "Trace")
 ARC = ("scienceArc", "Arc: Neon")
 
 
-def lowerIsWorse(metric: str, warn: float, fail: float, seqName: str) -> pd.DataFrame:
-    """Return a thresholds table with one lower-is-worse entry for ``seqName``."""
+def lowerIsWorse(metric: str, warn: float, fail: float, seqName: str, **population) -> pd.DataFrame:
+    """Return a thresholds table with one lower-is-worse entry for ``seqName`` (and ``population``)."""
     return pd.DataFrame(
         [
             {
@@ -30,6 +30,7 @@ def lowerIsWorse(metric: str, warn: float, fail: float, seqName: str) -> pd.Data
                 "higherIsWorse": False,
                 "absolute": False,
                 "provenance": "test",
+                **population,
             }
         ]
     )
@@ -54,6 +55,10 @@ def testLitFibers(iqqa, fakes):
     assert lit == {1, 2}
     assert possible == 4  # 1, 2 and the hidden 3, 4
     assert iqqa.litFibers(None, detectorMap.fiberId) == (None, None)
+    # On an IIS frame the engineering fibers are the lit ones, GOOD or not (PIPE2D-1954).
+    assert iqqa.litFibers(pfsConfig, detectorMap.fiberId, engineering=True) == ({6}, 1)
+    broken = fakes.PfsConfig([1, 6], status=[1, 2], targetType=[9, 5])
+    assert iqqa.litFibers(broken, detectorMap.fiberId, engineering=True) == (set(), 1)
 
 
 def testOneGroupArcIsCountedPerLitFiber(runTask, fakes):
@@ -167,11 +172,28 @@ def _getLamps(md):
     return {menu[key] for key in menu if md.get(key, False)}
 
 
-def testIisQuartzIsNotAFullSlit(iqqa, runTask, fakes, monkeypatch):
-    """An IIS quartz, DATA-TYP FLAT, is IIS: sparse, and not judged on the science fibers (PIPE2D-1953)."""
+ENGINEERING = np.array([5, 15], dtype=np.int32)
+IIS_QUARTZ = ("scienceTrace", "ImageQuality (Halogen)")
+IIS_ARC = ("scienceArc", "ImageQuality (Ne)")
+
+
+def iisPfsConfig(fakes, detectorMap):
+    """Return an IIS frame's pfsConfig: the engineering fibers GOOD, the science fibers at home."""
+    fiberId = detectorMap.fiberId
+    engineering = np.isin(fiberId, ENGINEERING)
+    return fakes.PfsConfig(fiberId, targetType=np.where(engineering, 5, 9))
+
+
+@pytest.fixture
+def oldGetLamps(monkeypatch):
+    """Install obs_pfs's ``getLamps`` as the processing servers still have it (PIPE2D-1953 unfixed)."""
     monkeypatch.setitem(sys.modules, "lsst.obs.pfs.utils", ModuleType("lsst.obs.pfs.utils"))
     monkeypatch.setattr(sys.modules["lsst.obs.pfs.utils"], "getLamps", _getLamps, raising=False)
-    iis = {"DATA-TYP": "FLAT", "W_IISQTH": True, **fakes.header("scienceTrace", "ImageQuality (Halogen)")}
+
+
+def testIisQuartzIsClassifiedFromItsLampHeaders(iqqa, fakes, oldGetLamps):
+    """An IIS quartz, DATA-TYP FLAT, is IIS, whatever getLamps makes of a FLAT (PIPE2D-1953)."""
+    iis = {"DATA-TYP": "FLAT", "W_IISQTH": True, **fakes.header(*IIS_QUARTZ)}
     slit = {"DATA-TYP": "FLAT", "W_AITQTH": True, **fakes.header(*TRACE)}
     task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
     assert task._classifyVisit(fakes.Exposure(np.zeros((2, 2)), iis), None)[:2] == ("trace", True)
@@ -179,20 +201,59 @@ def testIisQuartzIsNotAFullSlit(iqqa, runTask, fakes, monkeypatch):
     # Negative control: getLamps on the header as it is takes the IIS quartz for a science-fiber one.
     assert _getLamps(iis) == {"Quartz"}
 
+
+def testIisQuartzIsMeasuredOnTheEngineeringFibers(iqqa, runTask, fakes, oldGetLamps):
+    """An IIS quartz is judged like a quartz on its engineering fibers, by IIS thresholds (PIPE2D-1954)."""
     detectorMap = fakes.DetectorMap(numFibers=20)
-    lines = fakes.arcLines(detectorMap, 380, fibers=detectorMap.fiberId[:2], description="Trace")
-    calexp = fakes.Exposure(fakes.noiseImage(detectorMap), iis)
-    thresholds = [lowerIsWorse("linesPerFiber", warn=370, fail=360, seqName="ImageQuality (Halogen)")]
-    metrics = runTask(
-        lines,
-        detectorMap=detectorMap,
-        calexp=calexp,
-        pfsConfig=fakes.PfsConfig(detectorMap.fiberId),
-        fiberProfiles=fakes.FiberProfiles(detectorMap, sigma=1.0),
-        thresholds=thresholds,
-    ).iqQaMetrics.iloc[0]
-    assert np.isnan(metrics["linesPerFiber"]) and not metrics["traceOnly"]
-    assert metrics["qaStatus"] == "UNKNOWN"
+    pfsConfig = iisPfsConfig(fakes, detectorMap)
+    header = {"DATA-TYP": "FLAT", "W_IISQTH": True, **fakes.header(*IIS_QUARTZ)}
+    calexp = fakes.Exposure(fakes.traceImage(detectorMap, sigma=1.3, fibers=ENGINEERING), header)
+    lines = fakes.arcLines(detectorMap, 380, fibers=ENGINEERING, description="Trace")
+    inputs = {"detectorMap": detectorMap, "calexp": calexp, "pfsConfig": pfsConfig}
+
+    # The lit fibers are the engineering fibers, and the measurements are theirs.
+    metrics = runTask(lines, **inputs).iqQaMetrics.iloc[0]
+    assert metrics["illumination"] == "iis"
+    assert (metrics["nLitFibers"], metrics["nFibers"]) == (2, 2)
+    assert metrics["linesPerFiber"] == 380
+    assert metrics["medFwhm"] == pytest.approx(2.3548 * 1.3, rel=0.05) and not metrics["traceOnly"]
+    assert metrics["pctFlagged"] == 0.0  # the calexp samples' flag rate, as on any quartz
+    # Negative control: on the science fibers nothing is lit, and the 18 at home would be counted.
+    assert iqqa.litFibers(pfsConfig, detectorMap.fiberId) == (set(detectorMap.fiberId) - set(ENGINEERING), 18)
+
+    # Judged only by a threshold naming illumination=iis: the full-slit one leaves it UNKNOWN.
+    fullSlit = lowerIsWorse("linesPerFiber", warn=390, fail=385, seqName=IIS_QUARTZ[1])
+    assert runTask(lines, thresholds=[fullSlit], **inputs).iqQaMetrics["qaStatus"].iloc[0] == "UNKNOWN"
+    iis = lowerIsWorse("linesPerFiber", warn=390, fail=385, seqName=IIS_QUARTZ[1], illumination="iis")
+    verdict = runTask(lines, thresholds=[iis], **inputs).iqQaMetrics.iloc[0]
+    assert (verdict["qaStatus"], verdict["qaDecidedBy"]) == ("FAIL", "linesPerFiber")
+
+
+def testIisArcIsMeasuredOnTheEngineeringFibers(runTask, fakes, oldGetLamps):
+    """An IIS arc takes the arc-line path on its engineering fibers; an unlit spectrograph fails."""
+    detectorMap = fakes.DetectorMap(numFibers=20)
+    pfsConfig = iisPfsConfig(fakes, detectorMap)
+    header = {"DATA-TYP": "COMPARISON", "W_IISNEO": True, **fakes.header(*IIS_ARC)}
+    calexp = fakes.Exposure(fakes.noiseImage(detectorMap), header)
+    lines = arcWithTraces(fakes, detectorMap, ENGINEERING, linesPerFiber=60, flagged=10, tracesPerFiber=400)
+    thresholds = [lowerIsWorse("linesPerFiber", warn=40, fail=20, seqName=IIS_ARC[1], illumination="iis")]
+    inputs = {"detectorMap": detectorMap, "calexp": calexp, "pfsConfig": pfsConfig, "thresholds": thresholds}
+
+    metrics = runTask(lines, **inputs).iqQaMetrics.iloc[0]
+    assert metrics["illumination"] == "iis" and metrics["nLitFibers"] == 2
+    assert metrics["medFwhm"] == 2.5  # the lamp lines' second moments, not the noise calexp
+    assert metrics["linesPerFiber"] == (120 - 10) / 2
+    assert metrics["pctFlagged"] == pytest.approx(100 * 10 / 120)  # over the lamp lines alone
+    assert metrics["nTraceRows"] == 800 and metrics["nLines"] == 920
+    assert metrics["qaStatus"] == "PASS"
+
+    # The spectrograph whose lamp gave no light (Run27 139971): every lamp line flagged.
+    dark = arcWithTraces(fakes, detectorMap, ENGINEERING, linesPerFiber=60, flagged=120, tracesPerFiber=2)
+    verdict = runTask(dark, **inputs).iqQaMetrics.iloc[0]
+    assert verdict["linesPerFiber"] == 0 and verdict["qaStatus"] == "FAIL"
+    # Negative control: the same threshold without illumination doesn't judge an IIS frame.
+    fullSlit = [lowerIsWorse("linesPerFiber", warn=40, fail=20, seqName=IIS_ARC[1])]
+    assert runTask(dark, **(inputs | {"thresholds": fullSlit})).iqQaMetrics["qaStatus"].iloc[0] == "UNKNOWN"
 
 
 def testQuartzWithNoTracesFoundCountsNone(runTask, fakes):

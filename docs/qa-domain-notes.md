@@ -51,16 +51,25 @@ Returns `(obs_type, is_iis, seq_nam)`:
   "sky"), `"twilight"` (starting "twilight"), `"dark"` (`scienceDark`), `"unknown"`
 - `is_iis`: `True` when illuminated by the 16 IIS engineering fibers (lamp header names
   from `getLamps()` end with `"_eng"`, e.g. `"Ar_eng"`). The headers are read without
-  `DATA-TYP`: `getLamps()` answers `{"Quartz"}` for any `FLAT` before reading them, which took
+  `DATA-TYP`: `getLamps()` answered `{"Quartz"}` for any `FLAT` before reading them, which took
   Run30's nightly "ImageQuality (Halogen)" IIS quartz (`W_IISQTH`) for a full-slit quartz, so
-  its calexp failed and it fell back to `fiberProfiles` (PIPE2D-1953). Judging IIS frames on
-  their own fibers is PIPE2D-1954.
+  its calexp failed and it fell back to `fiberProfiles`. obs_pfs reads the IIS headers on a
+  FLAT from PIPE2D-1953; the workaround stays for the obs_pfs the processing servers run.
 - `seq_nam`: raw `W_SEQNAM` string
 
-**IIS vs regular**: IIS frames illuminate only 16 engineering fibers rather than all 600
-science fibers. Arc-line shape measurements are unreliable for IIS frames because the
-line catalog doesn't match the sparse illumination; the calexp path or fiber-profile
-fallback is preferred in that case.
+**IIS vs regular** (PIPE2D-1954): an IIS frame lights the 16 engineering fibers of each
+spectrograph, not the science fibers. drp_stella's `reduceExposure` detects it from the
+pfsConfig (every ENGINEERING fiber GOOD) and measures lines and traces on those fibers alone
+(boxcar extraction): a Run27 IIS arc's `lines` holds the lamp catalogue on 16 fibers (about
+160 lines per fiber on r, 560 on b, 130 on n) plus trace centroids that follow the light
+(13–98 rows on a spectrograph whose lamp gave no light, 5–17k lit). So an IIS frame takes the
+regular arc or quartz path on its engineering fibers (`litFibers(..., engineering=True)`), and
+`iqQaMetrics.illumination` is `iis`. The science fibers of an IIS design are at home and GOOD
+(Run30: about 2,300 lit, 0 hidden), so `litFibers` on the science fibers would count them though
+nothing lights them. Thresholds: an entry that doesn't name `illumination` is for full-slit
+frames, and an IIS frame is judged only by one naming `illumination: iis`
+(`pfs.drp.qa.metrics.gate.DEFAULT_POPULATION`); none exist until they are derived from Run30's
+nightly IIS frames ("ImageQuality (Ne)", "(Kr)", "(Halogen)": 148548–150721, 15 of each).
 
 ### Key config fields
 
@@ -446,7 +455,8 @@ From engineering run data:
 | `\|medDxCenter\|` > 1 px across all arms of an SM | Flexure or a stale `detectorMap_calib` | Check the calib validity range before blaming the optics |
 | `medDxCenter` ≈ 0 but `dxCenterRms` large | Distortion rather than bulk shift | Look at the `dxCenter` distribution in `iqQaData`, not just the summary |
 | `traceOnly=True` for all arc visits | `arcLines` connection missing or `minGoodLines` not satisfied | Check `fitDetectorMap` ran and produced `lines` |
-| No `medFwhm` (sparse result) for IIS arc or IIS quartz frames | Deliberate. The science arc catalog does not match the 16 engineering fibers, and scattered light from them gave a spurious ~7 px calexp FWHM, so both `is_iis` branches of `imageQualityQa` set `force_sparse = True` and never run the calexp measurement. `pctFlagged` is suppressed as well | Expected; no action. Were the calexp path re-enabled for IIS, the ~7 px figure would return for a second, independent reason — see the next row |
+| No `medFwhm` for IIS arc or IIS quartz frames | Metrics stored before PIPE2D-1954, which reported IIS frames sparse on the belief that the arc catalog did not match the engineering fibers. From PIPE2D-1954 they are measured on the engineering fibers | Judge the collection again with the current `imageQualityQa` |
+| `medFwhm` measured on an IIS frame but `qaStatus` `UNKNOWN` | No threshold names `illumination: iis`; full-slit thresholds don't apply to IIS frames (`gate.DEFAULT_POPULATION`) | Derive IIS thresholds (PIPE2D-1954) |
 | All `fit*` metric columns are `NaN`/0 | The `*_log` connections were absent from the input collection | Expected when `reduceExposure` hasn't run; the IQ metrics themselves are unaffected |
 | `ValueError: f(a) = NaN` in bisect during `fitDetectorMap` | Per-fiber dof=0 when very few arc lines remain after S/N cut | Proposed `dof <= 0` guard in `calculateSoftening` is **not** committed (see above), so relaxing per-species S/N is not yet safe |
 

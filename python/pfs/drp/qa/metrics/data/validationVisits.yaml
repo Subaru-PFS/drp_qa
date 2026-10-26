@@ -756,57 +756,59 @@ known_bad:
 
   # Run27 nightly ImageQuality arcs where one spectrograph's lamp gave no light,
   # as noted in the run's calibration summary. That spectrograph's detectors have no lines; QA must not pass
-  # them. They are IIS frames, as Run30's nightly ImageQuality are: no GOOD
-  # science fiber is lit (nLitFibers 0 on every detector), so linesPerFiber is
-  # not measured (PIPE2D-1935), and nLines is not judged. The raw nLines does
-  # separate them (unlit r about 2.6k rows, lit 16-19k; b 9k against 14-16k;
-  # n 2.4k against 3.9-7.4k; PIPE2D-1934). Judging IIS frames on the engineering
-  # fibers is PIPE2D-1954.
+  # them. They are IIS frames, as Run30's nightly ImageQuality are: lit through
+  # the 16 engineering fibers per spectrograph, on which reduceExposure measures
+  # the lamp lines (about 160 per fiber on r, 560 on b, 130 on n) and the trace
+  # centroids, which follow the light (unlit spectrograph 13-98 trace rows, lit
+  # 5-17k; PIPE2D-1934). From PIPE2D-1954 linesPerFiber is taken on the
+  # engineering fibers (illumination: iis), and the unlit spectrograph measures
+  # about 0; it is judged once IIS thresholds exist, derived from Run30's nightly
+  # IIS frames (Run27 is not a reference run).
   - visit: 139971
     sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1]
     seqType: "ImageQuality"
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "SM1 lamp didn't turn on. (Run27, 1 s arc)"
-    unchecked: "IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954)."
+    unchecked: "IIS frame: linesPerFiber on the engineering fibers has no IIS thresholds yet (PIPE2D-1954)."
   - visit: 140477
     sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1]
     seqType: "ImageQuality"
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "No light on SM1. (Run27, 1 s arc)"
-    unchecked: "IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954)."
+    unchecked: "IIS frame: linesPerFiber on the engineering fibers has no IIS thresholds yet (PIPE2D-1954)."
   - visit: 140640
     sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2]
     seqType: "ImageQuality"
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "No light on SM2. (Run27, 1 s arc)"
-    unchecked: "IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954)."
+    unchecked: "IIS frame: linesPerFiber on the engineering fibers has no IIS thresholds yet (PIPE2D-1954)."
   - visit: 140649
     sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2]
     seqType: "ImageQuality"
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "No light on SM1 or SM2. (Run27, 1 s arc)"
-    unchecked: "IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954)."
+    unchecked: "IIS frame: linesPerFiber on the engineering fibers has no IIS thresholds yet (PIPE2D-1954)."
   - visit: 140651
     sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2]
     seqType: "ImageQuality"
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "No light on SM2. (Run27, 1 s arc)"
-    unchecked: "IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954)."
+    unchecked: "IIS frame: linesPerFiber on the engineering fibers has no IIS thresholds yet (PIPE2D-1954)."
 
   # ---- Run30 -------------------------------------------------------------
   # Frames taken with the light path obstructed. These are mis-taken frames

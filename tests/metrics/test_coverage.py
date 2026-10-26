@@ -95,10 +95,14 @@ def testEveryKnownBadEntryIsCaughtOrUnchecked(sources):
         "robustRmsDeltaX": 70,  # SM1 defocused, in the line scatter
     }
     unchecked = confirmed[confirmed["unchecked"] != ""]
-    assert unchecked["result"].value_counts().to_dict() == {
-        "not judged": 21,  # the b-arm pctFlagged baselines and the unlit IIS arcs
-        "no metric": 1,  # the cloudy twilight: no metric measured on twilights sees cloud
-    }
+    assert (
+        unchecked["result"].value_counts().to_dict()
+        == {
+            "not judged": 16,  # the b-arm pctFlagged baselines
+            "not measured": 5,  # the unlit IIS arcs: stored before linesPerFiber was taken on the engineering fibers
+            "no metric": 1,  # the cloudy twilight: no metric measured on twilights sees cloud
+        }
+    )
 
 
 def testUncheckedEntriesFailWithoutTheirReason(sources):
@@ -109,18 +113,24 @@ def testUncheckedEntriesFailWithoutTheirReason(sources):
     )
     coverage = knownBadCoverage(stripped, sources)
     assert (~coverage["ok"]).sum() == 22
-    assert set(coverage.loc[~coverage["ok"], "metric"]) == {"pctFlagged", "nLines", "skyFluxUniformity"}
+    assert set(coverage.loc[~coverage["ok"], "metric"]) == {
+        "pctFlagged",
+        "linesPerFiber",
+        "skyFluxUniformity",
+    }
 
 
 def testCaughtEntryMarkedUncheckedFails(sources):
     """Negative control: an unchecked entry that is caught has outlived its reason."""
     visitSet = loadValidationVisits()
     knownBad = tuple(
-        replace(entry, unchecked="stale") if entry.metric == "linesPerFiber" else entry
+        replace(entry, unchecked="stale")
+        if entry.metric == "linesPerFiber" and not entry.unchecked
+        else entry
         for entry in visitSet.knownBad
     )
     coverage = knownBadCoverage(replace(visitSet, knownBad=knownBad), sources)
-    stale = coverage[coverage["metric"] == "linesPerFiber"]
+    stale = coverage[(coverage["metric"] == "linesPerFiber") & (coverage["unchecked"] == "stale")]
     assert len(stale) == 4 and (stale["result"] == CAUGHT).all() and not stale["ok"].any()
 
 

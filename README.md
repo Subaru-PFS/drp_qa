@@ -189,9 +189,9 @@ descending preference order:
 | Visit type                                        | Primary path                                                           | Fallback                                                               |
 |---------------------------------------------------|------------------------------------------------------------------------|------------------------------------------------------------------------|
 | Regular arc (`scienceArc`, all fibers)            | Arc-line second moments (`ixx`/`iyy` → FWHM)                           | `calexp` trace widths if `nGoodLines < minGoodLines`                   |
-| IIS arc (16 engineering fibers)                   | —                                                                      | Reported as sparse (no FWHM); arc catalog does not match IIS positions |
+| IIS arc (`scienceArc`, 16 engineering fibers)      | Arc-line second moments on the engineering fibers (PIPE2D-1954)        | `calexp` trace widths of those fibers if `nGoodLines < minGoodLines`   |
 | Regular trace/quartz (`scienceTrace`, all fibers) | `calexp` trace widths                                                  | Fiber profile calibration widths if the `calexp` is absent or unusable |
-| IIS trace/quartz                                  | —                                                                      | Reported as sparse; too few fibers for a reliable measurement          |
+| IIS trace/quartz (`scienceTrace`, 16 eng. fibers) | `calexp` trace widths of the engineering fibers                        | Fiber profile calibration widths if the `calexp` is absent or unusable |
 | Science / all-sky (`scienceObject*`)              | `calexp` trace widths of `FLUXSTD+GOOD` fibers                         | Sparse if FLUXSTD good fraction < `minFluxstdGoodFrac`                 |
 | Unknown (`W_SEQTYP` absent)                       | Heuristic: arc lines if sufficient, else `calexp`, else fiber profiles | —                                                                      |
 
@@ -219,7 +219,7 @@ width, a Gaussian fitted to the profile understates it by 8–10 %, and drp_stel
   High flag rates on b-arm Ar/Xe/Kr arcs are expected (lamp physics — those species have very few bright lines in the
   blue) and do not indicate an optical problem. High flag rates on HgCd or Ne arcs, or on r/n/m arms, are more likely to
   reflect genuine issues.
-  `pctFlagged` is set to `NaN` for IIS frames, sparse visits, and science/FLUXSTD paths where the flag rate reflects
+  `pctFlagged` is set to `NaN` for sparse visits and science/FLUXSTD paths where the flag rate reflects
   exposure depth rather than optical quality.
 - **Flag breakdown** — When `pctFlagged` is finite, the same rejections are broken out by
   `ReferenceLineStatus` bit: `pctNotVisible`, `pctBlend`, `pctSuspect`, `pctRejected`,
@@ -661,7 +661,9 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
   judged against the thresholds derived from Run25's sets. Daily ones are often taken with one fiber group lit:
   `linesPerFiber` and `pctFlagged` are taken on the lit fibers, so they are judged like sets; metrics measured before
   that (no `nLitFibers`) skip `nLines` and `pctFlagged` on them (PIPE2D-1935). Run30's nightly `ImageQuality` frames are
-  IIS, reported sparse until PIPE2D-1954.
+  IIS: lit through the 16 engineering fibers per spectrograph, on which drp_stella measures their lines and traces, so
+  they are measured on those fibers and carry `illumination` `iis` (PIPE2D-1954). A threshold judges them only when it
+  names `illumination: iis`; one that doesn't is for full-slit frames (`pfs.drp.qa.metrics.gate`).
 - **Sky visits are labelled** from the telescope status: a *focus sweep* (10 or more focus offsets spanning at least
   0.5 mm on one field in one night) changes how much light enters the fibers but not the line widths, so its
   `nLines`, `linesPerFiber` and `pctFlagged` aren't judged; *dithered* visits are marked.
