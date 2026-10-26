@@ -10,6 +10,20 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Known-bad coverage** (PIPE2D-1934) — `pfs.drp.qa.metrics.coverage.knownBadCoverage` reports, for each
+  known-bad validation entry, whether every image it covers with its metric measured is judged and reaches its
+  verdict under the thresholds the gate uses, per image (a `dmLineResiduals` table's rows per species count as one
+  image, at their worst). Known-bad entries take `unchecked: <reason>` when no check can give their verdict;
+  `tests/metrics/test_coverage.py` fails on a confirmed entry that is neither caught nor unchecked, or both. Before
+  it, entries naming a metric that had stopped being judged (`nLines`, `pctFlagged`) went unnoticed. Unchecked: the
+  16 b-arm `pctFlagged` baselines, the 5 Run27 unlit-spectrograph `ImageQuality` arcs (IIS frames, PIPE2D-1954) and
+  the Run25 cloudy twilight, whose metric is now `skyFluxUniformity`, a check still to be written (PIPE2D-1973):
+  nothing measured on a twilight sees cloud, and FWHM is not measured there. An `unchecked` entry is held to its
+  reason: it fails once its metric judges any of its images, or once it matches no data. `lineResiduals.judgedRows`
+  (the rows and metrics `dmLineResiduals` judges, shared by `residualVerdict` and coverage) and
+  `lineResiduals.residualTaskThresholds` (the task's thresholds from a duck-typed config, which `DmLineResidualsTask`
+  now uses) let stored tables be judged as the task judges them.
+
 - **`dmLineResiduals` stores the frame type, and judges trace scatter on quartz frames** (PIPE2D-1956) —
   `dmLineResidualMetrics` and `dmLineResidualSummary` gain `obsType`, the observation type from the raw header's
   `W_SEQTYP` as `imageQualityQa` classifies it (`trace` for a quartz, `arc`, `twilight`, ...; the pfsConfig header
@@ -350,6 +364,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   This needs matplotlib 3.10, now the minimum in `pyproject.toml` (PIPE2D-1916).
 
 ### Changed
+
+- **Validation set** (PIPE2D-1934) — the Run27 SM1 defocus is known-bad for the line scatter, `robustRmsDeltaX`,
+  as well as `medFwhm`: the trace sets and the Ar, Ne, Kr and r/n Xe arcs, which fail at 1.7–4× each detector's
+  Run25 median (not HgCd, whose scatter is not judged, nor b-arm Xenon, the one noisy population). Removed: the
+  suspected faults 149883 ("Home"), which every metric passes, and 150661 (screen in the wrong position), whose
+  b-arm trace scatter fails but for which no metric can be named; and the five unconfirmed Run25 SM3
+  `medianDeltaY` entries on traces, which measure no y.
 
 - **Comparison mode's scatter table splits the b arm by camera** (PIPE2D-1927) — the scatter of the lines held back
   has a `bReadWith` column, `m` or `r` for the camera the b arm was read with (from `cameraSet`) and empty for the

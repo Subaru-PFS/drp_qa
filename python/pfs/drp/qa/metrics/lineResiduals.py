@@ -62,7 +62,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from pfs.drp.qa.metrics.gate import STATUS_ORDER, judge
+from pfs.drp.qa.metrics.gate import STATUS_ORDER, judge, loadThresholds, thresholdsPath
 
 __all__ = [
     "BAD_STATUS",
@@ -86,10 +86,12 @@ __all__ = [
     "addObsType",
     "cameraSet",
     "frameType",
+    "judgedRows",
     "lineResiduals",
     "lineTable",
     "longResiduals",
     "observationType",
+    "residualTaskThresholds",
     "residualThresholds",
     "residualVerdict",
     "robustRms",
@@ -651,6 +653,63 @@ def residualThresholds(
     return pd.DataFrame(rows).astype({"reference": object, "description": object, "statusType": object})
 
 
+def residualTaskThresholds(config: Any) -> list[pd.DataFrame]:
+    """Return the thresholds a ``dmLineResiduals`` config judges with, as the task builds them.
+
+    Parameters
+    ----------
+    config : `Any`
+        A ``DmLineResidualsConfig``, or any object with its ``thresholdsFile``
+        and threshold fields; duck-typed so this is tested without the stack.
+
+    Returns
+    -------
+    `list` [`pandas.DataFrame`]
+        The thresholds file's table, if any, then the config's
+        (`residualThresholds`), highest priority first.
+    """
+    files = [thresholdsPath(config.thresholdsFile)] if config.thresholdsFile else []
+    fields = residualThresholds(
+        config.xWarnThreshold,
+        config.xFailThreshold,
+        config.yWarnThreshold,
+        config.yFailThreshold,
+        config.xRmsWarnThreshold,
+        config.xRmsFailThreshold,
+        config.yRmsWarnThreshold,
+        config.yRmsFailThreshold,
+    )
+    return [*loadThresholds(files), fields]
+
+
+def judgedRows(species: pd.DataFrame) -> pd.DataFrame:
+    """Return the rows `residualVerdict` judges, with the metrics it does not judge on them NaN.
+
+    Parameters
+    ----------
+    species : `pandas.DataFrame`
+        Rows with ``reference``, ``statusType`` and the `RESIDUAL_METRICS`
+        present: `speciesResiduals`, or `wideResiduals` of either reference.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        The rows of each reference whose ``statusType`` `JUDGED` names,
+        reindexed from 0; a metric `JUDGED` leaves out for the reference is
+        NaN, so no thresholds file can give it a verdict.
+    """
+    keep = np.zeros(len(species), dtype=bool)
+    for reference, (statusTypes, _) in JUDGED.items():
+        keep |= (species["reference"] == reference).to_numpy() & species["statusType"].isin(
+            statusTypes
+        ).to_numpy()
+    rows = species[keep].reset_index(drop=True)
+    for reference, (_, metrics) in JUDGED.items():
+        blank = [metric for metric in RESIDUAL_METRICS if metric not in metrics and metric in rows]
+        rows.loc[rows["reference"] == reference, blank] = np.nan
+    return rows
+
+
 def residualVerdict(
     species: pd.DataFrame,
     dataId: Mapping[str, Any],
@@ -694,23 +753,13 @@ def residualVerdict(
         measurable, never measured but not combinable. ``qaDecidedBy`` is
         ``"<reference> <description> <metric>"``.
     """
-    keep = np.zeros(len(species), dtype=bool)
-    for reference, (statusTypes, _) in JUDGED.items():
-        keep |= (species["reference"] == reference).to_numpy() & species["statusType"].isin(statusTypes)
-    wide = (
-        species[keep]
-        .assign(
-            visit=dataId["visit"],
-            arm=dataId["arm"],
-            spectrograph=dataId["spectrograph"],
-            cameraSet=camera,
-            obsType=obsType,
-        )
-        .reset_index(drop=True)
+    wide = judgedRows(species).assign(
+        visit=dataId["visit"],
+        arm=dataId["arm"],
+        spectrograph=dataId["spectrograph"],
+        cameraSet=camera,
+        obsType=obsType,
     )
-    for reference, (_, metrics) in JUDGED.items():
-        blank = [metric for metric in RESIDUAL_METRICS if metric not in metrics]
-        wide.loc[wide["reference"] == reference, blank] = np.nan
     judged = judge(wide, thresholds)
     rows = judged["row"].to_numpy(dtype=int)
     for column in ("reference", "description", "statusType"):
