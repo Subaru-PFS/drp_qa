@@ -18,7 +18,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   it, entries naming a metric that had stopped being judged (`nLines`, `pctFlagged`) went unnoticed. Unchecked: the
   16 b-arm `pctFlagged` baselines, the 5 Run27 unlit-spectrograph `ImageQuality` arcs (IIS frames, PIPE2D-1954) and
   the Run25 cloudy twilight, whose metric is now `skyFluxUniformity`, a check still to be written (PIPE2D-1973):
-  nothing measured on a twilight sees cloud, and FWHM is not measured there.
+  nothing measured on a twilight sees cloud, and FWHM is not measured there. An `unchecked` entry is held to its
+  reason: it fails once its metric judges any of its images, or once it matches no data. `lineResiduals.judgedRows`
+  (the rows and metrics `dmLineResiduals` judges, shared by `residualVerdict` and coverage) and
+  `lineResiduals.residualTaskThresholds` (the task's thresholds from a duck-typed config, which `DmLineResidualsTask`
+  now uses) let stored tables be judged as the task judges them.
 
 - **`dmLineResiduals` stores the frame type, and judges trace scatter on quartz frames** (PIPE2D-1956) —
   `dmLineResidualMetrics` and `dmLineResidualSummary` gain `obsType`, the observation type from the raw header's
