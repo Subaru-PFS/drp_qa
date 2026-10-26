@@ -75,12 +75,15 @@ AGC_DATA_COLUMNS = {
     "guide_ra": "designed field center RA (deg)",
     "guide_dec": "designed field center Dec (deg)",
     "guide_pa": "designed field position angle (deg)",
-    "guide_delta_ra": "guide offset in RA (arcsec)",
-    "guide_delta_dec": "guide offset in Dec (arcsec)",
+    "guide_delta_ra": "guide offset in RA (arcsec): a coordinate offset, ΔRA; on-sky it is ΔRA cos(dec)",
+    "guide_delta_dec": "guide offset in Dec (arcsec), on-sky",
     "guide_delta_insrot": "guide offset in rotator angle (arcsec)",
     "guide_delta_scale": "guide offset in scale",
-    "guide_delta_azimuth": "guide offset in azimuth (arcsec); the opdb's guide_delta_az",
-    "guide_delta_altitude": "guide offset in altitude (arcsec); the opdb's guide_delta_el",
+    "guide_delta_azimuth": (
+        "guide offset in azimuth (arcsec); the opdb's guide_delta_az: a coordinate offset, ΔAz, "
+        "as ics_agActor's to_altaz takes the difference of two azimuths; on-sky it is ΔAz cos(altitude)"
+    ),
+    "guide_delta_altitude": "guide offset in altitude (arcsec); the opdb's guide_delta_el, on-sky",
     "guide_delta_z": "focus offset (mm)",
     **{f"guide_delta_z{i}": f"focus offset for AG{i} (mm)" for i in range(1, 7)},
 }

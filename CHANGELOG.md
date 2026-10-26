@@ -340,6 +340,14 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Fixed
 
+- **`showTelescopeErrors` plots the azimuth offset on-sky** (PIPE2D-1971) — `agc_guide_offset.guide_delta_az` is a
+  coordinate offset, the difference of two azimuths, where `guide_delta_el` is on-sky (likewise `guide_delta_ra`
+  and `guide_delta_dec`, INSTRM-2923). Plotted as read against δalt with equal aspect, as drp_stella did, the δaz
+  axis was stretched by 1/cos(alt), 1.3-2.6 at Run30's altitudes. The panels now show δaz·cos(alt), and the plot's
+  `data` carries it as `daz_cosalt_arcsec` beside `daz_arcsec` as read; `readAgcData`'s columns are unchanged, and
+  `queries.AGC_DATA_COLUMNS` describes both conventions. On the real-data fixtures hypot(δaz·cos(alt), δalt) matches
+  hypot(δRA·cos(dec), δdec) per AG exposure to 0.1%.
+
 - **Task logs at INFO** (PIPE2D-1938) — `docs/qa-thresholds.ipynb` and comparison mode's fresh reductions ran
   `pipetask --log-level PFS=INFO`, but the tasks log as `pfs.<task>`, lowercase, so their INFO lines (the fit
   statistics `imageQualityQa` parses among them) were missing from the stored logs; a bare `INFO` sets only
