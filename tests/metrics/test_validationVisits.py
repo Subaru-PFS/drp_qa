@@ -411,7 +411,7 @@ class TestRowMatching:
         frame = pd.DataFrame(
             [
                 {"visit": visit, "arm": arm, "spectrograph": spectrograph, "seqName": seqName}
-                for visit in (133025, 133037, 133042, 134334, 140005, 149883, 150779)
+                for visit in (133025, 133037, 133042, 134334, 140005, 150115, 150779)
                 for arm in ("b", "r", "m")
                 for spectrograph in (1, 2)
                 for seqName in ("Arc: Argon", "Arc: HgCd", "Twilight sky", "Arc: Neon")

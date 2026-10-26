@@ -569,17 +569,12 @@ def formatTables(visitSet: ValidationVisitSet) -> str:
             "|---|---|---|---|---|---|---|---|---|",
         ]
         for entry in entries:
-            if entry.visits:
-                first, last = entry.visits[0], entry.visits[-1]
-                visits = str(first) if first == last else f"{first}–{last}"
-            else:
-                visits = "*to find*"
             cells = (
-                visits,
+                _visitsCell(entry),
                 "" if entry.run is None else str(entry.run),
                 entry.sequenceType or "",
                 _armsCell(entry),
-                ", ".join(str(s) for s in entry.spectrographs) or "all",
+                _spectrographsCell(entry),
                 entry.seqType or "any",
                 entry.expect,
                 _metricCell(entry),
@@ -588,6 +583,19 @@ def formatTables(visitSet: ValidationVisitSet) -> str:
             lines.append("| " + " | ".join(cell.replace("|", "\\|") for cell in cells) + " |")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks) + "\n"
+
+
+def _visitsCell(entry: ValidationVisit) -> str:
+    """Return an entry's visits as ``first`` or ``first–last``; ``*to find*`` in a placeholder."""
+    if not entry.visits:
+        return "*to find*"
+    first, last = entry.visits[0], entry.visits[-1]
+    return str(first) if first == last else f"{first}–{last}"
+
+
+def _spectrographsCell(entry: ValidationVisit) -> str:
+    """Return an entry's spectrographs, or ``all``."""
+    return ", ".join(str(s) for s in entry.spectrographs) or "all"
 
 
 def _metricCell(entry: ValidationVisit) -> str:

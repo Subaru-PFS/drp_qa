@@ -10,25 +10,33 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.coverage import CAUGHT, CoverageSource, knownBadCoverage
-from pfs.drp.qa.metrics.gate import configThresholds, thresholdsPath
-from pfs.drp.qa.metrics.lineResiduals import residualThresholds
+from pfs.drp.qa.comparison.findings import taskThresholds
+from pfs.drp.qa.metrics.coverage import (
+    CAUGHT,
+    IMAGE_QUALITY_METRICS,
+    LINE_RESIDUAL_METRICS,
+    CoverageSource,
+    knownBadCoverage,
+)
+from pfs.drp.qa.metrics.lineResiduals import judgedRows, residualTaskThresholds
 from pfs.drp.qa.metrics.validationVisits import ValidationVisit, ValidationVisitSet, loadValidationVisits
 
 ROOT = Path(__file__).parents[2]
 DATA = Path(__file__).parent / "data"
 
-#: The metrics each table answers for.
-IMAGE_QUALITY = ("medFwhm", "pctFlagged", "nLines", "linesPerFiber", "medDxCenter", "dxCenterRms")
-LINE_RESIDUALS = ("medianDeltaX", "medianDeltaY", "robustRmsDeltaX", "robustRmsDeltaY")
+
+class ConfigDefaults(SimpleNamespace):
+    """A config's defaults; a field without a literal default raises, naming it."""
+
+    def __getattr__(self, name):
+        raise AttributeError(f"{name}: no literal default in the config's source; set it in the test")
 
 
-def configDefaults(module: str, cls: str) -> SimpleNamespace:
+def configDefaults(module: str, cls: str) -> ConfigDefaults:
     """Return a task config's field defaults, read from its source with `ast`.
 
     The task modules import the stack, so the config can't be instantiated
-    here: a changed default changes this. ``float("nan")`` is read as NaN; any
-    other default that is not a literal is left out.
+    here: a changed default changes this. ``float("nan")`` is read as NaN.
     """
     source = (ROOT / "python" / "pfs" / "drp" / "qa" / module).read_text()
     config = next(n for n in ast.walk(ast.parse(source)) if isinstance(n, ast.ClassDef) and n.name == cls)
@@ -36,13 +44,15 @@ def configDefaults(module: str, cls: str) -> SimpleNamespace:
     for statement in config.body:
         if isinstance(statement, ast.Assign) and isinstance(statement.value, ast.Call):
             for keyword in statement.value.keywords:
-                if keyword.arg == "default":
-                    if ast.unparse(keyword.value) == "float('nan')":
-                        defaults[statement.targets[0].id] = float("nan")
-                        continue
+                if keyword.arg != "default":
+                    continue
+                if ast.unparse(keyword.value) == "float('nan')":
+                    defaults[statement.targets[0].id] = float("nan")
+                else:
+                    # A computed default is left out: reading it raises (ConfigDefaults).
                     with contextlib.suppress(ValueError):
                         defaults[statement.targets[0].id] = ast.literal_eval(keyword.value)
-    return SimpleNamespace(**defaults)
+    return ConfigDefaults(**defaults)
 
 
 @pytest.fixture(scope="module")
@@ -50,30 +60,15 @@ def sources() -> list[CoverageSource]:
     """Return the validation visits' stored metrics with the thresholds the two tasks judge them by."""
     iq = configDefaults("imageQualityQa.py", "ImageQualityQaConfig")
     dm = configDefaults("dmLineResiduals.py", "DmLineResidualsConfig")
+    lines = pd.read_parquet(DATA / "dmDriftMetrics-validation.parquet")
     return [
         CoverageSource(
             pd.read_parquet(DATA / "iqQaMetrics-validation.parquet"),
-            [thresholdsPath(iq.thresholdsFile), configThresholds(iq)],
-            IMAGE_QUALITY,
+            taskThresholds(iq),
+            IMAGE_QUALITY_METRICS,
         ),
-        CoverageSource(
-            # A species with fewer than minLines lines is stored as NaN: not measured.
-            pd.read_parquet(DATA / "dmDriftMetrics-validation.parquet"),
-            [
-                thresholdsPath(dm.thresholdsFile),
-                residualThresholds(
-                    dm.xWarnThreshold,
-                    dm.xFailThreshold,
-                    dm.yWarnThreshold,
-                    dm.yFailThreshold,
-                    dm.xRmsWarnThreshold,
-                    dm.xRmsFailThreshold,
-                    dm.yRmsWarnThreshold,
-                    dm.yRmsFailThreshold,
-                ),
-            ],
-            LINE_RESIDUALS,
-        ),
+        # A species with fewer than minLines lines is stored as NaN: not measured.
+        CoverageSource(judgedRows(lines), residualTaskThresholds(dm), LINE_RESIDUAL_METRICS),
     ]
 
 
@@ -218,3 +213,64 @@ def testUnconfirmedEntriesAreReportedNotDecided():
     """An unconfirmed entry is reported with its counts but is always ok."""
     coverage = knownBadCoverage(bad(unconfirmed=True), [CoverageSource(rows(0.5), [threshold()], ("m",))])
     assert coverage["result"].tolist() == ["missed"] and coverage["ok"].all()
+
+
+@pytest.mark.parametrize(
+    ("frame", "fields", "ok"),
+    [
+        (rows(np.nan), {}, True),  # not measured
+        (rows(3.0), {"metric": "other"}, True),  # no metric
+        (rows(3.0), {}, False),  # caught: the reason is stale
+        # Negative controls: a judged miss, or an entry matching nothing, is not unchecked either.
+        (rows(1.5), {}, False),
+        (rows(3.0).assign(visit=2), {}, False),
+    ],
+)
+def testUncheckedHoldsOnlyWhileNoCheckRuns(frame, fields, ok):
+    """``unchecked`` says no check gives a verdict; once one does, or the entry matches nothing, it fails."""
+    coverage = knownBadCoverage(
+        bad(unchecked="why", **fields), [CoverageSource(frame, [threshold()], ("m",))]
+    )
+    assert coverage["ok"].tolist() == [ok]
+
+
+def testImageTheGateCountsAsUnmeasuredIsNotMeasured():
+    """A FWHM read from fiberProfiles (``traceOnly``) is not a measurement, for coverage as for the gate."""
+    frame = pd.DataFrame([{"visit": 1, "arm": "b", "spectrograph": 1, "medFwhm": 9.0, "traceOnly": True}])
+    table = threshold().assign(metric="medFwhm")
+    (row,) = knownBadCoverage(bad(metric="medFwhm"), [CoverageSource(frame, [table], ("medFwhm",))]).to_dict(
+        "records"
+    )
+    assert (row["images"], row["measured"], row["result"]) == (1, 0, "not measured")
+    # Negative control: measured, the same value is caught.
+    measured = frame.assign(traceOnly=False)
+    coverage = knownBadCoverage(bad(metric="medFwhm"), [CoverageSource(measured, [table], ("medFwhm",))])
+    assert coverage["result"].tolist() == [CAUGHT]
+
+
+def testImageWithANullSelectorIsCounted():
+    """A row whose arm is unknown matches every arm (`matchRows`), so it is an image like any other."""
+    frame = rows(3.0).assign(arm=None)
+    (row,) = knownBadCoverage(bad(), [CoverageSource(frame, [threshold()], ("m",))]).to_dict("records")
+    assert (row["images"], row["measured"], row["judged"], row["result"]) == (1, 1, 1, CAUGHT)
+
+
+def testMetricMissingFromItsTableIsNotMeasured():
+    """A table without the column, e.g. one stored before the metric existed, reads as not measured."""
+    coverage = knownBadCoverage(bad(metric="z"), [CoverageSource(rows(3.0), [threshold()], ("m", "z"))])
+    assert coverage["result"].tolist() == ["not measured"]
+
+
+def testAMetricHasOneTable():
+    """Two sources answering for one metric would make the result depend on their order."""
+    source = CoverageSource(rows(3.0), [threshold()], ("m",))
+    with pytest.raises(ValueError, match="two sources"):
+        knownBadCoverage(bad(), [source, source])
+
+
+def testEntryIsDescribedAsTheTablesDescribeIt():
+    """Camera selectors show, as in docs/validation-visits.md."""
+    (row,) = knownBadCoverage(
+        bad(arms=("b",), cameras=("b2",)), [CoverageSource(rows(3.0, spectrograph=2), [threshold()], ("m",))]
+    ).to_dict("records")
+    assert (row["visits"], row["arms"], row["spectrographs"]) == ("1", "b; cameras b2", "all")
