@@ -1025,7 +1025,7 @@ def testFitDriftRateDisabledCamera(makeAgcData, rng, byCamera):
     wrong = fitDriftRate(agcData.assign(camera_enabled=True), radialTangential=False, robust=False)
     assert wrong.rates.x_rate_um_per_min > 2
 
-    with pytest.raises(ValueError, match="No AG exposures"):
+    with pytest.raises(ValueError, match="No AG exposures on enabled cameras"):
         fitDriftRate(agcData.assign(camera_enabled=False), byCamera=byCamera)
 
 
@@ -1050,6 +1050,18 @@ def testEstimateFocusErrorsDisabledCamera():
     # Negative control: with the disabled camera, the left half's median is AG1's.
     wrong = estimateFocusErrors(agcData.assign(camera_enabled=True), byCamera=False)
     assert wrong.rms_left_pix.iloc[0] == pytest.approx(2.1)
+
+
+def testEstimateGuideErrorsRecenterDisabledCamera(makeAgcData):
+    """With recenterPerVisit, each visit's mean over the enabled cameras is subtracted."""
+    agcData, _ = disableCamera(makeAgcData().reset_index(drop=True))
+
+    guideErrors = estimateGuideErrors(agcData, recenterPerVisit=True)
+
+    enabled = guideErrors[guideErrors.camera_enabled]
+    np.testing.assert_allclose(enabled.groupby("pfs_visit_id").dx_um.mean(), 0, atol=1e-9)
+    # Negative control: the mean over every camera, the moved one included, isn't 0.
+    assert not np.allclose(guideErrors.groupby("pfs_visit_id").dx_um.mean(), 0, atol=1)
 
 
 def testEstimateGuideErrorsDisabledCamera(makeAgcData):

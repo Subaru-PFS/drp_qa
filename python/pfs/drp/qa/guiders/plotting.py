@@ -26,7 +26,11 @@ A camera that ics_agActor disabled (``camera_enabled`` False; see
 `pfs.drp.qa.guiders.analysis.selectEnabledCameras`) is drawn with crosses,
 named "AGn (disabled)" in legends, labels and titles, and a panel of its own
 is greyed. A plot that averages over the cameras leaves it out, as the
-guider did, and its title says so.
+guider did, and its title says so. A camera disabled in only some AG
+exposures has crosses only there, and is left out of the averages only
+there; but where a plot marks the camera as a whole (its name, a panel, a
+line, or a point averaging its exposures), it is marked disabled if it was
+in any of them.
 """
 
 import itertools
@@ -2159,7 +2163,8 @@ def plotFocus(
     left half red and right half green unless ``showCameraId``. Only valid
     matches without bad detection flags are used. A disabled camera's focus
     errors are crosses, and its own panels are greyed; it is left out of the
-    exposures' focus errors from the stars, as the guider left it out.
+    exposures' focus errors from the stars and the FWHM medians of several
+    cameras, as the guider left it out.
 
     Parameters
     ----------
@@ -2392,7 +2397,9 @@ def plotFocus(
                         points = byCamera[byCamera.agc_camera_id == cameras[0]]
                         y = points.ag_actor_focus_error_um
                     else:
-                        points = byCamera.groupby("agc_exposure_id", as_index=False).first()
+                        # The guider's focus error of the exposure, whichever cameras were disabled.
+                        points = byCamera.drop(columns="camera_enabled")
+                        points = points.groupby("agc_exposure_id", as_index=False).first()
                         y = points.exposure_focus_error_um
                     newArtists = drawFocusErrors(
                         ax, points[what], y, points[colorColumn], "black", None, selectEnabledCameras(points)
@@ -2418,6 +2425,7 @@ def plotFocus(
                     scatterMarkerSize,
                     resolution,
                     disabled,
+                    mediansOfEnabled=not plotPerCamera,
                 )
                 ax.set_ylim(minFWHM_arcsec, maxFWHM_arcsec)
                 if j == 0:
@@ -2489,10 +2497,12 @@ def plotFocus(
     elif magMax is not None:
         magLimits = f"mag < {magMax}"
     title = f"pfs_visit_id {_visitRange(data.pfs_visit_id)}" + (" only GAIA stars" if onlyGuideStars else "")
-    pooled = "opdb" in rows and colorBy != "camera" and not plotPerCamera
-    title += "\n" + _cameraNames(
-        data.agc_camera_id.unique(), disabled, "the exposures' focus errors" if pooled else None
-    )
+    leftOutOf = []
+    if "opdb" in rows and colorBy != "camera" and not plotPerCamera:
+        leftOutOf.append("the exposures' focus errors")
+    if "fwhm" in rows and showMedian and not showCameraId and not plotPerCamera:
+        leftOutOf.append("the FWHM medians")
+    title += "\n" + _cameraNames(data.agc_camera_id.unique(), disabled, " and ".join(leftOutOf) or None)
     title += (
         (f"  {magLimits}" if magLimits else "") + "  " + ("traceRadius" if useTraceRadius else "detRadius")
     )
@@ -2515,8 +2525,13 @@ def _plotFwhm(
     scatterMarkerSize: float | None,
     resolution: float,
     disabled: Iterable[int] = (),
+    mediansOfEnabled: bool = False,
 ) -> list[Artist]:
-    """Plot the stars' FWHM for `plotFocus`; return the artists. The legend names the ``disabled`` cameras."""
+    """Plot the stars' FWHM for `plotFocus`; return the artists.
+
+    The legend names the ``disabled`` cameras. With ``mediansOfEnabled``, the
+    left and right halves' medians leave out the disabled cameras' stars.
+    """
     artists = []
     if not showOnlyMedian and len(stars):
         if plotFrac < 1:
@@ -2583,8 +2598,9 @@ def _plotFwhm(
         else:
             # Joined whatever connectMedian, as drp_stella did: as points they vanish into the stars'.
             # A lone median has nothing to join, so it is drawn as a point.
+            pooled = stars[selectEnabledCameras(stars)] if mediansOfEnabled else stars
             for isLeft, color in [(True, "red"), (False, "green")]:
-                half = stars[stars.left == isLeft]
+                half = pooled[pooled.left == isLeft]
                 xm, ym = _medianByX(half[what], half.fwhm_arcsec, resolution)
                 artists += ax.plot(xm, ym, "-" if len(xm) > 1 else "o", color=color)
 
@@ -2628,7 +2644,7 @@ def plotFocusByAG(
     sizes (`pfs.drp.qa.guiders.analysis.estimateFocusErrors`). Each camera's
     median in each visit (or AG exposure) has the mean of the other cameras
     but AG1 subtracted, and then the overall mean, and is negated to match
-    Kawanomoto-san's plots. Disabled cameras are left out of that mean, and
+    Kawanomoto-san's plots. Disabled cameras are left out of both means, and
     drawn with crosses.
 
     Parameters
@@ -2694,7 +2710,7 @@ def plotFocusByAG(
     reference = (relative.agc_camera_id != 0) & relative.camera_enabled
     others = relative[reference].groupby(xName).focus_error_um.mean()
     relative["focus_error_um"] -= relative[xName].map(others)
-    relative["focus_error_um"] -= relative.focus_error_um.mean()
+    relative["focus_error_um"] -= relative.focus_error_um[relative.camera_enabled].mean()
     relative["focus_error_um"] *= -1
 
     fig, axes, ownPanels = _panels(1, 1, fig, ax)

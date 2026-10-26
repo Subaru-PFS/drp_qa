@@ -887,7 +887,8 @@ def estimateGuideErrors(
         Smooth each star's offsets over this many exposures first; see
         `smoothAgcData`.
     recenterPerVisit : `bool`
-        Subtract each visit's mean.
+        Subtract each visit's mean over the enabled cameras
+        (`selectEnabledCameras`).
     subtractMedian : `bool`
         Subtract each camera's median.
     includeClosedShutter : `bool`
@@ -942,7 +943,8 @@ def estimateGuideErrors(
         if subtractMedian:
             guideErrors[d] -= guideErrors.groupby("agc_camera_id")[d].transform("median")
         if recenterPerVisit:
-            guideErrors[d] -= guideErrors.groupby("pfs_visit_id")[d].transform("mean")
+            enabledMean = guideErrors[d].where(guideErrors.camera_enabled).groupby(guideErrors.pfs_visit_id)
+            guideErrors[d] -= enabledMean.transform("mean")
 
     guideErrors.attrs["offset"] = f"{position} - {reference}"
 
@@ -1048,10 +1050,14 @@ def fitDriftRate(
     data = addReferencePositions(data, reference, stat)
     for xy, column in zip("xy", referenceColumns(reference), strict=True):
         data[f"d{xy}_um"] = mmToUm(data[f"agc_{position}_{xy}_mm"] - data[column])
-    matches = selectValidMatches(data) if byCamera else selectFittedMatches(data)
-    data = data[(data.shutter_open == 1).to_numpy() & matches]
-    if data.empty:
+    use = (data.shutter_open == 1).to_numpy() & selectValidMatches(data)
+    if not use.any():
         raise ValueError(f"No AG exposures with the shutters open to fit, from visit {visit}")
+    if not byCamera:
+        use &= selectEnabledCameras(data)
+        if not use.any():
+            raise ValueError(f"No AG exposures on enabled cameras to fit, from visit {visit}")
+    data = data[use]
     means = data[["altitude", "azimuth", "insrot", "exptime"]].mean()
 
     data = smoothAgcData(data, smoothing)

@@ -1227,13 +1227,13 @@ def nCrosses(fig: Figure) -> int:
     return n
 
 
-def checkDisabledPlot(plot: GuiderPlot, crosses: bool = True) -> None:
-    """Check that a plot names the disabled camera, and draws its points as crosses."""
+def checkDisabledPlot(plot: GuiderPlot, crosses: bool | None = True) -> None:
+    """Check that a plot names the disabled camera, and draws crosses if ``crosses``, none if False."""
     checkPlot(plot)
     text = figureText(plot.fig)
     assert DISABLED_NAME in text or "AG4 disabled" in text
-    if crosses:
-        assert nCrosses(plot.fig) > 0
+    if crosses is not None:
+        assert (nCrosses(plot.fig) > 0) if crosses else (nCrosses(plot.fig) == 0)
     # Negative control: no other camera is called disabled.
     assert "AG1 (disabled)" not in text and "AG1 disabled" not in text
 
@@ -1295,10 +1295,9 @@ def testShowGuiderErrorsDisabled(realAgcData, kwargs):
 
     plot = showGuiderErrors(fit, config, fig=Figure())
 
-    shown = config.showGuideStars and (config.showGuideStarsAsPoints or config.showGuideStarsAsArrows)
-    crosses = (shown and not config.showGuideStarsAsArrows) or config.showAverageGuideStarPos
-    crosses &= not (config.showGuideStarsAsArrows and not config.showGuideStarsAsPoints)
-    checkDisabledPlot(plot, crosses=crosses)
+    # Points take precedence over arrows, which have no marker; the cameras' means are points too.
+    points = config.showGuideStars and config.showGuideStarsAsPoints
+    checkDisabledPlot(plot, crosses=points or config.showAverageGuideStarPos)
     assert "AG4 disabled: left out of the boresight fit" in figureText(plot.fig)
 
 
@@ -1349,13 +1348,17 @@ def testPlotPfsUtilsComparisonDisabled(realAgcData, realAgcStars):
 
 
 def focusHasCrosses(kwargs: dict) -> bool:
-    """Whether plotFocus draws a disabled camera's focus errors as points with these options."""
+    """Whether plotFocus draws the disabled camera's points as crosses with these options.
+
+    Its focus errors are crosses when they are drawn per camera; the exposures' (other colorBy) aren't its.
+    Its stars' FWHM are crosses unless showCameraId uses the markers for the halves.
+    """
     if kwargs.get("showOnlyMedian") or DISABLED not in kwargs.get("agcCameraIds", range(6)):
         return False
-    if not (kwargs.get("showAGActorFocus", True) or kwargs.get("showOpdbFocus", True)):
-        return False
-    pooled = kwargs.get("colorBy", "camera") != "camera" and not kwargs.get("plotPerCamera", False)
-    return not pooled
+    focusRows = kwargs.get("showAGActorFocus", True) or kwargs.get("showOpdbFocus", True)
+    perCamera = kwargs.get("colorBy", "camera") == "camera" or kwargs.get("plotPerCamera", False)
+    fwhmCrosses = kwargs.get("showFWHM", True) and not kwargs.get("showCameraId", False)
+    return (focusRows and perCamera) or fwhmCrosses
 
 
 @pytest.mark.parametrize("kwargs", FOCUS_OPTIONS, ids=optionId)
@@ -1405,11 +1408,48 @@ def testPlotFocusByAGDisabled(realAgcData, byCamera):
 
     checkDisabledPlot(plot)
     assert "AG4 (disabled), AG5, AG6; disabled left out of the reference mean" in figureText(plot.fig)
-    relative = plot.data
-    # The other enabled cameras but AG1 average to the overall offset at each visit.
-    reference = relative[(relative.agc_camera_id != 0) & relative.camera_enabled]
-    spread = reference.groupby("pfs_visit_id").focus_error_um.mean()
-    np.testing.assert_allclose(spread, spread.iloc[0])
-    # Negative control: with AG4 in the reference, its mean is no longer the same at each visit.
-    included = relative[relative.agc_camera_id != 0].groupby("pfs_visit_id").focus_error_um.mean()
-    assert not np.allclose(included, included.iloc[0])
+    # Neither the reference nor the zero point uses the disabled camera: the others are as without its data.
+    enabled = plot.data[plot.data.camera_enabled].reset_index(drop=True)
+    without = plotFocusByAG(focusSweep[focusSweep.agc_camera_id != DISABLED], byCamera=byCamera, fig=Figure())
+    np.testing.assert_allclose(enabled.focus_error_um, without.data.focus_error_um)
+    # Negative control: counted as enabled, it moves the others.
+    withAll = plotFocusByAG(focusSweep, byCamera=byCamera, fig=Figure()).data
+    withAll = withAll[withAll.agc_camera_id != DISABLED].reset_index(drop=True)
+    assert not np.allclose(withAll.focus_error_um, enabled.focus_error_um, atol=1)
+
+
+def testPlotFocusPooledAgActorFocusLowestCameraDisabled(realAgcData):
+    """The exposures' AG actor focus errors aren't crosses when the exposure's first camera is disabled.
+
+    They are the guider's, of the whole exposure; drawing them took camera_enabled from its first camera.
+    """
+    focusSweep = realAgcData("focusSweep")
+    lowest = int(plotFocus(focusSweep, fig=Figure()).data.agc_camera_id.min())
+    data = disableCamera(focusSweep, lowest)
+    kwargs = {"showOpdbFocus": False, "showFWHM": False}
+
+    plot = plotFocus(data, colorBy="altitude", fig=Figure(), **kwargs)
+
+    assert nPoints(plot.axes[0, 0]) > 0
+    assert nCrosses(plot.fig) == 0
+    # Negative control: drawn per camera, the lowest camera's points are crosses.
+    assert nCrosses(plotFocus(data, colorBy="altitude", plotPerCamera=True, fig=Figure(), **kwargs).fig) > 0
+
+
+def testPlotFocusFwhmMediansDisabled(realAgcData):
+    """The halves' FWHM medians leave the disabled camera out, and the title says so."""
+    focusSweep = realAgcData("focusSweep")
+    kwargs = {"showAGActorFocus": False, "showOpdbFocus": False, "showMedian": True}
+
+    def medians(plot):
+        return [line.get_ydata() for line in plot.axes[0, 0].lines]
+
+    plot = plotFocus(disableCamera(focusSweep), fig=Figure(), **kwargs)
+
+    assert "disabled left out of the FWHM medians" in figureText(plot.fig)
+    without = plotFocus(focusSweep[focusSweep.agc_camera_id != DISABLED], fig=Figure(), **kwargs)
+    for got, expected in zip(medians(plot), medians(without), strict=True):
+        np.testing.assert_allclose(got, expected)
+    # Negative control: with the camera, the medians differ.
+    withAll = medians(plotFocus(focusSweep, fig=Figure(), **kwargs))
+    assert any(len(a) != len(b) or not np.allclose(a, b) for a, b in zip(withAll, medians(plot), strict=True))
