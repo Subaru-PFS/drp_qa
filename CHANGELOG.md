@@ -37,7 +37,19 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `medDxCenter` at the config's 1/2 px, and no `pctFlagged`. The 14 known-good nights pass; the two faults warn.
   `taskPipeline` takes the first file's pipeline and logs a disagreement between files: the two were derived from
   different collections, so their obs_pfs versions differ (w.2026.40 and w.2026.43).
-
+- **`readAgcData` reads `camera_enabled`** (INSTRM-3057) — `agc_match.camera_enabled`, a nullable boolean: False for a
+  spot from a camera that ics_agActor left out of its fit (INSTRM-2919), NA for rows written before the column.
+  `selectEnabledCameras` selects the rest, taking NA (or no column) as enabled, and `selectFittedMatches` the valid
+  matches among them. The fits that combine the cameras use only those, as the guider did: the boresight fit of
+  `fitGuiderModel`, the exposure terms of `fitGlobalModel`, `guideErrorsByExposure`, the rates of `fitDriftRate` and
+  the exposure focus errors of `estimateFocusErrors`, as do the visit means of
+  `estimateGuideErrors(recenterPerVisit=True)`. Per-camera results keep them, with a `camera_enabled` column. Every
+  guider plot draws a disabled camera's points as crosses, names it "AGn (disabled)" in labels, legends and titles,
+  greys a panel of its own and strikes it out in the camera cartoon; the averages the plots take over the cameras
+  (each exposure's guide error and pointing mean, the mean at the boresight, the exposures' focus errors, the FWHM
+  medians, `plotFocusByAG`'s reference and zero point) leave it out, and the title says so.
+  `docs/guider-plots.ipynb` has a sample. Needs the opdb migration `f3a8d61c2b57` (spt_operational_database) on the
+  database read.
 - **Known-bad coverage** (PIPE2D-1934) — `pfs.drp.qa.metrics.coverage.knownBadCoverage` reports, for each
   known-bad validation entry, whether every image it covers with its metric measured is judged and reaches its
   verdict under the thresholds the gate uses, per image (a `dmLineResiduals` table's rows per species count as one
@@ -354,6 +366,14 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `plotting.dmCombined`) and `metrics.fitStats` go with them; `dmLineResidualData` is plotted after the fact.
 
 ### Fixed
+
+- **`showTelescopeErrors` plots the azimuth offset on-sky** (PIPE2D-1971) — `agc_guide_offset.guide_delta_az` is a
+  coordinate offset, the difference of two azimuths, where `guide_delta_el` is on-sky (likewise `guide_delta_ra`
+  and `guide_delta_dec`, INSTRM-2923). Plotted as read against δalt with equal aspect, as drp_stella did, the δaz
+  axis was stretched by 1/cos(alt), 1.3-2.6 at Run30's altitudes. The panels now show δaz·cos(alt), and the plot's
+  `data` carries it as `daz_cosalt_arcsec` beside `daz_arcsec` as read; `readAgcData`'s columns are unchanged, and
+  `queries.AGC_DATA_COLUMNS` describes both conventions. On the real-data fixtures hypot(δaz·cos(alt), δalt) matches
+  hypot(δRA·cos(dec), δdec) per AG exposure to 0.1%.
 
 - **Task logs at INFO** (PIPE2D-1938) — `docs/qa-thresholds.ipynb` and comparison mode's fresh reductions ran
   `pipetask --log-level PFS=INFO`, but the tasks log as `pfs.<task>`, lowercase, so their INFO lines (the fit
