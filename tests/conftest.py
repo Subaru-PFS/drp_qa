@@ -40,6 +40,7 @@ _OPTIONAL_DIRS = [
     "imageQualityQa",
     "metrics",
     "plotting",
+    "qadb",
 ]
 
 _HERE = Path(__file__).parent

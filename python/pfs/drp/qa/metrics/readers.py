@@ -36,6 +36,7 @@ def readMetrics(
     instrument: str = "PFS",
     visitRange: tuple[int, int] | None = None,
     progress: bool = False,
+    withRun: bool = False,
 ) -> pd.DataFrame:
     """Read and concatenate a per-detector metrics table for some visits.
 
@@ -60,6 +61,8 @@ def readMetrics(
     progress : `bool`, optional
         Print how many datasets there are, then done/total, elapsed and ETA
         every 100 and at the end.
+    withRun : `bool`, optional
+        Add ``run``, the Butler RUN each table was read from.
 
     Returns
     -------
@@ -114,6 +117,8 @@ def readMetrics(
         for key in _DATA_ID_KEYS:
             if key not in table.columns and key in dataId:
                 table[key] = dataId[key]
+        if withRun:
+            table["run"] = ref.run
         tables.append(table)
         if progress and (done % 100 == 0 or done == total):
             elapsed = time.monotonic() - start
