@@ -138,24 +138,38 @@ class SqliteQaDB:
         with self.engine.begin() as c:
             return pd.read_sql(self._bind(sql, params), con=c, params=params)
 
-    def count(self, table: str) -> int:
-        return int(self.query_scalar(f"SELECT count(*) FROM {table}"))
+    def count(self, table: str, where: str = "") -> int:
+        return int(self.query_scalar(f"SELECT count(*) FROM {table}" + (f" WHERE {where}" if where else "")))
+
+
+#: What the tests may create in a database that holds real rows too (a copy of qadb): processings of test
+#: collections, and visits with small ids. The tests scope their counts with these, and the PostgreSQL
+#: fixture deletes only these from the shared tables.
+TEST_PROCESSINGS = "collection_name LIKE 'u/test/%'"
+TEST_VISITS = "pfs_visit_id < 1000"
+
+#: The new QA tables, which the PostgreSQL fixture empties (the dump has none of their rows).
+QA_TABLES = [table for table in TABLES if table not in ("pfs_visit", "data_processing_pipe2d")]
 
 
 def _postgres():
-    """Return a `QaDB` on the scratch PostgreSQL ``PFS_QADB_TEST_DSN`` names, its tables emptied; or None."""
+    """Return a `QaDB` on the scratch PostgreSQL ``PFS_QADB_TEST_DSN`` names, its test rows removed; or None."""
     dsn = os.environ.get("PFS_QADB_TEST_DSN")
     if not dsn:
         return None
     from pfs.utils.database.qadb import QaDB
 
     class TestQaDB(QaDB):
-        def count(self, table):
-            return int(self.query_scalar(f"SELECT count(*) FROM {table}"))
+        def count(self, table, where=""):
+            return int(
+                self.query_scalar(f"SELECT count(*) FROM {table}" + (f" WHERE {where}" if where else ""))
+            )
 
     db = TestQaDB(dsn)
-    for table in reversed(TABLES):
+    for table in reversed(QA_TABLES):
         db.commit(f"DELETE FROM {table}")
+    db.commit(f"DELETE FROM data_processing_pipe2d WHERE {TEST_PROCESSINGS}")
+    db.commit(f"DELETE FROM pfs_visit WHERE {TEST_VISITS}")
     return db
 
 
@@ -288,3 +302,9 @@ def ddlColumns():
                 names.append(words[0])
         columns[name] = names
     return columns
+
+
+@pytest.fixture
+def scope():
+    """Return the WHERE clauses that pick the tests' own rows of the shared tables."""
+    return {"data_processing_pipe2d": TEST_PROCESSINGS, "pfs_visit": TEST_VISITS}

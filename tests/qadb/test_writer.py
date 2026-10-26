@@ -66,14 +66,14 @@ def testRecordsAreNative():
 
 
 class TestProcessingId:
-    def testSameRunSameId(self, qadb):
+    def testSameRunSameId(self, qadb, scope):
         first = processingId(
             qadb, "u/test/qa", "run1", "w.2026.44", {"drp_stella": "w.2026.41", "datamodel": "w.2026.40"}
         )
         again = processingId(qadb, "u/test/qa", "run1", "w.2026.45", {"drp_stella": "w.2026.42"})
         other = processingId(qadb, "u/test/qa", "run2", "w.2026.44", None)
         assert first == again != other
-        assert qadb.count("data_processing_pipe2d") == 2
+        assert qadb.count("data_processing_pipe2d", scope["data_processing_pipe2d"]) == 2
         row = qadb.query_dataframe(
             "SELECT * FROM data_processing_pipe2d WHERE processing_id = :id", params={"id": first}
         ).iloc[0]
@@ -86,7 +86,7 @@ class TestProcessingId:
 
 class TestUpsert:
     def testLoadingTwiceReplaces(self, qadb, fixtures):
-        pid = processingId(qadb, "c", "r", "v")
+        pid = processingId(qadb, "u/test/writer", "r", "v")
         ensureVisits(qadb, [133025, 133040])
         rows = imageRows(fixtures["iqQaMetrics"], IMAGE_QUALITY, pid)
         assert upsert(qadb, "image_quality_qa", rows, list(IMAGE_QUALITY.keys)) == 4
@@ -104,13 +104,13 @@ class TestUpsert:
         with pytest.raises(sqlalchemy.exc.IntegrityError):
             qadb.commit(plain, params=records(rows))
 
-    def testEmptyWritesNothing(self, qadb):
+    def testEmptyWritesNothing(self, qadb, scope):
         assert upsert(qadb, "pfs_visit", pd.DataFrame(columns=["pfs_visit_id"]), ["pfs_visit_id"]) == 0
-        assert qadb.count("pfs_visit") == 0
+        assert qadb.count("pfs_visit", scope["pfs_visit"]) == 0
 
     def testForeignKeyNeedsTheImage(self, qadb):
         """A species row without its image's row is refused (the schema's foreign key)."""
-        pid = processingId(qadb, "c", "r", "v")
+        pid = processingId(qadb, "u/test/writer", "r", "v")
         ensureVisits(qadb, [1])
         orphan = pd.DataFrame(
             [
@@ -148,7 +148,9 @@ class TestEnsureVisits:
     def testIdsOnly(self, qadb):
         assert ensureVisits(qadb, [2, 1, 1]) == 2
         assert ensureVisits(qadb, [1, 3]) == 2
-        assert qadb.query_scalars("SELECT pfs_visit_id FROM pfs_visit ORDER BY 1") == [1, 2, 3]
+        assert qadb.query_scalars(
+            "SELECT pfs_visit_id FROM pfs_visit WHERE pfs_visit_id < 1000 ORDER BY 1"
+        ) == [1, 2, 3]
         assert ensureVisits(qadb, []) == 0
 
     def testFromOpdb(self, qadb):
@@ -164,7 +166,9 @@ class TestEnsureVisits:
             )
         )
         assert ensureVisits(qadb, [1, 2, 3], opdb) == 3
-        table = qadb.query_dataframe("SELECT * FROM pfs_visit ORDER BY pfs_visit_id")
+        table = qadb.query_dataframe(
+            "SELECT * FROM pfs_visit WHERE pfs_visit_id < 1000 ORDER BY pfs_visit_id"
+        )
         assert table["pfs_visit_description"].tolist()[:2] == ["Arc: Argon", "Trace"]
         assert pd.isna(table.loc[2, "pfs_visit_description"])  # unknown to the opdb: id alone
         assert int(table.loc[0, "pfs_design_id"]) == 0x1234

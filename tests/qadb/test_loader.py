@@ -84,7 +84,9 @@ class TestLoadCollection:
             "dm_line_residual_qa_metric": 128,
             "qa_gate": 4,
         }
-        processing = qadb.query_dataframe("SELECT * FROM data_processing_pipe2d")
+        processing = qadb.query_dataframe(
+            "SELECT * FROM data_processing_pipe2d WHERE collection_name = :c", params={"c": COLLECTION}
+        )
         assert len(processing) == 1
         assert processing.loc[0, "collection_name"] == COLLECTION
         assert processing.loc[0, "run_name"] == RUN
@@ -103,13 +105,13 @@ class TestLoadCollection:
             assert row.qa_status == worstStatus([iq[key], dm[key]])
             assert row.qa_status in GATE_ORDER
 
-    def testLoadingTwiceChangesNothing(self, butler, qadb, tables):
+    def testLoadingTwiceChangesNothing(self, butler, qadb, tables, scope):
         first = load(butler, qadb)
-        before = {table: qadb.count(table) for table in first if table != "processings"}
+        before = {table: qadb.count(table, scope.get(table, "")) for table in first if table != "processings"}
         again = load(butler, qadb)
         assert again == first
-        assert {table: qadb.count(table) for table in before} == before
-        assert qadb.count("data_processing_pipe2d") == 1
+        assert {table: qadb.count(table, scope.get(table, "")) for table in before} == before
+        assert qadb.count("data_processing_pipe2d", scope["data_processing_pipe2d"]) == 1
         # Negative control: a re-judged image is replaced, not duplicated.
         tables["iqQaMetrics"].loc[0, "qaStatus"] = "FAIL"
         tables["iqQaMetrics"].loc[0, "qaReason"] = "test"
@@ -137,7 +139,8 @@ class TestLoadCollection:
         counts = load(butler, qadb)
         assert counts["processings"] == 2
         ids = qadb.query_dataframe(
-            "SELECT processing_id, run_name FROM data_processing_pipe2d ORDER BY run_name"
+            "SELECT processing_id, run_name FROM data_processing_pipe2d WHERE collection_name = :c ORDER BY run_name",
+            params={"c": COLLECTION},
         )
         assert ids["run_name"].tolist() == ["r1", "r2"]
         byRun = qadb.query_dataframe(
@@ -217,7 +220,9 @@ class TestLoadCollection:
             "VERSION_DRP_STELLA": "w.2026.41",
         }
         load(butler, qadb, pipelineVersions=True, readHeader=lambda ref: header)
-        row = qadb.query_dataframe("SELECT * FROM data_processing_pipe2d").iloc[0]
+        row = qadb.query_dataframe(
+            "SELECT * FROM data_processing_pipe2d WHERE collection_name = :c", params={"c": COLLECTION}
+        ).iloc[0]
         assert row["pipe2d_version"] == "w.2026.41"
         assert row["datamodel_version"] == "w.2026.40"
         assert row["obs_pfs_version"] == "w.2026.40"
@@ -234,6 +239,8 @@ class TestLoadCollection:
             log=messages.append,
             now=lambda: NOW,
         )
-        row = qadb.query_dataframe("SELECT * FROM data_processing_pipe2d").iloc[0]
+        row = qadb.query_dataframe(
+            "SELECT * FROM data_processing_pipe2d WHERE collection_name = :c", params={"c": COLLECTION}
+        ).iloc[0]
         assert pd.isna(row["pipe2d_version"])
         assert any("no single reduction pipeline" in m for m in messages)
