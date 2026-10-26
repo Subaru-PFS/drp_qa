@@ -20,8 +20,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   guider plot draws a disabled camera's points as crosses, names it "AGn (disabled)" in labels, legends and titles,
   greys a panel of its own and strikes it out in the camera cartoon; the averages the plots take over the cameras
   (each exposure's guide error and pointing mean, the mean at the boresight, the exposures' focus errors, the FWHM
-  medians, `plotFocusByAG`'s reference and zero point) leave it out, and the title says so. `docs/guider-plots.ipynb` has a sample. Needs the opdb migration
-  `f3a8d61c2b57` (spt_operational_database) on the database read.
+  medians, `plotFocusByAG`'s reference and zero point) leave it out, and the title says so.
+  `docs/guider-plots.ipynb` has a sample. Needs the opdb migration `f3a8d61c2b57` (spt_operational_database) on the
+  database read.
 - **`dmLineResiduals` stores the frame type, and judges trace scatter on quartz frames** (PIPE2D-1956) —
   `dmLineResidualMetrics` and `dmLineResidualSummary` gain `obsType`, the observation type from the raw header's
   `W_SEQTYP` as `imageQualityQa` classifies it (`trace` for a quartz, `arc`, `twilight`, ...; the pfsConfig header
