@@ -35,7 +35,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   and lamp's median (not judged: the n-arm Ne arc, whose 15 faint lines per fiber scatter 2–4 %, and the m arm,
   taken one night), `linesPerFiber` 25/50 % (arcs) and 2.5/5 % (quartz) below each arm and sequence's median,
   `medDxCenter` at the config's 1/2 px, and no `pctFlagged`. The 14 known-good nights pass; the two faults warn.
-  `taskPipeline` requires the files to record one pipeline.
+  `taskPipeline` takes the first file's pipeline and logs a disagreement between files: the two were derived from
+  different collections, so their obs_pfs versions differ (w.2026.40 and w.2026.43).
 
 - **Known-bad coverage** (PIPE2D-1934) — `pfs.drp.qa.metrics.coverage.knownBadCoverage` reports, for each
   known-bad validation entry, whether every image it covers with its metric measured is judged and reaches its

@@ -55,14 +55,14 @@ OUTPUT = Path(__file__).parent / "iqQaThresholds-iis-run30.yaml"
 
 #: The collection the metrics came from: Run30's nightly IIS frames reduced afresh.
 COLLECTION = "u/wtg/qa-iis/003b"
-#: The pipeline that reduced them, from the pfsArm headers (reports/PIPE2D-1954/pipelines-003b.parquet).
-PIPELINE = {
-    "datamodel": "w.2026.40",
-    "obs_pfs": "w.2026.16-1-ga922722",
-    "drp_stella": "w.2026.41-6-ge56938d2",
-}
-#: The drp_qa that measured them (tickets/PIPE2D-1954).
-DRP_QA_VERSION = "w.2026.41-27-g091db6c"
+#: The pipeline that reduced them. datamodel and drp_stella are as the pfsArm headers record
+#: them (reports/PIPE2D-1954/pipelines-003b.parquet). obs_pfs was master at 56b12d7, tagged
+#: w.2026.43, set up from a checkout whose version module had not been rebuilt, so its headers
+#: say "w.2026.16-1-ga922722"; a reduction from that checkout reads as another pipeline to
+#: the gate's provisional check until the module is rebuilt.
+PIPELINE = {"datamodel": "w.2026.40", "obs_pfs": "w.2026.43", "drp_stella": "w.2026.41-6-ge56938d2"}
+#: The drp_qa that measured them: tickets/PIPE2D-1954 at the commit before this file's.
+DRP_QA_VERSION = "w.2026.35-217-g6c5c143"
 #: When these were derived and adopted.
 DERIVED_ON = date(2026, 10, 26)
 #: The population column every entry names: the IIS frames' own thresholds.

@@ -3,10 +3,10 @@ derivedOn: '2026-10-26'
 collection: u/wtg/qa-iis/003b
 referenceRuns:
 - 30
-drpQaVersion: w.2026.41-27-g091db6c
+drpQaVersion: w.2026.35-217-g6c5c143
 pipelineVersions:
   datamodel: w.2026.40
-  obs_pfs: w.2026.16-1-ga922722
+  obs_pfs: w.2026.43
   drp_stella: w.2026.41-6-ge56938d2
 thresholds:
 - metric: medFwhm

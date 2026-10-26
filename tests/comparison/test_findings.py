@@ -247,6 +247,15 @@ def testTaskPipeline(tmp_path):
             }
         )
     )
+    # Further files (extraThresholdsFiles) are read too; when they disagree, the first file's pipeline
+    # stands and the difference is logged (PIPE2D-1954).
+    assert taskPipeline(SimpleNamespace(thresholdsFile=str(bare), extraThresholdsFiles=[str(path)])) == {
+        "datamodel": "a",
+        "obs_pfs": "b",
+        "drp_stella": "c",
+    }
+    both = SimpleNamespace(thresholdsFile="iqQaThresholds-run25.yaml", extraThresholdsFiles=[str(path)])
+    assert taskPipeline(both)["obs_pfs"] == "w.2026.40"
     assert taskPipeline(SimpleNamespace(thresholdsFile=str(path))) == {
         "datamodel": "a",
         "obs_pfs": "b",

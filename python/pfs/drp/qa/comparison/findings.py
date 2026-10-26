@@ -16,6 +16,7 @@ allow for it; metrics written before then (no ``nLitFibers``) aren't judged on t
 (`DAILY_UNJUDGED`).
 """
 
+import logging
 import re
 from pathlib import Path
 
@@ -24,6 +25,8 @@ import pandas as pd
 
 from pfs.drp.qa.metrics.calibration import readThresholds
 from pfs.drp.qa.metrics.gate import STATUS_ORDER, configThresholds, judge, loadThresholds, thresholdsPath
+
+log = logging.getLogger(__name__)
 
 __all__ = [
     "DAILY_UNJUDGED",
@@ -160,18 +163,18 @@ def taskPipeline(config) -> dict[str, str]:
         none, or the config names no file (its own thresholds record no
         origin).
 
-    Raises
-    ------
-    ValueError
-        If the files record different pipelines: one pipeline is what the
-        provisional marking compares a reduction with.
+        The first file's, when the files record different ones: one pipeline
+        is what the provisional marking compares a reduction with, and the
+        files are derived from different collections (the Run25 file from
+        ``u/wtg/qa-thresholds/010``, the IIS file from ``u/wtg/qa-iis/003b``),
+        so their obs_pfs versions differ. The difference is logged.
     """
     pipelines = [readThresholds(path)[0]["pipelineVersions"] for path in thresholdsFiles(config)]
     pipelines = [pipeline for pipeline in pipelines if pipeline]
     if not pipelines:
         return {}
     if any(pipeline != pipelines[0] for pipeline in pipelines[1:]):
-        raise ValueError(f"The thresholds files record different pipelines: {pipelines}")
+        log.warning("The thresholds files record different pipelines; taking the first: %s", pipelines)
     return pipelines[0]
 
 
