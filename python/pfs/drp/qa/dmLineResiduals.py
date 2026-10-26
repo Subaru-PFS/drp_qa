@@ -29,7 +29,6 @@ from lsst.pipe.base.connectionTypes import PrerequisiteInput as PrerequisiteConn
 
 from pfs.datamodel import PfsConfig
 from pfs.drp.qa.imageQualityQa import litFibers
-from pfs.drp.qa.metrics.gate import loadThresholds, thresholdsPath
 from pfs.drp.qa.metrics.lineResiduals import (
     BOTH,
     CALIB,
@@ -42,7 +41,7 @@ from pfs.drp.qa.metrics.lineResiduals import (
     lineResiduals,
     lineTable,
     longResiduals,
-    residualThresholds,
+    residualTaskThresholds,
     residualVerdict,
     speciesResiduals,
 )
@@ -271,18 +270,7 @@ class DmLineResidualsTask(PipelineTask):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Highest priority first; see pfs.drp.qa.metrics.gate.
-        files = [thresholdsPath(self.config.thresholdsFile)] if self.config.thresholdsFile else []
-        fields = residualThresholds(
-            self.config.xWarnThreshold,
-            self.config.xFailThreshold,
-            self.config.yWarnThreshold,
-            self.config.yFailThreshold,
-            self.config.xRmsWarnThreshold,
-            self.config.xRmsFailThreshold,
-            self.config.yRmsWarnThreshold,
-            self.config.yRmsFailThreshold,
-        )
-        self.thresholds = [*loadThresholds(files), fields]
+        self.thresholds = residualTaskThresholds(self.config)
 
     def runQuantum(
         self,

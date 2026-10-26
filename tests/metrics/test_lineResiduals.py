@@ -27,10 +27,12 @@ from pfs.drp.qa.metrics.lineResiduals import (
     addObsType,
     cameraSet,
     frameType,
+    judgedRows,
     lineResiduals,
     lineTable,
     longResiduals,
     observationType,
+    residualTaskThresholds,
     residualThresholds,
     residualVerdict,
     robustRms,
@@ -1090,8 +1092,10 @@ def testShippedScatterVerdicts():
             "lamps": {"PASS": 468, "FAIL": 63, "WARN": 23},
             "goodQuartzTraces": {"PASS": 144},  # every known-good quartz trace passes
             "goodLamps": {"PASS": 357, "WARN": 3},  # three b-arm Xenon arcs at the 20 % WARN
-            "unconfirmedQuartzTraces": {"FAIL": 7, "PASS": 3, "WARN": 2},  # 150661, Run30
-            "unconfirmedLamps": {"PASS": 12},
+            # The SM1 defocus (Run27), known-bad in the scatter too (PIPE2D-1934): every quartz
+            # trace and every lamp it names fails.
+            "badQuartzTraces": {"FAIL": 36},
+            "badLamps": {"FAIL": 34},
         },
         "robustRmsDeltaY": {
             "quartzTraces": {},  # traces measure x only
@@ -1100,8 +1104,8 @@ def testShippedScatterVerdicts():
             "lamps": {"PASS": 450, "FAIL": 55, "WARN": 49},
             "goodQuartzTraces": {"": 144},
             "goodLamps": {"PASS": 358, "WARN": 2},  # two b-arm Krypton arcs at the 50 % WARN
-            "unconfirmedQuartzTraces": {"": 12},
-            "unconfirmedLamps": {"PASS": 12},
+            "badQuartzTraces": {},  # the defocus is known-bad in x only
+            "badLamps": {},
         },
     }
     for metric, expected in counts.items():
@@ -1130,18 +1134,79 @@ def testShippedScatterVerdicts():
             status.loc[good[(traces & quartz)[good]]].value_counts().to_dict() == expected["goodQuartzTraces"]
         )
         assert status.loc[good[lamps[good]]].value_counts().to_dict() == expected["goodLamps"]
-        unconfirmed = labelled.index[labelled["validation"] == "unconfirmed"]
-        assert (
-            status.loc[unconfirmed[(traces & quartz)[unconfirmed]]].value_counts().to_dict()
-            == expected["unconfirmedQuartzTraces"]
-        )
-        assert (
-            status.loc[unconfirmed[lamps[unconfirmed]]].value_counts().to_dict()
-            == expected["unconfirmedLamps"]
-        )
+        assert not (labelled["validation"] == "unconfirmed").any()  # no scatter verdict is a suspicion
+        bad = labelled.index[labelled["validation"].str.startswith("bad")]
+        assert status.loc[bad[(traces & quartz)[bad]]].value_counts().to_dict() == expected["badQuartzTraces"]
+        assert status.loc[bad[lamps[bad]]].value_counts().to_dict() == expected["badLamps"]
     # Negative control: a flat 0.03/0.04 px scatter threshold fails or warns most known-good quartz traces.
     strict = judge(reserved, [residualThresholds(1.0, 2.0, 1.0, 2.0, 0.03, 0.04, 0.03, 0.04)])
     strictX = strict.set_index(["row", "metric"]).xs("robustRmsDeltaX", level="metric")["status"]
     labelled = labelRows(reserved, visitSet, "robustRmsDeltaX")
     goodTraces = labelled.index[(labelled["validation"] == "good") & (traces & quartz)[labelled.index]]
     assert strictX.loc[goodTraces].value_counts().to_dict() == {"FAIL": 96, "PASS": 30, "WARN": 18}
+
+
+def testJudgedRowsAreWhatTheTaskJudges():
+    """Drift against the calibration on BOTH and UNFITTED rows; scatter against the visit on RESERVED ones.
+
+    Coverage judges stored tables with `judge` (PIPE2D-1934), so it needs the same selection as
+    `residualVerdict`: a thresholds file whose entries don't name the reference would otherwise
+    judge rows the task never does.
+    """
+    values = {"medianDeltaX": 3.0, "robustRmsDeltaX": 3.0, "medianDeltaY": 3.0, "robustRmsDeltaY": 3.0}
+    species = pd.DataFrame(
+        [
+            {"reference": reference, "statusType": statusType, "description": "ArI", **values}
+            for reference in (CALIB, VISIT)
+            for statusType in (BOTH, USED, RESERVED, UNFITTED)
+        ]
+    )
+    rows = judgedRows(species)
+    assert sorted(zip(rows["reference"], rows["statusType"], strict=True)) == [
+        (CALIB, BOTH),
+        (CALIB, UNFITTED),
+        (VISIT, RESERVED),
+    ]
+    visit = rows[rows["reference"] == VISIT]
+    assert visit[["medianDeltaX", "medianDeltaY"]].isna().all().all()
+    assert (visit[["robustRmsDeltaX", "robustRmsDeltaY"]] == 3.0).all().all()
+    assert (rows.loc[rows["reference"] == CALIB, list(values)] == 3.0).all().all()
+    # Negative control: a threshold naming no reference judges the visit's medianDeltaX
+    # on the whole table, and on the selection only the calibration's.
+    loose = pd.DataFrame(
+        [
+            {
+                "metric": "medianDeltaX",
+                "warn": 1.0,
+                "fail": 2.0,
+                "higherIsWorse": True,
+                "absolute": True,
+                "provenance": "t",
+            }
+        ]
+    )
+    everything = judge(species, [loose])
+    assert (everything["status"] == "FAIL").sum() == 8
+    selected = judge(rows, [loose])
+    assert (selected["status"] == "FAIL").sum() == 2
+
+
+def testResidualTaskThresholdsLayerTheFileOverTheConfig():
+    """The task's thresholds: the file, if one is named, over the config's fields."""
+    config = SimpleNamespace(
+        thresholdsFile="dmLineResidualThresholds-run25.yaml",
+        xWarnThreshold=1.0,
+        xFailThreshold=2.0,
+        yWarnThreshold=1.0,
+        yFailThreshold=2.0,
+        xRmsWarnThreshold=NAN,
+        xRmsFailThreshold=NAN,
+        yRmsWarnThreshold=NAN,
+        yRmsFailThreshold=NAN,
+    )
+    tables = residualTaskThresholds(config)
+    assert len(tables) == 2 and len(tables[0]) > 100
+    pd.testing.assert_frame_equal(tables[1], residualThresholds(1.0, 2.0, 1.0, 2.0))
+    # With no file, the config's fields alone.
+    (only,) = residualTaskThresholds(SimpleNamespace(**{**vars(config), "thresholdsFile": ""}))
+    pd.testing.assert_frame_equal(only, tables[1])
