@@ -264,6 +264,44 @@ def testRealDataShutterOpen(realAgcData):
     assert medians[0] < 1.5 * medians[1]
 
 
+@pytest.mark.parametrize("name", NAMES)
+def testRealDataGuideOffsetConventions(realAgcData, name):
+    """``guide_delta_azimuth`` and ``guide_delta_ra`` are coordinate offsets; the altitude and Dec ones on-sky.
+
+    The AG actor's guide offset is one on-sky vector, so its length is the
+    same in (alt, az) and (RA, Dec) once the azimuth and RA offsets are
+    scaled by cos(alt) and cos(dec): hypot(δaz·cos(alt), δalt) over
+    hypot(δRA·cos(dec), δdec) is 0.9994-0.9999 per AG exposure on these
+    visits (INSTRM-2923, PIPE2D-1971).
+    """
+    agcData = realAgcData(name)
+    offsets = (
+        agcData.groupby("agc_exposure_id")
+        .agg(
+            altitude=("altitude", "mean"),
+            guide_dec=("guide_dec", "mean"),
+            daz=("guide_delta_azimuth", "mean"),
+            dalt=("guide_delta_altitude", "mean"),
+            dra=("guide_delta_ra", "mean"),
+            ddec=("guide_delta_dec", "mean"),
+        )
+        .dropna()
+    )
+    assert len(offsets) > 50
+    cosAlt = np.cos(np.deg2rad(offsets.altitude))
+    assert cosAlt.max() < 0.85  # altitudes of 33-61 deg: the scaling matters
+    onSkyRaDec = np.hypot(offsets.dra * np.cos(np.deg2rad(offsets.guide_dec)), offsets.ddec)
+
+    ratio = np.hypot(offsets.daz * cosAlt, offsets.dalt) / onSkyRaDec
+    np.testing.assert_allclose(ratio, 1, atol=1e-3)
+
+    # Negative control: the azimuth offset taken as on-sky. The ratio then runs from 1 (δaz = 0) up to
+    # 1/cos(alt) (δalt = 0), 1.2-2.1 here.
+    ratioRaw = np.hypot(offsets.daz, offsets.dalt) / onSkyRaDec
+    assert not np.allclose(ratioRaw, 1, atol=1e-3)
+    assert ratioRaw.max() > 0.98 * (1 / cosAlt).max()
+
+
 def testRealDataFitGuiderModel(realAgcData):
     """The boresight and camera models take out most of the raster scan's guide errors.
 

@@ -1409,6 +1409,11 @@ def showTelescopeErrors(
     motion it causes at the AG cameras (microns); and the rotator offset by
     altitude and azimuth.
 
+    ``guide_delta_azimuth`` is a coordinate offset, the difference of two
+    azimuths, where ``guide_delta_altitude`` is on-sky, so the azimuth
+    offset is plotted as δaz·cos(alt): the two axes then share a scale,
+    and hypot(δaz·cos(alt), δalt) is hypot(δRA·cos(dec), δdec).
+
     Parameters
     ----------
     agcData : `pandas.DataFrame`
@@ -1426,7 +1431,9 @@ def showTelescopeErrors(
     Returns
     -------
     plot : `GuiderPlot`
-        ``data`` has one row per AG exposure plotted.
+        ``data`` has one row per AG exposure plotted: ``daz_arcsec`` is the
+        mean ``guide_delta_azimuth`` as read, and ``daz_cosalt_arcsec`` the
+        on-sky offset plotted.
     """
     offsets = agcData.groupby("agc_exposure_id", as_index=False).agg(
         altitude=("altitude", "mean"),
@@ -1439,6 +1446,7 @@ def showTelescopeErrors(
     offsets = offsets[offsets.shutter_open > 0].reset_index(drop=True)
     if offsets.empty:
         raise ValueError("No AG exposures with the shutters open to plot")
+    offsets["daz_cosalt_arcsec"] = offsets.daz_arcsec * np.cos(np.deg2rad(offsets.altitude))
     offsets["theta_um"] = mmToUm(AGC_RING_RADIUS_MM) * arcsecToRad(offsets.theta_arcsec)
 
     fig, axes, ownPanels = _panels(2, 2, fig, axes)
@@ -1452,20 +1460,20 @@ def showTelescopeErrors(
     newColorbars = []
     ax = axes[0, 0]
     hexbin = ax.hexbin(
-        offsets.dalt_arcsec, offsets.daz_arcsec, gridsize=max(1, min(10, int(np.sqrt(len(offsets)))))
+        offsets.dalt_arcsec, offsets.daz_cosalt_arcsec, gridsize=max(1, min(10, int(np.sqrt(len(offsets)))))
     )
     artists.append(hexbin)
     newColorbars.append(_colorbar(fig, hexbin, "N", colorbars, 0, ax=ax))
 
     ax = axes[0, 1]
-    scatter = ax.scatter(offsets.dalt_arcsec, offsets.daz_arcsec, s=10, c=offsets.agc_exposure_id)
+    scatter = ax.scatter(offsets.dalt_arcsec, offsets.daz_cosalt_arcsec, s=10, c=offsets.agc_exposure_id)
     artists.append(scatter)
     newColorbars.append(_colorbar(fig, scatter, "agc_exposure_id", colorbars, 1, ax=ax))
     ax.set_facecolor("black")
     for ax in axes[0, :]:
         ax.set_aspect(1)
         ax.set_xlabel(r"$\delta$alt (arcsec)")
-        ax.set_ylabel(r"$\delta$az (arcsec)")
+        ax.set_ylabel(r"$\delta$az$\,\cos$(alt) (arcsec)")
 
     ax = axes[1, 0]
     if showTheta:
@@ -1494,8 +1502,8 @@ def showTelescopeErrors(
     ax.set_ylabel("altitude")
 
     title = (
-        rf"$\langle\delta$(alt, az)$\rangle$ = ({offsets.dalt_arcsec.mean():.1f}, "
-        f"{offsets.daz_arcsec.mean():.2f}) arcsec"
+        rf"$\langle\delta$(alt, az$\,\cos$(alt))$\rangle$ = ({offsets.dalt_arcsec.mean():.2f}, "
+        f"{offsets.daz_cosalt_arcsec.mean():.2f}) arcsec"
         rf"   $\langle\theta\rangle$ = {offsets.theta_arcsec.mean():.1f} arcsec"
     )
     _finish(fig, axes, ownPanels, title)
