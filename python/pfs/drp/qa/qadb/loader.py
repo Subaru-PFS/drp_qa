@@ -5,9 +5,15 @@ as its pipetask has run (`loadVisit`), comparison mode for a run, and
 ``bin.src/loadQadb.py`` for a backfill. Each Butler RUN found becomes a
 ``data_processing_pipe2d`` row, with the drp_qa that wrote it (from the RUN's
 ``packages`` dataset) and the pipeline that reduced the images it judged (from
-their ``pfsArm`` headers, as comparison mode reads them); the thresholds file
-each task's config in that RUN names is registered, and the gate verdict of
-every image is written to ``qa_gate``.
+their ``pfsArm`` headers, as comparison mode reads them); the thresholds files
+each image was judged with are registered, and its gate verdict is written to
+``qa_gate``.
+
+The tasks record those files with each image, by name and SHA-256 as they were
+at judgement time (`pfs.drp.qa.metrics.gate.thresholdsRecord`, PIPE2D-1976), so
+what the gate cites does not depend on the drp_qa that loads. A table written
+before then records none, and its RUN's stored task config is read instead:
+through today's config class, and with today's files under those names.
 """
 
 import time
@@ -18,7 +24,13 @@ from typing import Any
 
 import pandas as pd
 
-from pfs.drp.qa.metrics.gate import thresholdsPath
+from pfs.drp.qa.metrics.gate import (
+    THRESHOLDS_COLUMNS,
+    recordedThresholds,
+    sha256Of,
+    thresholdsNames,
+    thresholdsPath,
+)
 from pfs.drp.qa.metrics.readers import readMetrics, readReductionPipelines
 from pfs.drp.qa.qadb.tables import (
     IMAGE_KEYS,
@@ -141,38 +153,109 @@ def drpQaVersionOf(butler: Any, run: str) -> str:
 
 
 def thresholdsFilesOf(butler: Any, run: str, task: str) -> list[Path]:
-    """Return the thresholds files a task judged a RUN with, from the config pipetask stored there.
+    """Return the thresholds files a RUN's stored config for a task names, as this drp_qa ships them.
 
     The config's ``thresholdsFile`` first, then its ``extraThresholdsFiles``
     (``imageQualityQa``'s further layers, judged after it). Empty when the RUN
-    has no config for the task, or it names no file.
+    has no config for the task, or it names no file. Only for tables that
+    record none themselves: the config is read through today's config class,
+    so a field added since has today's default.
     """
     try:
         config = butler.get(f"{task}_config", collections=[run])
     except Exception:  # a RUN without the task has no config
         return []
-    names = [getattr(config, "thresholdsFile", None), *(getattr(config, "extraThresholdsFiles", None) or [])]
-    return [thresholdsPath(name) for name in names if name]
+    return [thresholdsPath(name) for name in thresholdsNames(config)]
 
 
 def _thresholdsIdOf(qadb: Any, butler: Any, run: str, task: str, now: datetime, log: Callable) -> int | None:
-    """Register the thresholds files a task judged a RUN with; return the first layer's id.
+    """Register the thresholds files a RUN's stored config names; return the first layer's id.
 
-    Every file is registered, so each is in ``qa_thresholds`` by content;
-    ``qa_gate`` cites the first, the layer judged first. `None`, with a log
-    line, for a file this drp_qa no longer ships.
+    For tables written before the tasks recorded their files. Every file is
+    registered, so each is in ``qa_thresholds`` by content; ``qa_gate`` cites
+    the first, the layer judged first. `None`, with a log line, for a file
+    this drp_qa no longer ships.
     """
+    log(
+        f"{run}: {task} recorded no thresholds files; citing those its stored config names, as this drp_qa has them"
+    )
     ids = []
     for path in thresholdsFilesOf(butler, run, task):
         try:
             ids.append(registerThresholds(qadb, path, now))
         except FileNotFoundError:
-            # The file this drp_qa ships is not the one that judged (PIPE2D-1976 records it at judgement time).
             log(
                 f"{run}: {task} judged with {path.name}, which this drp_qa no longer has; thresholds left null"
             )
             ids.append(None)
     return ids[0] if ids else None
+
+
+def _shippedWith(name: str, digest: str) -> Path | None:
+    """Return a thresholds file this drp_qa ships with a given content: under its name, or renamed."""
+    shipped = thresholdsPath(name)
+    for path in [shipped, *sorted(thresholdsPath("").glob("*.yaml"))]:
+        if path.is_file() and sha256Of(path) == digest:
+            return path
+    return None
+
+
+def _recordedId(qadb: Any, name: str, digest: str, now: datetime, log: Callable) -> int | None:
+    """Return the ``thresholds_id`` of a file an image records judging with, registering it if needed.
+
+    By content: qadb's row with that SHA-256, else a file this drp_qa ships
+    with it, registered under the name judged with. `None`, with a log line,
+    when there is neither: the file changed or went before it was registered.
+    """
+    found = qadb.query_scalar(
+        "SELECT thresholds_id FROM qa_thresholds WHERE sha256 = :sha256", params={"sha256": digest}
+    )
+    if found is not None:
+        return int(found)
+    path = _shippedWith(name, digest)
+    if path is None:
+        log(
+            f"thresholds {name} (sha256 {digest[:12]}) is neither in qadb nor shipped with this drp_qa;"
+            " thresholds left null"
+        )
+        return None
+    return registerThresholds(qadb, path, now, name=name)
+
+
+def _thresholdsIds(
+    qadb: Any,
+    butler: Any,
+    task: str,
+    judged: pd.DataFrame,
+    registered: dict[tuple[str, str], int | None],
+    now: datetime,
+    log: Callable[[str], None],
+) -> list[int | None]:
+    """Return the ``thresholds_id`` of the first file each image of a task was judged with.
+
+    Every recorded file is registered (``registered`` caches them by name and
+    SHA-256 across the load); an image that records none falls back on its
+    RUN's stored config (`_thresholdsIdOf`).
+    """
+    recorded = (
+        judged[list(THRESHOLDS_COLUMNS)].itertuples(index=False, name=None)
+        if set(THRESHOLDS_COLUMNS) <= set(judged.columns)
+        else [(None, None)] * len(judged)
+    )
+    fromConfig: dict[str, int | None] = {}
+    ids = []
+    for (files, digests), run in zip(recorded, judged["run"], strict=True):
+        layers = recordedThresholds(files, digests)
+        if layers is None:
+            if run not in fromConfig:
+                fromConfig[run] = _thresholdsIdOf(qadb, butler, run, task, now, log)
+            ids.append(fromConfig[run])
+            continue
+        for layer in layers:
+            if layer not in registered:
+                registered[layer] = _recordedId(qadb, *layer, now, log)
+        ids.append(registered[layers[0]] if layers else None)
+    return ids
 
 
 def _pipelineByRun(
@@ -301,14 +384,17 @@ def loadCollection(
         else:
             ids[run] = processingId(qadb, collection, run, drpQaVersionOf(butler, run), pipeline.get(run))
 
-    # The thresholds each task judged each RUN with: pipetask stores the task's config in the RUN.
-    thresholdsIds: dict[str, dict[str, int | None]] = {run: {} for run in runs}
+    # The thresholds each image was judged with, as its task recorded them.
     if sink is None:
-        for run in runs:
-            for task in TASK_TABLES:
-                judged = images[task]
-                if not judged.empty and (judged["run"] == run).any():
-                    thresholdsIds[run][task] = _thresholdsIdOf(qadb, butler, run, task, now(), log)
+        registered: dict[tuple[str, str], int | None] = {}
+        images = {
+            task: judged.assign(
+                thresholdsId=_thresholdsIds(qadb, butler, task, judged, registered, now(), log)
+            )
+            if not judged.empty
+            else judged
+            for task, judged in images.items()
+        }
 
     allVisits = {int(v) for table in images.values() for v in table.get("visit", pd.Series(dtype=object))}
     counts: dict[str, int] = {"processings": len(runs)}
@@ -348,7 +434,7 @@ def loadCollection(
     gates = []
     for run in runs:
         byRun = {task: table[table["run"] == run] for task, table in images.items() if not table.empty}
-        gates.append(gateRows(byRun, ids[run], mode, now(), thresholdsIds[run]))
+        gates.append(gateRows(byRun, ids[run], mode, now()))
     gate = pd.concat(gates, ignore_index=True) if gates else gateRows({}, 0, mode, now())
     write("qa_gate", gate, list(QA_GATE[:3]))
     log(f"loaded {collection} in {time.monotonic() - start:.0f} s")

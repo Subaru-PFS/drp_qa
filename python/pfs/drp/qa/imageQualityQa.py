@@ -33,7 +33,14 @@ from lsst.pipe.base.connectionTypes import (
 
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
 from pfs.drp.qa.crossDispersion import measureImageWidths, profileFwhm
-from pfs.drp.qa.metrics.gate import configThresholds, gate, loadThresholds, thresholdsPath
+from pfs.drp.qa.metrics.gate import (
+    configThresholds,
+    gate,
+    loadThresholds,
+    thresholdsNames,
+    thresholdsPath,
+    thresholdsRecord,
+)
 from pfs.drp.qa.metrics.longFormat import parseSpeciesStats, speciesFrame
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
@@ -175,7 +182,10 @@ class ImageQualityQaConnections(
             " centroids in ``lines``), ``traceOnly``, ``illumination`` (``full``,"
             " the science fibers, or ``iis``, the 16 engineering fibers), ``qaStatus``"
             " (``PASS``, ``WARN``, ``FAIL``, or ``UNKNOWN`` when no metric was"
-            " judged), ``qaDecidedBy``, ``qaReason``, ``calexpRun`` (the RUN"
+            " judged), ``qaDecidedBy``, ``qaReason``, ``thresholdsFiles`` and"
+            " ``thresholdsSha256`` (the thresholds files judged with and their"
+            " content then, comma-separated; empty when none:"
+            " `pfs.drp.qa.metrics.gate.thresholdsRecord`), ``calexpRun`` (the RUN"
             " collection of the calexp judged, null without one)."
         ),
         storageClass="DataFrame",
@@ -492,9 +502,13 @@ class ImageQualityQaTask(PipelineTask):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Highest priority first; see pfs.drp.qa.metrics.gate.
-        files = [thresholdsPath(self.config.thresholdsFile)] if self.config.thresholdsFile else []
-        files.extend(thresholdsPath(name) for name in self.config.extraThresholdsFiles)
-        self.thresholds = [*loadThresholds(files), configThresholds(self.config)]
+        names = thresholdsNames(self.config)
+        self.thresholds = [
+            *loadThresholds([thresholdsPath(name) for name in names]),
+            configThresholds(self.config),
+        ]
+        # Which files judged, by content, for qadb: the loader's drp_qa may ship others (PIPE2D-1976).
+        self.thresholdsRecord = thresholdsRecord(names)
 
     def runQuantum(
         self,
@@ -1122,6 +1136,7 @@ class ImageQualityQaTask(PipelineTask):
         position = metrics.columns.get_loc("seqName") + 1
         for offset, column in enumerate(verdict.columns):
             metrics.insert(position + offset, column, verdict[column].to_numpy())
+        metrics = metrics.assign(**self.thresholdsRecord)
         qa_status, reason = verdict["qaStatus"].iloc[0], verdict["qaReason"].iloc[0]
 
         dxStr = f"{medDxCenter:+.3f}px" if np.isfinite(medDxCenter) else "NaN"

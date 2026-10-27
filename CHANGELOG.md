@@ -10,6 +10,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **The QA tasks record the thresholds files they judged with** (PIPE2D-1976) — `iqQaMetrics` and
+  `dmLineResidualSummary` gain `thresholdsFiles` and `thresholdsSha256`: each file judged with, in the order judged,
+  and the sha256 of its content then, comma-separated (empty when judged by the config fields alone;
+  `gate.thresholdsRecord`). The qadb loader cites those, by content, rather than what the drp_qa that loads ships
+  under the names the stored config gives: a file changed or renamed since is cited as it judged, and a layer the
+  config class gained later is not registered. `registerThresholds` takes the `name` to record.
+
 - **QA results load into qadb** (PIPE2D-1385) — `pfs.drp.qa.qadb` copies the tables `imageQualityQa` and
   `dmLineResiduals` write to the Butler (`iqQaMetrics`, `iqQaSpeciesMetrics`, `dmLineResidualSummary`,
   `dmLineResidualMetrics`) into qadb's `image_quality_qa`, `image_quality_qa_species`, `dm_line_residual_qa` and
@@ -20,8 +27,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   deciding task and metric, the mode and whether it is provisional. Every write is `INSERT ... ON CONFLICT DO
   UPDATE`, and a long table's rows of each loaded image are deleted before its reload, in the same transaction, so a
   collection can be loaded again after a re-judgement; a version a later load does not know keeps the one recorded.
-  Thresholds are registered per RUN, from the config pipetask stored there, and cited only on the images the task
-  judged; a file this drp_qa no longer ships leaves the id null (PIPE2D-1976 records the hash at judgement time).
+  Thresholds are cited only on the images the task judged, as each image records them (below); a table that records
+  none falls back on its RUN's stored config and the files this drp_qa ships under those names.
   `loadCollection` is the one entry point, for
   qaActor after a visit's pipetask (`loadVisit`, INSTRM-3040), comparison mode and backfill;
   `bin.src/loadQadb.py` runs it, with `--dry-run` writing parquet instead. `readMetrics` gains `withRun`, the

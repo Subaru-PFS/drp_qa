@@ -752,9 +752,13 @@ and the backfill of whole collections (`bin.src/loadQadb.py`).
   that wrote it (the RUN's `packages` dataset) and the pipeline that reduced the images it judged (`datamodel`,
   `obs_pfs` and `drp_stella`, from the judged calexps' `pfsArm` headers as comparison mode reads them; null when the
   RUN judged reductions of more than one pipeline, or none is recorded).
-- **Thresholds.** The thresholds files the tasks' stored configs name (`thresholdsFile`, then
-  `extraThresholdsFiles`) are registered per RUN in `qa_thresholds`, identified by content (sha256), with their
-  entries in `qa_threshold_entry`; `qa_gate` cites the first layer. Entries are stored as the file writes them: a
+- **Thresholds.** Each task records, on every image's row, the thresholds files it judged with (`thresholdsFile`,
+  then `extraThresholdsFiles`) and the sha256 of each as it was then (`thresholdsFiles`, `thresholdsSha256`;
+  PIPE2D-1976). The loader registers them in `qa_thresholds`, identified by content, with their entries in
+  `qa_threshold_entry`, and `qa_gate` cites the first layer: the row qadb already has with that sha256, else a file
+  this drp_qa ships with that content (under any name; it is registered under the name judged with), else null,
+  logged. A table written before PIPE2D-1976 records none, and its RUN's stored config is read instead, through
+  today's config class and with today's files under those names. Entries are stored as the file writes them: a
   population column an entry does not name is null, and for a column with a default (`gate.DEFAULT_POPULATION`:
   `illumination`, default `full`) null means that default, so a query joining entries to images must read a null
   `illumination` as `full`.

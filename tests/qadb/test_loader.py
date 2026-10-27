@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
+from pfs.drp.qa.metrics.gate import sha256Of, thresholdsPath, thresholdsRecord
 from pfs.drp.qa.qadb.loader import (
     MODES,
     SPECS,
@@ -18,7 +19,7 @@ from pfs.drp.qa.qadb.loader import (
     thresholdsFilesOf,
 )
 from pfs.drp.qa.qadb.tables import GATE_ORDER, worstStatus
-from pfs.drp.qa.qadb.writer import UNKNOWN_VERSION
+from pfs.drp.qa.qadb.writer import UNKNOWN_VERSION, registerThresholds
 
 COLLECTION = "u/test/qa"
 RUN = "u/test/qa/20261026T000000Z"
@@ -46,6 +47,15 @@ def butler(StubButler, tables, configs):
     return StubButler(
         tables, datasets={"packages": {"drp_qa": "w.2026.44", "drp_stella": "w.2026.41"}, **configs}
     )
+
+
+def recorded(tables, iq=("iqQaThresholds-run25.yaml",), dm=("dmLineResidualThresholds-run25.yaml",)):
+    """Return the tables with the thresholds files each task records judging with, as the tasks write them."""
+    return {
+        **tables,
+        "iqQaMetrics": tables["iqQaMetrics"].assign(**thresholdsRecord(list(iq))),
+        "dmLineResidualSummary": tables["dmLineResidualSummary"].assign(**thresholdsRecord(list(dm))),
+    }
 
 
 def load(butler, qadb, **kwargs):
@@ -424,3 +434,114 @@ class TestLoadCollection:
         ).iloc[0]
         assert pd.isna(row["pipe2d_version"])
         assert any("no single reduction pipeline" in m for m in messages)
+
+
+class TestRecordedThresholds:
+    """The gate cites the files each image records judging with, by content (PIPE2D-1976)."""
+
+    #: Today's imageQualityQa config: a layer added after the tables below were judged.
+    TODAY = SimpleNamespace(
+        thresholdsFile="iqQaThresholds-run25.yaml", extraThresholdsFiles=["iqQaThresholds-iis-run30.yaml"]
+    )
+
+    def gate(self, qadb):
+        return qadb.query_dataframe(
+            "SELECT pfs_visit_id, camera_name, iq_thresholds_id, dm_thresholds_id FROM qa_gate"
+            " ORDER BY pfs_visit_id, camera_name"
+        )
+
+    def idOf(self, qadb, name):
+        return qadb.query_scalar(
+            "SELECT thresholds_id FROM qa_thresholds WHERE name = :n", params={"n": name}
+        )
+
+    def testRecordedFilesNotTheConfig(self, StubButler, SqliteQaDB, tables, configs, qadb):
+        """A layer the RUN's config gains from today's config class is not registered."""
+        datasets = {**configs, "imageQualityQa_config": self.TODAY}
+        load(StubButler(recorded(tables), datasets=datasets), qadb)
+        names = set(qadb.query_scalars("SELECT name FROM qa_thresholds"))
+        assert names == {"iqQaThresholds-run25.yaml", "dmLineResidualThresholds-run25.yaml"}
+        gate = self.gate(qadb)
+        assert gate["iq_thresholds_id"].tolist() == [self.idOf(qadb, "iqQaThresholds-run25.yaml")] * 4
+        assert (
+            gate["dm_thresholds_id"].tolist() == [self.idOf(qadb, "dmLineResidualThresholds-run25.yaml")] * 4
+        )
+        # Negative control: the same tables recording nothing are read through the config, extra layer and all.
+        legacy = SqliteQaDB()
+        load(StubButler(tables, datasets=datasets), legacy)
+        assert "iqQaThresholds-iis-run30.yaml" in set(legacy.query_scalars("SELECT name FROM qa_thresholds"))
+
+    def testEveryLayerIsRegisteredAndTheFirstCited(self, StubButler, tables, configs, qadb):
+        iq = ("iqQaThresholds-run25.yaml", "iqQaThresholds-iis-run30.yaml")
+        load(StubButler(recorded(tables, iq=iq), datasets=configs), qadb)
+        assert qadb.count("qa_thresholds") == 3
+        assert set(self.gate(qadb)["iq_thresholds_id"]) == {self.idOf(qadb, iq[0])}
+        iis = self.idOf(qadb, iq[1])
+        assert qadb.count("qa_threshold_entry", f"thresholds_id = {iis}") > 0
+
+    def testChangedFileIsCitedByTheContentThatJudged(self, StubButler, tables, configs, qadb, tmp_path):
+        """A file edited since judgement is cited as qadb registered it then, not as it is now."""
+        name = "iqQaThresholds-run25.yaml"
+        then = tmp_path / name
+        then.write_bytes(thresholdsPath(name).read_bytes() + b"\n# as it was\n")
+        judgedWith = registerThresholds(qadb, then, NOW)  # an earlier load, before the file changed
+        iq = recorded(tables)["iqQaMetrics"].assign(thresholdsFiles=name, thresholdsSha256=sha256Of(then))
+        load(StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs), qadb)
+        assert set(self.gate(qadb)["iq_thresholds_id"]) == {judgedWith}
+        # Negative control: today's file under that name was not registered, so not cited.
+        shipped = sha256Of(thresholdsPath(name))
+        assert (
+            qadb.query_scalar("SELECT count(*) FROM qa_thresholds WHERE sha256 = :s", params={"s": shipped})
+            == 0
+        )
+
+    def testRenamedFileIsFoundByContent(self, StubButler, tables, configs, qadb):
+        """A file shipped under a new name is registered under the name it judged with."""
+        shipped = sha256Of(thresholdsPath("iqQaThresholds-run25.yaml"))
+        iq = recorded(tables)["iqQaMetrics"].assign(
+            thresholdsFiles="iqQaThresholds-old.yaml", thresholdsSha256=shipped
+        )
+        load(StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs), qadb)
+        row = qadb.query_dataframe(
+            "SELECT * FROM qa_thresholds WHERE sha256 = :s", params={"s": shipped}
+        ).iloc[0]
+        assert row["name"] == "iqQaThresholds-old.yaml"
+        assert set(self.gate(qadb)["iq_thresholds_id"]) == {row["thresholds_id"]}
+        assert qadb.count("qa_threshold_entry", f"thresholds_id = {row['thresholds_id']}") > 0
+
+    def testUnknownContentIsNullAndLogged(self, StubButler, tables, configs, qadb):
+        iq = recorded(tables)["iqQaMetrics"].assign(thresholdsSha256="f" * 64)
+        messages = []
+        loadCollection(
+            StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs),
+            qadb,
+            COLLECTION,
+            visits=VISITS,
+            pipelineVersions=False,
+            log=messages.append,
+            now=lambda: NOW,
+        )
+        gate = self.gate(qadb)
+        assert gate["iq_thresholds_id"].isna().all()
+        assert gate["dm_thresholds_id"].notna().all()
+        assert sum("iqQaThresholds-run25.yaml" in m and "neither in qadb" in m for m in messages) == 1
+
+    def testNoFileRecordedIsNull(self, StubButler, tables, configs, qadb):
+        """Judged by the config's fields alone: no thresholds, though the config names a file."""
+        load(StubButler(recorded(tables, iq=()), datasets=configs), qadb)
+        assert self.gate(qadb)["iq_thresholds_id"].isna().all()
+        assert set(qadb.query_scalars("SELECT name FROM qa_thresholds")) == {
+            "dmLineResidualThresholds-run25.yaml"
+        }
+
+    def testPerImage(self, StubButler, tables, configs, qadb):
+        """Images of one RUN that judged with different files cite their own."""
+        iq = recorded(tables)["iqQaMetrics"]
+        later = iq["visit"] == 133040
+        iq.loc[later, list(thresholdsRecord([]))] = list(
+            thresholdsRecord(["iqQaThresholds-iis-run30.yaml"]).values()
+        )
+        load(StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs), qadb)
+        gate = self.gate(qadb).set_index("pfs_visit_id")["iq_thresholds_id"]
+        assert set(gate[133025]) == {self.idOf(qadb, "iqQaThresholds-run25.yaml")}
+        assert set(gate[133040]) == {self.idOf(qadb, "iqQaThresholds-iis-run30.yaml")}

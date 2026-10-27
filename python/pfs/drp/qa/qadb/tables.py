@@ -445,7 +445,9 @@ def gateRows(
         The per-image table of each task in `TASK_TABLES`, by task:
         `IMAGE_KEYS`, ``qaStatus``, ``qaDecidedBy``, ``qaReason``, and
         ``qaProvisional`` where known (``run`` when ``processingId`` is a
-        mapping). A task may be absent, or have no row for an image.
+        mapping), and ``thresholdsId``, the ``thresholds_id`` the image was
+        judged with, where known. A task may be absent, or have no row for an
+        image.
     processingId : `int` or mapping [`str`, `int`]
         As for `imageRows`.
     mode : `str`
@@ -453,7 +455,8 @@ def gateRows(
     decidedAt : `datetime.datetime`
         When the gate decided.
     thresholdsIds : mapping [`str`, `int`], optional
-        The ``thresholds_id`` each task judged with, by task.
+        The ``thresholds_id`` each task judged with, by task, for a task
+        whose table has no ``thresholdsId``.
 
     Returns
     -------
@@ -470,7 +473,9 @@ def gateRows(
     for task in tasks:
         table = verdicts[task]
         columns = [
-            c for c in ("qaStatus", "qaDecidedBy", "qaReason", "qaProvisional", "run") if c in table.columns
+            c
+            for c in ("qaStatus", "qaDecidedBy", "qaReason", "qaProvisional", "thresholdsId", "run")
+            if c in table.columns
         ]
         part = table[keys + columns].rename(columns={c: f"{c}_{task}" for c in columns})
         part[f"present_{task}"] = True
@@ -517,6 +522,18 @@ def gateRows(
         flags = [_scalar(column(task, "qaProvisional")[index], "bool") for task in tasks]
         flags = [flag for flag in flags if flag is not None]
         provisional.append(any(flags) if flags else None)
+
+    def thresholdsId(task: str) -> list[int | None]:
+        """Return the thresholds a task judged each image with; a task's apply only to the images it judged."""
+        if task not in present:
+            return [None] * len(merged)
+        ids = (
+            [_scalar(value, "int") for value in column(task, "thresholdsId")]
+            if f"thresholdsId_{task}" in merged.columns
+            else [thresholdsIds.get(task)] * len(merged)
+        )
+        return [found if judged else None for found, judged in zip(ids, present[task], strict=True)]
+
     return pd.DataFrame(
         {
             "processing_id": _processingIds(merged, processingId),
@@ -530,19 +547,8 @@ def gateRows(
             "qa_reason": reasons,
             "provisional": provisional,
             "mode": [mode] * len(merged),
-            # A task's thresholds apply only to the images it judged.
-            "iq_thresholds_id": [
-                thresholdsIds.get("imageQualityQa")
-                if "imageQualityQa" in present and present["imageQualityQa"][i]
-                else None
-                for i in merged.index
-            ],
-            "dm_thresholds_id": [
-                thresholdsIds.get("dmLineResiduals")
-                if "dmLineResiduals" in present and present["dmLineResiduals"][i]
-                else None
-                for i in merged.index
-            ],
+            "iq_thresholds_id": thresholdsId("imageQualityQa"),
+            "dm_thresholds_id": thresholdsId("dmLineResiduals"),
             "decided_at": [decidedAt] * len(merged),
         },
         columns=list(QA_GATE),
