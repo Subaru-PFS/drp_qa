@@ -23,6 +23,19 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `bin.src/loadQadb.py` runs it, with `--dry-run` writing parquet instead. `readMetrics` gains `withRun`, the
   Butler RUN of each row. `tests/qadb/` runs the statements on SQLite (and on PostgreSQL with `PFS_QADB_TEST_DSN`).
 
+- **`readAgcData` reads `camera_enabled`** (INSTRM-3057) — `agc_match.camera_enabled`, a nullable boolean: False for a
+  spot from a camera that ics_agActor left out of its fit (INSTRM-2919), NA for rows written before the column.
+  `selectEnabledCameras` selects the rest, taking NA (or no column) as enabled, and `selectFittedMatches` the valid
+  matches among them. The fits that combine the cameras use only those, as the guider did: the boresight fit of
+  `fitGuiderModel`, the exposure terms of `fitGlobalModel`, `guideErrorsByExposure`, the rates of `fitDriftRate` and
+  the exposure focus errors of `estimateFocusErrors`, as do the visit means of
+  `estimateGuideErrors(recenterPerVisit=True)`. Per-camera results keep them, with a `camera_enabled` column. Every
+  guider plot draws a disabled camera's points as crosses, names it "AGn (disabled)" in labels, legends and titles,
+  greys a panel of its own and strikes it out in the camera cartoon; the averages the plots take over the cameras
+  (each exposure's guide error and pointing mean, the mean at the boresight, the exposures' focus errors, the FWHM
+  medians, `plotFocusByAG`'s reference and zero point) leave it out, and the title says so.
+  `docs/guider-plots.ipynb` has a sample. Needs the opdb migration `f3a8d61c2b57` (spt_operational_database) on the
+  database read.
 - **Known-bad coverage** (PIPE2D-1934) — `pfs.drp.qa.metrics.coverage.knownBadCoverage` reports, for each
   known-bad validation entry, whether every image it covers with its metric measured is judged and reaches its
   verdict under the thresholds the gate uses, per image (a `dmLineResiduals` table's rows per species count as one

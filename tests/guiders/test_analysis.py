@@ -29,6 +29,8 @@ from pfs.drp.qa.guiders.analysis import (
     fitTransform,
     guideErrorsByExposure,
     momentDifferenceToPiston,
+    selectEnabledCameras,
+    selectFittedMatches,
     selectGoodDetections,
     selectIsolatedGaiaStars,
     selectStars,
@@ -203,6 +205,16 @@ def testSelectFlags():
     np.testing.assert_array_equal(selectGoodDetections(flags), [True, True, False])
     np.testing.assert_array_equal(selectIsolatedGaiaStars(flags), [True, False, False])
     np.testing.assert_array_equal(selectValidMatches(flags), [True, False, False])
+
+
+def testSelectEnabledCameras():
+    """A disabled camera's spots are dropped; rows from before the column count as enabled."""
+    agcData = pd.DataFrame({"camera_enabled": pd.array([True, False, pd.NA], dtype="boolean")})
+    enabled = selectEnabledCameras(agcData)
+    np.testing.assert_array_equal(enabled, [True, False, True])
+    assert enabled.dtype == bool
+    # Negative control: a plain cast treats NA (rows before INSTRM-3057) as disabled.
+    assert not np.array_equal(agcData.camera_enabled.fillna(False).to_numpy(dtype=bool), enabled)
 
 
 # Boresight and per-camera transforms
@@ -925,3 +937,139 @@ def testAverageByFocusPosition():
     with np.errstate(all="ignore"), pytest.warns(RuntimeWarning):
         medians = [np.median(values[focusPosition == fp]) for fp in rounded]
     assert np.isnan(medians).any()
+
+
+# Disabled cameras (INSTRM-3057)
+
+
+def disableCamera(agcData, cid=2, shift_mm=0.1):
+    """Return a copy of AG data with camera ``cid`` disabled and its centers moved."""
+    agcData = agcData.copy()
+    disabled = (agcData.agc_camera_id == cid).to_numpy()
+    agcData["camera_enabled"] = pd.array(~disabled, dtype="boolean")
+    agcData.loc[disabled, "agc_center_x_mm"] += shift_mm
+    return agcData, disabled
+
+
+def testSelectFittedMatches():
+    """Valid matches on enabled cameras; NA (rows before INSTRM-3057) counts as enabled."""
+    agcData = pd.DataFrame(
+        {
+            "agc_match_flags": [1, 0, 1, 1],
+            "camera_enabled": pd.array([True, True, False, pd.NA], dtype="boolean"),
+        }
+    )
+    np.testing.assert_array_equal(selectFittedMatches(agcData), [True, False, False, True])
+    # Negative control: valid matches alone keep the disabled camera's.
+    np.testing.assert_array_equal(selectValidMatches(agcData), [True, False, True, True])
+
+
+def testGuideErrorsByExposureDisabledCamera(makeAgcData):
+    agcData, disabled = disableCamera(makeAgcData(nVisit=1).reset_index(drop=True))
+
+    guideErrors = guideErrorsByExposure(agcData)
+
+    pd.testing.assert_series_equal(guideErrors, guideErrorsByExposure(agcData[~disabled]))
+    # Negative control: counted as enabled, the moved camera changes the guide errors.
+    wrong = guideErrorsByExposure(agcData.assign(camera_enabled=True))
+    assert not np.allclose(wrong, guideErrors, atol=1)
+
+
+def testFitGuiderModelDisabledCamera(makeAgcData):
+    """The boresight is fitted without a disabled camera, which still gets its own transform."""
+    agcData, disabled = disableCamera(makeAgcData(nVisit=1).reset_index(drop=True))
+
+    fit = fitGuiderModel(agcData, fitConfig())
+
+    expected = fitGuiderModel(agcData[~disabled], fitConfig())
+    np.testing.assert_allclose(fit.agcData.guide_error_um[~disabled], expected.agcData.guide_error_um)
+    assert 2 in fit.cameraTransforms
+    byCamera = fit.guideErrorByCamera.groupby("agc_camera_id").camera_enabled.all()
+    assert byCamera.to_dict() == {cid: cid != 2 for cid in range(6)}
+    # Negative control: counted as enabled, the moved camera drags the boresight fit.
+    wrong = fitGuiderModel(agcData.assign(camera_enabled=True), fitConfig())
+    assert not np.allclose(wrong.agcData.guide_error_um, fit.agcData.guide_error_um, atol=1)
+
+
+def testFitGlobalModelDisabledCamera(makeAgcData, rng):
+    """The exposure terms are fitted without a disabled camera; the camera terms with it."""
+    agcData, _ = makeZenithData(makeAgcData, rng, np.zeros((6, 2)))
+    agcData, disabled = disableCamera(agcData)
+
+    fit = fitGlobalModel(agcData, fitPfiRotation=False)
+
+    expected = fitGlobalModel(agcData[~disabled], fitPfiRotation=False)
+    pd.testing.assert_frame_equal(fit.exposures, expected.exposures)
+    assert 2 in fitGlobalModel(agcData, fitPfiRotation=False, fitAgcOffsets=True).cameras.index
+    # Negative control: counted as enabled, the moved camera shifts every exposure's terms.
+    wrong = fitGlobalModel(agcData.assign(camera_enabled=True), fitPfiRotation=False)
+    assert not np.allclose(wrong.exposures.dz_um, fit.exposures.dz_um, atol=1)
+
+
+@pytest.mark.parametrize("byCamera", [True, False])
+def testFitDriftRateDisabledCamera(makeAgcData, rng, byCamera):
+    agcData = makeDriftData(makeAgcData, rng, (1.0, 0.0))
+    agcData, disabled = disableCamera(agcData, shift_mm=0.0)
+    time_min = (agcData.taken_at - agcData.taken_at.min()).dt.total_seconds() / 60
+    agcData.loc[disabled, "agc_center_x_mm"] += 1e-3 * 50 * time_min[disabled]  # 50 microns/min more
+
+    fit = fitDriftRate(agcData, radialTangential=False, robust=False, byCamera=byCamera)
+
+    assert fit.rates.x_rate_um_per_min == pytest.approx(1.0, abs=0.05)
+    if byCamera:
+        assert not fit.offsets[fit.offsets.agc_camera_id == 2].camera_enabled.any()
+        assert fit.offsets[fit.offsets.agc_camera_id != 2].camera_enabled.all()
+    else:
+        assert fit.offsets.camera_enabled.all()
+    # Negative control: counted as enabled, the disabled camera pulls the rate up.
+    wrong = fitDriftRate(agcData.assign(camera_enabled=True), radialTangential=False, robust=False)
+    assert wrong.rates.x_rate_um_per_min > 2
+
+    with pytest.raises(ValueError, match="No AG exposures on enabled cameras"):
+        fitDriftRate(agcData.assign(camera_enabled=False), byCamera=byCamera)
+
+
+def testEstimateFocusErrorsDisabledCamera():
+    sizes = {
+        (1, 0, True): 2.1,
+        (1, 0, False): 2.0,
+        (1, 1, True): 2.0,
+        (1, 1, False): 2.2,
+        (1, 2, True): 2.4,
+        (1, 2, False): 2.0,
+    }
+    agcData = makeFocusData(sizes)
+    agcData["camera_enabled"] = pd.array(agcData.agc_camera_id != 2, dtype="boolean")
+
+    byCamera = estimateFocusErrors(agcData)
+    assert byCamera.set_index("agc_camera_id").camera_enabled.to_dict() == {0: True, 1: True, 2: False}
+
+    byExposure = estimateFocusErrors(agcData, byCamera=False)
+    np.testing.assert_allclose(byExposure.rms_left_pix, 2.05)  # the median of AG1 and AG2's
+    np.testing.assert_allclose(byExposure.rms_right_pix, 2.1)
+    # Negative control: with the disabled camera, the left half's median is AG1's.
+    wrong = estimateFocusErrors(agcData.assign(camera_enabled=True), byCamera=False)
+    assert wrong.rms_left_pix.iloc[0] == pytest.approx(2.1)
+
+
+def testEstimateGuideErrorsRecenterDisabledCamera(makeAgcData):
+    """With recenterPerVisit, each visit's mean over the enabled cameras is subtracted."""
+    agcData, _ = disableCamera(makeAgcData().reset_index(drop=True))
+
+    guideErrors = estimateGuideErrors(agcData, recenterPerVisit=True)
+
+    enabled = guideErrors[guideErrors.camera_enabled]
+    np.testing.assert_allclose(enabled.groupby("pfs_visit_id").dx_um.mean(), 0, atol=1e-9)
+    # Negative control: the mean over every camera, the moved one included, isn't 0.
+    assert not np.allclose(guideErrors.groupby("pfs_visit_id").dx_um.mean(), 0, atol=1)
+
+
+def testEstimateGuideErrorsDisabledCamera(makeAgcData):
+    agcData, _ = disableCamera(makeAgcData(nVisit=1).reset_index(drop=True))
+
+    guideErrors = estimateGuideErrors(agcData)
+
+    assert set(guideErrors.agc_camera_id) == set(range(6))  # per camera, so kept
+    np.testing.assert_array_equal(guideErrors.camera_enabled, guideErrors.agc_camera_id != 2)
+    # Negative control: without the column, every camera counts as enabled.
+    assert estimateGuideErrors(agcData.drop(columns="camera_enabled")).camera_enabled.all()

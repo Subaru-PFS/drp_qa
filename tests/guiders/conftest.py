@@ -108,6 +108,7 @@ def makeAgcData(
                     "agc_center_x_mm": x0 + cc * xn - ss * yn + rng.normal(0, NOISE),
                     "agc_center_y_mm": y0 + ss * xn + cc * yn + rng.normal(0, NOISE),
                     "agc_match_flags": 1,
+                    "camera_enabled": True,
                     "agc_data_flags": int(rng.uniform() < 0.5),
                     "shutter_open": shutter,
                     "guide_delta_insrot": rng.normal(0, 3),
