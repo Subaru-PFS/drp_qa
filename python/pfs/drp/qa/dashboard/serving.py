@@ -34,7 +34,14 @@ from pfs.drp.qa.dashboard.schema import (
     TIER1_COLUMNS,
     VERDICT,
 )
-from pfs.drp.qa.metrics.gate import ThresholdsLike, configThresholds, judge, loadThresholds, thresholdsPath
+from pfs.drp.qa.metrics.gate import (
+    ThresholdsLike,
+    configThresholds,
+    judge,
+    loadThresholds,
+    thresholdsNames,
+    thresholdsPath,
+)
 from pfs.drp.qa.metrics.lineResiduals import residualThresholds
 
 __all__ = [
@@ -100,7 +107,9 @@ def inferSequences(images: pd.DataFrame, visitTimes: pd.DataFrame | None = None)
     visits = images.groupby("visit", sort=True)["seqName"].first().reset_index()
     newSequence = (visits["seqName"] != visits["seqName"].shift()) | (visits["visit"].diff() > _SEQUENCE_GAP)
     # Negative, so an inferred key never collides with an iic_sequence_id.
-    visits["sequenceKey"] = -newSequence.cumsum().astype("int64")
+    # As plain booleans: a pyarrow-backed seqName compares to bool[pyarrow], which has no cumsum, and the
+    # first visit, against a missing one, to NA: it starts a sequence.
+    visits["sequenceKey"] = -np.cumsum(newSequence.to_numpy(dtype=bool, na_value=True)).astype("int64")
     visits["sequenceSource"] = "inferred"
     visits["timeExpStart"] = pd.NaT
     if visitTimes is not None and not visitTimes.empty:
@@ -432,7 +441,8 @@ def taskThresholds() -> tuple[dict[str, list], dict[str, str]]:
             sources[key] = f"{name} defaults, read from source"
     layers = {}
     for key, config in configs.items():
-        files = [thresholdsPath(config.thresholdsFile)] if getattr(config, "thresholdsFile", "") else []
+        # The task's own layers: thresholdsFile, then extraThresholdsFiles (the IIS file, PIPE2D-1954).
+        files = [thresholdsPath(name) for name in thresholdsNames(config)]
         sources[key] += "; " + " + ".join([*(path.name for path in files), "config fields"])
         if key == "iqQaMetrics":
             layers[key] = [*files, configThresholds(config)]

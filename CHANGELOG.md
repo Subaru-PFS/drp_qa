@@ -138,6 +138,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   each value's distance past FAIL, the pipeline's PDFs, Tier 2 line residuals rasterised with Datashader).
   `bin.src/exportDashboardTier1.py` builds the file from `exportMetrics.py`'s tables; `bin.src/qaDashboard.py`
   serves it. The app needs panel, holoviews, datashader and duckdb, which are not dependencies of the package.
+  **Live from qadb**: `qaDashboard.py --collection qaActor/reductions` reads the images qaActor loads
+  (`qadbSource`, read-only, one query per table) into the same table and, every `--refresh` seconds, only those
+  loaded since (`live.QadbTier1Store`, one read for every session); the Live tab follows the latest visit, and it
+  waits for the first. An image judged in more than one RUN of the collection shows the latest.
 
 - **b2 and n4 quartz take their reference from Run29** (PIPE2D-1938) — reduced with one pipeline, Runs 25–30 agree
   with Run25 in `medFwhm` to within 3 % everywhere but b2 quartz (SM2's slit refocused on 2026-03-11) and n4 quartz

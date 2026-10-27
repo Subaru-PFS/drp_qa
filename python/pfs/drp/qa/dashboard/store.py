@@ -46,12 +46,22 @@ class Tier1Store:
         The file `pfs.drp.qa.dashboard.serving.writeTier1` wrote.
     """
 
+    #: Whether `refresh` can bring new visits (`pfs.drp.qa.dashboard.live.QadbTier1Store`).
+    live = False
+
+    #: Counts the changes `refresh` made.
+    version = 0
+
     def __init__(self, path: Path | str):
         self.path = Path(path)
         self.provenance = readProvenance(self.path)
         self._db = duckdb.connect()
         # A view, not a copy: every query reads the file.
         self._db.execute(f"CREATE VIEW t1 AS SELECT * FROM read_parquet('{self.path.as_posix()}')")
+
+    def refresh(self) -> bool:
+        """Read what changed since the last call; a file never changes. Return whether anything did."""
+        return False
 
     def _query(self, sql: str, **params) -> pd.DataFrame:
         frame = self._db.execute(sql, params).df()

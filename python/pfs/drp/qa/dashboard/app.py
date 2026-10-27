@@ -3,9 +3,10 @@
 Three tabs:
 
 Live
-    The latest visit (replayed from the table in visit order, standing in for
-    qaActor's feed): its arm × spectrograph verdict grid, the recent visits,
-    and the sequences they belong to.
+    The latest visit: its arm × spectrograph verdict grid, the recent visits,
+    and the sequences they belong to. Over qadb (`live.QadbTier1Store`) it
+    follows the visits as qaActor loads them; over a file it replays the
+    table in visit order.
 Run
     A visit range (or HST date range, when the table has visit times), the
     verdicts of every image in it, and trends of image quality, line counts,
@@ -15,7 +16,8 @@ Visit
     One visit: the verdicts and every metric behind them, the pipeline's PDFs,
     and the Tier 2 line residuals rasterised server-side with Datashader.
 
-Everything shown comes from the Tier 1 table (`store.Tier1Store`) or, for the
+Everything shown comes from the Tier 1 table (`store.Tier1Store`, or
+`live.QadbTier1Store` read from qadb) or, for the
 Visit tab's detail, from files fetched per visit into ``detailDir``; the app
 computes no metric and holds no threshold of its own.
 """
@@ -495,28 +497,59 @@ def thresholdDistance(checks: pd.DataFrame) -> hv.Overlay | hv.Text:
 
 
 class Dashboard(param.Parameterized):
-    """The app's state: the replay position and the visit in the Visit tab."""
+    """The app's state: the replay (or followed) position, the visit in the Visit tab, the data's version."""
 
     replayIndex = param.Integer(default=0, bounds=(0, None))
     selectedVisit = param.Integer(default=0)
+    dataVersion = param.Integer(default=0)
+    follow = param.Boolean(default=True, doc="Over qadb: keep the Live tab on the latest visit")
 
     def __init__(
-        self, store: Tier1Store, detailDir: Path | None = None, startVisit: int | None = None, **params
+        self,
+        store: Tier1Store,
+        detailDir: Path | None = None,
+        startVisit: int | None = None,
+        refreshSeconds: float = 30.0,
+        **params,
     ):
         self.store = store
         self.detailDir = Path(detailDir) if detailDir else None
-        self.visits = store.visits()
-        self.images = store.images()
-        self.notes = store.notes()
-        self.timeline = visitTimeline(self.visits)
-        self.visitIds = [int(v) for v in self.visits["visit"]]
+        self.refreshSeconds = refreshSeconds
+        self._reload()
         super().__init__(**params)
-        # The replay starts at startVisit (the first visit at or after it), else a little way in.
-        start = int(np.searchsorted(self.visitIds, startVisit)) if startVisit is not None else 20
-        self.replayIndex = min(start, len(self.visitIds) - 1)
-        self.selectedVisit = self.visitIds[self.replayIndex]
+        if store.live or not self.visitIds:
+            self.replayIndex = max(0, len(self.visitIds) - 1)
+        else:
+            # The replay starts at startVisit (the first visit at or after it), else a little way in.
+            start = int(np.searchsorted(self.visitIds, startVisit)) if startVisit is not None else 20
+            self.replayIndex = min(start, len(self.visitIds) - 1)
+        self.selectedVisit = self.visitIds[self.replayIndex] if self.visitIds else 0
         self.tabs = pn.Tabs(dynamic=True)
         self._timer = None
+
+    def _reload(self) -> None:
+        """Read the visits, images and notes from the store."""
+        self._seenVersion = self.store.version
+        self.visits = self.store.visits()
+        self.images = self.store.images()
+        self.notes = self.store.notes()
+        self.timeline = visitTimeline(self.visits)
+        self.visitIds = [int(v) for v in self.visits["visit"]]
+
+    def refresh(self) -> None:
+        """Take what the store has read since the last call; over qadb, move the Live tab to the latest visit."""
+        self.store.refresh()
+        if self.store.version == self._seenVersion:
+            return
+        first = not self.visitIds
+        self._reload()
+        if self.follow and self.visitIds:
+            self.replayIndex = len(self.visitIds) - 1
+            if first:
+                self.selectedVisit = self.visitIds[-1]
+        if first and self.visitIds:
+            self._buildTabs()
+        self.dataVersion += 1
 
     # ---- shared ----------------------------------------------------------------------------------
 
@@ -541,7 +574,12 @@ class Dashboard(param.Parameterized):
                 "from these thresholds: the collection was gated with an earlier thresholds file, and does "
                 "not record which. Stored verdicts are shown; per-metric verdicts are re-judged."
             )
-        if (self.visits["sequenceSource"] == "inferred").all():
+        if self.store.live:
+            warnings.append(
+                "Live from qadb: times are qadb's pfs_visit.issued_at (HST), and sequences are inferred from "
+                "runs of one seqName (qadb holds no IIC sequence)."
+            )
+        elif (self.visits["sequenceSource"] == "inferred").all():
             warnings.append(
                 "No opdb visit listing: sequences are inferred from runs of one seqName, and there are no "
                 "visit times (date picker disabled)."
@@ -655,11 +693,27 @@ class Dashboard(param.Parameterized):
 
         play.param.watch(togglePlay, "value")
         speed.param.watch(setSpeed, "value")
+        follow = pn.widgets.Toggle.from_param(self.param.follow, name="Follow the latest visit", width=190)
 
-        @pn.depends(self.param.replayIndex)
-        def position(_):
+        def onFollow(event):
+            if event.new and self.visitIds:
+                self.replayIndex = len(self.visitIds) - 1
+
+        self.param.watch(onFollow, "follow")
+
+        @pn.depends(self.param.replayIndex, self.param.dataVersion)
+        def position(*_):
             visit = self.visitIds[self.replayIndex]
             when = self._when(visit)
+            if self.store.live:
+                updated = getattr(self.store, "updatedAt", None)
+                return pn.pane.HTML(
+                    f"<div style='padding-top:8px'>Visit <b>{self.replayIndex + 1}</b> of "
+                    f"{len(self.visitIds)}"
+                    + (f" · <b>{when}</b>" if when else "")
+                    + (f" · qadb read at {updated:%H:%M:%S} HST" if updated else "")
+                    + f" (every {self.refreshSeconds:g} s)</div>"
+                )
             return pn.pane.HTML(
                 f"<div style='padding-top:8px'>Replaying <b>{self.replayIndex + 1}</b> of "
                 f"{len(self.visitIds)} visits"
@@ -667,8 +721,8 @@ class Dashboard(param.Parameterized):
                 + " — standing in for qaActor's feed</div>"
             )
 
-        @pn.depends(self.param.replayIndex)
-        def latest(_):
+        @pn.depends(self.param.replayIndex, self.param.dataVersion)
+        def latest(*_):
             visit = self.visitIds[self.replayIndex]
             images = self._imagesOf(visit)
             problems = images[images["status"].isin(["WARN", "FAIL"])].assign(camera=_camera)
@@ -695,8 +749,8 @@ class Dashboard(param.Parameterized):
                 sizing_mode="stretch_width",
             )
 
-        @pn.depends(self.param.replayIndex)
-        def recent(_):
+        @pn.depends(self.param.replayIndex, self.param.dataVersion)
+        def recent(*_):
             visits = self.visitIds[max(0, self.replayIndex - 29) : self.replayIndex + 1]
             timeline = _renumber(self.timeline, visits)
             overlay, heatmap = statusHeatmap(self.images, timeline)
@@ -709,8 +763,8 @@ class Dashboard(param.Parameterized):
                 sizing_mode="stretch_width",
             )
 
-        @pn.depends(self.param.replayIndex)
-        def sequences(_):
+        @pn.depends(self.param.replayIndex, self.param.dataVersion)
+        def sequences(*_):
             seen = self.visits.iloc[: self.replayIndex + 1]
             keys = list(dict.fromkeys(seen["sequenceKey"][::-1]))[:5]
             cards = []
@@ -750,8 +804,11 @@ class Dashboard(param.Parameterized):
                 )
             return pn.Column(*cards, sizing_mode="stretch_width")
 
+        controls = (
+            (follow, backButton, nextButton) if self.store.live else (backButton, nextButton, play, speed)
+        )
         return pn.Column(
-            pn.Row(backButton, nextButton, play, speed, position),
+            pn.Row(*controls, position),
             pn.Row(
                 pn.Column(latest, recent, sizing_mode="stretch_width"),
                 pn.Column("### Sequence groups", sequences, width=430),
@@ -770,6 +827,15 @@ class Dashboard(param.Parameterized):
             step=1,
             sizing_mode="stretch_width",
         )
+
+        def grow(_):
+            # Keep the range's end on the latest visit if it was there.
+            end = visitRange.end
+            visitRange.end = self.visitIds[-1]
+            if visitRange.value[1] == end:
+                visitRange.value = (visitRange.value[0], self.visitIds[-1])
+
+        self.param.watch(grow, "dataVersion")
         hasTimes = self.visits["timeExpStart"].notna().any()
         dates = pn.widgets.DatetimeRangePicker(
             name="HST dates" + ("" if hasTimes else " (needs the opdb visit listing)"), disabled=not hasTimes
@@ -867,19 +933,22 @@ class Dashboard(param.Parameterized):
         }
 
     def visitTab(self) -> pn.viewable.Viewable:
-        labels = {
-            (
-                f"{visit} · {self._when(visit).removesuffix(' HST')}" if self._when(visit) else str(visit)
-            ): visit
-            for visit in self.visitIds
-        }
-        picker = pn.widgets.Select(name="Visit (HST)", options=labels, width=230)
+        def labels() -> dict[str, int]:
+            return {
+                (
+                    f"{visit} · {self._when(visit).removesuffix(' HST')}" if self._when(visit) else str(visit)
+                ): visit
+                for visit in self.visitIds
+            }
+
+        picker = pn.widgets.Select(name="Visit (HST)", options=labels(), width=230)
+        self.param.watch(lambda _: setattr(picker, "options", labels()), "dataVersion")
         cameraPicker = pn.widgets.Select(name="Camera", options=["all", *CAMERAS], value="all", width=120)
         picker.link(self, value="selectedVisit", bidirectional=True)
         picker.value = self.selectedVisit
 
-        @pn.depends(self.param.selectedVisit, cameraPicker)
-        def body(visit, camera):
+        @pn.depends(self.param.selectedVisit, cameraPicker, self.param.dataVersion)
+        def body(visit, camera, _version):
             images = self._imagesOf(visit).assign(camera=_camera)
             metrics = self.store.visitMetrics(visit).assign(camera=_camera)
             if camera != "all":
@@ -1057,10 +1126,20 @@ class Dashboard(param.Parameterized):
 
     # ---- layout ----------------------------------------------------------------------------------
 
+    def _buildTabs(self) -> None:
+        self.tabs[:] = [("Live", self.liveTab()), ("Run", self.runTab()), ("Visit", self.visitTab())]
+
     def view(self) -> pn.template.FastListTemplate:
-        self.tabs.extend([("Live", self.liveTab()), ("Run", self.runTab()), ("Visit", self.visitTab())])
+        if self.visitIds:
+            self._buildTabs()
+        else:
+            self.tabs.append(
+                ("Live", pn.pane.HTML("<i>No visit in qadb yet: waiting for qaActor to load the first.</i>"))
+            )
+        if self.store.live:
+            pn.state.add_periodic_callback(self.refresh, period=int(self.refreshSeconds * 1000))
         return pn.template.FastListTemplate(
-            title="PFS QA dashboard · prototype (PIPE2D-1924)",
+            title="PFS QA dashboard (PIPE2D-1924)",
             main=[self.provenanceBar(), self.tabs],
             accent="#3b6ea8",
             theme_toggle=True,
@@ -1069,12 +1148,18 @@ class Dashboard(param.Parameterized):
 
 
 def createApp(
-    tier1: Path | str, detailDir: Path | str | None = None, startVisit: int | None = None
+    tier1: Path | str | Tier1Store,
+    detailDir: Path | str | None = None,
+    startVisit: int | None = None,
+    refreshSeconds: float = 30.0,
 ) -> pn.template.FastListTemplate:
-    """Return the dashboard for one Tier 1 file; ``detailDir/<visit>/`` holds fetched detail files.
+    """Return the dashboard for a Tier 1 file or store; ``detailDir/<visit>/`` holds fetched detail files.
 
-    The Live replay starts at ``startVisit``, or the first visit after it.
+    Over a file the Live replay starts at ``startVisit``, or the first visit after it. A store that
+    is `~Tier1Store.live` (`live.QadbTier1Store`) is polled every ``refreshSeconds``, and one store
+    may serve every session.
     """
     hv.extension("bokeh")
     pn.extension("tabulator", sizing_mode="stretch_width")
-    return Dashboard(Tier1Store(tier1), detailDir, startVisit).view()
+    store = tier1 if isinstance(tier1, Tier1Store) else Tier1Store(tier1)
+    return Dashboard(store, detailDir, startVisit, refreshSeconds).view()
