@@ -8,6 +8,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ## [Unreleased]
 
+### Fixed
+
+- **`loadQadb.py` names a missing collection** (PIPE2D-1385) — `pfs.drp.qa.qadb.collectionExists` is checked before
+  anything is read, so a mistyped collection is one line, not daf_butler's traceback from the first query.
+
 ### Added
 
 - **QA results load into qadb** (PIPE2D-1385) — `pfs.drp.qa.qadb` copies the tables `imageQualityQa` and

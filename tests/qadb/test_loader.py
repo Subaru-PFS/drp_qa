@@ -10,6 +10,7 @@ import pytest
 from pfs.drp.qa.qadb.loader import (
     MODES,
     SPECS,
+    collectionExists,
     drpQaVersionOf,
     loadCollection,
     loadVisit,
@@ -73,6 +74,36 @@ def testHelpers(butler, StubButler):
     bare = StubButler({})
     assert thresholdsFilesOf(bare, RUN, "imageQualityQa") == []
     assert drpQaVersionOf(bare, RUN) == UNKNOWN_VERSION  # never the loader's own version
+
+
+class TestCollectionExists:
+    @staticmethod
+    def butlerWith(query):
+        return SimpleNamespace(collections=SimpleNamespace(query=query))
+
+    def testFound(self):
+        assert collectionExists(self.butlerWith(lambda name: [name]), "u/test/qa")
+
+    def testMissingByEmptyAnswer(self):
+        assert not collectionExists(self.butlerWith(lambda name: []), "u/test/qa")
+
+    def testMissingByError(self):
+        class MissingCollectionError(Exception):
+            pass
+
+        def query(name):
+            raise MissingCollectionError(name)
+
+        assert not collectionExists(self.butlerWith(query), "u/test/qa")
+
+    def testOtherErrorsPropagate(self):
+        """Negative control: a registry failure is not reported as a missing collection."""
+
+        def query(name):
+            raise RuntimeError("registry down")
+
+        with pytest.raises(RuntimeError, match="registry down"):
+            collectionExists(self.butlerWith(query), "u/test/qa")
 
 
 def testProgressGoesToTheLog(butler):

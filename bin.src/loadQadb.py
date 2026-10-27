@@ -26,7 +26,7 @@ Requires the LSST stack (``lsst.daf.butler``) and a qadb user that may write
 import argparse
 from collections.abc import Sequence
 
-from pfs.drp.qa.qadb.loader import MODES, loadCollection
+from pfs.drp.qa.qadb.loader import MODES, collectionExists, loadCollection
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -57,6 +57,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     from lsst.daf.butler import Butler
 
     butler = Butler(args.butler, writeable=False)
+    if not collectionExists(butler, args.collection):
+        raise SystemExit(f"No collection {args.collection!r} in {args.butler}")
     qadb = opdb = None
     if args.dry_run is None:
         from pfs.utils.database.qadb import QaDB

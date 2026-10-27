@@ -46,6 +46,7 @@ from pfs.drp.qa.utils.provenance import commonPipeline
 __all__ = [
     "MODES",
     "SPECS",
+    "collectionExists",
     "drpQaVersionOf",
     "loadCollection",
     "loadVisit",
@@ -60,6 +61,21 @@ MODES = ("realtime", "comparison", "backfill")
 SPECS: dict[str, TableSpec] = {
     spec.source: spec for spec in (IMAGE_QUALITY, IMAGE_QUALITY_SPECIES, LINE_RESIDUAL, LINE_RESIDUAL_METRIC)
 }
+
+
+def collectionExists(butler: Any, collection: str) -> bool:
+    """Say whether a Butler has a collection of this exact name.
+
+    A missing collection would otherwise surface deep inside the first
+    registry query as a long traceback.
+    """
+    try:
+        found = butler.collections.query(collection)
+    except Exception as error:  # daf_butler raises MissingCollectionError for an unknown exact name
+        if type(error).__name__ == "MissingCollectionError":
+            return False
+        raise
+    return collection in set(found)
 
 
 def readTables(
