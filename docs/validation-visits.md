@@ -202,6 +202,48 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 134338–134339 | 25 | scienceTrace | b, n; cameras b2, n4 | 2, 4 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
 | 135828–135829 | 25 | scienceTrace | b, n; cameras b2, n4 | 2, 4 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
 | 135849–135850 | 25 | scienceTrace | b; cameras b2 | 2 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
+| 148548 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 148549 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 148550 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 148686 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 148687 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 148688 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 148828 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 148829 | 30 | scienceArc | all; not n4 | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 148830 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 148971 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 148972 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 148973 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 149132 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 149133 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 149134 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 149320 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 149321 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 149322 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 149797 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 149798 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 149799 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 149940 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 149941 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 149942 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150079 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150080 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150081 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150226 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150227 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150228 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150284 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150285 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150286 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150471 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150472 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150473 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150621 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150622 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150623 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150719 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150720 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150721 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
 
 ### Known bad
 
@@ -250,15 +292,16 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 139971 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
 | 140005–140006 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
 | 140124–140138 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
-| 139971 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `nLines` (unchecked) | SM1 lamp didn't turn on. (Run27, 1 s arc) *Unchecked:* IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954). |
-| 140477 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `nLines` (unchecked) | No light on SM1. (Run27, 1 s arc) *Unchecked:* IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954). |
-| 140640 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `nLines` (unchecked) | No light on SM2. (Run27, 1 s arc) *Unchecked:* IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954). |
-| 140649 | 27 | scienceArc | b, r, n | 1, 2 | ImageQuality | FAIL | `nLines` (unchecked) | No light on SM1 or SM2. (Run27, 1 s arc) *Unchecked:* IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954). |
-| 140651 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `nLines` (unchecked) | No light on SM2. (Run27, 1 s arc) *Unchecked:* IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954). |
+| 139971 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `linesPerFiber` (unchecked) | SM1 lamp didn't turn on. (Run27, 1 s arc) *Unchecked:* IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954). |
+| 140477 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `linesPerFiber` (unchecked) | No light on SM1. (Run27, 1 s arc) *Unchecked:* IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954). |
+| 140640 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `linesPerFiber` (unchecked) | No light on SM2. (Run27, 1 s arc) *Unchecked:* IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954). |
+| 140649 | 27 | scienceArc | b, r, n | 1, 2 | ImageQuality | FAIL | `linesPerFiber` (unchecked) | No light on SM1 or SM2. (Run27, 1 s arc) *Unchecked:* IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954). |
+| 140651 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `linesPerFiber` (unchecked) | No light on SM2. (Run27, 1 s arc) *Unchecked:* IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954). |
 | 150115 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | M1 cover closed. |
 | 150116 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | M1 cover closed. |
 | 150641 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
 | 150642 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
+| 148829 | 30 | scienceArc | all; cameras n4 | all | ImageQuality (Kr) | WARN | `medDxCenter` | IIS Kr lamp header off on n4: reduced against the sky line list; lines 2 px from detectorMap_calib. |
 
 ### Unconfirmed
 

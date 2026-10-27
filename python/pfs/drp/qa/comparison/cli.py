@@ -404,10 +404,10 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     from lsst.daf.butler import Butler
 
     from pfs.drp.qa.comparison.butlerQueries import detectorHoldings
-    from pfs.drp.qa.comparison.findings import findings, judgeImages, taskPipeline, taskThresholds
+    from pfs.drp.qa.comparison.findings import findings, judgeImages, taskPipelines, taskThresholds
     from pfs.drp.qa.comparison.report import ReportInputs, buildReport, failedSummary, populations
     from pfs.drp.qa.comparison.residuals import residualFindings
-    from pfs.drp.qa.metrics.gate import pipelineMismatch
+    from pfs.drp.qa.metrics.gate import layerPipelineMismatch
     from pfs.drp.qa.metrics.readers import readMetrics, readReductionPipelines
     from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS
 
@@ -448,10 +448,12 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     metrics[list(PIPELINE_COLUMNS.values())] = versions.to_numpy(dtype=object)
     metrics.to_parquet(workDir / f"iqQaMetrics-{period.name}.parquet")
     config = butler.get("imageQualityQa_config", collections=[output])
-    mismatch = pipelineMismatch(metrics, taskPipeline(config))
+    judged = judgeImages(metrics, visits, taskThresholds(config))
+    # Provisional against the pipeline of the layer that judged each image: the Run25 and IIS
+    # thresholds files record different ones (PIPE2D-1954).
+    mismatch = layerPipelineMismatch(metrics, judged, taskPipelines(config))
     for column in mismatch.columns:
         metrics[column] = mismatch[column].to_numpy()
-    judged = judgeImages(metrics, visits, taskThresholds(config))
     from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 
     found = findings(metrics, judged, visits, frames["notes"], visitSet=loadValidationVisits())

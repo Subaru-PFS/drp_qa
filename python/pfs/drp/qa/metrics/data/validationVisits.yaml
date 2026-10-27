@@ -89,6 +89,12 @@ version: 1
 # against older ones and is suspect. Ranges are each run's calibration summary;
 # Run30's starts at 148039, its summary also repeating Run28 and Run29 sequences.
 #
+# Run30 is the reference for the IIS frames alone (PIPE2D-1954): its nightly
+# "ImageQuality" sequences (the IIS Ne and Kr arcs and halogen quartz through the 16
+# engineering fibers per spectrograph, 15 nights) are the first IIS series taken
+# every night; Run25 has none (its two IIS traces, 135903-135904, fall after its
+# period). Their thresholds carry ``illumination: iis`` and judge IIS frames only.
+#
 # Two detectors take their quartz reference from Run29 instead (PIPE2D-1938), whose
 # detectorMap set was used to build its calibrations: b2, whose slit was refocused on
 # 2026-03-11 (its quartz width stepped from 3.12 to 3.34 px and has stayed), and n4,
@@ -102,7 +108,7 @@ runs:
   28: [141254, 144311]
   29: [144587, 147830]
   30: [148039, 150896]
-referenceRuns: [25, 29]
+referenceRuns: [25, 29, 30]
 
 known_good:
   # Run25, 2025-11-10/11. A stable calibration sequence at fixed pointing
@@ -360,6 +366,191 @@ known_good:
   - {visitRange: [134338, 134339], sequenceType: scienceTrace, arms: [b, n], spectrographs: [2, 4], cameras: [b2, n4], seqType: "Trace", metrics: [robustRmsDeltaX, robustRmsDeltaY]}
   - {visitRange: [135828, 135829], sequenceType: scienceTrace, arms: [b, n], spectrographs: [2, 4], cameras: [b2, n4], seqType: "Trace", metrics: [robustRmsDeltaX, robustRmsDeltaY]}
   - {visitRange: [135849, 135850], sequenceType: scienceTrace, arms: [b], spectrographs: [2], cameras: [b2], seqType: "Trace", metrics: [robustRmsDeltaX, robustRmsDeltaY]}
+
+
+  # ---- Run30 IIS frames (PIPE2D-1954) -------------------------------------------
+  # The nightly "ImageQuality" sequences: an IIS Ne arc (30 s), an IIS Kr arc (80 s)
+  # and an IIS halogen quartz (20 s) through the 16 engineering fibers per
+  # spectrograph, every night from 2026-09-01 to 09-15. Reduced afresh on one
+  # pipeline (u/wtg/qa-iis/003b), the 15 nights agree per camera and lamp to about
+  # 1 % in medFwhm and 2 % in linesPerFiber on b and r; n is noisier on Ne, whose
+  # IIS lines are few and faint there. Known good for the IIS populations; 148829 n4
+  # and the night of 149593-149595 are left out (below). 148971-148973 were taken with
+  # the m arm in place of r, and 150471-150473 on a one-group design, which the
+  # engineering fibers don't see.
+  - visit: 148548
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 148549
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 148550
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
+  - visit: 148686
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 148687
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 148688
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
+  - visit: 148828
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 148829
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    excludeCameras: [n4]  # the IIS lamp header read off on n4 (known_bad)
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 148830
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
+  - visit: 148971
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 148972
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 148973
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
+  - visit: 149132
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 149133
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 149134
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
+  - visit: 149320
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 149321
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 149322
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
+  # 2026-09-08 (149593-149595) is left out: SM2 and SM4 sat +0.26 to +0.39 px from
+  # detectorMap_calib in x that night on every arm (medDxCenter; the other nights
+  # are within 0.1 px), and b2's quartz width was 3.5 % above its other nights
+  # (2.10 against 2.03 px). A night the spectrographs moved is not a reference.
+  - visit: 149797
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 149798
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 149799
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
+  - visit: 149940
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 149941
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 149942
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
+  - visit: 150079
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 150080
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 150081
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
+  - visit: 150226
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 150227
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 150228
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
+  - visit: 150284
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 150285
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 150286
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
+  - visit: 150471
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 150472
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 150473
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
+  - visit: 150621
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 150622
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 150623
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
+  - visit: 150719
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Ne)"
+    note: "Run30 nightly IIS Ne arc."
+  - visit: 150720
+    sequenceType: scienceArc
+    seqType: "ImageQuality (Kr)"
+    note: "Run30 nightly IIS Kr arc."
+  - visit: 150721
+    sequenceType: scienceTrace
+    seqType: "ImageQuality (Halogen)"
+    note: "Run30 nightly IIS quartz."
 
 known_bad:
   # Run25 b-arm arcs of the faint and crowded lamps: most of their lines are
@@ -756,57 +947,60 @@ known_bad:
 
   # Run27 nightly ImageQuality arcs where one spectrograph's lamp gave no light,
   # as noted in the run's calibration summary. That spectrograph's detectors have no lines; QA must not pass
-  # them. They are IIS frames, as Run30's nightly ImageQuality are: no GOOD
-  # science fiber is lit (nLitFibers 0 on every detector), so linesPerFiber is
-  # not measured (PIPE2D-1935), and nLines is not judged. The raw nLines does
-  # separate them (unlit r about 2.6k rows, lit 16-19k; b 9k against 14-16k;
-  # n 2.4k against 3.9-7.4k; PIPE2D-1934). Judging IIS frames on the engineering
-  # fibers is PIPE2D-1954.
+  # them. They are IIS frames, as Run30's nightly ImageQuality are: lit through
+  # the 16 engineering fibers per spectrograph, on which reduceExposure measures
+  # the lamp lines (about 160 per fiber on r, 560 on b, 130 on n) and the trace
+  # centroids, which follow the light (unlit spectrograph 13-98 trace rows, lit
+  # 5-17k; PIPE2D-1934). From PIPE2D-1954 linesPerFiber is taken on the
+  # engineering fibers (illumination: iis), and the unlit spectrograph measures
+  # about 0. Still unchecked: Run27 named these sequences "ImageQuality" without
+  # the lamp, so no linesPerFiber entry, keyed by arm and sequence name, matches
+  # them, and their stored metrics predate the IIS measurement.
   - visit: 139971
     sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1]
     seqType: "ImageQuality"
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "SM1 lamp didn't turn on. (Run27, 1 s arc)"
-    unchecked: "IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954)."
+    unchecked: "IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954)."
   - visit: 140477
     sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1]
     seqType: "ImageQuality"
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "No light on SM1. (Run27, 1 s arc)"
-    unchecked: "IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954)."
+    unchecked: "IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954)."
   - visit: 140640
     sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2]
     seqType: "ImageQuality"
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "No light on SM2. (Run27, 1 s arc)"
-    unchecked: "IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954)."
+    unchecked: "IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954)."
   - visit: 140649
     sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [1, 2]
     seqType: "ImageQuality"
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "No light on SM1 or SM2. (Run27, 1 s arc)"
-    unchecked: "IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954)."
+    unchecked: "IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954)."
   - visit: 140651
     sequenceType: scienceArc
     arms: [b, r, n]
     spectrographs: [2]
     seqType: "ImageQuality"
     expect: FAIL
-    metric: nLines
+    metric: linesPerFiber
     reason: "No light on SM2. (Run27, 1 s arc)"
-    unchecked: "IIS frame, no science fiber lit: linesPerFiber not measured, nLines not judged (PIPE2D-1954)."
+    unchecked: "IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954)."
 
   # ---- Run30 -------------------------------------------------------------
   # Frames taken with the light path obstructed. These are mis-taken frames
@@ -908,3 +1102,19 @@ known_bad:
   # (PIPE2D-1921), b sits -0.33 to -0.51 px in x, as b read with m does at the
   # zenith, and every arm within 0.2 px in y: any flexure is well under the 1 px
   # WARN, so the verdict does not hold and they were removed.
+
+  # ---- Run30 IIS frames (PIPE2D-1954) -------------------------------------------
+  # 148829 n4: this camera's raw header records the IIS Kr lamp as off (W_IISKRY
+  # false) while every other camera of the visit has it on, so readLineList took
+  # the frame for sky and fitted the sky line list to an IIS arc: medFwhm 14 % below
+  # the camera's other nights, medDxCenter 1.98 px, dxCenterRms 1.1 px
+  # (reports/PIPE2D-1954/checkHeaders.txt). The same header fault, on the quartz
+  # (148973 n4, 149134 n2 and n4, 149322 n2 and n4, 149799 n4), is harmless: a
+  # quartz reads no line list. imageQualityQa classifies them IIS from the pfsConfig.
+  - visit: 148829
+    sequenceType: scienceArc
+    cameras: [n4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: medDxCenter
+    reason: "IIS Kr lamp header off on n4: reduced against the sky line list; lines 2 px from detectorMap_calib."

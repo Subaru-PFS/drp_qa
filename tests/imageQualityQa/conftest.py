@@ -54,7 +54,7 @@ def _module(name: str, **attributes) -> ModuleType:
 
 
 class _Field:
-    """Stand-in for ``lsst.pex.config.Field`` and ``DictField``: a default."""
+    """Stand-in for ``lsst.pex.config.Field``, ``DictField`` and ``ListField``: a default."""
 
     def __init__(self, default=None, **kwargs):
         self.default = default
@@ -71,7 +71,9 @@ class _Config:
             for name, value in vars(klass).items():
                 if isinstance(value, _Field):
                     default = value.default
-                    setattr(self, name, dict(default) if isinstance(default, dict) else default)
+                    setattr(
+                        self, name, type(default)(default) if isinstance(default, (dict, list)) else default
+                    )
 
 
 class _Connections:
@@ -118,7 +120,7 @@ def _standIns() -> dict[str, ModuleType]:
             connectionTypes=connectionTypes,
         )
         afwImage = _module("lsst.afw.image", Exposure=object)
-        pexConfig = _module("lsst.pex.config", Field=_Field, DictField=_Field)
+        pexConfig = _module("lsst.pex.config", Field=_Field, DictField=_Field, ListField=_Field)
         modules |= {
             "lsst": _module(
                 "lsst",
@@ -329,6 +331,7 @@ def runTask(iqqa, monkeypatch):
         monkeypatch.setattr(iqqa, "computeImageQuality", lambda arcLines: arcLines.copy())
         config = iqqa.ImageQualityQaConfig()
         config.thresholdsFile = ""
+        config.extraThresholdsFiles = []
         task = iqqa.ImageQualityQaTask(config=config)
         if thresholds is not None:
             task.thresholds = thresholds
