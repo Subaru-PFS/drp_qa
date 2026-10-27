@@ -73,6 +73,12 @@ the pipeline/config glue to run them.
   update its section and rerun it (`jupyter nbconvert --to notebook --execute --inplace`).
   `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its replacement
   (needs the opdb; committed without outputs): keep it in step with renamed arguments.
+  The end-of-run report (INSTRM-2466) adds `queries.readAgRun` (aggregates over a period's AG
+  exposures), `runAnalysis` (stack-free: per-exposure camera states, dropouts, settled jitter,
+  flags), `runPlotting` (figures from an `AgRun`) and `runReport` (fetch to parquet, then the
+  Markdown report), driven by `bin.src/agRunReport.py` with comparison mode's runs; tested in
+  `tests/guiders/test_runAnalysis.py` and `test_runReport.py` on a synthetic run (`makeAgRunTables`). Its plots are not in `docs/guider-plots.ipynb`: a run
+  holds science visits, which can't be committed, so each run's `report.md` is their description.
 - **Plotting (`python/pfs/drp/qa/plotting/`)** — the QA plots: DataFrames in, figures
   out (`iqQa`, `comparison`, `thresholds`, and `palettes` for the shared
   palettes and `scatterplot_with_outliers`). It imports no Butler, stack or task module, so plots can
@@ -108,6 +114,7 @@ the pipeline/config glue to run them.
   - `plotIqQaTimeSeries.py` — cross-visit `iqQaMetrics` time series via `plotting/iqQa.py`
   - `fiberNormsQa.py` — entry point for `fiberNormsQa.main`
   - `qaComparison.py` — entry point for `pfs.drp.qa.comparison.cli.main` (comparison mode)
+  - `agRunReport.py` — entry point for `pfs.drp.qa.guiders.runReport.main` (end-of-run AG report)
   - `exportMetrics.py` — per-detector QA tables (`iqQaMetrics`, `dmLineResidualMetrics`, ...) from a
     collection to parquet, with progress, via `metrics.readers.exportMetrics`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),
