@@ -61,7 +61,7 @@ CREATE TABLE dm_line_residual_qa (
     pfs_visit_id INTEGER REFERENCES pfs_visit,
     camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1), camera_set TEXT, obs_type TEXT,
     fitted BOOLEAN, n_species INTEGER, n_species_measured INTEGER, qa_status TEXT, qa_decided_by TEXT,
-    qa_reason TEXT, recommended_action TEXT, calib_id TEXT, calib_run TEXT, calib_created TEXT,
+    qa_reason TEXT, recommended_action TEXT, calib_id TEXT, calib_run TEXT, calib_created TIMESTAMP,
     calib_first_visit INTEGER, calib_last_visit INTEGER,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
 CREATE TABLE dm_line_residual_qa_metric (
@@ -72,7 +72,7 @@ CREATE TABLE dm_line_residual_qa_metric (
         REFERENCES dm_line_residual_qa (processing_id, pfs_visit_id, camera_name) ON DELETE CASCADE);
 CREATE TABLE qa_thresholds (
     thresholds_id INTEGER PRIMARY KEY AUTOINCREMENT, sha256 VARCHAR(64) NOT NULL UNIQUE, name TEXT,
-    derived_on TEXT, collection TEXT, reference_runs TEXT, drp_qa_version TEXT, datamodel_version TEXT,
+    derived_on TIMESTAMP, collection TEXT, reference_runs TEXT, drp_qa_version TEXT, datamodel_version TEXT,
     obs_pfs_version TEXT, drp_stella_version TEXT, n_entries INTEGER, registered_at TIMESTAMP);
 CREATE TABLE qa_threshold_entry (
     thresholds_id INTEGER REFERENCES qa_thresholds ON DELETE CASCADE, metric TEXT, population TEXT, arm VARCHAR(1),

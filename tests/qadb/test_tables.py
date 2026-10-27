@@ -95,6 +95,20 @@ class TestImageRows:
         assert all(isinstance(v, bool) for v in rows["trace_only"])
         assert set(rows["qa_status"]) <= set(GATE_ORDER)
 
+    def testDatetime(self):
+        frame = pd.DataFrame(
+            {
+                "visit": [1, 2, 3],
+                "arm": ["b"] * 3,
+                "spectrograph": [1] * 3,
+                "calibCreated": ["2025-11-12", None, "n/a"],
+            }
+        )
+        rows = imageRows(frame, LINE_RESIDUAL, 1)
+        assert rows["calib_created"].tolist() == [datetime(2025, 11, 12), None, None]
+        # Negative control: the header's date is not kept as text.
+        assert not isinstance(rows.loc[0, "calib_created"], str)
+
     def testNanBecomesNull(self):
         frame = pd.DataFrame(
             {
@@ -130,6 +144,7 @@ class TestImageRows:
     def testSummary(self, fixtures):
         rows = imageRows(fixtures["dmLineResidualSummary"], LINE_RESIDUAL, 3)
         assert rows["calib_first_visit"].tolist() == [133025] * 4
+        assert all(isinstance(v, datetime) for v in rows["calib_created"])
         assert all(isinstance(v, bool) for v in rows["fitted"])
         assert (
             rows["recommended_action"]
@@ -145,6 +160,7 @@ class TestThresholdRows:
         assert list(header.columns) == list(QA_THRESHOLDS)
         assert header.loc[0, "thresholds_id"] == 5
         assert header.loc[0, "reference_runs"] == "25,29"
+        assert header.loc[0, "derived_on"] == datetime(2026, 10, 19)
         assert header.loc[0, "drp_stella_version"] == metadata["pipelineVersions"]["drp_stella"]
         assert header.loc[0, "n_entries"] == len(table) == len(entries)
         assert list(entries.columns) == list(QA_THRESHOLD_ENTRY)

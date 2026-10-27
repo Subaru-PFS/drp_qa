@@ -92,7 +92,8 @@ class TableSpec:
         The Butler dataset type.
     columns : mapping [`str`, `str`]
         The Butler columns copied, in order, with the type each is stored as:
-        ``int``, ``float``, ``bool`` or ``str``. The qadb column is
+        ``int``, ``float``, ``bool``, ``str`` or ``datetime`` (anything
+        `pandas.to_datetime` reads; null when it doesn't). The qadb column is
         `snakeCase` of the Butler column.
     extraKeys : `tuple` [`str`, ...], optional
         Butler columns that, with `KEYS`, identify a row of a long table;
@@ -183,7 +184,7 @@ LINE_RESIDUAL = TableSpec(
         "recommendedAction": "str",
         "calibId": "str",
         "calibRun": "str",
-        "calibCreated": "str",
+        "calibCreated": "datetime",
         "calibFirstVisit": "int",
         "calibLastVisit": "int",
     },
@@ -288,6 +289,9 @@ def _scalar(value: Any, dtype: str) -> Any:
         return float(value)
     if dtype == "bool":
         return bool(value)
+    if dtype == "datetime":
+        when = pd.to_datetime(value, errors="coerce")
+        return None if pd.isna(when) else when.to_pydatetime()
     return str(value)
 
 
@@ -384,7 +388,7 @@ def thresholdRows(
                 "thresholds_id": int(thresholdsId),
                 "sha256": sha256,
                 "name": name,
-                "derived_on": _scalar(metadata.get("derivedOn"), "str"),
+                "derived_on": _scalar(metadata.get("derivedOn"), "datetime"),
                 "collection": _scalar(metadata.get("collection"), "str"),
                 "reference_runs": ",".join(str(run) for run in runs) if runs else None,
                 "drp_qa_version": _scalar(metadata.get("drpQaVersion"), "str"),
