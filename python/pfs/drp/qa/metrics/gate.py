@@ -19,6 +19,13 @@ one means "any value". For each image and metric, the entry used is
 An entry with neither ``warn`` nor ``fail`` stops the search: the metric is
 deliberately not judged in that population.
 
+One population column has a default, `DEFAULT_POPULATION`: ``illumination``,
+``full`` for the science fibers and ``iis`` for the 16 engineering fibers lit
+by the IIS lamps (PIPE2D-1954). An entry that doesn't name it applies to
+``full`` images only, since every threshold derived before the column existed
+was from full-slit frames; an IIS image is judged only by an entry naming
+``illumination: iis``. An image without the column has the default.
+
 A missing (NaN) value, one with no thresholds, or one its `MetricSpec` marks
 as not measured (a FWHM read from ``fiberProfiles``) gets no verdict; an
 infinite one is judged, and fails a higher-is-worse metric. A value at a
@@ -44,12 +51,14 @@ from pfs.drp.qa.metrics.registry import specFor
 from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS, PIPELINE_PRODUCTS, knownVersion
 
 __all__ = [
+    "DEFAULT_POPULATION",
     "PROVISIONAL_COLUMNS",
     "STATUS_ORDER",
     "VERDICT_COLUMNS",
     "configThresholds",
     "gate",
     "judge",
+    "layerPipelineMismatch",
     "loadThresholds",
     "pipelineMismatch",
     "thresholdsPath",
@@ -85,6 +94,12 @@ PROVISIONAL_COLUMNS = ("qaProvisional", "qaPipeline")
 
 #: Columns identifying an image, copied to `judge`'s output when present.
 _ID_COLUMNS = ("visit", "arm", "spectrograph")
+
+#: Population columns with a default: an entry that doesn't name the column applies
+#: to images with the default value only, and an image without the column has it.
+#: ``illumination`` is ``imageQualityQa``'s: ``full`` (the science fibers, every
+#: threshold derived before PIPE2D-1954) or ``iis`` (the 16 engineering fibers).
+DEFAULT_POPULATION: dict[str, str] = {"illumination": "full"}
 
 #: Fallback flag-rate thresholds of ``imageQualityQa`` for an arm with no entry.
 _FLAG_RATE_FALLBACK = (15.0, 20.0)
@@ -293,7 +308,7 @@ def gate(
     metrics: pd.DataFrame,
     thresholds: ThresholdsLike | Sequence[ThresholdsLike],
     default: str = "PASS",
-    pipeline: Mapping[str, str] | None = None,
+    pipeline: Mapping[str, str] | Sequence[Mapping[str, str] | None] | None = None,
 ) -> pd.DataFrame:
     """Give each image a verdict, and the metric that decided it.
 
@@ -305,10 +320,12 @@ def gate(
         Threshold tables or files, highest priority first.
     default : `str`, optional
         The verdict for an image with no metric judged.
-    pipeline : mapping [`str`, `str`], optional
+    pipeline : mapping [`str`, `str`], or a sequence of them, optional
         The pipeline the thresholds were derived with, as the thresholds
-        file's ``pipelineVersions`` (empty when it records none). When given,
-        `PROVISIONAL_COLUMNS` are added from `pipelineMismatch`.
+        file's ``pipelineVersions`` (empty when it records none), or one per
+        table of ``thresholds`` (`None` for a table with no origin, such as
+        the config's). When given, `PROVISIONAL_COLUMNS` are added from
+        `pipelineMismatch` or `layerPipelineMismatch`.
 
     Returns
     -------
@@ -342,10 +359,61 @@ def gate(
     )
     if pipeline is not None:
         # By position: an index join would multiply rows that share a label.
-        mismatch = pipelineMismatch(metrics, pipeline)
+        if isinstance(pipeline, Mapping):
+            mismatch = pipelineMismatch(metrics, pipeline)
+        else:
+            mismatch = layerPipelineMismatch(metrics, judged, pipeline)
         for column in PROVISIONAL_COLUMNS:
             verdicts[column] = mismatch[column].to_numpy()
     return verdicts
+
+
+def layerPipelineMismatch(
+    metrics: pd.DataFrame, judged: pd.DataFrame, pipelines: Sequence[Mapping[str, str] | None]
+) -> pd.DataFrame:
+    """Say which images were reduced with another pipeline than the thresholds that judged them.
+
+    Thresholds files derived from different collections record different
+    pipelines (the Run25 file obs_pfs w.2026.40, the IIS file w.2026.43;
+    PIPE2D-1954), and each image is judged by some of the layers: it is
+    provisional when its reduction differs from the pipeline of any layer that
+    gave it a verdict. An image no layer judged is compared with the first
+    pipeline recorded, as `pipelineMismatch` would.
+
+    Parameters
+    ----------
+    metrics : `pandas.DataFrame`
+        One row per image, as for `pipelineMismatch`.
+    judged : `pandas.DataFrame`
+        `judge`'s table for ``metrics``: ``row`` is the image's position,
+        ``layer`` the table that judged it and ``status`` its verdict.
+    pipelines : sequence of mapping [`str`, `str`] or `None`
+        One per thresholds layer: its ``pipelineVersions``, or `None` for a
+        layer with no origin to check (the config's fields).
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        Indexed like ``metrics``, with `PROVISIONAL_COLUMNS`; the reasons of
+        every differing layer, joined by ``"; "``.
+    """
+    byLayer = {
+        layer: pipelineMismatch(metrics, pipeline)
+        for layer, pipeline in enumerate(pipelines)
+        if pipeline is not None
+    }
+    first = min(byLayer) if byLayer else None
+    verdicts = judged[judged["status"] != ""]
+    judgedLayers = verdicts.groupby("row")["layer"].agg(lambda layers: sorted(set(layers)))
+    reasons = []
+    for position in range(len(metrics)):
+        layers = [layer for layer in judgedLayers.get(position, []) if layer in byLayer]
+        if not layers and first is not None:
+            layers = [first]
+        found = [byLayer[layer]["qaPipeline"].iloc[position] for layer in layers]
+        reasons.append("; ".join(dict.fromkeys(reason for reason in found if reason)))
+    reason = pd.Series(reasons, index=metrics.index, dtype=object)
+    return pd.DataFrame({"qaProvisional": reason != "", "qaPipeline": reason}, index=metrics.index)
 
 
 def pipelineMismatch(metrics: pd.DataFrame, pipeline: Mapping[str, str]) -> pd.DataFrame:
@@ -453,6 +521,17 @@ def _choose(metrics: pd.DataFrame, tables: list[pd.DataFrame], name: str) -> lis
                     match[:, index] &= metrics[column].to_numpy(dtype=object) == wanted[index]
                 else:
                     match[:, index] = False
+        for column, default in DEFAULT_POPULATION.items():
+            # An entry that doesn't name the column is for the default population alone.
+            if column not in metrics.columns:
+                continue
+            values = metrics[column].to_numpy(dtype=object)
+            isDefault = np.array([_isNull(value) or value == default for value in values], dtype=bool)
+            if column in entries.columns:
+                unnamed = np.array([_isNull(value) for value in entries[column].to_numpy(dtype=object)])
+            else:
+                unnamed = np.ones(len(entries), dtype=bool)
+            match[:, unnamed] &= isDefault[:, None]
         score = np.where(match, specificity, -1)
         best = score.max(axis=1)
         ties = ((score == best[:, None]).sum(axis=1) > 1) & (best >= 0) & pending

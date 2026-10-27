@@ -269,7 +269,7 @@ def whyNotJudged(image: pd.Series) -> str:
     Returns
     -------
     `str`
-        E.g. ``no method for dotRoach``, ``IIS lamp: no FWHM``, ``FWHM from
+        E.g. ``no method for dotRoach``, ``IIS lamp: FWHM not measured (before PIPE2D-1954)``, ``FWHM from
         fiberProfiles; nLines not judged on daily``, ``FLUXSTD FWHM not
         measured``.
     """
@@ -281,8 +281,9 @@ def whyNotJudged(image: pd.Series) -> str:
         return f"no method for {image.get('sequence_type')}"
     if obsType == "twilight":
         return "twilight: not measured"
-    if "(IIS)" in str(image.get("lamps") or ""):
-        return "IIS lamp: no FWHM" + daily
+    if "(IIS)" in str(image.get("lamps") or "") and pd.isna(image.get("medFwhm")):
+        # Measured on the engineering fibers from PIPE2D-1954; before it, reported sparse.
+        return "IIS lamp: FWHM not measured (before PIPE2D-1954)" + daily
     if bool(image.get("traceOnly")):
         return "FWHM from fiberProfiles" + daily
     if obsType in ("science", "allsky") and pd.isna(image.get("medFwhm")):

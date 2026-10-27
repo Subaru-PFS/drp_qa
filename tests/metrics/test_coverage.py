@@ -61,12 +61,17 @@ def sources() -> list[CoverageSource]:
     iq = configDefaults("imageQualityQa.py", "ImageQualityQaConfig")
     dm = configDefaults("dmLineResiduals.py", "DmLineResidualsConfig")
     lines = pd.read_parquet(DATA / "dmDriftMetrics-validation.parquet")
-    return [
-        CoverageSource(
+    # Run30's nightly IIS frames (PIPE2D-1954) join the validation visits' metrics: the IIS
+    # thresholds file judges them, and one table answers for each metric.
+    imageQuality = pd.concat(
+        [
             pd.read_parquet(DATA / "iqQaMetrics-validation.parquet"),
-            taskThresholds(iq),
-            IMAGE_QUALITY_METRICS,
-        ),
+            pd.read_parquet(DATA / "iqQaMetrics-iis-run30.parquet"),
+        ],
+        ignore_index=True,
+    )
+    return [
+        CoverageSource(imageQuality, taskThresholds(iq), IMAGE_QUALITY_METRICS),
         # A species with fewer than minLines lines is stored as NaN: not measured.
         CoverageSource(judgedRows(lines), residualTaskThresholds(dm), LINE_RESIDUAL_METRICS),
     ]
@@ -89,16 +94,21 @@ def testEveryKnownBadEntryIsCaughtOrUnchecked(sources):
     assert (caught["unchecked"] == "").all() and (caught["reached"] == caught["measured"]).all()
     assert caught.groupby("metric")["reached"].sum().to_dict() == {
         "linesPerFiber": 48,  # the obstructed Run30 frames
+        "medDxCenter": 1,  # the IIS Kr arc whose lamp header read off, 148829 n4
         "medFwhm": 82,  # SM1 defocused, Run27
         "medianDeltaX": 88,  # Run27 against a later calibration, SM3
         "medianDeltaY": 36,  # and SM2
         "robustRmsDeltaX": 70,  # SM1 defocused, in the line scatter
     }
     unchecked = confirmed[confirmed["unchecked"] != ""]
-    assert unchecked["result"].value_counts().to_dict() == {
-        "not judged": 21,  # the b-arm pctFlagged baselines and the unlit IIS arcs
-        "no metric": 1,  # the cloudy twilight: no metric measured on twilights sees cloud
-    }
+    assert (
+        unchecked["result"].value_counts().to_dict()
+        == {
+            "not judged": 16,  # the b-arm pctFlagged baselines
+            "not measured": 5,  # the unlit IIS arcs: stored before linesPerFiber was taken on the engineering fibers
+            "no metric": 1,  # the cloudy twilight: no metric measured on twilights sees cloud
+        }
+    )
 
 
 def testUncheckedEntriesFailWithoutTheirReason(sources):
@@ -109,18 +119,24 @@ def testUncheckedEntriesFailWithoutTheirReason(sources):
     )
     coverage = knownBadCoverage(stripped, sources)
     assert (~coverage["ok"]).sum() == 22
-    assert set(coverage.loc[~coverage["ok"], "metric"]) == {"pctFlagged", "nLines", "skyFluxUniformity"}
+    assert set(coverage.loc[~coverage["ok"], "metric"]) == {
+        "pctFlagged",
+        "linesPerFiber",
+        "skyFluxUniformity",
+    }
 
 
 def testCaughtEntryMarkedUncheckedFails(sources):
     """Negative control: an unchecked entry that is caught has outlived its reason."""
     visitSet = loadValidationVisits()
     knownBad = tuple(
-        replace(entry, unchecked="stale") if entry.metric == "linesPerFiber" else entry
+        replace(entry, unchecked="stale")
+        if entry.metric == "linesPerFiber" and not entry.unchecked
+        else entry
         for entry in visitSet.knownBad
     )
     coverage = knownBadCoverage(replace(visitSet, knownBad=knownBad), sources)
-    stale = coverage[coverage["metric"] == "linesPerFiber"]
+    stale = coverage[(coverage["metric"] == "linesPerFiber") & (coverage["unchecked"] == "stale")]
     assert len(stale) == 4 and (stale["result"] == CAUGHT).all() and not stale["ok"].any()
 
 

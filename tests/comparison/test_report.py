@@ -385,11 +385,11 @@ def testNotJudgedIsToldFromUnknown():
     assert verdicts["status"].tolist() == ["PASS", *[NOT_JUDGED] * 5, "UNKNOWN"]
     assert verdicts["why"].tolist() == [
         "",
-        "IIS lamp: no FWHM; nLines not judged on daily",
+        "IIS lamp: FWHM not measured (before PIPE2D-1954); nLines not judged on daily",
         "FWHM from fiberProfiles; nLines not judged on daily",
         "no method for dotRoach",
         "FLUXSTD FWHM not measured",
-        "IIS lamp: no FWHM",  # the reason, not the missing nLines threshold
+        "IIS lamp: FWHM not measured (before PIPE2D-1954)",  # the reason, not the missing nLines threshold
         "no threshold: nLines",  # measured, nothing else explains it: a gap in the reference
     ]
     assert notJudgedSummary(verdicts)["images"].sum() == 6

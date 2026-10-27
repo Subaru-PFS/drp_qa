@@ -19,6 +19,7 @@ falls back to the percentile rows (``method`` ``percentile``) for an image
 whose finer population has no known-good values.
 """
 
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import date
 from pathlib import Path
@@ -87,7 +88,8 @@ def addSpecies(metrics: pd.DataFrame) -> pd.DataFrame:
 
     The species is what ``imageQualityQa`` keys flag-rate thresholds on: the
     part of ``W_SEQNAM`` after the colon (``"Arc: HgCd"`` gives ``"HgCd"``),
-    or an empty string when there is no colon.
+    else the part in trailing parentheses (the IIS sequences: ``"ImageQuality
+    (Ne)"`` gives ``"Ne"``; PIPE2D-1954), or an empty string.
 
     Parameters
     ----------
@@ -102,9 +104,14 @@ def addSpecies(metrics: pd.DataFrame) -> pd.DataFrame:
     if "seqName" not in metrics.columns:
         return metrics
     seqName = metrics["seqName"].fillna("").astype(str)
-    return metrics.assign(
-        species=seqName.map(lambda name: name.split(":", 1)[-1].strip() if ":" in name else "")
-    )
+
+    def species(name: str) -> str:
+        if ":" in name:
+            return name.split(":", 1)[-1].strip()
+        match = re.search(r"\(([^()]+)\)\s*$", name)
+        return match.group(1).strip() if match else ""
+
+    return metrics.assign(species=seqName.map(species))
 
 
 def labelRows(metrics: pd.DataFrame, visitSet: ValidationVisitSet, metric: str) -> pd.DataFrame:

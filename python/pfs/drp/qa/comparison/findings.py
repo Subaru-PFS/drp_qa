@@ -16,13 +16,17 @@ allow for it; metrics written before then (no ``nLitFibers``) aren't judged on t
 (`DAILY_UNJUDGED`).
 """
 
+import logging
 import re
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from pfs.drp.qa.metrics.calibration import readThresholds
 from pfs.drp.qa.metrics.gate import STATUS_ORDER, configThresholds, judge, loadThresholds, thresholdsPath
+
+log = logging.getLogger(__name__)
 
 __all__ = [
     "DAILY_UNJUDGED",
@@ -34,6 +38,7 @@ __all__ = [
     "judgeImages",
     "lampsOf",
     "taskPipeline",
+    "taskPipelines",
     "taskThresholds",
 ]
 
@@ -131,10 +136,35 @@ def taskThresholds(config) -> list[pd.DataFrame]:
     Returns
     -------
     `list` [`pandas.DataFrame`]
-        The thresholds file's table, if any, then the config's.
+        The thresholds files' tables, if any (``thresholdsFile``, then
+        ``extraThresholdsFiles``), then the config's.
     """
+    return [*loadThresholds(thresholdsFiles(config)), configThresholds(config)]
+
+
+def thresholdsFiles(config) -> list[Path]:
+    """Return the thresholds files an ``imageQualityQa`` config names, in the order the task judges them."""
     files = [thresholdsPath(config.thresholdsFile)] if config.thresholdsFile else []
-    return [*loadThresholds(files), configThresholds(config)]
+    files.extend(thresholdsPath(name) for name in getattr(config, "extraThresholdsFiles", None) or [])
+    return files
+
+
+def taskPipelines(config) -> list[dict[str, str] | None]:
+    """Return the pipeline each of an ``imageQualityQa`` config's thresholds layers was derived with.
+
+    Parameters
+    ----------
+    config : `Any`
+        An ``ImageQualityQaConfig``; duck-typed.
+
+    Returns
+    -------
+    `list` [`dict` [`str`, `str`] or `None`]
+        One per layer of `taskThresholds`: each file's ``pipelineVersions``
+        (empty when it records none), and `None` for the config's own fields,
+        which are physical limits with no reduction to compare.
+    """
+    return [*(readThresholds(path)[0]["pipelineVersions"] for path in thresholdsFiles(config)), None]
 
 
 def taskPipeline(config) -> dict[str, str]:
@@ -148,14 +178,23 @@ def taskPipeline(config) -> dict[str, str]:
     Returns
     -------
     `dict` [`str`, `str`]
-        The thresholds file's ``pipelineVersions``; empty when it records
+        The thresholds files' ``pipelineVersions``; empty when they record
         none, or the config names no file (its own thresholds record no
         origin).
+
+        The first file's, when the files record different ones: one pipeline
+        is what the provisional marking compares a reduction with, and the
+        files are derived from different collections (the Run25 file from
+        ``u/wtg/qa-thresholds/010``, the IIS file from ``u/wtg/qa-iis/003b``),
+        so their obs_pfs versions differ. The difference is logged.
     """
-    if not config.thresholdsFile:
+    pipelines = [readThresholds(path)[0]["pipelineVersions"] for path in thresholdsFiles(config)]
+    pipelines = [pipeline for pipeline in pipelines if pipeline]
+    if not pipelines:
         return {}
-    metadata, _ = readThresholds(thresholdsPath(config.thresholdsFile))
-    return metadata["pipelineVersions"]
+    if any(pipeline != pipelines[0] for pipeline in pipelines[1:]):
+        log.warning("The thresholds files record different pipelines; taking the first: %s", pipelines)
+    return pipelines[0]
 
 
 def judgeImages(metrics: pd.DataFrame, visits: pd.DataFrame, thresholds) -> pd.DataFrame:

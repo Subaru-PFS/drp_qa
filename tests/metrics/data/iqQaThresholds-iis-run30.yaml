@@ -1,0 +1,1131 @@
+version: 2
+derivedOn: '2026-10-26'
+collection: u/wtg/qa-iis/003b
+referenceRuns:
+- 30
+drpQaVersion: w.2026.35-217-g6c5c143
+pipelineVersions:
+  datamodel: w.2026.40
+  obs_pfs: w.2026.43
+  drp_stella: w.2026.41-6-ge56938d2
+thresholds:
+- metric: medFwhm
+  population:
+    arm: b
+    obsType: arc
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 1.811
+  fail: 1.821
+  nGood: 112
+  nGoodVisits: 28
+  visitRange: 148548-150720
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150720 (n=112): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=112 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: medFwhm
+  population:
+    arm: b
+    obsType: trace
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 2.04
+  fail: 2.04
+  nGood: 56
+  nGoodVisits: 14
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=56): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=56 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.
+    DEGENERATE: WARN is not less severe than FAIL, so WARN can never fire.'
+- metric: medFwhm
+  population:
+    arm: m
+    obsType: arc
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 1.962
+  fail: 1.965
+  nGood: 8
+  nGoodVisits: 2
+  visitRange: 148971-148972
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148971-148972 (n=8): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=8 is below the 20-sample floor. FAIL UNBOUNDED: n=8 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data.'
+- metric: medFwhm
+  population:
+    arm: m
+    obsType: trace
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 1.953
+  fail: 1.953
+  nGood: 4
+  nGoodVisits: 1
+  visitRange: 148973-148973
+  reliable: false
+  failBounded: false
+  degenerate: true
+  provenance: 'Derived 2026-10-26 from validation visits 148973-148973 (n=4): WARN at p95, FAIL at p99. NOT RELIABLE:
+    n=4 is below the 20-sample floor. FAIL UNBOUNDED: n=4 cannot bound p99 at 95% confidence: its interval is open,
+    and FAIL may move a long way with more data. DEGENERATE: WARN is not less severe than FAIL, so WARN can never
+    fire.'
+- metric: medFwhm
+  population:
+    arm: n
+    obsType: arc
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 1.96
+  fail: 1.98
+  nGood: 111
+  nGoodVisits: 28
+  visitRange: 148548-150720
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150720 (n=111): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=111 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: medFwhm
+  population:
+    arm: n
+    obsType: trace
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 1.725
+  fail: 1.728
+  nGood: 56
+  nGoodVisits: 14
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=56): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=56 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: medFwhm
+  population:
+    arm: r
+    obsType: arc
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 1.889
+  fail: 1.893
+  nGood: 104
+  nGoodVisits: 26
+  visitRange: 148548-150720
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150720 (n=104): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=104 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: medFwhm
+  population:
+    arm: r
+    obsType: trace
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: percentile
+  warn: 1.867
+  fail: 1.868
+  nGood: 52
+  nGoodVisits: 13
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=52): WARN at p95, FAIL at p99. FAIL UNBOUNDED:
+    n=52 cannot bound p99 at 95% confidence: its interval is open, and FAIL may move a long way with more data.'
+- metric: medFwhm
+  population:
+    arm: b
+    spectrograph: 1
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.796
+  fail: 1.831
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148549-150720
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148549-150720 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.743px.'
+- metric: medFwhm
+  population:
+    arm: b
+    spectrograph: 1
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.833
+  fail: 1.869
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148548-150719
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150719 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.779px.'
+- metric: medFwhm
+  population:
+    arm: b
+    spectrograph: 1
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.731
+  fail: 1.765
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.68px.'
+- metric: medFwhm
+  population:
+    arm: b
+    spectrograph: 2
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.844
+  fail: 1.879
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148549-150720
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148549-150720 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.789px.'
+- metric: medFwhm
+  population:
+    arm: b
+    spectrograph: 2
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.858
+  fail: 1.894
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148548-150719
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150719 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.803px.'
+- metric: medFwhm
+  population:
+    arm: b
+    spectrograph: 2
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 2.09
+  fail: 2.13
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 2.028px.'
+- metric: medFwhm
+  population:
+    arm: b
+    spectrograph: 3
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.791
+  fail: 1.825
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148549-150720
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148549-150720 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.738px.'
+- metric: medFwhm
+  population:
+    arm: b
+    spectrograph: 3
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.835
+  fail: 1.871
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148548-150719
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150719 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.781px.'
+- metric: medFwhm
+  population:
+    arm: b
+    spectrograph: 3
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.792
+  fail: 1.826
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.739px.'
+- metric: medFwhm
+  population:
+    arm: b
+    spectrograph: 4
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.768
+  fail: 1.802
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148549-150720
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148549-150720 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.716px.'
+- metric: medFwhm
+  population:
+    arm: b
+    spectrograph: 4
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.801
+  fail: 1.836
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148548-150719
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150719 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.749px.'
+- metric: medFwhm
+  population:
+    arm: b
+    spectrograph: 4
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.71
+  fail: 1.743
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.659px.'
+- metric: medFwhm
+  population:
+    arm: m
+    spectrograph: 1
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 2.014
+  fail: 2.053
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 148972-148972
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148972-148972 (n=1): WARN 3% and FAIL 5% above the known-good
+    median, 1.955px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: medFwhm
+  population:
+    arm: m
+    spectrograph: 1
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.874
+  fail: 1.91
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 148971-148971
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148971-148971 (n=1): WARN 3% and FAIL 5% above the known-good
+    median, 1.819px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: medFwhm
+  population:
+    arm: m
+    spectrograph: 1
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 2.006
+  fail: 2.045
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 148973-148973
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148973-148973 (n=1): WARN 3% and FAIL 5% above the known-good
+    median, 1.947px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: medFwhm
+  population:
+    arm: m
+    spectrograph: 2
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.94
+  fail: 1.978
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 148972-148972
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148972-148972 (n=1): WARN 3% and FAIL 5% above the known-good
+    median, 1.883px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: medFwhm
+  population:
+    arm: m
+    spectrograph: 2
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.806
+  fail: 1.841
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 148971-148971
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148971-148971 (n=1): WARN 3% and FAIL 5% above the known-good
+    median, 1.753px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: medFwhm
+  population:
+    arm: m
+    spectrograph: 2
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.936
+  fail: 1.973
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 148973-148973
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148973-148973 (n=1): WARN 3% and FAIL 5% above the known-good
+    median, 1.879px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: medFwhm
+  population:
+    arm: m
+    spectrograph: 3
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.975
+  fail: 2.013
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 148972-148972
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148972-148972 (n=1): WARN 3% and FAIL 5% above the known-good
+    median, 1.917px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: medFwhm
+  population:
+    arm: m
+    spectrograph: 3
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.85
+  fail: 1.886
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 148971-148971
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148971-148971 (n=1): WARN 3% and FAIL 5% above the known-good
+    median, 1.795px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: medFwhm
+  population:
+    arm: m
+    spectrograph: 3
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 2.012
+  fail: 2.051
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 148973-148973
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148973-148973 (n=1): WARN 3% and FAIL 5% above the known-good
+    median, 1.953px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: medFwhm
+  population:
+    arm: m
+    spectrograph: 4
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 2.025
+  fail: 2.064
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 148972-148972
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148972-148972 (n=1): WARN 3% and FAIL 5% above the known-good
+    median, 1.965px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: medFwhm
+  population:
+    arm: m
+    spectrograph: 4
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.899
+  fail: 1.936
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 148971-148971
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148971-148971 (n=1): WARN 3% and FAIL 5% above the known-good
+    median, 1.843px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: medFwhm
+  population:
+    arm: m
+    spectrograph: 4
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.97
+  fail: 2.008
+  nGood: 1
+  nGoodVisits: 1
+  visitRange: 148973-148973
+  reliable: false
+  failBounded: false
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148973-148973 (n=1): WARN 3% and FAIL 5% above the known-good
+    median, 1.912px. NOT RELIABLE: n=1 is below the 3-sample floor. MEDIAN UNBOUNDED: n=1 cannot bound the median
+    at 95% confidence.'
+- metric: medFwhm
+  population:
+    arm: n
+    spectrograph: 1
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.934
+  fail: 1.971
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148549-150720
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148549-150720 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.877px.'
+- metric: medFwhm
+  population:
+    arm: n
+    spectrograph: 1
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.78
+  fail: 1.815
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148548-150719
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150719 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.728px.'
+- metric: medFwhm
+  population:
+    arm: n
+    spectrograph: 1
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.739
+  fail: 1.772
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.688px.'
+- metric: medFwhm
+  population:
+    arm: n
+    spectrograph: 2
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.948
+  fail: 1.986
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148549-150720
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148549-150720 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.891px.'
+- metric: medFwhm
+  population:
+    arm: n
+    spectrograph: 2
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.788
+  fail: 1.822
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148548-150719
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150719 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.735px.'
+- metric: medFwhm
+  population:
+    arm: n
+    spectrograph: 2
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.758
+  fail: 1.792
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.706px.'
+- metric: medFwhm
+  population:
+    arm: n
+    spectrograph: 3
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.993
+  fail: 2.032
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148549-150720
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148549-150720 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.935px.'
+- metric: medFwhm
+  population:
+    arm: n
+    spectrograph: 3
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.783
+  fail: 1.818
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148548-150719
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150719 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.731px.'
+- metric: medFwhm
+  population:
+    arm: n
+    spectrograph: 3
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.749
+  fail: 1.783
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.697px.'
+- metric: medFwhm
+  population:
+    arm: n
+    spectrograph: 4
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 2.012
+  fail: 2.051
+  nGood: 13
+  nGoodVisits: 13
+  visitRange: 148549-150720
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148549-150720 (n=13): WARN 3% and FAIL 5% above the known-good
+    median, 1.953px.'
+- metric: medFwhm
+  population:
+    arm: n
+    spectrograph: 4
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.73
+  fail: 1.764
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148548-150719
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150719 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.68px.'
+- metric: medFwhm
+  population:
+    arm: n
+    spectrograph: 4
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.776
+  fail: 1.81
+  nGood: 14
+  nGoodVisits: 14
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=14): WARN 3% and FAIL 5% above the known-good
+    median, 1.724px.'
+- metric: medFwhm
+  population:
+    arm: r
+    spectrograph: 1
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.921
+  fail: 1.958
+  nGood: 13
+  nGoodVisits: 13
+  visitRange: 148549-150720
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148549-150720 (n=13): WARN 3% and FAIL 5% above the known-good
+    median, 1.864px.'
+- metric: medFwhm
+  population:
+    arm: r
+    spectrograph: 1
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.858
+  fail: 1.894
+  nGood: 13
+  nGoodVisits: 13
+  visitRange: 148548-150719
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150719 (n=13): WARN 3% and FAIL 5% above the known-good
+    median, 1.804px.'
+- metric: medFwhm
+  population:
+    arm: r
+    spectrograph: 1
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.921
+  fail: 1.959
+  nGood: 13
+  nGoodVisits: 13
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=13): WARN 3% and FAIL 5% above the known-good
+    median, 1.865px.'
+- metric: medFwhm
+  population:
+    arm: r
+    spectrograph: 2
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.938
+  fail: 1.976
+  nGood: 13
+  nGoodVisits: 13
+  visitRange: 148549-150720
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148549-150720 (n=13): WARN 3% and FAIL 5% above the known-good
+    median, 1.881px.'
+- metric: medFwhm
+  population:
+    arm: r
+    spectrograph: 2
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.881
+  fail: 1.917
+  nGood: 13
+  nGoodVisits: 13
+  visitRange: 148548-150719
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150719 (n=13): WARN 3% and FAIL 5% above the known-good
+    median, 1.825px.'
+- metric: medFwhm
+  population:
+    arm: r
+    spectrograph: 2
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.916
+  fail: 1.953
+  nGood: 13
+  nGoodVisits: 13
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=13): WARN 3% and FAIL 5% above the known-good
+    median, 1.859px.'
+- metric: medFwhm
+  population:
+    arm: r
+    spectrograph: 3
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.912
+  fail: 1.949
+  nGood: 13
+  nGoodVisits: 13
+  visitRange: 148549-150720
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148549-150720 (n=13): WARN 3% and FAIL 5% above the known-good
+    median, 1.856px.'
+- metric: medFwhm
+  population:
+    arm: r
+    spectrograph: 3
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.868
+  fail: 1.904
+  nGood: 13
+  nGoodVisits: 13
+  visitRange: 148548-150719
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150719 (n=13): WARN 3% and FAIL 5% above the known-good
+    median, 1.813px.'
+- metric: medFwhm
+  population:
+    arm: r
+    spectrograph: 3
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.875
+  fail: 1.911
+  nGood: 13
+  nGoodVisits: 13
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=13): WARN 3% and FAIL 5% above the known-good
+    median, 1.82px.'
+- metric: medFwhm
+  population:
+    arm: r
+    spectrograph: 4
+    obsType: arc
+    species: Kr
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.934
+  fail: 1.972
+  nGood: 13
+  nGoodVisits: 13
+  visitRange: 148549-150720
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148549-150720 (n=13): WARN 3% and FAIL 5% above the known-good
+    median, 1.877px.'
+- metric: medFwhm
+  population:
+    arm: r
+    spectrograph: 4
+    obsType: arc
+    species: Ne
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.872
+  fail: 1.908
+  nGood: 13
+  nGoodVisits: 13
+  visitRange: 148548-150719
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148548-150719 (n=13): WARN 3% and FAIL 5% above the known-good
+    median, 1.817px.'
+- metric: medFwhm
+  population:
+    arm: r
+    spectrograph: 4
+    obsType: trace
+    species: Halogen
+    illumination: iis
+  higherIsWorse: true
+  absolute: false
+  method: tolerance
+  warn: 1.919
+  fail: 1.957
+  nGood: 13
+  nGoodVisits: 13
+  visitRange: 148550-150721
+  reliable: true
+  failBounded: true
+  degenerate: false
+  provenance: 'Derived 2026-10-26 from validation visits 148550-150721 (n=13): WARN 3% and FAIL 5% above the known-good
+    median, 1.863px.'

@@ -488,7 +488,9 @@ against a CSV without a Butler.
   - `FiberProfileSet` — per-fiber cross-dispersion profile shapes
   - `addTraceLambdaToArclines()` — enriches ArcLineSet with wavelength column
 - **`obs_pfs`**: `getLamps(metadata)` returns active lamp names; names ending in
-  `"_eng"` indicate IIS illumination. Import is guarded so the task gracefully degrades
-  if `obs_pfs` is unavailable.
-- Line lists live in `obs_pfs/pfs/lineLists/{Ar,Xe,Kr,Ne,HgCd}.txt`; column format:
-  `wavelength intensity species`.
+  `"_eng"` indicate IIS illumination (the pfsConfig is the second witness: its engineering
+  fibers all GOOD, `engineeringLit`; PIPE2D-1954). Import is guarded so the task gracefully
+  degrades if `obs_pfs` is unavailable.
+- Line lists live in `obs_pfs/pfs/lineLists/`: `{Ar,Xe,Kr,Ne,HgAr,HgCd}.txt` for the PFI lamps and
+  `{Ar,Kr,Ne,HgAr,He,H}_IIS.txt` for the IIS lamps (PIPE2D-1958, PIPE2D-1959); columns
+  `wavelength intensity species status transition source intensityErr`.
