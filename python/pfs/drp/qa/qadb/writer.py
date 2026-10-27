@@ -7,7 +7,6 @@ The database is a `pfs.utils.database.qadb.QaDB` (or anything with its
 ``commit`` and ``query_scalar``), queried with bound parameters only.
 """
 
-import hashlib
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +17,7 @@ import pandas as pd
 from sqlalchemy import text
 
 from pfs.drp.qa.metrics.calibration import readThresholds
+from pfs.drp.qa.metrics.gate import sha256Of
 from pfs.drp.qa.qadb.tables import QA_THRESHOLD_ENTRY, QA_THRESHOLDS, thresholdRows
 
 __all__ = [
@@ -255,12 +255,9 @@ def processingId(
     return int(found)
 
 
-def sha256Of(path: Path | str) -> str:
-    """Return the hex SHA-256 of a file."""
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
-def registerThresholds(qadb: Any, path: Path | str, registeredAt: datetime | None = None) -> int:
+def registerThresholds(
+    qadb: Any, path: Path | str, registeredAt: datetime | None = None, name: str | None = None
+) -> int:
     """Register a thresholds file, returning its ``thresholds_id``.
 
     The file is identified by its content: registering the same thresholds
@@ -276,6 +273,9 @@ def registerThresholds(qadb: Any, path: Path | str, registeredAt: datetime | Non
         The file, as `pfs.drp.qa.metrics.calibration.writeThresholds` writes it.
     registeredAt : `datetime.datetime`, optional
         Default now.
+    name : `str`, optional
+        The name to record, when the file judged under another (it was
+        renamed since); default the file's own.
 
     Returns
     -------
@@ -283,9 +283,10 @@ def registerThresholds(qadb: Any, path: Path | str, registeredAt: datetime | Non
         The id.
     """
     path = Path(path)
+    name = Path(name).name if name else path.name
     digest = sha256Of(path)
     metadata, thresholds = readThresholds(path)
-    header, _ = thresholdRows(metadata, thresholds, 0, path.name, digest, registeredAt or datetime.now())
+    header, _ = thresholdRows(metadata, thresholds, 0, name, digest, registeredAt or datetime.now())
     columns = [column for column in QA_THRESHOLDS if column != "thresholds_id"]
     params = records(header[columns])[0]
     sql = (
@@ -296,6 +297,6 @@ def registerThresholds(qadb: Any, path: Path | str, registeredAt: datetime | Non
     if found is None:
         raise RuntimeError(f"No thresholds_id returned for {path}")
     thresholdsId = int(found)
-    _, entries = thresholdRows(metadata, thresholds, thresholdsId, path.name, digest, registeredAt)
+    _, entries = thresholdRows(metadata, thresholds, thresholdsId, name, digest, registeredAt)
     upsert(qadb, "qa_threshold_entry", entries, list(QA_THRESHOLD_ENTRY[:3]))
     return thresholdsId

@@ -29,6 +29,7 @@ from lsst.pipe.base.connectionTypes import PrerequisiteInput as PrerequisiteConn
 
 from pfs.datamodel import PfsConfig
 from pfs.drp.qa.imageQualityQa import litFibers
+from pfs.drp.qa.metrics.gate import thresholdsNames, thresholdsRecord
 from pfs.drp.qa.metrics.lineResiduals import (
     BOTH,
     CALIB,
@@ -132,7 +133,9 @@ class DmLineResidualsConnections(
             " (``NOMINAL``, ``APPLY_SHIFT``, ``RECALIBRATE``, ``INSUFFICIENT_DATA``, ``UNJUDGED``), and"
             " the calibration: ``calibId`` and ``calibRun`` (look up its validity range with"
             " `pfs.drp.qa.metrics.readers.readCalibValidity`), ``calibCreated``,"
-            " ``calibFirstVisit`` and ``calibLastVisit`` (the visits it was made from)."
+            " ``calibFirstVisit`` and ``calibLastVisit`` (the visits it was made from); and the thresholds"
+            " file judged with, ``thresholdsFiles`` and ``thresholdsSha256`` (its content then; empty when"
+            " none: `pfs.drp.qa.metrics.gate.thresholdsRecord`)."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -271,6 +274,8 @@ class DmLineResidualsTask(PipelineTask):
         super().__init__(**kwargs)
         # Highest priority first; see pfs.drp.qa.metrics.gate.
         self.thresholds = residualTaskThresholds(self.config)
+        # Which file judged, by content, for qadb: the loader's drp_qa may ship another (PIPE2D-1976).
+        self.thresholdsRecord = thresholdsRecord(thresholdsNames(self.config))
 
     def runQuantum(
         self,
@@ -341,6 +346,7 @@ class DmLineResidualsTask(PipelineTask):
 
         summary = {key: dataId.get(key) for key in ("visit", "arm", "spectrograph")}
         summary |= {"cameraSet": camera, "obsType": obsType} | verdict | _calibProvenance(detectorMapCalib)
+        summary |= self.thresholdsRecord
         self.log.info(
             "DM line residuals %-7s %s%s %s: %s [%s]",
             verdict["qaStatus"],

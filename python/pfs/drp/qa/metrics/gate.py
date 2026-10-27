@@ -37,6 +37,7 @@ another one provisional (`pipelineMismatch`): the difference may be the
 pipeline's, not the instrument's.
 """
 
+import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from importlib.resources import files
@@ -54,6 +55,7 @@ __all__ = [
     "DEFAULT_POPULATION",
     "PROVISIONAL_COLUMNS",
     "STATUS_ORDER",
+    "THRESHOLDS_COLUMNS",
     "THRESHOLD_FIELDS",
     "VERDICT_COLUMNS",
     "configThresholds",
@@ -62,7 +64,11 @@ __all__ = [
     "layerPipelineMismatch",
     "loadThresholds",
     "pipelineMismatch",
+    "recordedThresholds",
+    "sha256Of",
+    "thresholdsNames",
     "thresholdsPath",
+    "thresholdsRecord",
 ]
 
 #: Verdicts from best to worst.
@@ -95,6 +101,10 @@ VERDICT_COLUMNS = ("qaStatus", "qaDecidedBy", "qaReason")
 
 #: Columns `gate` adds when given the thresholds' pipeline: whether the verdict is provisional, and why.
 PROVISIONAL_COLUMNS = ("qaProvisional", "qaPipeline")
+
+#: Columns a task adds to each image's row: the thresholds files it judged with, in the order judged,
+#: comma-separated, and the SHA-256 of each as it was then (`thresholdsRecord`, PIPE2D-1976).
+THRESHOLDS_COLUMNS = ("thresholdsFiles", "thresholdsSha256")
 
 #: Columns identifying an image, copied to `judge`'s output when present.
 _ID_COLUMNS = ("visit", "arm", "spectrograph")
@@ -146,6 +156,60 @@ def thresholdsPath(name: str) -> Path:
     """
     path = Path(name)
     return path if path.is_absolute() else Path(str(files("pfs.drp.qa.metrics") / "data")) / path
+
+
+def thresholdsNames(config: Any) -> list[str]:
+    """Return the thresholds files a task config names, in the order they are judged.
+
+    Its ``thresholdsFile``, then any ``extraThresholdsFiles`` (``imageQualityQa``'s
+    further layers); empty names are dropped. Duck-typed, for any QA task's config.
+    """
+    names = [getattr(config, "thresholdsFile", None), *(getattr(config, "extraThresholdsFiles", None) or [])]
+    return [str(name) for name in names if name]
+
+
+def sha256Of(path: Path | str) -> str:
+    """Return the hex SHA-256 of a file."""
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def thresholdsRecord(names: Sequence[str]) -> dict[str, str]:
+    """Return `THRESHOLDS_COLUMNS` for the thresholds files a task judges with.
+
+    A task calls this when it loads the files, so the record is of their
+    content at judgement time, whatever the drp_qa that later reads it ships.
+    No file gives empty strings: judged by the config's fields alone.
+
+    Parameters
+    ----------
+    names : sequence [`str`]
+        The files as the config names them (`thresholdsNames`); none may
+        contain a comma.
+    """
+    if any("," in name for name in names):
+        raise ValueError(f"A thresholds file name may not contain a comma: {names}")
+    digests = [sha256Of(thresholdsPath(name)) for name in names]
+    return dict(zip(THRESHOLDS_COLUMNS, (",".join(names), ",".join(digests)), strict=True))
+
+
+def recordedThresholds(files: Any, digests: Any) -> list[tuple[str, str]] | None:
+    """Return the ``(name, sha256)`` pairs a `thresholdsRecord` holds, in the order judged.
+
+    `None` when nothing was recorded (a table written before PIPE2D-1976, or
+    a null); an empty list when the task judged with no file.
+
+    Raises
+    ------
+    ValueError
+        If the two columns name different numbers of files.
+    """
+    if not isinstance(files, str) or not isinstance(digests, str):
+        return None
+    names = [name for name in files.split(",") if name]
+    hashes = [digest for digest in digests.split(",") if digest]
+    if len(names) != len(hashes):
+        raise ValueError(f"{len(names)} thresholds files recorded with {len(hashes)} SHA-256s: {files!r}")
+    return list(zip(names, hashes, strict=True))
 
 
 def configThresholds(config: Any) -> pd.DataFrame:

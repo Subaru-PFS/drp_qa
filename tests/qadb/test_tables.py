@@ -263,6 +263,17 @@ class TestGateRows:
         assert gate["iq_thresholds_id"].tolist() == [7, None]  # r1 was not judged by imageQualityQa
         assert gate["dm_thresholds_id"].tolist() == [8, 8]
 
+    def testThresholdsPerImage(self):
+        """An image's own thresholdsId wins over its task's id; a null one stays null."""
+        iq = self.task([(1, "b", 1, "PASS", "", ""), (1, "r", 1, "PASS", "", "")]).assign(
+            thresholdsId=[3, None]
+        )
+        dm = self.task([(1, "b", 1, "PASS", "", ""), (2, "b", 1, "PASS", "", "")])
+        ids = {"imageQualityQa": 7, "dmLineResiduals": 8}
+        gate = gateRows({"imageQualityQa": iq, "dmLineResiduals": dm}, 1, "backfill", NOW, ids)
+        assert gate["iq_thresholds_id"].tolist() == [3, None, None]  # b1, r1, then visit 2 not judged
+        assert gate["dm_thresholds_id"].tolist() == [8, None, 8]
+
     def testRowWithoutVerdictIsUnknownAndDecides(self):
         iq = self.task([(1, "b", 1, None, "", ""), (2, "b", 1, np.nan, "", "")])
         gate = gateRows({"imageQualityQa": iq}, 1, "backfill", NOW)

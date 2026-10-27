@@ -62,7 +62,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from pfs.drp.qa.metrics.gate import STATUS_ORDER, judge, loadThresholds, thresholdsPath
+from pfs.drp.qa.metrics.gate import STATUS_ORDER, judge, loadThresholds, thresholdsNames, thresholdsPath
 
 __all__ = [
     "BAD_STATUS",
@@ -668,7 +668,7 @@ def residualTaskThresholds(config: Any) -> list[pd.DataFrame]:
         The thresholds file's table, if any, then the config's
         (`residualThresholds`), highest priority first.
     """
-    files = [thresholdsPath(config.thresholdsFile)] if config.thresholdsFile else []
+    files = [thresholdsPath(name) for name in thresholdsNames(config)]
     fields = residualThresholds(
         config.xWarnThreshold,
         config.xFailThreshold,

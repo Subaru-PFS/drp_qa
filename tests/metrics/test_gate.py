@@ -14,6 +14,7 @@ import yaml
 from pfs.drp.qa.metrics.calibration import labelRows, readThresholds
 from pfs.drp.qa.metrics.gate import (
     PROVISIONAL_COLUMNS,
+    THRESHOLDS_COLUMNS,
     VERDICT_COLUMNS,
     configThresholds,
     gate,
@@ -21,7 +22,11 @@ from pfs.drp.qa.metrics.gate import (
     layerPipelineMismatch,
     loadThresholds,
     pipelineMismatch,
+    recordedThresholds,
+    sha256Of,
+    thresholdsNames,
     thresholdsPath,
+    thresholdsRecord,
 )
 from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 
@@ -593,3 +598,47 @@ def testGateKeepsOneRowPerImageWithDuplicateLabels():
     assert len(result) == 2
     assert result["qaStatus"].tolist() == ["PASS", "FAIL"]
     assert result["qaProvisional"].tolist() == [False, True]
+
+
+class TestThresholdsRecord:
+    """A task records the files it judged with by name and content, in the order judged (PIPE2D-1976)."""
+
+    def testNamesInTheOrderJudged(self):
+        config = SimpleNamespace(thresholdsFile="a.yaml", extraThresholdsFiles=["b.yaml", ""])
+        assert thresholdsNames(config) == ["a.yaml", "b.yaml"]
+        assert thresholdsNames(SimpleNamespace(thresholdsFile="", extraThresholdsFiles=["b.yaml"])) == [
+            "b.yaml"
+        ]
+        assert thresholdsNames(SimpleNamespace(thresholdsFile="a.yaml")) == ["a.yaml"]  # no further layers
+
+    def testRecordRoundTrips(self):
+        names = ["iqQaThresholds-run25.yaml", str(IIS)]  # shipped by name, and an absolute path
+        record = thresholdsRecord(names)
+        assert tuple(record) == THRESHOLDS_COLUMNS
+        expected = [(names[0], sha256Of(thresholdsPath(names[0]))), (names[1], sha256Of(IIS))]
+        assert recordedThresholds(*record.values()) == expected
+        # Negative control: the order is the order judged, so the first layer is the one qa_gate cites.
+        assert recordedThresholds(*thresholdsRecord(names[::-1]).values()) != expected
+
+    def testRecordsContentNotName(self, tmp_path):
+        path = tmp_path / "thresholds.yaml"
+        path.write_bytes(RUN25.read_bytes())
+        before = thresholdsRecord([str(path)])
+        assert before["thresholdsSha256"] == sha256Of(RUN25)
+        path.write_bytes(RUN25.read_bytes() + b"\n# edited\n")
+        after = thresholdsRecord([str(path)])
+        assert after["thresholdsFiles"] == before["thresholdsFiles"]
+        assert after["thresholdsSha256"] != before["thresholdsSha256"]
+
+    def testNoFileIsRecordedAsNone(self):
+        """Judged by the config's fields alone is recorded, and differs from a table that recorded nothing."""
+        assert thresholdsRecord([]) == dict.fromkeys(THRESHOLDS_COLUMNS, "")
+        assert recordedThresholds("", "") == []
+        assert recordedThresholds(None, None) is None
+        assert recordedThresholds(np.nan, np.nan) is None
+
+    def testBadRecords(self):
+        with pytest.raises(ValueError, match="comma"):
+            thresholdsRecord(["a,b.yaml"])
+        with pytest.raises(ValueError, match="2 thresholds files recorded with 1"):
+            recordedThresholds("a.yaml,b.yaml", "0" * 64)

@@ -463,7 +463,7 @@ bin.src/plotIqQaTimeSeries.py
 
 bin.src/loadQadb.py / pfs.drp.qa.qadb.loadCollection   (after pipetask, not a task)
     ← reads: iqQaMetrics, iqQaSpeciesMetrics, dmLineResidualSummary, dmLineResidualMetrics,
-             packages (per RUN), imageQualityQa_config, dmLineResiduals_config
+             packages (per RUN); *_config only for tables without thresholdsFiles/thresholdsSha256
     → writes to qadb: image_quality_qa(_species), dm_line_residual_qa(_metric),
              data_processing_pipe2d, qa_thresholds, qa_threshold_entry, qa_gate (idempotent upserts)
 ```
