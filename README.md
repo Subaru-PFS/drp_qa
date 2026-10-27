@@ -752,8 +752,12 @@ and the backfill of whole collections (`bin.src/loadQadb.py`).
   that wrote it (the RUN's `packages` dataset) and the pipeline that reduced the images it judged (`datamodel`,
   `obs_pfs` and `drp_stella`, from the judged calexps' `pfsArm` headers as comparison mode reads them; null when the
   RUN judged reductions of more than one pipeline, or none is recorded).
-- **Thresholds.** The thresholds files the tasks' stored configs name are registered in `qa_thresholds`, identified
-  by content (sha256), with their entries in `qa_threshold_entry`; `qa_gate` cites them.
+- **Thresholds.** The thresholds files the tasks' stored configs name (`thresholdsFile`, then
+  `extraThresholdsFiles`) are registered per RUN in `qa_thresholds`, identified by content (sha256), with their
+  entries in `qa_threshold_entry`; `qa_gate` cites the first layer. Entries are stored as the file writes them: a
+  population column an entry does not name is null, and for a column with a default (`gate.DEFAULT_POPULATION`:
+  `illumination`, default `full`) null means that default, so a query joining entries to images must read a null
+  `illumination` as `full`.
 - **Gate.** `qa_gate` holds each image's worst verdict across the tasks (`FAIL` > `WARN` > `PASS` > `UNKNOWN`; a task
   that judged nothing never outranks one that did), the task and metric that decided it, every task's reason, the
   mode (`realtime`, `comparison`, `backfill`) and whether the verdict is provisional. PIPE2D-1930 reads this table.
