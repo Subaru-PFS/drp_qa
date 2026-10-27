@@ -292,6 +292,8 @@ def _scalar(value: Any, dtype: str) -> Any:
     if dtype == "datetime":
         when = pd.to_datetime(value, errors="coerce")
         return None if pd.isna(when) else when.to_pydatetime()
+    if isinstance(value, list | tuple):
+        return ",".join(str(item) for item in value)
     return str(value)
 
 
@@ -469,6 +471,7 @@ def gateRows(
             c for c in ("qaStatus", "qaDecidedBy", "qaReason", "qaProvisional", "run") if c in table.columns
         ]
         part = table[keys + columns].rename(columns={c: f"{c}_{task}" for c in columns})
+        part[f"present_{task}"] = True
         merged = part if merged is None else merged.merge(part, on=keys, how="outer")
     if merged is None:
         return pd.DataFrame(columns=list(QA_GATE), dtype=object)
@@ -489,11 +492,17 @@ def gateRows(
         )
 
     statuses = {task: column(task, "qaStatus") for task in tasks}
+    present = {task: merged[f"present_{task}"].fillna(False).astype(bool) for task in tasks}
     worst, decidedByTask, decidedBy, reasons, provisional = [], [], [], [], []
     for index in merged.index:
-        rowStatuses = {task: statuses[task][index] for task in tasks}
+        # A task's row with no verdict counts as UNKNOWN; a task with no row at all does not count.
+        rowStatuses = {
+            task: (statuses[task][index] if statuses[task][index] in GATE_ORDER else "UNKNOWN")
+            for task in tasks
+            if present[task][index]
+        }
         status = worstStatus(rowStatuses.values())
-        decider = next((task for task in tasks if rowStatuses[task] == status), None)
+        decider = next((task for task in tasks if rowStatuses.get(task) == status), None)
         worst.append(status)
         decidedByTask.append(decider)
         decidedBy.append(_scalar(column(decider, "qaDecidedBy")[index], "str") if decider else None)
@@ -519,8 +528,19 @@ def gateRows(
             "qa_reason": reasons,
             "provisional": provisional,
             "mode": [mode] * len(merged),
-            "iq_thresholds_id": [thresholdsIds.get("imageQualityQa")] * len(merged),
-            "dm_thresholds_id": [thresholdsIds.get("dmLineResiduals")] * len(merged),
+            # A task's thresholds apply only to the images it judged.
+            "iq_thresholds_id": [
+                thresholdsIds.get("imageQualityQa")
+                if "imageQualityQa" in present and present["imageQualityQa"][i]
+                else None
+                for i in merged.index
+            ],
+            "dm_thresholds_id": [
+                thresholdsIds.get("dmLineResiduals")
+                if "dmLineResiduals" in present and present["dmLineResiduals"][i]
+                else None
+                for i in merged.index
+            ],
             "decided_at": [decidedAt] * len(merged),
         },
         columns=list(QA_GATE),

@@ -1,6 +1,8 @@
 """Tests for loading a collection from a (stub) Butler into qadb."""
 
 from datetime import datetime
+from pathlib import Path
+from types import SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -15,6 +17,7 @@ from pfs.drp.qa.qadb.loader import (
     thresholdsFileOf,
 )
 from pfs.drp.qa.qadb.tables import GATE_ORDER, worstStatus
+from pfs.drp.qa.qadb.writer import UNKNOWN_VERSION
 
 COLLECTION = "u/test/qa"
 RUN = "u/test/qa/20261026T000000Z"
@@ -66,10 +69,16 @@ class TestReadTables:
 
 def testHelpers(butler, StubButler):
     assert drpQaVersionOf(butler, RUN) == "w.2026.44"
-    assert thresholdsFileOf(butler, COLLECTION, "imageQualityQa").name == "iqQaThresholds-run25.yaml"
+    assert thresholdsFileOf(butler, RUN, "imageQualityQa").name == "iqQaThresholds-run25.yaml"
     bare = StubButler({})
-    assert thresholdsFileOf(bare, COLLECTION, "imageQualityQa") is None
-    assert drpQaVersionOf(bare, RUN) != ""  # falls back to this package's version or "unknown"
+    assert thresholdsFileOf(bare, RUN, "imageQualityQa") is None
+    assert drpQaVersionOf(bare, RUN) == UNKNOWN_VERSION  # never the loader's own version
+
+
+def testProgressGoesToTheLog(butler):
+    messages = []
+    readTables(butler, COLLECTION, visits=VISITS, log=messages.append)
+    assert any(m.startswith("iqQaMetrics: reading 4 datasets") for m in messages)
 
 
 class TestLoadCollection:
@@ -151,6 +160,89 @@ class TestLoadCollection:
         assert qadb.count("image_quality_qa_species") == 12
         # Negative control: the per-image rows stay (one per image loaded), so the drop is in the long tables only.
         assert qadb.count("image_quality_qa") == 4
+
+    def testReloadWithNoLongRowsLeftRemovesThem(self, butler, qadb, tables):
+        """An image whose re-judgement has no species rows at all loses its old ones."""
+        load(butler, qadb)
+        species = tables["iqQaSpeciesMetrics"]
+        tables["iqQaSpeciesMetrics"] = species[species["visit"] != 133025]
+        load(butler, qadb)
+        assert qadb.count("image_quality_qa_species", "pfs_visit_id = 133025") == 0
+        assert qadb.count("image_quality_qa_species") == 8
+        # And when the whole long dataset is gone from the collection.
+        del tables["iqQaSpeciesMetrics"]
+        counts = load(butler, qadb)
+        assert counts["image_quality_qa_species"] == 0
+        assert qadb.count("image_quality_qa_species") == 0
+        assert qadb.count("image_quality_qa") == 4
+
+    def testVersionsSurviveARealtimeReload(self, StubButler, tables, configs, qadb):
+        """QaActor's loadVisit reads no pipeline versions; the backfill's stay."""
+        tables = dict(tables)
+        iq = tables["iqQaMetrics"].assign(calexpRun="u/test/reduce")
+        tables["iqQaMetrics"] = iq
+        tables["pfsArm"] = iq[["visit", "arm", "spectrograph"]]
+        butler = StubButler(tables, datasets={"packages": {"drp_qa": "w.2026.44"}, **configs})
+        butler.getURI = lambda ref: ref
+        header = {
+            "VERSION_DATAMODEL": "w.2026.40",
+            "VERSION_OBS_PFS": "w.2026.40",
+            "VERSION_DRP_STELLA": "w.2026.41",
+        }
+        load(butler, qadb, pipelineVersions=True, readHeader=lambda ref: header)
+        bare = StubButler(tables, datasets=configs)  # no packages dataset this time either
+        loadVisit(bare, qadb, COLLECTION, 133040, pipelineVersions=False, log=lambda _: None, now=lambda: NOW)
+        row = qadb.query_dataframe(
+            "SELECT * FROM data_processing_pipe2d WHERE collection_name = :c", params={"c": COLLECTION}
+        ).iloc[0]
+        assert row["pipe2d_version"] == "w.2026.41"
+        assert row["drp_qa_version"] == "w.2026.44"
+
+    def testThresholdsPerRun(self, StubButler, tables, configs, qadb):
+        """Each RUN's gate rows cite the thresholds its own config named."""
+        runs = {
+            (133025, "b", 1): "r1",
+            (133025, "r", 1): "r1",
+            (133040, "b", 1): "r2",
+            (133040, "r", 1): "r2",
+        }
+        other = str(Path(__file__).parents[1] / "metrics" / "data" / "dmLineResidualThresholds-run25.yaml")
+        datasets = {
+            "packages": {"drp_qa": "x"},
+            **configs,
+            ("dmLineResiduals_config", "r2"): SimpleNamespace(thresholdsFile=other),
+        }
+        butler = StubButler(tables, runs=runs, datasets=datasets)
+        load(butler, qadb)
+        gate = qadb.query_dataframe(
+            "SELECT pfs_visit_id, iq_thresholds_id, dm_thresholds_id FROM qa_gate ORDER BY pfs_visit_id, camera_name"
+        )
+        assert gate["iq_thresholds_id"].nunique() == 1
+        assert gate.loc[gate["pfs_visit_id"] == 133025, "dm_thresholds_id"].nunique() == 1
+        assert gate.loc[gate["pfs_visit_id"] == 133040, "dm_thresholds_id"].nunique() == 1
+        assert set(gate["dm_thresholds_id"]).__len__() == 2  # r1 and r2 differ
+        assert qadb.count("qa_thresholds") == 3
+
+    def testMissingThresholdsFileIsLogged(self, StubButler, tables, configs, qadb):
+        datasets = {**configs, "dmLineResiduals_config": SimpleNamespace(thresholdsFile="gone.yaml")}
+        butler = StubButler(tables, datasets=datasets)
+        messages = []
+        loadCollection(
+            butler,
+            qadb,
+            COLLECTION,
+            visits=VISITS,
+            pipelineVersions=False,
+            log=messages.append,
+            now=lambda: NOW,
+        )
+        assert any("gone.yaml" in m and "no longer has" in m for m in messages)
+        assert qadb.query_scalars("SELECT dm_thresholds_id FROM qa_gate") == [None] * 4
+        assert qadb.query_scalars("SELECT DISTINCT iq_thresholds_id FROM qa_gate") != [None]
+
+    def testNeedsADatabaseOrADryRun(self, butler):
+        with pytest.raises(ValueError, match="dryRun"):
+            load(butler, None)
 
     def testDeletingAProcessingCascades(self, butler, qadb, scope):
         """Removing a processing row takes every QA row of it along (the schema's ON DELETE CASCADE)."""

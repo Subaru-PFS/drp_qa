@@ -18,11 +18,14 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   versions), the visit and the camera. The thresholds files the tasks judged with are registered by content in
   `qa_thresholds` and `qa_threshold_entry`, and `qa_gate` gets each image's worst verdict across the tasks, with the
   deciding task and metric, the mode and whether it is provisional. Every write is `INSERT ... ON CONFLICT DO
-  UPDATE`, and a long table's rows of each image are deleted before its reload, so a collection can be loaded again
-  after a re-judgement. `loadCollection` is the one entry point, for
+  UPDATE`, and a long table's rows of each loaded image are deleted before its reload, in the same transaction, so a
+  collection can be loaded again after a re-judgement; a version a later load does not know keeps the one recorded.
+  Thresholds are registered per RUN, from the config pipetask stored there, and cited only on the images the task
+  judged; a file this drp_qa no longer ships leaves the id null (PIPE2D-1976 records the hash at judgement time).
+  `loadCollection` is the one entry point, for
   qaActor after a visit's pipetask (`loadVisit`, INSTRM-3040), comparison mode and backfill;
   `bin.src/loadQadb.py` runs it, with `--dry-run` writing parquet instead. `readMetrics` gains `withRun`, the
-  Butler RUN of each row. `tests/qadb/` runs the statements on SQLite (and on PostgreSQL with `PFS_QADB_TEST_DSN`).
+  Butler RUN of each row, and `log`, where its progress goes. `tests/qadb/` runs the statements on SQLite (and on PostgreSQL with `PFS_QADB_TEST_DSN`).
 
 - **`readAgcData` reads `camera_enabled`** (INSTRM-3057) — `agc_match.camera_enabled`, a nullable boolean: False for a
   spot from a camera that ics_agActor left out of its fit (INSTRM-2919), NA for rows written before the column.

@@ -5,9 +5,9 @@ as its pipetask has run (`loadVisit`), comparison mode for a run, and
 ``bin.src/loadQadb.py`` for a backfill. Each Butler RUN found becomes a
 ``data_processing_pipe2d`` row, with the drp_qa that wrote it (from the RUN's
 ``packages`` dataset) and the pipeline that reduced the images it judged (from
-their ``pfsArm`` headers, as comparison mode reads them); the thresholds files
-the tasks' configs name are registered, and the gate verdict of every image is
-written to ``qa_gate``.
+their ``pfsArm`` headers, as comparison mode reads them); the thresholds file
+each task's config in that RUN names is registered, and the gate verdict of
+every image is written to ``qa_gate``.
 """
 
 import time
@@ -33,7 +33,14 @@ from pfs.drp.qa.qadb.tables import (
     gateRows,
     imageRows,
 )
-from pfs.drp.qa.qadb.writer import deleteRows, ensureVisits, processingId, registerThresholds, upsert
+from pfs.drp.qa.qadb.writer import (
+    UNKNOWN_VERSION,
+    deleteRows,
+    ensureVisits,
+    processingId,
+    registerThresholds,
+    upsert,
+)
 from pfs.drp.qa.utils.provenance import commonPipeline
 
 __all__ = [
@@ -53,8 +60,6 @@ MODES = ("realtime", "comparison", "backfill")
 SPECS: dict[str, TableSpec] = {
     spec.source: spec for spec in (IMAGE_QUALITY, IMAGE_QUALITY_SPECIES, LINE_RESIDUAL, LINE_RESIDUAL_METRIC)
 }
-
-_UNKNOWN = "unknown"
 
 
 def readTables(
@@ -93,6 +98,7 @@ def readTables(
                 visitRange=visitRange,
                 progress=True,
                 withRun=True,
+                log=log,
             )
         except LookupError:
             log(f"{datasetType}: none in {collection}")
@@ -103,8 +109,10 @@ def readTables(
 def drpQaVersionOf(butler: Any, run: str) -> str:
     """Return the drp_qa version that wrote a RUN, from its ``packages`` dataset.
 
-    pipetask records the versions of every product set up when it ran. Falls
-    back to this package's own version, then ``unknown``.
+    pipetask records the versions of every product set up when it ran.
+    `UNKNOWN_VERSION` when the RUN has no readable ``packages``: the loader's
+    own version would be the wrong answer, and `processingId` never
+    overwrites a recorded version with it.
     """
     try:
         packages = butler.get("packages", collections=[run])
@@ -113,25 +121,33 @@ def drpQaVersionOf(butler: Any, run: str) -> str:
             return str(version)
     except Exception:  # any Butler failure means the RUN recorded none
         pass
-    try:
-        from pfs.drp.qa.version import __version__
-
-        return str(__version__)
-    except ImportError:
-        return _UNKNOWN
+    return UNKNOWN_VERSION
 
 
-def thresholdsFileOf(butler: Any, collection: str, task: str) -> Path | None:
-    """Return the thresholds file a task judged with, from its config in the collection.
+def thresholdsFileOf(butler: Any, run: str, task: str) -> Path | None:
+    """Return the thresholds file a task judged with in a RUN, from the config pipetask stored there.
 
-    `None` when the config is not there or names no file.
+    `None` when the RUN has no config for the task, or it names no file.
     """
     try:
-        config = butler.get(f"{task}_config", collections=[collection])
-    except Exception:  # a collection without the task has no config
+        config = butler.get(f"{task}_config", collections=[run])
+    except Exception:  # a RUN without the task has no config
         return None
     name = getattr(config, "thresholdsFile", None)
     return thresholdsPath(name) if name else None
+
+
+def _thresholdsIdOf(qadb: Any, butler: Any, run: str, task: str, now: datetime, log: Callable) -> int | None:
+    """Register the thresholds a task judged a RUN with; `None` with a log line when it can't."""
+    path = thresholdsFileOf(butler, run, task)
+    if path is None:
+        return None
+    try:
+        return registerThresholds(qadb, path, now)
+    except FileNotFoundError:
+        # The file this drp_qa ships is not the one that judged (PIPE2D-1976 records it at judgement time).
+        log(f"{run}: {task} judged with {path.name}, which this drp_qa no longer has; thresholds left null")
+        return None
 
 
 def _pipelineByRun(
@@ -227,12 +243,15 @@ def loadCollection(
     Raises
     ------
     ValueError
-        If ``mode`` is not one of `MODES`.
+        If ``mode`` is not one of `MODES`, or there is neither a database nor
+        a ``dryRun`` directory.
     LookupError
         If the collection has none of the tables for these visits.
     """
     if mode not in MODES:
         raise ValueError(f"mode {mode!r} is not one of {MODES}")
+    if qadb is None and dryRun is None:
+        raise ValueError("Give a qadb to write to, or a dryRun directory")
     start = time.monotonic()
     tables = readTables(butler, collection, visits, visitRange, log=log)
     if all(table.empty for table in tables.values()):
@@ -257,41 +276,55 @@ def loadCollection(
         else:
             ids[run] = processingId(qadb, collection, run, drpQaVersionOf(butler, run), pipeline.get(run))
 
-    # The thresholds of each task that judged something here; a task's config alone says nothing.
-    thresholdsIds: dict[str, int | None] = {}
-    for task in TASK_TABLES:
-        path = thresholdsFileOf(butler, collection, task) if not images[task].empty else None
-        thresholdsIds[task] = registerThresholds(qadb, path, now()) if path and sink is None else None
+    # The thresholds each task judged each RUN with: pipetask stores the task's config in the RUN.
+    thresholdsIds: dict[str, dict[str, int | None]] = {run: {} for run in runs}
+    if sink is None:
+        for run in runs:
+            for task in TASK_TABLES:
+                judged = images[task]
+                if not judged.empty and (judged["run"] == run).any():
+                    thresholdsIds[run][task] = _thresholdsIdOf(qadb, butler, run, task, now(), log)
 
     allVisits = {int(v) for table in images.values() for v in table.get("visit", pd.Series(dtype=object))}
     counts: dict[str, int] = {"processings": len(runs)}
     if sink is None:
         counts["pfs_visit"] = ensureVisits(qadb, allVisits, opdb)
 
-    def write(table: str, frame: pd.DataFrame, keys: list[str]) -> None:
-        counts[table] = sink.write(table, frame) if sink is not None else upsert(qadb, table, frame, keys)
+    def write(table: str, frame: pd.DataFrame, keys: list[str], conn: Any = None) -> None:
+        counts[table] = (
+            sink.write(table, frame) if sink is not None else upsert(qadb, table, frame, keys, conn=conn)
+        )
         log(f"{table}: {counts[table]} rows")
 
     for perImage, longTable in TASK_TABLES.values():
         spec, longSpec = SPECS[perImage], SPECS[longTable]
         image = tables[perImage]
-        if not image.empty:
-            write(spec.name, imageRows(image, spec, ids), list(spec.keys))
+        if image.empty:
+            continue
+        imageKeys = imageRows(image, spec, ids)
+        write(spec.name, imageKeys, list(spec.keys))
         rows = tables[longTable]
-        if not rows.empty:
-            # The long table's rows belong to the image's processing, whatever RUN they were read from.
-            keyed = rows.drop(columns=["run"], errors="ignore").merge(
-                image[[*IMAGE_KEYS, "run"]], on=list(IMAGE_KEYS), how="inner"
-            )
-            if len(keyed) < len(rows):
-                log(f"{longTable}: {len(rows) - len(keyed)} rows without a {perImage} row, skipped")
-            longRows = imageRows(keyed, longSpec, ids)
-            if sink is None:
-                # A reload replaces the image's rows: what the new judgement no longer has must go too.
-                deleteRows(qadb, longSpec.name, longRows[list(KEYS)])
+        # The long table's rows belong to the image's processing, whatever RUN they were read from.
+        keyed = rows.drop(columns=["run"], errors="ignore").merge(
+            image[[*IMAGE_KEYS, "run"]], on=list(IMAGE_KEYS), how="inner"
+        )
+        if len(keyed) < len(rows):
+            log(f"{longTable}: {len(rows) - len(keyed)} rows without a {perImage} row, skipped")
+        longRows = imageRows(keyed, longSpec, ids)
+        if sink is not None:
             write(longSpec.name, longRows, list(longSpec.keys))
+            continue
+        # A reload replaces every loaded image's rows, in one transaction: what the new judgement no
+        # longer has must go, and no reader sees an image with a verdict and no rows in between.
+        with qadb.connection() as conn:
+            deleteRows(qadb, longSpec.name, imageKeys[list(KEYS)], conn=conn)
+            write(longSpec.name, longRows, list(longSpec.keys), conn=conn)
 
-    gate = gateRows(images, ids, mode, now(), thresholdsIds)
+    gates = []
+    for run in runs:
+        byRun = {task: table[table["run"] == run] for task, table in images.items() if not table.empty}
+        gates.append(gateRows(byRun, ids[run], mode, now(), thresholdsIds[run]))
+    gate = pd.concat(gates, ignore_index=True) if gates else gateRows({}, 0, mode, now())
     write("qa_gate", gate, list(QA_GATE[:3]))
     log(f"loaded {collection} in {time.monotonic() - start:.0f} s")
     return counts

@@ -15,12 +15,14 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sqlalchemy import text
 
 from pfs.drp.qa.metrics.calibration import readThresholds
 from pfs.drp.qa.qadb.tables import QA_THRESHOLD_ENTRY, QA_THRESHOLDS, thresholdRows
 
 __all__ = [
     "PIPELINE_VERSION_COLUMNS",
+    "UNKNOWN_VERSION",
     "deleteRows",
     "ensureVisits",
     "processingId",
@@ -30,6 +32,9 @@ __all__ = [
     "upsert",
     "upsertSql",
 ]
+
+#: The drp_qa version recorded when a RUN's ``packages`` dataset names none; never overwrites a known one.
+UNKNOWN_VERSION = "unknown"
 
 #: ``data_processing_pipe2d`` column of each product's version (``pipe2d_version`` is drp_stella's).
 PIPELINE_VERSION_COLUMNS = {
@@ -96,7 +101,15 @@ def records(frame: pd.DataFrame) -> list[dict[str, Any]]:
     ]
 
 
-def upsert(qadb: Any, table: str, frame: pd.DataFrame, keys: Sequence[str]) -> int:
+def _run(qadb: Any, sql: str, params: list[dict[str, Any]], conn: Any) -> None:
+    """Run a statement for every row of ``params``: on ``conn`` when given, else in its own transaction."""
+    if conn is not None:
+        conn.execute(text(sql), params)
+    else:
+        qadb.commit(sql, params=params)
+
+
+def upsert(qadb: Any, table: str, frame: pd.DataFrame, keys: Sequence[str], conn: Any = None) -> int:
     """Write a table's rows, replacing any already there.
 
     Parameters
@@ -109,6 +122,8 @@ def upsert(qadb: Any, table: str, frame: pd.DataFrame, keys: Sequence[str]) -> i
         The rows, every column a column of the table.
     keys : sequence of `str`
         The columns that identify a row.
+    conn : `sqlalchemy.engine.Connection`, optional
+        From ``qadb.connection()``, to put several writes in one transaction.
 
     Returns
     -------
@@ -117,11 +132,11 @@ def upsert(qadb: Any, table: str, frame: pd.DataFrame, keys: Sequence[str]) -> i
     """
     if frame.empty:
         return 0
-    qadb.commit(upsertSql(table, list(frame.columns), keys), params=records(frame))
+    _run(qadb, upsertSql(table, list(frame.columns), keys), records(frame), conn)
     return len(frame)
 
 
-def deleteRows(qadb: Any, table: str, keys: pd.DataFrame) -> int:
+def deleteRows(qadb: Any, table: str, keys: pd.DataFrame, conn: Any = None) -> int:
     """Delete the rows of a table that match each row of ``keys`` on every column of ``keys``.
 
     For a long table before its reload: an upsert alone would leave the rows
@@ -136,6 +151,8 @@ def deleteRows(qadb: Any, table: str, keys: pd.DataFrame) -> int:
     keys : `pandas.DataFrame`
         One row per key to delete, e.g. the images loaded; duplicates are
         deleted once.
+    conn : `sqlalchemy.engine.Connection`, optional
+        As for `upsert`.
 
     Returns
     -------
@@ -146,7 +163,7 @@ def deleteRows(qadb: Any, table: str, keys: pd.DataFrame) -> int:
     if keys.empty:
         return 0
     where = " AND ".join(f"{column} = :{column}" for column in keys.columns)
-    qadb.commit(f"DELETE FROM {table} WHERE {where}", params=records(keys))
+    _run(qadb, f"DELETE FROM {table} WHERE {where}", records(keys), conn)
     return len(keys)
 
 
@@ -212,19 +229,25 @@ def processingId(
     Returns
     -------
     `int`
-        The id. The versions of an existing row are replaced.
+        The id. A version given here replaces the existing row's; one not
+        given (`None`, or `UNKNOWN_VERSION` for drp_qa) leaves it, so a later
+        load that did not read the versions keeps what an earlier one recorded.
     """
     pipeline = pipeline or {}
     params = {
         "collection_name": collection,
         "run_name": run,
-        "drp_qa_version": drpQaVersion,
+        "drp_qa_version": None if drpQaVersion in (None, UNKNOWN_VERSION) else drpQaVersion,
         **{column: pipeline.get(product) for product, column in PIPELINE_VERSION_COLUMNS.items()},
     }
     columns = list(params)
+    keys = ["collection_name", "run_name"]
+    updates = ", ".join(
+        f"{c} = COALESCE(EXCLUDED.{c}, data_processing_pipe2d.{c})" for c in columns if c not in keys
+    )
     sql = (
-        upsertSql("data_processing_pipe2d", columns, ["collection_name", "run_name"])
-        + " RETURNING processing_id"
+        f"INSERT INTO data_processing_pipe2d ({', '.join(columns)}) VALUES ({', '.join(f':{c}' for c in columns)})"
+        f" ON CONFLICT ({', '.join(keys)}) DO UPDATE SET {updates} RETURNING processing_id"
     )
     found = qadb.query_scalar(sql, params=params)
     if found is None:

@@ -11,6 +11,7 @@ import sqlalchemy.exc
 from pfs.drp.qa.metrics.calibration import readThresholds
 from pfs.drp.qa.qadb.tables import IMAGE_QUALITY, imageRows
 from pfs.drp.qa.qadb.writer import (
+    UNKNOWN_VERSION,
     deleteRows,
     ensureVisits,
     processingId,
@@ -78,11 +79,23 @@ class TestProcessingId:
         row = qadb.query_dataframe(
             "SELECT * FROM data_processing_pipe2d WHERE processing_id = :id", params={"id": first}
         ).iloc[0]
-        # The versions follow the latest load; a product not given is null.
+        # A version given replaces; one not given keeps what was recorded.
         assert row["drp_qa_version"] == "w.2026.45"
         assert row["pipe2d_version"] == "w.2026.42"
-        assert pd.isna(row["datamodel_version"])
+        assert row["datamodel_version"] == "w.2026.40"
         assert pd.isna(row["obs_pfs_version"])
+
+    def testUnknownVersionsKeepTheRecorded(self, qadb):
+        """A later load that read no versions (qaActor, pipelineVersions=False) must not null them."""
+        first = processingId(qadb, "u/test/qa", "run1", "w.2026.44", {"drp_stella": "w.2026.41"})
+        assert processingId(qadb, "u/test/qa", "run1", UNKNOWN_VERSION, None) == first
+        row = qadb.query_dataframe(
+            "SELECT * FROM data_processing_pipe2d WHERE processing_id = :id", params={"id": first}
+        ).iloc[0]
+        assert row["drp_qa_version"] == "w.2026.44"
+        assert row["pipe2d_version"] == "w.2026.41"
+        # Negative control: a plain overwrite would have nulled them.
+        assert row["pipe2d_version"] is not None and not pd.isna(row["pipe2d_version"])
 
 
 class TestUpsert:
@@ -114,6 +127,19 @@ class TestUpsert:
         assert deleteRows(qadb, "image_quality_qa", pd.concat([keys, keys])) == 2  # duplicates deleted once
         assert qadb.count("image_quality_qa") == 2
         assert deleteRows(qadb, "image_quality_qa", keys.iloc[:0]) == 0
+
+    def testOneTransaction(self, qadb, fixtures):
+        """A delete and an upsert on one connection commit together."""
+        pid = processingId(qadb, "u/test/writer", "r", "v")
+        ensureVisits(qadb, [133025, 133040])
+        rows = imageRows(fixtures["iqQaMetrics"], IMAGE_QUALITY, pid)
+        upsert(qadb, "image_quality_qa", rows, list(IMAGE_QUALITY.keys))
+        with qadb.connection() as conn:
+            deleteRows(
+                qadb, "image_quality_qa", rows[["processing_id", "pfs_visit_id", "camera_name"]], conn=conn
+            )
+            upsert(qadb, "image_quality_qa", rows.iloc[:1], list(IMAGE_QUALITY.keys), conn=conn)
+        assert qadb.count("image_quality_qa") == 1
 
     def testEmptyWritesNothing(self, qadb, scope):
         assert upsert(qadb, "pfs_visit", pd.DataFrame(columns=["pfs_visit_id"]), ["pfs_visit_id"]) == 0

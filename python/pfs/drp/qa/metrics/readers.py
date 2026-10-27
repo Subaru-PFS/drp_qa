@@ -37,6 +37,7 @@ def readMetrics(
     visitRange: tuple[int, int] | None = None,
     progress: bool = False,
     withRun: bool = False,
+    log: Callable[[str], None] = print,
 ) -> pd.DataFrame:
     """Read and concatenate a per-detector metrics table for some visits.
 
@@ -63,6 +64,8 @@ def readMetrics(
         every 100 and at the end.
     withRun : `bool`, optional
         Add ``run``, the Butler RUN each table was read from.
+    log : callable, optional
+        Where the progress lines go. Default `print`.
 
     Returns
     -------
@@ -110,7 +113,7 @@ def readMetrics(
 
     total, start, tables = len(refs), time.monotonic(), []
     if progress:
-        print(f"{datasetType}: reading {total} datasets for {described}", flush=True)
+        log(f"{datasetType}: reading {total} datasets for {described}")
     for done, ref in enumerate(refs, 1):
         table = butler.get(ref)
         dataId = ref.dataId
@@ -123,7 +126,7 @@ def readMetrics(
         if progress and (done % 100 == 0 or done == total):
             elapsed = time.monotonic() - start
             eta = elapsed / done * (total - done)
-            print(f"{datasetType}: {done}/{total}  {elapsed:.0f} s elapsed, ETA {eta:.0f} s", flush=True)
+            log(f"{datasetType}: {done}/{total}  {elapsed:.0f} s elapsed, ETA {eta:.0f} s")
     metrics = pd.concat(tables, ignore_index=True)
     sortKeys = [key for key in _DATA_ID_KEYS if key in metrics.columns]
     return metrics.sort_values(sortKeys, ignore_index=True)

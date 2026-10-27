@@ -109,6 +109,10 @@ class TestImageRows:
         # Negative control: the header's date is not kept as text.
         assert not isinstance(rows.loc[0, "calib_created"], str)
 
+    def testListsAreJoined(self):
+        frame = pd.DataFrame({"visit": [1], "arm": ["b"], "spectrograph": [1], "qaReason": [["a", "b"]]})
+        assert imageRows(frame, IMAGE_QUALITY, 1).loc[0, "qa_reason"] == "a,b"
+
     def testNanBecomesNull(self):
         frame = pd.DataFrame(
             {
@@ -242,6 +246,20 @@ class TestGateRows:
         gate = gateRows({"imageQualityQa": iq, "dmLineResiduals": dm}, {"r1": 11, "r2": 22}, "realtime", NOW)
         assert gate["processing_id"].tolist() == [11, 22]
         assert gate["provisional"].tolist() == [True, None]
+
+    def testThresholdsOnlyWhereTheTaskJudged(self):
+        iq = self.task([(1, "b", 1, "PASS", "", "")])
+        dm = self.task([(1, "b", 1, "PASS", "", ""), (1, "r", 1, "PASS", "", "")])
+        ids = {"imageQualityQa": 7, "dmLineResiduals": 8}
+        gate = gateRows({"imageQualityQa": iq, "dmLineResiduals": dm}, 1, "backfill", NOW, ids)
+        assert gate["iq_thresholds_id"].tolist() == [7, None]  # r1 was not judged by imageQualityQa
+        assert gate["dm_thresholds_id"].tolist() == [8, 8]
+
+    def testRowWithoutVerdictIsUnknownAndDecides(self):
+        iq = self.task([(1, "b", 1, None, "", ""), (2, "b", 1, np.nan, "", "")])
+        gate = gateRows({"imageQualityQa": iq}, 1, "backfill", NOW)
+        assert gate["qa_status"].tolist() == ["UNKNOWN", "UNKNOWN"]
+        assert gate["decided_by_task"].tolist() == ["imageQualityQa"] * 2
 
     def testEmpty(self):
         gate = gateRows({}, 1, "backfill", NOW)

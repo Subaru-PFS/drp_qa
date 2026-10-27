@@ -14,6 +14,7 @@ CI runs this directory in the ``deps`` job; the standard-library job ignores it.
 
 import os
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -124,9 +125,15 @@ class SqliteQaDB:
                 statement = statement.bindparams(*(sqlalchemy.bindparam(k, expanding=True) for k in lists))
         return statement
 
-    def commit(self, query, params=None):
+    @contextmanager
+    def connection(self):
+        """Yield one connection for several statements, committed together, as `DB.connection` does."""
         with self.engine.begin() as conn:
             conn.exec_driver_sql("PRAGMA foreign_keys = ON")
+            yield conn
+
+    def commit(self, query, params=None):
+        with self.connection() as conn:
             conn.execute(self._bind(query, params), params)
 
     def query_scalar(self, sql, /, *, params=None, conn=None):
@@ -243,6 +250,10 @@ class StubButler:
 
     def get(self, ref, collections=None):
         if isinstance(ref, str):
+            # A dataset keyed by (name, collection) answers for that collection alone; by name, for every one.
+            for collection in collections or ():
+                if (ref, collection) in self.datasets:
+                    return self.datasets[(ref, collection)]
             if ref in self.datasets:
                 return self.datasets[ref]
             raise LookupError(f"{ref} not in {collections}")
