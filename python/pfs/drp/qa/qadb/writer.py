@@ -21,6 +21,7 @@ from pfs.drp.qa.qadb.tables import QA_THRESHOLD_ENTRY, QA_THRESHOLDS, thresholdR
 
 __all__ = [
     "PIPELINE_VERSION_COLUMNS",
+    "deleteRows",
     "ensureVisits",
     "processingId",
     "records",
@@ -118,6 +119,35 @@ def upsert(qadb: Any, table: str, frame: pd.DataFrame, keys: Sequence[str]) -> i
         return 0
     qadb.commit(upsertSql(table, list(frame.columns), keys), params=records(frame))
     return len(frame)
+
+
+def deleteRows(qadb: Any, table: str, keys: pd.DataFrame) -> int:
+    """Delete the rows of a table that match each row of ``keys`` on every column of ``keys``.
+
+    For a long table before its reload: an upsert alone would leave the rows
+    of a species or metric the new judgement no longer has.
+
+    Parameters
+    ----------
+    qadb : `pfs.utils.database.qadb.QaDB`
+        The database.
+    table : `str`
+        The table.
+    keys : `pandas.DataFrame`
+        One row per key to delete, e.g. the images loaded; duplicates are
+        deleted once.
+
+    Returns
+    -------
+    `int`
+        Keys deleted (not rows).
+    """
+    keys = keys.drop_duplicates()
+    if keys.empty:
+        return 0
+    where = " AND ".join(f"{column} = :{column}" for column in keys.columns)
+    qadb.commit(f"DELETE FROM {table} WHERE {where}", params=records(keys))
+    return len(keys)
 
 
 def ensureVisits(qadb: Any, visits: Iterable[int], opdb: Any = None) -> int:

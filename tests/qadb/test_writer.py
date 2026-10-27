@@ -11,6 +11,7 @@ import sqlalchemy.exc
 from pfs.drp.qa.metrics.calibration import readThresholds
 from pfs.drp.qa.qadb.tables import IMAGE_QUALITY, imageRows
 from pfs.drp.qa.qadb.writer import (
+    deleteRows,
     ensureVisits,
     processingId,
     records,
@@ -103,6 +104,16 @@ class TestUpsert:
         )[0]
         with pytest.raises(sqlalchemy.exc.IntegrityError):
             qadb.commit(plain, params=records(rows))
+
+    def testDeleteRows(self, qadb, fixtures):
+        pid = processingId(qadb, "u/test/writer", "r", "v")
+        ensureVisits(qadb, [133025, 133040])
+        rows = imageRows(fixtures["iqQaMetrics"], IMAGE_QUALITY, pid)
+        upsert(qadb, "image_quality_qa", rows, list(IMAGE_QUALITY.keys))
+        keys = rows[["processing_id", "pfs_visit_id", "camera_name"]].iloc[:2]
+        assert deleteRows(qadb, "image_quality_qa", pd.concat([keys, keys])) == 2  # duplicates deleted once
+        assert qadb.count("image_quality_qa") == 2
+        assert deleteRows(qadb, "image_quality_qa", keys.iloc[:0]) == 0
 
     def testEmptyWritesNothing(self, qadb, scope):
         assert upsert(qadb, "pfs_visit", pd.DataFrame(columns=["pfs_visit_id"]), ["pfs_visit_id"]) == 0

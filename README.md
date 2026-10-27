@@ -739,8 +739,9 @@ and the backfill of whole collections (`bin.src/loadQadb.py`).
 - **Gate.** `qa_gate` holds each image's worst verdict across the tasks (`FAIL` > `WARN` > `PASS` > `UNKNOWN`; a task
   that judged nothing never outranks one that did), the task and metric that decided it, every task's reason, the
   mode (`realtime`, `comparison`, `backfill`) and whether the verdict is provisional. PIPE2D-1930 reads this table.
-- **Idempotent.** Every write is `INSERT ... ON CONFLICT DO UPDATE` on the row's key: load a collection again after
-  a re-judgement, or after a load that stopped, and the rows are replaced, not duplicated. Visits qadb's `pfs_visit`
+- **Idempotent.** Every write is `INSERT ... ON CONFLICT DO UPDATE` on the row's key, and a long table's rows of each
+  image are deleted before its reload: load a collection again after a re-judgement, or after a load that stopped,
+  and the rows are replaced, not duplicated, and a species or metric the new judgement lacks is gone. Visits qadb's `pfs_visit`
   lacks get a row, filled from the opdb when one is given.
 
 ```bash

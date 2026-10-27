@@ -128,6 +128,44 @@ class TestLoadCollection:
         )
         assert gate == "FAIL"
 
+    def testReloadDropsRowsTheNewJudgementLacks(self, butler, qadb, tables, scope):
+        """A species or metric missing from a re-judged image is removed, not left with its old value."""
+        load(butler, qadb)
+        assert qadb.count("image_quality_qa_species") == 16
+        assert qadb.count("dm_line_residual_qa_metric") == 128
+        species = tables["iqQaSpeciesMetrics"]
+        tables["iqQaSpeciesMetrics"] = species[
+            ~((species["visit"] == 133025) & (species["description"] == "Trace"))
+        ]
+        metrics = tables["dmLineResidualMetrics"]
+        tables["dmLineResidualMetrics"] = metrics[metrics["metric"] != "linesPerFiber"]
+        counts = load(butler, qadb)
+        assert counts["image_quality_qa_species"] == 12
+        assert qadb.count("image_quality_qa_species") == 12
+        assert qadb.count("dm_line_residual_qa_metric") == counts["dm_line_residual_qa_metric"] < 128
+        assert qadb.count("dm_line_residual_qa_metric", "metric = 'linesPerFiber'") == 0
+        # Another image's rows are untouched by a reload of fewer images.
+        loadVisit(
+            butler, qadb, COLLECTION, 133040, pipelineVersions=False, log=lambda _: None, now=lambda: NOW
+        )
+        assert qadb.count("image_quality_qa_species") == 12
+        # Negative control: the per-image rows stay (one per image loaded), so the drop is in the long tables only.
+        assert qadb.count("image_quality_qa") == 4
+
+    def testDeletingAProcessingCascades(self, butler, qadb, scope):
+        """Removing a processing row takes every QA row of it along (the schema's ON DELETE CASCADE)."""
+        load(butler, qadb)
+        qadb.commit("DELETE FROM data_processing_pipe2d WHERE collection_name = :c", params={"c": COLLECTION})
+        for table in (
+            "image_quality_qa",
+            "image_quality_qa_species",
+            "dm_line_residual_qa",
+            "dm_line_residual_qa_metric",
+            "qa_gate",
+        ):
+            assert qadb.count(table) == 0, table
+        assert qadb.count("qa_thresholds") == 2  # thresholds outlive the processings that used them
+
     def testOneProcessingPerRun(self, StubButler, tables, configs, qadb):
         runs = {
             (133025, "b", 1): "r1",

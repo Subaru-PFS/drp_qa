@@ -37,7 +37,8 @@ CREATE TABLE data_processing_pipe2d (
     pipe2d_version TEXT, drp_qa_version TEXT, datamodel_version TEXT, obs_pfs_version TEXT,
     CONSTRAINT uq_collection_run UNIQUE (collection_name, run_name));
 CREATE TABLE image_quality_qa (
-    processing_id INTEGER REFERENCES data_processing_pipe2d, pfs_visit_id INTEGER REFERENCES pfs_visit,
+    processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
+    pfs_visit_id INTEGER REFERENCES pfs_visit,
     camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1), obs_type TEXT, seq_name TEXT,
     trace_only BOOLEAN, med_fwhm REAL, med_dx_center REAL, dx_center_rms REAL, pct_flagged REAL,
     pct_low_sn REAL, pct_meas_fail REAL, n_lines INTEGER, lines_per_fiber REAL, n_lit_fibers INTEGER,
@@ -54,9 +55,10 @@ CREATE TABLE image_quality_qa_species (
     value REAL,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name, description, metric),
     FOREIGN KEY (processing_id, pfs_visit_id, camera_name)
-        REFERENCES image_quality_qa (processing_id, pfs_visit_id, camera_name));
+        REFERENCES image_quality_qa (processing_id, pfs_visit_id, camera_name) ON DELETE CASCADE);
 CREATE TABLE dm_line_residual_qa (
-    processing_id INTEGER REFERENCES data_processing_pipe2d, pfs_visit_id INTEGER REFERENCES pfs_visit,
+    processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
+    pfs_visit_id INTEGER REFERENCES pfs_visit,
     camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1), camera_set TEXT, obs_type TEXT,
     fitted BOOLEAN, n_species INTEGER, n_species_measured INTEGER, qa_status TEXT, qa_decided_by TEXT,
     qa_reason TEXT, recommended_action TEXT, calib_id TEXT, calib_run TEXT, calib_created TEXT,
@@ -67,20 +69,22 @@ CREATE TABLE dm_line_residual_qa_metric (
     status_type TEXT, metric TEXT, value REAL, status TEXT,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name, reference, description, status_type, metric),
     FOREIGN KEY (processing_id, pfs_visit_id, camera_name)
-        REFERENCES dm_line_residual_qa (processing_id, pfs_visit_id, camera_name));
+        REFERENCES dm_line_residual_qa (processing_id, pfs_visit_id, camera_name) ON DELETE CASCADE);
 CREATE TABLE qa_thresholds (
     thresholds_id INTEGER PRIMARY KEY AUTOINCREMENT, sha256 VARCHAR(64) NOT NULL UNIQUE, name TEXT,
     derived_on TEXT, collection TEXT, reference_runs TEXT, drp_qa_version TEXT, datamodel_version TEXT,
     obs_pfs_version TEXT, drp_stella_version TEXT, n_entries INTEGER, registered_at TIMESTAMP);
 CREATE TABLE qa_threshold_entry (
-    thresholds_id INTEGER REFERENCES qa_thresholds, metric TEXT, population TEXT, arm VARCHAR(1),
+    thresholds_id INTEGER REFERENCES qa_thresholds ON DELETE CASCADE, metric TEXT, population TEXT, arm VARCHAR(1),
     spectrograph INTEGER, obs_type TEXT, description TEXT, camera_set TEXT, reference TEXT,
-    status_type TEXT, higher_is_worse BOOLEAN, absolute BOOLEAN, method TEXT, warn REAL, fail REAL,
+    status_type TEXT, higher_is_worse BOOLEAN, absolute BOOLEAN, method TEXT, warn DOUBLE PRECISION,
+    fail DOUBLE PRECISION,
     n_good INTEGER, n_good_visits INTEGER, visit_range TEXT, reliable BOOLEAN, fail_bounded BOOLEAN,
     degenerate BOOLEAN, provenance TEXT,
     PRIMARY KEY (thresholds_id, metric, population));
 CREATE TABLE qa_gate (
-    processing_id INTEGER REFERENCES data_processing_pipe2d, pfs_visit_id INTEGER REFERENCES pfs_visit,
+    processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
+    pfs_visit_id INTEGER REFERENCES pfs_visit,
     camera_name VARCHAR(2), qa_status TEXT, decided_by_task TEXT, qa_decided_by TEXT, qa_reason TEXT,
     provisional BOOLEAN, mode TEXT, iq_thresholds_id INTEGER REFERENCES qa_thresholds,
     dm_thresholds_id INTEGER REFERENCES qa_thresholds, decided_at TIMESTAMP,

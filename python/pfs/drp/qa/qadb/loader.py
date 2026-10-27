@@ -24,6 +24,7 @@ from pfs.drp.qa.qadb.tables import (
     IMAGE_KEYS,
     IMAGE_QUALITY,
     IMAGE_QUALITY_SPECIES,
+    KEYS,
     LINE_RESIDUAL,
     LINE_RESIDUAL_METRIC,
     QA_GATE,
@@ -32,7 +33,7 @@ from pfs.drp.qa.qadb.tables import (
     gateRows,
     imageRows,
 )
-from pfs.drp.qa.qadb.writer import ensureVisits, processingId, registerThresholds, upsert
+from pfs.drp.qa.qadb.writer import deleteRows, ensureVisits, processingId, registerThresholds, upsert
 from pfs.drp.qa.utils.provenance import commonPipeline
 
 __all__ = [
@@ -284,7 +285,11 @@ def loadCollection(
             )
             if len(keyed) < len(rows):
                 log(f"{longTable}: {len(rows) - len(keyed)} rows without a {perImage} row, skipped")
-            write(longSpec.name, imageRows(keyed, longSpec, ids), list(longSpec.keys))
+            longRows = imageRows(keyed, longSpec, ids)
+            if sink is None:
+                # A reload replaces the image's rows: what the new judgement no longer has must go too.
+                deleteRows(qadb, longSpec.name, longRows[list(KEYS)])
+            write(longSpec.name, longRows, list(longSpec.keys))
 
     gate = gateRows(images, ids, mode, now(), thresholdsIds)
     write("qa_gate", gate, list(QA_GATE[:3]))
