@@ -124,6 +124,7 @@ IMAGE_QUALITY = TableSpec(
         "arm": "str",
         "obsType": "str",
         "seqName": "str",
+        "illumination": "str",
         "traceOnly": "bool",
         "medFwhm": "float",
         "medDxCenter": "float",
@@ -223,6 +224,7 @@ _POPULATION_COLUMNS = (
     "cameraSet",
     "reference",
     "statusType",
+    "illumination",
 )
 
 #: ``qa_threshold_entry``: one row per metric and population of a file.

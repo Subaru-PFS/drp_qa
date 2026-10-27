@@ -14,7 +14,7 @@ from pfs.drp.qa.qadb.loader import (
     loadCollection,
     loadVisit,
     readTables,
-    thresholdsFileOf,
+    thresholdsFilesOf,
 )
 from pfs.drp.qa.qadb.tables import GATE_ORDER, worstStatus
 from pfs.drp.qa.qadb.writer import UNKNOWN_VERSION
@@ -69,9 +69,9 @@ class TestReadTables:
 
 def testHelpers(butler, StubButler):
     assert drpQaVersionOf(butler, RUN) == "w.2026.44"
-    assert thresholdsFileOf(butler, RUN, "imageQualityQa").name == "iqQaThresholds-run25.yaml"
+    assert [p.name for p in thresholdsFilesOf(butler, RUN, "imageQualityQa")] == ["iqQaThresholds-run25.yaml"]
     bare = StubButler({})
-    assert thresholdsFileOf(bare, RUN, "imageQualityQa") is None
+    assert thresholdsFilesOf(bare, RUN, "imageQualityQa") == []
     assert drpQaVersionOf(bare, RUN) == UNKNOWN_VERSION  # never the loader's own version
 
 
@@ -222,6 +222,25 @@ class TestLoadCollection:
         assert gate.loc[gate["pfs_visit_id"] == 133040, "dm_thresholds_id"].nunique() == 1
         assert set(gate["dm_thresholds_id"]).__len__() == 2  # r1 and r2 differ
         assert qadb.count("qa_thresholds") == 3
+
+    def testExtraThresholdsFilesAreRegistered(self, StubButler, tables, configs, qadb):
+        """ImageQualityQa's further layers are registered too; qa_gate cites the first."""
+        iq = SimpleNamespace(
+            thresholdsFile="iqQaThresholds-run25.yaml", extraThresholdsFiles=["iqQaThresholds-iis-run30.yaml"]
+        )
+        butler = StubButler(tables, datasets={**configs, "imageQualityQa_config": iq})
+        load(butler, qadb)
+        names = qadb.query_dataframe("SELECT thresholds_id, name FROM qa_thresholds ORDER BY thresholds_id")
+        assert set(names["name"]) == {
+            "iqQaThresholds-run25.yaml",
+            "iqQaThresholds-iis-run30.yaml",
+            "dmLineResidualThresholds-run25.yaml",
+        }
+        first = int(names.loc[names["name"] == "iqQaThresholds-run25.yaml", "thresholds_id"].iloc[0])
+        assert qadb.query_scalars("SELECT DISTINCT iq_thresholds_id FROM qa_gate") == [first]
+        iis = int(names.loc[names["name"] == "iqQaThresholds-iis-run30.yaml", "thresholds_id"].iloc[0])
+        assert qadb.count("qa_threshold_entry", f"thresholds_id = {iis} AND illumination = 'iis'") > 0
+        assert qadb.count("qa_threshold_entry", f"thresholds_id = {first} AND illumination IS NOT NULL") == 0
 
     def testMissingThresholdsFileIsLogged(self, StubButler, tables, configs, qadb):
         datasets = {**configs, "dmLineResiduals_config": SimpleNamespace(thresholdsFile="gone.yaml")}

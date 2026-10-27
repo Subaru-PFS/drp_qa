@@ -184,6 +184,14 @@ class TestThresholdRows:
         assert set(entries["reference"].dropna()) <= {"calib", "visit"}
         assert "statusType" not in entries.columns and "status_type" in entries.columns
 
+    def testIisPopulation(self):
+        from pfs.drp.qa.metrics.gate import thresholdsPath
+
+        metadata, table = readThresholds(thresholdsPath("iqQaThresholds-iis-run30.yaml"))
+        _, entries = thresholdRows(metadata, table, 9, "iis.yaml", "ef" * 32, NOW)
+        assert (entries["illumination"] == "iis").all()
+        assert entries["population"].str.contains("illumination=iis").all()
+
     def testPopulationKey(self):
         assert populationKey({"obsType": "arc", "arm": "b", "spectrograph": None}) == "arm=b obsType=arc"
         assert populationKey({"spectrograph": 2}) == "spectrograph=2"

@@ -41,7 +41,7 @@ CREATE TABLE image_quality_qa (
     processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
     pfs_visit_id INTEGER REFERENCES pfs_visit,
     camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1), obs_type TEXT, seq_name TEXT,
-    trace_only BOOLEAN, med_fwhm REAL, med_dx_center REAL, dx_center_rms REAL, pct_flagged REAL,
+    illumination TEXT, trace_only BOOLEAN, med_fwhm REAL, med_dx_center REAL, dx_center_rms REAL, pct_flagged REAL,
     pct_low_sn REAL, pct_meas_fail REAL, n_lines INTEGER, lines_per_fiber REAL, n_lit_fibers INTEGER,
     n_fibers INTEGER, n_trace_rows INTEGER, qa_status TEXT, qa_decided_by TEXT, qa_reason TEXT,
     calexp_run TEXT, isr_bad_pixels INTEGER, isr_time REAL, cosmic_ray_count INTEGER,
@@ -78,7 +78,7 @@ CREATE TABLE qa_thresholds (
 CREATE TABLE qa_threshold_entry (
     thresholds_id INTEGER REFERENCES qa_thresholds ON DELETE CASCADE, metric TEXT, population TEXT, arm VARCHAR(1),
     spectrograph INTEGER, obs_type TEXT, description TEXT, camera_set TEXT, reference TEXT,
-    status_type TEXT, higher_is_worse BOOLEAN, absolute BOOLEAN, method TEXT, warn DOUBLE PRECISION,
+    status_type TEXT, illumination TEXT, higher_is_worse BOOLEAN, absolute BOOLEAN, method TEXT, warn DOUBLE PRECISION,
     fail DOUBLE PRECISION,
     n_good INTEGER, n_good_visits INTEGER, visit_range TEXT, reliable BOOLEAN, fail_bounded BOOLEAN,
     degenerate BOOLEAN, provenance TEXT,

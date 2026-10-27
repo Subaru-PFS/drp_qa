@@ -50,7 +50,7 @@ __all__ = [
     "loadCollection",
     "loadVisit",
     "readTables",
-    "thresholdsFileOf",
+    "thresholdsFilesOf",
 ]
 
 #: How a load came about: qaActor as the run goes, comparison mode over a run, or later.
@@ -124,30 +124,39 @@ def drpQaVersionOf(butler: Any, run: str) -> str:
     return UNKNOWN_VERSION
 
 
-def thresholdsFileOf(butler: Any, run: str, task: str) -> Path | None:
-    """Return the thresholds file a task judged with in a RUN, from the config pipetask stored there.
+def thresholdsFilesOf(butler: Any, run: str, task: str) -> list[Path]:
+    """Return the thresholds files a task judged a RUN with, from the config pipetask stored there.
 
-    `None` when the RUN has no config for the task, or it names no file.
+    The config's ``thresholdsFile`` first, then its ``extraThresholdsFiles``
+    (``imageQualityQa``'s further layers, judged after it). Empty when the RUN
+    has no config for the task, or it names no file.
     """
     try:
         config = butler.get(f"{task}_config", collections=[run])
     except Exception:  # a RUN without the task has no config
-        return None
-    name = getattr(config, "thresholdsFile", None)
-    return thresholdsPath(name) if name else None
+        return []
+    names = [getattr(config, "thresholdsFile", None), *(getattr(config, "extraThresholdsFiles", None) or [])]
+    return [thresholdsPath(name) for name in names if name]
 
 
 def _thresholdsIdOf(qadb: Any, butler: Any, run: str, task: str, now: datetime, log: Callable) -> int | None:
-    """Register the thresholds a task judged a RUN with; `None` with a log line when it can't."""
-    path = thresholdsFileOf(butler, run, task)
-    if path is None:
-        return None
-    try:
-        return registerThresholds(qadb, path, now)
-    except FileNotFoundError:
-        # The file this drp_qa ships is not the one that judged (PIPE2D-1976 records it at judgement time).
-        log(f"{run}: {task} judged with {path.name}, which this drp_qa no longer has; thresholds left null")
-        return None
+    """Register the thresholds files a task judged a RUN with; return the first layer's id.
+
+    Every file is registered, so each is in ``qa_thresholds`` by content;
+    ``qa_gate`` cites the first, the layer judged first. `None`, with a log
+    line, for a file this drp_qa no longer ships.
+    """
+    ids = []
+    for path in thresholdsFilesOf(butler, run, task):
+        try:
+            ids.append(registerThresholds(qadb, path, now))
+        except FileNotFoundError:
+            # The file this drp_qa ships is not the one that judged (PIPE2D-1976 records it at judgement time).
+            log(
+                f"{run}: {task} judged with {path.name}, which this drp_qa no longer has; thresholds left null"
+            )
+            ids.append(None)
+    return ids[0] if ids else None
 
 
 def _pipelineByRun(
