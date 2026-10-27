@@ -26,8 +26,9 @@ detector. Its verdict is persisted, so that calibration building and the science
 - **Comparison works on a partial run.** Run on day 10 of a 20-day run, it gives valid verdicts, and a later
   re-run adds the new nights' images without changing earlier verdicts: a verdict depends only on its own
   image, each period and drp_qa version has its own collection, and what is already judged is skipped.
-- **Verdicts are stored in the Butler**, in `iqQaMetrics` (`qaStatus`, `qaReason`). qadb (`spt_qa_database`)
-  loads them later, with the long-term QA results (PIPE2D-1385).
+- **Verdicts are stored in the Butler**, in `iqQaMetrics` and `dmLineResidualSummary` (`qaStatus`, `qaReason`),
+  and copied to qadb (`spt_qa_database`) afterwards by `pfs.drp.qa.qadb`, with the thresholds they were judged by
+  and one gate verdict per image; see [Loading QA results into qadb](#loading-qa-results-into-qadb) (PIPE2D-1385).
 - **Gate, not product assessment.** Judging the quality of science products is a separate job, not yet
   designed; tasks here should stay on one side of that line.
 - **Not covered yet:** cosmic-ray processing (PIPE2D-1609).
@@ -735,6 +736,48 @@ the pipeline writes (not the comparison driver, its report, tests or docs), so a
 collection; uncommitted changes to the rest are refused. Report the reference
 (`--period run25`) first: its stored metrics are what each other run is compared with.
 
+## Loading QA results into qadb
+
+`pfs.drp.qa.qadb` copies what `imageQualityQa` and `dmLineResiduals` wrote to the Butler into qadb
+(`spt_qa_database` 0.2.0), after the fact: the Butler is the record, and a database outage cannot fail a quantum.
+One code path serves qaActor after each visit's pipetask (`loadVisit`; INSTRM-3040), comparison mode after a run,
+and the backfill of whole collections (`bin.src/loadQadb.py`).
+
+- **Tables.** `iqQaMetrics` → `image_quality_qa`, `iqQaSpeciesMetrics` → `image_quality_qa_species`,
+  `dmLineResidualSummary` → `dm_line_residual_qa`, `dmLineResidualMetrics` → `dm_line_residual_qa_metric`: the same
+  columns in snake_case (`pfs.drp.qa.qadb.tables`), keyed by the processing, the visit and the camera (`b1`). A
+  Butler column reaches qadb once both the schema and the table's spec here name it; the fiber arrays and the
+  per-flag percentages of `iqQaMetrics` stay in the Butler.
+- **Processing.** Each Butler RUN found is a `data_processing_pipe2d` row (collection and RUN name), with the drp_qa
+  that wrote it (the RUN's `packages` dataset) and the pipeline that reduced the images it judged (`datamodel`,
+  `obs_pfs` and `drp_stella`, from the judged calexps' `pfsArm` headers as comparison mode reads them; null when the
+  RUN judged reductions of more than one pipeline, or none is recorded).
+- **Thresholds.** The thresholds files the tasks' stored configs name (`thresholdsFile`, then
+  `extraThresholdsFiles`) are registered per RUN in `qa_thresholds`, identified by content (sha256), with their
+  entries in `qa_threshold_entry`; `qa_gate` cites the first layer. Entries are stored as the file writes them: a
+  population column an entry does not name is null, and for a column with a default (`gate.DEFAULT_POPULATION`:
+  `illumination`, default `full`) null means that default, so a query joining entries to images must read a null
+  `illumination` as `full`.
+- **Gate.** `qa_gate` holds each image's worst verdict across the tasks (`FAIL` > `WARN` > `PASS` > `UNKNOWN`; a task
+  that judged nothing never outranks one that did), the task and metric that decided it, every task's reason, the
+  mode (`realtime`, `comparison`, `backfill`) and whether the verdict is provisional. PIPE2D-1930 reads this table.
+- **Idempotent.** Every write is `INSERT ... ON CONFLICT DO UPDATE` on the row's key, and a long table's rows of each
+  image are deleted before its reload: load a collection again after a re-judgement, or after a load that stopped,
+  and the rows are replaced, not duplicated, and a species or metric the new judgement lacks is gone. Visits qadb's `pfs_visit`
+  lacks get a row, filled from the opdb when one is given.
+
+```bash
+# What would be written, as parquet, touching no database
+python bin.src/loadQadb.py -c u/wtg/comparison/run30/<version> --visit-range 148302 148348 --dry-run ~/reports/dry
+# Load it (qadb user that may write; credentials in ~/.pgpass), with the opdb's visit descriptions
+python bin.src/loadQadb.py -c qaActor/reductions --visits 150001 150002 --opdb-host pfsa-db
+```
+
+The tests (`tests/qadb/`) run the writer's statements on SQLite through SQLAlchemy, whose `ON CONFLICT` and
+`RETURNING` match PostgreSQL's; set `PFS_QADB_TEST_DSN` to a scratch PostgreSQL to run them there too. The
+schema the tests create (`tests/qadb/conftest.py`) mirrors `spt_qa_database`'s migration `a7c3e5d91b24`: change both
+together.
+
 ## Command-line tools
 
 Scripts live in `bin.src/` and are run directly — there is no SCons step to copy them into a `bin/` directory on `PATH`:
@@ -759,6 +802,12 @@ run's healthy frames in bulk describe the reference visits' night, not the instr
 ### `fiberNormsQa.py`
 
 Thin entry point for `pfs.drp.qa.fiberNormsQa.main`, which plots fiber normalizations from a Butler collection.
+
+### `loadQadb.py`
+
+Loads a collection's QA tables, thresholds and gate verdicts into qadb; see
+[Loading QA results into qadb](#loading-qa-results-into-qadb). Requires the stack (it reads the Butler) and a qadb
+user that may write; `--dry-run DIR` writes parquet files instead.
 
 ## Command-line tools
 

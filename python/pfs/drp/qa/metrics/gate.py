@@ -54,6 +54,7 @@ __all__ = [
     "DEFAULT_POPULATION",
     "PROVISIONAL_COLUMNS",
     "STATUS_ORDER",
+    "THRESHOLD_FIELDS",
     "VERDICT_COLUMNS",
     "configThresholds",
     "gate",
@@ -85,6 +86,9 @@ _FIELDS = frozenset(
         "provenance",
     )
 )
+
+#: The same, for readers of a thresholds table: every other column names its population.
+THRESHOLD_FIELDS = _FIELDS
 
 #: Columns `gate` returns: the verdict, the metric that decided it, and why.
 VERDICT_COLUMNS = ("qaStatus", "qaDecidedBy", "qaReason")

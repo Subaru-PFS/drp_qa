@@ -10,6 +10,23 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **QA results load into qadb** (PIPE2D-1385) — `pfs.drp.qa.qadb` copies the tables `imageQualityQa` and
+  `dmLineResiduals` write to the Butler (`iqQaMetrics`, `iqQaSpeciesMetrics`, `dmLineResidualSummary`,
+  `dmLineResidualMetrics`) into qadb's `image_quality_qa`, `image_quality_qa_species`, `dm_line_residual_qa` and
+  `dm_line_residual_qa_metric` (`spt_qa_database` 0.2.0), the same columns in snake_case, keyed by the processing
+  (collection and Butler RUN: `data_processing_pipe2d`, with the drp_qa that wrote it and the reducing pipeline's
+  versions), the visit and the camera. The thresholds files the tasks judged with are registered by content in
+  `qa_thresholds` and `qa_threshold_entry`, and `qa_gate` gets each image's worst verdict across the tasks, with the
+  deciding task and metric, the mode and whether it is provisional. Every write is `INSERT ... ON CONFLICT DO
+  UPDATE`, and a long table's rows of each loaded image are deleted before its reload, in the same transaction, so a
+  collection can be loaded again after a re-judgement; a version a later load does not know keeps the one recorded.
+  Thresholds are registered per RUN, from the config pipetask stored there, and cited only on the images the task
+  judged; a file this drp_qa no longer ships leaves the id null (PIPE2D-1976 records the hash at judgement time).
+  `loadCollection` is the one entry point, for
+  qaActor after a visit's pipetask (`loadVisit`, INSTRM-3040), comparison mode and backfill;
+  `bin.src/loadQadb.py` runs it, with `--dry-run` writing parquet instead. `readMetrics` gains `withRun`, the
+  Butler RUN of each row, and `log`, where its progress goes. `tests/qadb/` runs the statements on SQLite (and on PostgreSQL with `PFS_QADB_TEST_DSN`).
+
 - **IIS frames judged on the engineering fibers** (PIPE2D-1954) — an IIS arc or quartz ("ImageQuality (Ne)",
   "(Kr)", "(Halogen)": the IIS lamps through the 16 engineering fibers per spectrograph) takes the regular arc or
   quartz path on those fibers, which drp_stella's `reduceExposure` measures lines and traces on: `litFibers(...,

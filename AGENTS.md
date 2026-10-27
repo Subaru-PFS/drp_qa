@@ -460,6 +460,12 @@ drpQA.yaml#extractionQaCombined      ← extQaImage_pickle (multiple)
 bin.src/plotIqQaTimeSeries.py
     ← reads: iqQaMetrics (all quanta in a collection)
     → writes: time-series PNG via pfs.drp.qa.plotting.iqQa.plotIqTimeSeries
+
+bin.src/loadQadb.py / pfs.drp.qa.qadb.loadCollection   (after pipetask, not a task)
+    ← reads: iqQaMetrics, iqQaSpeciesMetrics, dmLineResidualSummary, dmLineResidualMetrics,
+             packages (per RUN), imageQualityQa_config, dmLineResiduals_config
+    → writes to qadb: image_quality_qa(_species), dm_line_residual_qa(_metric),
+             data_processing_pipe2d, qa_thresholds, qa_threshold_entry, qa_gate (idempotent upserts)
 ```
 
 `reduceExposure` is **not** required between `fitDetectorMap` and `imageQualityQa`. The
