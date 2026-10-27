@@ -52,14 +52,22 @@ class TestCheckedInSet:
         assert visitSet.path == defaultValidationVisitsPath()
 
     def testSm1DefocusIsKnownBad(self):
-        """The Run27 SM1-defocused sequences: spectrograph 1 only, caught by medFwhm."""
+        """The Run27 SM1-defocused sequences: spectrograph 1 only, caught by medFwhm and the line scatter."""
         visitSet = loadValidationVisits()
         sm1 = [entry for entry in visitSet.knownBad if entry.reason and "SM1 defocused" in entry.reason]
-        assert len(sm1) == 9
+        byMetric = {metric: [e for e in sm1 if e.metric == metric] for metric in {e.metric for e in sm1}}
+        assert {metric: len(entries) for metric, entries in byMetric.items()} == {
+            "medFwhm": 9,
+            "robustRmsDeltaX": 8,  # not HgCd, whose scatter is not judged (PIPE2D-1934)
+        }
         visits = {visit for entry in sm1 for visit in entry.visits}
         assert visits >= {140005, 140032, 140035, 140138, 140139, 140148}
         assert not visits & {140033, 140034}, "no raw data"
-        assert all(entry.spectrographs == (1,) and entry.metric == "medFwhm" for entry in sm1)
+        assert all(entry.spectrographs == (1,) for entry in sm1)
+        # The scatter entries leave out b-arm Xenon, the one noisy population, and HgCd.
+        xenon = [e for e in byMetric["robustRmsDeltaX"] if e.seqType == "Arc: Xenon"]
+        assert [e.arms for e in xenon] == [("r", "n")]
+        assert not any(e.seqType == "Arc: HgCd" for e in byMetric["robustRmsDeltaX"])
         assert visitSet.expectationFor(140130, arm="b", spectrograph=1, seqType="Arc: Neon") == "FAIL"
         assert visitSet.expectationFor(140130, arm="b", spectrograph=4, seqType="Arc: Neon") is None
         # SM2 has a verdict of its own: drift against a later calibration (PIPE2D-1921).
@@ -80,10 +88,12 @@ class TestCheckedInSet:
             if entry.reason
             and any(text in entry.reason for text in ("SM1 defocused", "No light", "didn't turn on"))
         ]
-        assert len(faults) == 14 and {entry.run for entry in faults} == {27}
+        assert len(faults) == 22 and {entry.run for entry in faults} == {27}
         assert {entry.run for entry in visitSet.confirmedBad} == {25, 27, 30}
-        # Run29 holds the b2 and n4 quartz references only (PIPE2D-1938).
-        assert {entry.run for entry in visitSet.knownGood} == {25, 29}
+        # Run29 holds the b2 and n4 quartz references only (PIPE2D-1938); Run30 the IIS frames' (PIPE2D-1954).
+        assert {entry.run for entry in visitSet.knownGood} == {25, 29, 30}
+        run30 = [entry for entry in visitSet.knownGood if entry.run == 30]
+        assert len(run30) == 42 and all(entry.seqType.startswith("ImageQuality (") for entry in run30)
         run29 = [entry for entry in visitSet.knownGood if entry.run == 29]
         traces = [entry for entry in run29 if entry.sequenceType == "scienceTrace"]
         assert traces and set().union(*(entry.cameras for entry in traces)) == {"b2", "n4"}
@@ -94,7 +104,7 @@ class TestCheckedInSet:
         visitSet = loadValidationVisits()
         assert visitSet.knownGood, "no usable known_good entries"
         assert visitSet.goodVisits[0] == 133025
-        assert visitSet.goodVisits[-1] == 147747  # Run29's last trace set
+        assert visitSet.goodVisits[-1] == 150721  # Run30's last nightly IIS quartz (PIPE2D-1954)
 
     def testQuartzReferenceOfB2AndN4IsRun29(self):
         """Run25's trace entries leave b2 and n4 out; Run29's hold them alone (PIPE2D-1938).
@@ -218,17 +228,17 @@ class TestUnconfirmedVerdicts:
         """They are real visits; hiding them defeats the point of recording them."""
         visitSet = loadValidationVisits()
         suspect = {entry.visits[0] for entry in visitSet.knownBad if entry.unconfirmed}
-        # Run25 SM3's y offset from its calibration (PIPE2D-1921): its traces, arcs and twilights
-        # after the calibration block, named visit by visit (an entry's visits are reduced, so a
-        # range here would sweep in every visit between them).
-        sm3 = {133532, 133536, 134338, 135828, 135849, 135830, 134334, 134880, 135275}
-        assert suspect == {149883, 150661} | sm3
+        # Run25 SM3's y offset from its calibration (PIPE2D-1921): its arcs and twilights after the
+        # calibration block, named visit by visit (an entry's visits are reduced, so a range here
+        # would sweep in every visit between them). Not its traces, which measure no y (PIPE2D-1934).
+        sm3 = {135830, 134334, 134880, 135275}
+        assert suspect == sm3
         assert len(visitSet.visits) < 200  # negative control: no entry spans a run
 
     def testConfirmedBadExcludesThem(self):
         """A guess must not decide whether a threshold separates the bad data."""
         visitSet = loadValidationVisits()
-        assert len(visitSet.confirmedBad) == len(visitSet.knownBad) - 11
+        assert len(visitSet.confirmedBad) == len(visitSet.knownBad) - 4
         assert all(not entry.unconfirmed for entry in visitSet.confirmedBad)
 
     def testTheyStillCarryAVerdictAndAReason(self):
@@ -328,12 +338,39 @@ class TestParsing:
                 "version: 1\nknown_bad:\n  - {visit: 1, sequenceType: scienceArc, expect: FAIL, unconfirmed: yes please}\n",
                 "must be true or false",
             ),
+            (
+                "version: 1\nknown_bad:\n  - {visit: 1, sequenceType: scienceArc, expect: FAIL, unchecked: ' '}\n",
+                "must give the reason",
+            ),
+            (
+                "version: 1\nknown_bad:\n  - {visit: 1, sequenceType: scienceArc, expect: FAIL, unconfirmed: true,"
+                " unchecked: why}\n",
+                "cannot be 'unchecked'",
+            ),
+            (
+                "version: 1\nknown_good:\n  - {visit: 1, sequenceType: scienceArc, unchecked: why}\n",
+                "'unchecked' is for known_bad",
+            ),
         ],
     )
     def testMalformedEntriesRaise(self, writeYaml, body, message):
         """Validation is strict: a dropped entry stops being a reference."""
         with pytest.raises(ValueError, match=message):
             loadValidationVisits(writeYaml(body))
+
+    def testUnchecked(self, writeYaml):
+        """An entry no check can run says why; the others leave the field out."""
+        path = writeYaml(
+            """
+            version: 1
+            known_bad:
+              - {visit: 1, sequenceType: scienceArc, expect: FAIL, metric: nLines, unchecked: "not judged"}
+              - {visit: 2, sequenceType: scienceArc, expect: FAIL, metric: medFwhm}
+            """
+        )
+        unchecked, checked = loadValidationVisits(path).knownBad
+        assert unchecked.unchecked == "not judged"
+        assert checked.unchecked is None
 
     def testMissingFileRaises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
@@ -376,7 +413,7 @@ class TestRowMatching:
         frame = pd.DataFrame(
             [
                 {"visit": visit, "arm": arm, "spectrograph": spectrograph, "seqName": seqName}
-                for visit in (133025, 133037, 133042, 134334, 140005, 149883, 150779)
+                for visit in (133025, 133037, 133042, 134334, 140005, 150115, 150779)
                 for arm in ("b", "r", "m")
                 for spectrograph in (1, 2)
                 for seqName in ("Arc: Argon", "Arc: HgCd", "Twilight sky", "Arc: Neon")
@@ -463,6 +500,19 @@ class TestTables:
             widths = {line.count(" | ") for line in rows if "---" not in line}
             assert len(widths) == 1, block.splitlines()[0]
 
+    def testUncheckedIsShown(self):
+        """The metric cell says unchecked and the reason cell says why."""
+        entry = ValidationVisit(
+            visits=(1,), expect="FAIL", metric="nLines", reason="Unlit.", unchecked="Not judged."
+        )
+        text = formatTables(ValidationVisitSet(knownBad=(entry,)))
+        assert "| `nLines` (unchecked) | Unlit. *Unchecked:* Not judged. |" in text
+        # Negative control: an entry without the field shows neither.
+        checked = formatTables(
+            ValidationVisitSet(knownBad=(ValidationVisit(visits=(1,), expect="FAIL", metric="nLines"),))
+        )
+        assert "unchecked" not in checked.lower()
+
     def testPipesAreEscaped(self):
         entry = ValidationVisit(visits=(1,), expect="PASS", note="a | b")
         assert "a \\| b" in formatTables(ValidationVisitSet(knownGood=(entry,)))
@@ -538,8 +588,8 @@ class TestRuns:
 
     def testCheckedInSetDerivesFromRun25AndRun29(self):
         visitSet = loadValidationVisits()
-        assert visitSet.referenceRuns == (25, 29)  # Run29 for b2 and n4 quartz (PIPE2D-1938)
-        assert {entry.run for entry in visitSet.knownGood} == {25, 29}
+        assert visitSet.referenceRuns == (25, 29, 30)  # Run29 for b2 and n4 quartz; Run30 for IIS frames
+        assert {entry.run for entry in visitSet.knownGood} == {25, 29, 30}
 
     def testBArmFlagRatesAreRecordedAsBad(self):
         """The baseline for drp_stella's adjustDetectorMap work: bad for pctFlagged only."""

@@ -4,6 +4,7 @@ import pandas as pd
 
 from pfs.drp.qa.comparison.classify import classifyVisits
 from pfs.drp.qa.comparison.residuals import (
+    bReadWith,
     describeCrossing,
     residualFindings,
     residualProblems,
@@ -131,3 +132,45 @@ def testScatterTable():
     ]
     pooled = scatterTable(traces, reference, labels=("run2", "run1"))
     assert "obsType" not in pooled.columns and list(pooled["images run2"]) == [3]
+
+
+def testBReadWith():
+    arm = pd.Series(["b", "b", "b", "b", "r", "n"])
+    cameras = pd.Series(["bmn", "brn", "bn", None, "brn", "bmn"])
+    assert list(bReadWith(arm, cameras)) == ["m", "r", "", "", "", ""]
+
+
+def testScatterTableByCamera():
+    def traces(rows):
+        return _metrics(
+            [
+                (v, arm, 1, "visit", "Trace", "RESERVED", "robustRmsDeltaX", value, "")
+                for v, arm, value, _ in rows
+            ]
+        ).assign(cameraSet=[cameras for *_, cameras in rows])
+
+    run = traces(
+        [
+            (1, "b", 0.04, "bmn"),
+            (2, "b", 0.05, "brn"),
+            (3, "b", 0.06, "br"),  # a set the reference never read
+            (4, "b", 0.07, None),  # no pfsConfig
+            (2, "r", 0.10, "brn"),
+            (3, "r", 0.20, "br"),
+        ]
+    )
+    reference = traces([(7, "b", 0.045, "bmn"), (8, "b", 0.05, "brn"), (8, "r", 0.1, "brn")])
+    table = scatterTable(run, reference, labels=("run2", "run1"))
+    columns = ["arm", "bReadWith", "images run2", "median run1"]
+    rows = [tuple(row) for row in table[columns].itertuples(index=False, name=None)]
+    # Only the b arm is split, by the camera it was read with, whatever else the visit read: b read
+    # with r is compared with the reference's b read with r although the reference never read "br",
+    # and the r arm is one row beside the reference's.
+    assert rows[1:] == [("b", "m", 1, 0.045), ("b", "r", 2, 0.05), ("r", "", 2, 0.1)]
+    # A b row without a camera set is its own row, not dropped or counted as read with r or m.
+    assert rows[0][:3] == ("b", "", 1) and pd.isna(rows[0][3])
+    # An empty reference does not decide the grouping; the run's own table is still split.
+    assert "bReadWith" in scatterTable(run, pd.DataFrame(), labels=("run2", "run1"))
+    # Negative control: a reference without cameraSet keeps the b arm pooled.
+    pooled = scatterTable(run, reference.drop(columns="cameraSet"), labels=("run2", "run1"))
+    assert "bReadWith" not in pooled.columns and list(pooled["images run2"]) == [4, 2]

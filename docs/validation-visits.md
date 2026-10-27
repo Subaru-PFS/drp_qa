@@ -10,6 +10,11 @@ or passes a known-bad one, does not merge.
 - **Loader:** `pfs.drp.qa.metrics.validationVisits.loadValidationVisits()`.
 - **Using it:** [`qa-thresholds.ipynb`](qa-thresholds.ipynb) is the step-by-step
   procedure: run `imageQualityQa` over these visits, then derive and check thresholds.
+- **Known-bad coverage:** `pfs.drp.qa.metrics.coverage.knownBadCoverage` checks every
+  known-bad entry against the thresholds the gate uses: every image it covers, with its
+  metric measured, must reach its verdict, or the entry says why no check can
+  (`unchecked`). `tests/metrics/test_coverage.py` runs it on the stored metrics of the
+  validation visits, and the notebook prints it (PIPE2D-1934).
 
 ## Where the visits come from
 
@@ -55,6 +60,10 @@ or that it should warn or fail for a stated reason.
 - **`known_bad`:** expected to `WARN` or `FAIL`. Each entry names the metric that should
   catch it, because a known-bad visit must fail *for the right reason*. An entry holds only
   for the metric it names; it says nothing about the others.
+- **`unchecked: <reason>`:** a known-bad entry whose verdict no check gives today: its
+  metric is not judged, or not measured, on those images. It keeps the fault on record and
+  says why it is not caught. Every other confirmed known-bad entry must be caught, and an
+  unchecked one must not be: once a check catches it, drop the field.
 - **`unconfirmed: true`:** a suspected fault, noted in the run's calibration summary, whose numbers no one
   has checked yet. It is reported beside the thresholds but never decides anything. Once
   its metrics have been compared with the known-good data, either name the metric and drop
@@ -90,23 +99,40 @@ identified by visit number, with no observer, target or design names.
   flagged, because `adjustDetectorMap` applies one S/N cut to all lines together. The
   exposures are good for every other metric; these entries hold for `pctFlagged` only, so
   today's rates are the baseline for the drp_stella work rather than the threshold.
-- **Cloudy twilight (Run25):** image quality degraded by observing conditions; `medFwhm`.
+  Unchecked: `pctFlagged` is not judged (PIPE2D-1929).
+- **Cloudy twilight (Run25):** taken through cloud. Unchecked: nothing measured on a
+  twilight sees cloud. FWHM is not measured on twilights (PIPE2D-1917), and cloud need not
+  widen the lines; their `nLines` sit within the clear twilights' range. The check that
+  would see it, the uniformity of the sky's flux across the fibers against `fiberNorms`,
+  is not written yet (PIPE2D-1973), and the entry names it (`skyFluxUniformity`).
 - **SM1 defocused (Run27, 2026-03-09/10, spectrograph 1):** the eight arc and trace
   sequences noted "SM1 defocused", with FWHM 3.83–4.86 px across every lamp type;
-  `medFwhm`. See "SM1 exception" in [`qa-domain-notes.md`](qa-domain-notes.md). The
+  `medFwhm`. The same visits are known-bad for the line scatter, `robustRmsDeltaX`, at
+  1.7–4× each detector's Run25 median, except HgCd (scatter not judged) and b-arm Xenon (the
+  one noisy population; two of its three defocused images pass). See "SM1 exception" in
+  [`qa-domain-notes.md`](qa-domain-notes.md). The
   other visits in 140005–140138 carry no verdict and are not included: darks, the
   `sky1540+3500` frames, and visits the summary does not list (among them the raster
   scans 140106–140112 and 140115–140121).
 - **Unlit spectrograph (Run27 nightly `ImageQuality` arcs):** exposures noted "No light on
-  SM1" or "SM2". The unlit spectrograph's detectors have no lines; `nLines`, `FAIL`. No
-  threshold judges them: their pfsConfig has no `GOOD` science fiber, so `linesPerFiber` is not
-  measured (PIPE2D-1935); if they are IIS frames, they belong to PIPE2D-1954.
+  SM1" or "SM2". The unlit spectrograph's detectors have no lines; `nLines`, `FAIL`.
+  Unchecked: they are IIS frames, lighting no `GOOD` science fiber, so `linesPerFiber` is not
+  measured (PIPE2D-1935) and `nLines` is not judged. The raw `nLines` does separate them
+  (r about 2.6k rows unlit against 16–19k lit). Judging IIS frames is PIPE2D-1954.
 - **Obstructed frames (Run30):** taken with the M1 cover or the top screen closed. Less
   light reaches the detectors, so each lit fiber measures fewer lines (a quarter of the lamp
   lines on an arc, nine tenths of the trace centroids on a quartz); `linesPerFiber`, `FAIL`.
 - **Partial slit illumination (Run30)** is no longer known-bad (PIPE2D-1935): with one fiber
   group lit, each lit fiber measures the lines a full slit's does, and `linesPerFiber`
-  passes it. `tests/metrics/test_gate.py` checks 149398, 149881, 150367 and 150413 pass.
+  passes it. Comparison mode judges these daily arcs with every other.
+- **149883 ("Home", Run30)** was a suspected fault and is removed: every metric passes it,
+  and as a Run30 visit it cannot be known-good (PIPE2D-1934).
+- **150661 (Run30, "Mirror cover open, but screen is wrong position")** was a suspected fault
+  and is removed (PIPE2D-1934). Something is off: its trace scatter against its own
+  detectorMap is 1.5–1.6× each b detector's Run25 median, r reaches WARN or FAIL on three of
+  four and n is mixed. But no metric can be named for it: nobody has shown why a misplaced
+  screen would scatter the trace centroids, its `linesPerFiber` is within 3 % of normal, and it
+  is one visit.
 - **Off-zenith Helium detectorMap tests (Run30, 150779 and 150782, alt 45–49)** were listed
   as the flexure case, `WARN` provisionally, and are removed: against `detectorMap_calib`
   they sit within 0.2 px in y and −0.33 to −0.51 px in x on b, as b read with m does at the
@@ -119,7 +145,8 @@ identified by visit number, with no observer, target or design names.
   133055 sits off `detectorMap_calib` in y, by the same pixels in every arm of a
   spectrograph (n with the opposite sign): SM1 0.45, SM2 0.65, SM3 1.40, SM4 0.70 px
   (PIPE2D-1921). The adjustment absorbs it, so they stay known-good, but SM3 reaches the
-  1.0 px `medianDeltaY` WARN. Unconfirmed until the cause is known.
+  1.0 px `medianDeltaY` WARN. Unconfirmed until the cause is known. Only SM3's arcs and
+  twilights are listed: a quartz has trace centroids only, and no `medianDeltaY`.
 
 ### Gaps
 
@@ -175,28 +202,70 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 134338–134339 | 25 | scienceTrace | b, n; cameras b2, n4 | 2, 4 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
 | 135828–135829 | 25 | scienceTrace | b, n; cameras b2, n4 | 2, 4 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
 | 135849–135850 | 25 | scienceTrace | b; cameras b2 | 2 | Trace | PASS | `robustRmsDeltaX`, `robustRmsDeltaY` |  |
+| 148548 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 148549 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 148550 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 148686 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 148687 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 148688 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 148828 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 148829 | 30 | scienceArc | all; not n4 | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 148830 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 148971 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 148972 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 148973 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 149132 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 149133 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 149134 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 149320 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 149321 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 149322 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 149797 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 149798 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 149799 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 149940 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 149941 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 149942 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150079 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150080 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150081 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150226 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150227 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150228 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150284 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150285 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150286 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150471 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150472 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150473 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150621 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150622 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150623 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
+| 150719 | 30 | scienceArc | all | all | ImageQuality (Ne) | PASS |  | Run30 nightly IIS Ne arc. |
+| 150720 | 30 | scienceArc | all | all | ImageQuality (Kr) | PASS |  | Run30 nightly IIS Kr arc. |
+| 150721 | 30 | scienceTrace | all | all | ImageQuality (Halogen) | PASS |  | Run30 nightly IIS quartz. |
 
 ### Known bad
 
 | Visits | Run | Type | Arms | Spectrographs | Sequence | Expect | Metric | Reason |
 |---|---|---|---|---|---|---|---|---|
-| 133025–133027 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Argon | WARN | `pctFlagged` | b-arm Argon (Run25 block A): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 133028–133030 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Xenon | WARN | `pctFlagged` | b-arm Xenon (Run25 block A): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 133031–133033 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Neon | WARN | `pctFlagged` | b-arm Neon (Run25 block A): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 133034–133036 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Krypton | WARN | `pctFlagged` | b-arm Krypton (Run25 block A): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 133042–133044 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Argon | WARN | `pctFlagged` | b-arm Argon (Run25 block B): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 133045–133047 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Xenon | WARN | `pctFlagged` | b-arm Xenon (Run25 block B): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 133048–133050 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Neon | WARN | `pctFlagged` | b-arm Neon (Run25 block B): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 133051–133053 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Krypton | WARN | `pctFlagged` | b-arm Krypton (Run25 block B): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 135830–135831 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Argon | WARN | `pctFlagged` | b-arm Argon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 135832–135833 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Xenon | WARN | `pctFlagged` | b-arm Xenon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 135834–135835 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Neon | WARN | `pctFlagged` | b-arm Neon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 135836–135837 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Krypton | WARN | `pctFlagged` | b-arm Krypton (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 135841–135842 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Argon | WARN | `pctFlagged` | b-arm Argon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 135843–135844 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Xenon | WARN | `pctFlagged` | b-arm Xenon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 135845–135846 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Neon | WARN | `pctFlagged` | b-arm Neon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 135847–135848 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Krypton | WARN | `pctFlagged` | b-arm Krypton (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. |
-| 134334–134337 | 25 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | FAIL | `medFwhm` | Cloudy; 180 s twilight sky taken through cloud. |
+| 133025–133027 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Argon | WARN | `pctFlagged` (unchecked) | b-arm Argon (Run25 block A): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 133028–133030 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Xenon | WARN | `pctFlagged` (unchecked) | b-arm Xenon (Run25 block A): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 133031–133033 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Neon | WARN | `pctFlagged` (unchecked) | b-arm Neon (Run25 block A): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 133034–133036 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Krypton | WARN | `pctFlagged` (unchecked) | b-arm Krypton (Run25 block A): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 133042–133044 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Argon | WARN | `pctFlagged` (unchecked) | b-arm Argon (Run25 block B): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 133045–133047 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Xenon | WARN | `pctFlagged` (unchecked) | b-arm Xenon (Run25 block B): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 133048–133050 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Neon | WARN | `pctFlagged` (unchecked) | b-arm Neon (Run25 block B): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 133051–133053 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Krypton | WARN | `pctFlagged` (unchecked) | b-arm Krypton (Run25 block B): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 135830–135831 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Argon | WARN | `pctFlagged` (unchecked) | b-arm Argon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 135832–135833 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Xenon | WARN | `pctFlagged` (unchecked) | b-arm Xenon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 135834–135835 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Neon | WARN | `pctFlagged` (unchecked) | b-arm Neon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 135836–135837 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Krypton | WARN | `pctFlagged` (unchecked) | b-arm Krypton (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 135841–135842 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Argon | WARN | `pctFlagged` (unchecked) | b-arm Argon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 135843–135844 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Xenon | WARN | `pctFlagged` (unchecked) | b-arm Xenon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 135845–135846 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Neon | WARN | `pctFlagged` (unchecked) | b-arm Neon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 135847–135848 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Krypton | WARN | `pctFlagged` (unchecked) | b-arm Krypton (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
+| 134334–134337 | 25 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | FAIL | `skyFluxUniformity` (unchecked) | Cloudy; 180 s twilight sky taken through cloud. *Unchecked:* No metric measured on twilights sees cloud; the sky-uniformity check is PIPE2D-1973. |
 | 140005–140006 | 27 | scienceArc | r, n | 1 | Arc: Argon | FAIL | `medFwhm` | SM1 defocused (Run27). 15 s, az 90. |
 | 140032 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
 | 140035 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
@@ -206,6 +275,14 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 140130–140132 | 27 | scienceArc | b, r, n | 1 | Arc: Neon | FAIL | `medFwhm` | SM1 defocused (Run27). 5 s, az 336. |
 | 140133–140135 | 27 | scienceArc | b, r, n | 1 | Arc: Krypton | FAIL | `medFwhm` | SM1 defocused (Run27). 70 s, az 336. |
 | 140136–140138 | 27 | scienceArc | b, r, n | 1 | Arc: HgCd | FAIL | `medFwhm` | SM1 defocused (Run27). 45 s, az 336. |
+| 140005–140006 | 27 | scienceArc | r, n | 1 | Arc: Argon | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 15 s, az 90. |
+| 140032 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 30 s, az 226. |
+| 140035 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 30 s, az 226. |
+| 140139–140148 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 30 s, az 336. |
+| 140124–140126 | 27 | scienceArc | r, n | 1 | Arc: Argon | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 15 s, az 336. |
+| 140127–140129 | 27 | scienceArc | r, n | 1 | Arc: Xenon | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 45 s, az 336. |
+| 140130–140132 | 27 | scienceArc | b, r, n | 1 | Arc: Neon | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 5 s, az 336. |
+| 140133–140135 | 27 | scienceArc | b, r, n | 1 | Arc: Krypton | FAIL | `robustRmsDeltaX` | SM1 defocused (Run27). 70 s, az 336. |
 | 139971 | 27 | scienceArc | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
 | 140005–140006 | 27 | scienceArc | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
 | 140124–140138 | 27 | scienceArc | all | 3 | any | WARN | `medianDeltaX` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM3 lines +1.15 px off in x. |
@@ -215,27 +292,21 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 139971 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
 | 140005–140006 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
 | 140124–140138 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
-| 139971 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `nLines` | SM1 lamp didn't turn on. (Run27, 1 s arc) |
-| 140477 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `nLines` | No light on SM1. (Run27, 1 s arc) |
-| 140640 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
-| 140649 | 27 | scienceArc | b, r, n | 1, 2 | ImageQuality | FAIL | `nLines` | No light on SM1 or SM2. (Run27, 1 s arc) |
-| 140651 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `nLines` | No light on SM2. (Run27, 1 s arc) |
+| 139971 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `linesPerFiber` (unchecked) | SM1 lamp didn't turn on. (Run27, 1 s arc) *Unchecked:* IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954). |
+| 140477 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `linesPerFiber` (unchecked) | No light on SM1. (Run27, 1 s arc) *Unchecked:* IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954). |
+| 140640 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `linesPerFiber` (unchecked) | No light on SM2. (Run27, 1 s arc) *Unchecked:* IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954). |
+| 140649 | 27 | scienceArc | b, r, n | 1, 2 | ImageQuality | FAIL | `linesPerFiber` (unchecked) | No light on SM1 or SM2. (Run27, 1 s arc) *Unchecked:* IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954). |
+| 140651 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `linesPerFiber` (unchecked) | No light on SM2. (Run27, 1 s arc) *Unchecked:* IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954). |
 | 150115 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | M1 cover closed. |
 | 150116 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | M1 cover closed. |
 | 150641 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
 | 150642 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | any | FAIL | `linesPerFiber` | Mirror cover and top screen both closed; noted in the calibration summary as to be ignored. |
+| 148829 | 30 | scienceArc | all; cameras n4 | all | ImageQuality (Kr) | WARN | `medDxCenter` | IIS Kr lamp header off on n4: reduced against the sky line list; lines 2 px from detectorMap_calib. |
 
 ### Unconfirmed
 
 | Visits | Run | Type | Arms | Spectrographs | Sequence | Expect | Metric | Reason |
 |---|---|---|---|---|---|---|---|---|
-| 150661 | 30 | scienceTrace | b, r, n | 1, 2, 3, 4 | Trace | FAIL |  | Noted "Mirror cover open, but screen is wrong position" in the calibration summary. Probably a failure; neither the verdict nor the metric that should catch it has been established. |
-| 149883 | 30 | scienceArc | b, r, n | 1, 2, 3, 4 | Arc: Neon | FAIL |  | Noted "Home" in the calibration summary, a note whose meaning is not settled. Other visits carry the same tag. Recorded so its metrics can be compared against the Run25 set; probably a failure, but unestablished. |
-| 133532–133533 | 25 | scienceTrace | all | 3 | Trace | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
-| 133536–133537 | 25 | scienceTrace | all | 3 | Trace | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
-| 134338–134339 | 25 | scienceTrace | all | 3 | Trace | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
-| 135828–135829 | 25 | scienceTrace | all | 3 | Trace | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
-| 135849–135850 | 25 | scienceTrace | all | 3 | Trace | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
 | 135830–135848 | 25 | scienceArc | all | 3 | any | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
 | 134334–134337 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
 | 134880–134886 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
@@ -264,8 +335,13 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 
    ```bash
    python -m pfs.drp.qa.metrics.validationVisits tables
-   pytest tests/metrics/test_validationVisits.py
+   pytest tests/metrics/test_validationVisits.py tests/metrics/test_coverage.py
    ```
+
+   A new known-bad entry must be caught by the shipped thresholds on the stored metrics
+   (`test_coverage.py`), or carry `unchecked` with the reason. Until its visits are in the
+   stored metrics (`tests/metrics/data`, remade by `makeGateFixtures.py` and
+   `makeDriftFixture.py` there), the test fails it as `no rows`.
 
    Paste the output between the `GENERATED` markers in this file.
 4. Update the prose in [What is in it](#what-is-in-it) if a new kind of visit was added.

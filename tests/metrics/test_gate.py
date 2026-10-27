@@ -14,19 +14,26 @@ import yaml
 from pfs.drp.qa.metrics.calibration import labelRows, readThresholds
 from pfs.drp.qa.metrics.gate import (
     PROVISIONAL_COLUMNS,
+    THRESHOLDS_COLUMNS,
     VERDICT_COLUMNS,
     configThresholds,
     gate,
     judge,
+    layerPipelineMismatch,
     loadThresholds,
     pipelineMismatch,
+    recordedThresholds,
+    sha256Of,
+    thresholdsNames,
     thresholdsPath,
+    thresholdsRecord,
 )
 from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 
 ROOT = Path(__file__).parents[2]
 DATA = Path(__file__).parent / "data"
 RUN25 = DATA / "iqQaThresholds-run25.yaml"
+IIS = DATA / "iqQaThresholds-iis-run30.yaml"
 
 
 def configDefaults() -> SimpleNamespace:
@@ -184,6 +191,34 @@ def testMostSpecificEntryWins():
     assert list(judged["status"]) == ["PASS", "FAIL", "FAIL"]
 
 
+def testIlluminationDefaultsToFull():
+    """An entry without ``illumination`` judges full-slit images only; an IIS image needs one naming it."""
+    full = table({"metric": "medFwhm", "arm": "b", "warn": 3.0, "fail": 3.5})
+    assert gate(image(medFwhm=4.0), full)["qaStatus"].iloc[0] == "FAIL"
+    assert gate(image(medFwhm=4.0, illumination="full"), full)["qaStatus"].iloc[0] == "FAIL"
+    assert (
+        gate(image(medFwhm=4.0, illumination="iis"), full, default="UNKNOWN")["qaStatus"].iloc[0] == "UNKNOWN"
+    )
+
+    both = table(
+        {"metric": "medFwhm", "illumination": "iis", "warn": 5.0, "fail": 6.0},
+        {"metric": "medFwhm", "arm": "b", "warn": 3.0, "fail": 3.5},
+    )
+    images = pd.concat(
+        [image(medFwhm=4.0), image(visit=2, medFwhm=4.0, illumination="iis")], ignore_index=True
+    )
+    judged = judge(images, both)
+    assert judged["population"].tolist() == ["arm=b", "illumination=iis"]
+    assert judged["status"].tolist() == ["FAIL", "PASS"]
+    # Negative control: by specificity alone the arm=b entry (1 column) ties the IIS one, which
+    # would be an error, and an entry naming two columns would take the IIS image.
+    specific = table(
+        {"metric": "medFwhm", "illumination": "iis", "warn": 5.0, "fail": 6.0},
+        {"metric": "medFwhm", "arm": "b", "obsType": "arc", "warn": 3.0, "fail": 3.5},
+    )
+    assert judge(images, specific)["population"].tolist() == ["arm=b obsType=arc", "illumination=iis"]
+
+
 def testEarlierTableWins():
     """A table's match, however general, beats any match in a later table."""
     first = table({"metric": "medFwhm", "warn": 2.0, "fail": 2.5})
@@ -300,6 +335,70 @@ def testShippedFileIsTheAdoptedRun25(stored):
         yaml.safe_load(RUN25.read_text()), pd.read_parquet(DATA / "iqQaMetrics-validation.parquet")
     )
     assert remade == yaml.safe_load(thresholdsPath("iqQaThresholds-run25.yaml").read_text())
+
+
+def loadScript(name: str):
+    """Return the thresholds-making script ``name`` beside the shipped files, imported as a module."""
+    spec = importlib.util.spec_from_file_location(name, thresholdsPath(f"{name}.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture(scope="module")
+def iisStored() -> pd.DataFrame:
+    """Return Run30's nightly IIS frames' ``iqQaMetrics``, reduced afresh (u/wtg/qa-iis/003b)."""
+    return pd.read_parquet(DATA / "iqQaMetrics-iis-run30.parquet")
+
+
+def testShippedIisFileIsTheAdoptedRun30(iisStored, tmp_path):
+    """The IIS file is what its script derives from the Run30 IIS frames and adopts (PIPE2D-1954)."""
+    module = loadScript("makeIisThresholds")
+    derived = module.derive(iisStored, tmp_path / "derived.yaml")
+    assert yaml.safe_load(derived.read_text()) == yaml.safe_load(IIS.read_text())
+    remade = module.adopt(yaml.safe_load(IIS.read_text()), iisStored)
+    assert remade == yaml.safe_load(thresholdsPath("iqQaThresholds-iis-run30.yaml").read_text())
+    assert all(entry["population"]["illumination"] == "iis" for entry in remade["thresholds"])
+
+
+def testShippedIisFileVerdicts(iisStored):
+    """IIS frames are judged by the IIS file alone: the known-good nights pass, the two faults warn."""
+    files = [thresholdsPath(configDefaults().thresholdsFile)]
+    files += [thresholdsPath(name) for name in configDefaults().extraThresholdsFiles]
+    thresholds = [*files, configThresholds(configDefaults())]
+    metrics = iisStored.drop(columns=list(VERDICT_COLUMNS))
+    verdicts = gate(metrics, thresholds, default="UNKNOWN")
+    judged = judge(metrics, thresholds)
+    assert (metrics["illumination"] == "iis").all()
+    # Neither the Run25 file (layer 0) nor the config (layer 2) judges an IIS image.
+    assert set(judged.loc[judged["status"] != "", "layer"]) == {1}
+    flagged = metrics.assign(qaStatus=verdicts["qaStatus"], qaDecidedBy=verdicts["qaDecidedBy"])
+    flagged = flagged[flagged["qaStatus"] != "PASS"]
+    assert flagged[["visit", "arm", "spectrograph", "qaStatus", "qaDecidedBy"]].to_records(
+        index=False
+    ).tolist() == [
+        (148829, "n", 4, "WARN", "medDxCenter"),  # IIS lamp header off: reduced against the sky line list
+        (149595, "b", 2, "WARN", "medFwhm"),  # the night SM2 and SM4 moved; not a known-good night
+    ]
+    # Every known-good image has its FWHM judged, the n-arm Ne arcs and the m arm excepted.
+    fwhm = judged[judged["metric"] == "medFwhm"].merge(metrics[["seqName"]], left_on="row", right_index=True)
+    unjudged = fwhm[fwhm["status"] == ""]
+    assert set(unjudged["arm"]) == {"m", "n"}
+    assert set(unjudged.loc[unjudged["arm"] == "n", "seqName"]) == {"ImageQuality (Ne)"}
+    # Negative control: a full-slit image is not judged by the IIS file.
+    full = image(medFwhm=1.0, linesPerFiber=1.0, medDxCenter=0.0)
+    assert (judge(full, [IIS])["status"] == "").all()
+    # An IIS lamp with no entry of its own (an IIS Ar arc) has no FWHM reference: not judged, not failed.
+    argon = image(
+        seqName="ImageQuality (Ar)",
+        illumination="iis",
+        medFwhm=1.95,
+        linesPerFiber=50.0,
+        medDxCenter=0.0,
+        pctFlagged=np.nan,
+    )
+    judgedArgon = judge(argon, thresholds).set_index("metric")
+    assert judgedArgon.loc["medFwhm", "status"] == "" and judgedArgon.loc["medDxCenter", "status"] == "PASS"
 
 
 def testShippedFileVerdicts(stored):
@@ -434,6 +533,40 @@ def testPipelineMismatchWithoutAReference():
     assert pipelineMismatch(metrics[["medFwhm"]], PIPELINE)["qaProvisional"].all()
 
 
+def testLayerPipelineMismatch():
+    """Each image is provisional against the pipeline of the layer that judged it (PIPE2D-1954)."""
+    run25 = table({"metric": "medFwhm", "warn": 3.0, "fail": 4.0})
+    iis = table({"metric": "medFwhm", "illumination": "iis", "warn": 2.0, "fail": 2.5})
+    iisPipeline = PIPELINE | {"obs_pfs": "w.2026.43"}
+    images = pd.concat(
+        [image(medFwhm=2.0), image(visit=2, medFwhm=1.9, illumination="iis"), image(visit=3, medFwhm=np.nan)],
+        ignore_index=True,
+    )
+    for column, value in (("versionDatamodel", "w.2026.40"), ("versionDrpStella", "w.2026.41-6-ge56938d2")):
+        images[column] = value
+    images["versionObsPfs"] = [
+        "w.2026.40",
+        "w.2026.43",
+        "w.2026.43",
+    ]  # each reduced on its own file's pipeline
+    judged = judge(images, [run25, iis])
+    assert judged.loc[judged["status"] != "", "layer"].tolist() == [0, 1]  # the third image's FWHM is NaN
+    mismatch = layerPipelineMismatch(images, judged, [PIPELINE, iisPipeline])
+    # The full-slit and IIS images match their own layers; the unjudged image is compared with the first.
+    assert mismatch["qaProvisional"].tolist() == [False, False, True]
+    assert mismatch["qaPipeline"].iloc[2] == "obs_pfs w.2026.43 (thresholds w.2026.40)"
+    # Negative control: against one pipeline, as before, the IIS image reads as provisional.
+    assert pipelineMismatch(images, PIPELINE)["qaProvisional"].tolist() == [False, True, True]
+    # Through gate, and a layer without a pipeline (the config's) checks nothing.
+    verdicts = gate(images, [run25, iis], default="UNKNOWN", pipeline=[PIPELINE, iisPipeline, None])
+    assert verdicts["qaProvisional"].tolist() == [False, False, True]
+    assert gate(images, [run25, iis], pipeline=[None, None])["qaProvisional"].tolist() == [
+        False,
+        False,
+        False,
+    ]
+
+
 def testGateMarksProvisionalOnlyWhenAsked():
     thresholds = pd.DataFrame([{"metric": "medFwhm", "warn": 3.0, "fail": 4.0, "higherIsWorse": True}])
     metrics = reductions("w.2026.41-6-ge56938d2", "w.2026.38")
@@ -465,3 +598,47 @@ def testGateKeepsOneRowPerImageWithDuplicateLabels():
     assert len(result) == 2
     assert result["qaStatus"].tolist() == ["PASS", "FAIL"]
     assert result["qaProvisional"].tolist() == [False, True]
+
+
+class TestThresholdsRecord:
+    """A task records the files it judged with by name and content, in the order judged (PIPE2D-1976)."""
+
+    def testNamesInTheOrderJudged(self):
+        config = SimpleNamespace(thresholdsFile="a.yaml", extraThresholdsFiles=["b.yaml", ""])
+        assert thresholdsNames(config) == ["a.yaml", "b.yaml"]
+        assert thresholdsNames(SimpleNamespace(thresholdsFile="", extraThresholdsFiles=["b.yaml"])) == [
+            "b.yaml"
+        ]
+        assert thresholdsNames(SimpleNamespace(thresholdsFile="a.yaml")) == ["a.yaml"]  # no further layers
+
+    def testRecordRoundTrips(self):
+        names = ["iqQaThresholds-run25.yaml", str(IIS)]  # shipped by name, and an absolute path
+        record = thresholdsRecord(names)
+        assert tuple(record) == THRESHOLDS_COLUMNS
+        expected = [(names[0], sha256Of(thresholdsPath(names[0]))), (names[1], sha256Of(IIS))]
+        assert recordedThresholds(*record.values()) == expected
+        # Negative control: the order is the order judged, so the first layer is the one qa_gate cites.
+        assert recordedThresholds(*thresholdsRecord(names[::-1]).values()) != expected
+
+    def testRecordsContentNotName(self, tmp_path):
+        path = tmp_path / "thresholds.yaml"
+        path.write_bytes(RUN25.read_bytes())
+        before = thresholdsRecord([str(path)])
+        assert before["thresholdsSha256"] == sha256Of(RUN25)
+        path.write_bytes(RUN25.read_bytes() + b"\n# edited\n")
+        after = thresholdsRecord([str(path)])
+        assert after["thresholdsFiles"] == before["thresholdsFiles"]
+        assert after["thresholdsSha256"] != before["thresholdsSha256"]
+
+    def testNoFileIsRecordedAsNone(self):
+        """Judged by the config's fields alone is recorded, and differs from a table that recorded nothing."""
+        assert thresholdsRecord([]) == dict.fromkeys(THRESHOLDS_COLUMNS, "")
+        assert recordedThresholds("", "") == []
+        assert recordedThresholds(None, None) is None
+        assert recordedThresholds(np.nan, np.nan) is None
+
+    def testBadRecords(self):
+        with pytest.raises(ValueError, match="comma"):
+            thresholdsRecord(["a,b.yaml"])
+        with pytest.raises(ValueError, match="2 thresholds files recorded with 1"):
+            recordedThresholds("a.yaml,b.yaml", "0" * 64)

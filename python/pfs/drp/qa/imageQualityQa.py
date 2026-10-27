@@ -11,7 +11,7 @@ from typing import Any
 import lsst.afw.image
 import numpy as np
 import pandas as pd
-from lsst.pex.config import DictField, Field
+from lsst.pex.config import DictField, Field, ListField
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -33,16 +33,57 @@ from lsst.pipe.base.connectionTypes import (
 
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
 from pfs.drp.qa.crossDispersion import measureImageWidths, profileFwhm
-from pfs.drp.qa.metrics.gate import configThresholds, gate, loadThresholds, thresholdsPath
+from pfs.drp.qa.metrics.gate import (
+    configThresholds,
+    gate,
+    loadThresholds,
+    thresholdsNames,
+    thresholdsPath,
+    thresholdsRecord,
+)
 from pfs.drp.qa.metrics.longFormat import parseSpeciesStats, speciesFrame
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
 from pfs.drp.stella.utils.stability import addTraceLambdaToArclines
 
-__all__ = ["ImageQualityQaTask", "litFibers"]
+__all__ = ["ImageQualityQaTask", "engineeringLit", "litFibers"]
 
 
-def litFibers(pfsConfig: PfsConfig | None, fiberId: np.ndarray) -> tuple[set[int] | None, int | None]:
+def engineeringLit(pfsConfig: PfsConfig, spectrograph: int | None = None) -> bool:
+    """Return whether the pfsConfig says the IIS is on: its engineering fibers are all ``GOOD``.
+
+    What drp_stella's ``reduceExposure`` decides by (``checkPfsConfig`` selects the quantum's
+    spectrograph from the pfsConfig, then ``isIIS`` asks whether its engineering fibers are
+    all ``GOOD``), and so what decides which fibers ``lines`` holds: a design that doesn't
+    light the IIS records the engineering fibers as not ``GOOD``. The lamp headers are the
+    other witness (`getLamps`), and some n-arm raws record the IIS lamp off (Run30: 148829
+    n4, 149134 n2, 149322 n2, ...; PIPE2D-1954).
+
+    Parameters
+    ----------
+    pfsConfig : `pfs.datamodel.PfsConfig`
+        Fiber configuration of the visit.
+    spectrograph : `int` or `None`, optional
+        Judge this spectrograph's engineering fibers alone, as reduceExposure does;
+        every engineering fiber when `None` or the pfsConfig has no ``spectrograph``.
+
+    Returns
+    -------
+    `bool`
+        Whether the engineering fibers (there must be some) are all ``GOOD``.
+    """
+    engineering = np.asarray(pfsConfig.targetType) == TargetType.ENGINEERING
+    spectrographs = getattr(pfsConfig, "spectrograph", None)
+    if spectrograph is not None and spectrographs is not None:
+        engineering &= np.asarray(spectrographs) == spectrograph
+    if not engineering.any():
+        return False
+    return bool(np.all(np.asarray(pfsConfig.fiberStatus)[engineering] == FiberStatus.GOOD))
+
+
+def litFibers(
+    pfsConfig: PfsConfig | None, fiberId: np.ndarray, engineering: bool = False
+) -> tuple[set[int] | None, int | None]:
     """Return the fibers of a detector that the pfsConfig lights, and how many it could.
 
     A design lights one fiber group by parking the others' cobras behind their black
@@ -52,29 +93,38 @@ def litFibers(pfsConfig: PfsConfig | None, fiberId: np.ndarray) -> tuple[set[int
     nominal position (an unassigned cobra) is lit too, and counts: leaving it out would
     let an obstructed frame on such a design pass (PIPE2D-1935).
 
+    An IIS frame lights the 16 engineering fibers of each spectrograph instead, and
+    drp_stella's reduceExposure then measures lines and traces on those alone, whatever
+    the science fibers' status (PIPE2D-1954): with ``engineering`` the lit fibers are
+    the ``GOOD`` engineering fibers.
+
     Parameters
     ----------
     pfsConfig : `pfs.datamodel.PfsConfig` or `None`
         Fiber configuration of the visit.
     fiberId : `numpy.ndarray` of `int`
         The detector's fibers (``detectorMap.fiberId``).
+    engineering : `bool`, optional
+        Count the engineering fibers (an IIS frame) rather than the science fibers.
 
     Returns
     -------
     lit : `set` [`int`] or `None`
-        The detector's ``GOOD`` fibers, engineering fibers excepted; `None`
-        without a pfsConfig.
+        The detector's ``GOOD`` science fibers, or with ``engineering`` its ``GOOD``
+        engineering fibers; `None` without a pfsConfig.
     possible : `int` or `None`
         How many of the detector's fibers the design could light: the lit ones
-        and those it hides behind a black dot. `None` without a pfsConfig.
+        and those it hides behind a black dot, or with ``engineering`` the
+        detector's engineering fibers. `None` without a pfsConfig.
     """
     if pfsConfig is None:
         return None, None
     status = np.asarray(pfsConfig.fiberStatus)
     onDetector = np.isin(np.asarray(pfsConfig.fiberId), np.asarray(fiberId))
-    onDetector &= np.asarray(pfsConfig.targetType) != TargetType.ENGINEERING
+    isEngineering = np.asarray(pfsConfig.targetType) == TargetType.ENGINEERING
+    onDetector &= isEngineering if engineering else ~isEngineering
     lit = onDetector & (status == FiberStatus.GOOD)
-    possible = lit | (onDetector & (status == FiberStatus.BLACKSPOT))
+    possible = onDetector if engineering else lit | (onDetector & (status == FiberStatus.BLACKSPOT))
     return {int(f) for f in np.asarray(pfsConfig.fiberId)[lit]}, int(possible.sum())
 
 
@@ -129,9 +179,13 @@ class ImageQualityQaConnections(
             " lines, or on a quartz trace centroids, per lit fiber), ``nLitFibers``"
             " and ``nFibers`` (the detector's fibers the pfsConfig lights, and"
             " those it lights or hides behind a black dot), ``nTraceRows`` (trace"
-            " centroids in ``lines``), ``traceOnly``, ``qaStatus``"
+            " centroids in ``lines``), ``traceOnly``, ``illumination`` (``full``,"
+            " the science fibers, or ``iis``, the 16 engineering fibers), ``qaStatus``"
             " (``PASS``, ``WARN``, ``FAIL``, or ``UNKNOWN`` when no metric was"
-            " judged), ``qaDecidedBy``, ``qaReason``, ``calexpRun`` (the RUN"
+            " judged), ``qaDecidedBy``, ``qaReason``, ``thresholdsFiles`` and"
+            " ``thresholdsSha256`` (the thresholds files judged with and their"
+            " content then, comma-separated; empty when none:"
+            " `pfs.drp.qa.metrics.gate.thresholdsRecord`), ``calexpRun`` (the RUN"
             " collection of the calexp judged, null without one)."
         ),
         storageClass="DataFrame",
@@ -261,10 +315,9 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             "Minimum number of good (unflagged, finite-FWHM) arc-line measurements"
             " required to trust the arc-line path.  When fewer good lines are found"
             " the task falls back to the calexp-based width measurement (or fiber"
-            " profile calibration if no calexp is available).  This handles IIS"
-            " frames and other sparse-illumination cases where the arc-line catalog"
-            " does not match the lamp spectrum well enough to yield reliable shape"
-            " measurements."
+            " profile calibration if no calexp is available).  An IIS arc's lines"
+            " are on its 16 engineering fibers per spectrograph, and count"
+            " (PIPE2D-1954)."
         ),
     )
     minPeakSN = Field(
@@ -286,9 +339,10 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             "Maximum fraction of calexp profile samples that may be flagged"
             " before the calexp path is considered unreliable and discarded."
             " Continuum/quartz frames illuminate all fibers uniformly so the"
-            " post-S/N-filter flag rate is low (< 10 %).  Arc-illuminated"
-            " frames — including IIS — illuminate only a small number of"
-            " fibers at discrete wavelengths; scattered light from those"
+            " post-S/N-filter flag rate is low (< 10 %), and only the lit fibers"
+            " are sampled (`litFibers`: the 16 engineering fibers on an IIS quartz,"
+            " PIPE2D-1954).  Arc-illuminated frames light the fibers only at"
+            " discrete wavelengths; scattered light from those"
             " bright fibers can pass the S/N gate at many neighbouring"
             " positions and produce a large spurious FWHM (~7 px).  The"
             " resulting flag rate is typically > 90 %, well above the"
@@ -399,6 +453,20 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " its provenance."
         ),
     )
+    extraThresholdsFiles = ListField(
+        dtype=str,
+        default=["iqQaThresholds-iis-run30.yaml"],
+        doc=(
+            "Further thresholds files, judged after ``thresholdsFile`` and before the config fields, named as"
+            " it is. The default is the IIS frames' file (PIPE2D-1954): every entry names"
+            " ``illumination: iis``, so it judges IIS frames alone, and an entry of any file that doesn't name"
+            " the column is for full-slit frames (`pfs.drp.qa.metrics.gate.DEFAULT_POPULATION`). Derived by"
+            " ``makeIisThresholds.py`` beside it from Run30's nightly IIS frames reduced afresh"
+            " (u/wtg/qa-iis/003b): medFwhm 3/5 % above each detector and lamp's median (the n-arm Ne arc and the"
+            " m arm not judged), linesPerFiber 25/50 % (arcs) and 2.5/5 % (quartz) below each arm and sequence's"
+            " median, medDxCenter at the config's 1/2 px, no pctFlagged."
+        ),
+    )
     dxCenterWarnThreshold = Field(
         dtype=float,
         default=1.0,
@@ -434,8 +502,13 @@ class ImageQualityQaTask(PipelineTask):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Highest priority first; see pfs.drp.qa.metrics.gate.
-        files = [thresholdsPath(self.config.thresholdsFile)] if self.config.thresholdsFile else []
-        self.thresholds = [*loadThresholds(files), configThresholds(self.config)]
+        names = thresholdsNames(self.config)
+        self.thresholds = [
+            *loadThresholds([thresholdsPath(name) for name in names]),
+            configThresholds(self.config),
+        ]
+        # Which files judged, by content, for qadb: the loader's drp_qa may ship others (PIPE2D-1976).
+        self.thresholdsRecord = thresholdsRecord(names)
 
     def runQuantum(
         self,
@@ -485,15 +558,19 @@ class ImageQualityQaTask(PipelineTask):
           are the primary path.  If fewer than ``config.minGoodLines`` good
           measurements are found (e.g. blue arm where catalog lines are sparse),
           a calexp cross-dispersion fallback is attempted.
-        * **IIS arc** (``scienceArc``, engineering fibers): the science arc
-          catalog does not match the 16 IIS positions; FWHM is reported as
-          sparse (no value, no pass/fail).
+        * **IIS arc** (``scienceArc``, the IIS lamps): as a regular arc, on the
+          16 engineering fibers per spectrograph that reduceExposure measures
+          lines on (PIPE2D-1954); the pfsConfig says whether it did
+          (`engineeringLit`), the lamp headers without one. ``illumination`` is
+          ``iis``, and only a threshold naming it judges the frame
+          (`pfs.drp.qa.metrics.gate`).
         * **Regular trace/quartz** (``scienceTrace``, all fibers): calexp
           trace widths are the primary path. When they are absent
           or unusable, the fiber profile calibration widths are reported with
           ``traceOnly``, and neither ``medFwhm`` nor ``pctFlagged`` is judged.
-        * **IIS trace/quartz** (``scienceTrace``, engineering fibers): too few
-          fibers for a reliable measurement; reported as sparse.
+        * **IIS trace/quartz** (``scienceTrace``, the IIS halogen lamp): as a
+          regular quartz, the calexp widths and the trace centroids taken on
+          the engineering fibers.
         * **Science / all-sky** (``scienceObject*``, no lamps): when
           ``pfsConfig`` is available, FWHM is measured from FLUXSTD+GOOD
           fibers in ``calexp`` and ``pctFlagged`` is suppressed (stellar fibers
@@ -538,7 +615,7 @@ class ImageQualityQaTask(PipelineTask):
             Single-row summary with ``medFwhm``, ``medDxCenter``,
             ``dxCenterRms``, ``pctFlagged``, ``nLines``, ``linesPerFiber``,
             ``nLitFibers``, ``nFibers``, ``nTraceRows``, ``traceOnly``,
-            ``obsType``, ``seqName``, ``qaStatus``, ``qaDecidedBy``,
+            ``obsType``, ``illumination``, ``seqName``, ``qaStatus``, ``qaDecidedBy``,
             ``qaReason``, ``visit``, ``arm``, ``spectrograph``.  The verdict
             is `pfs.drp.qa.metrics.gate.gate` with ``self.thresholds``;
             ``UNKNOWN`` when no metric was judged.
@@ -551,7 +628,7 @@ class ImageQualityQaTask(PipelineTask):
         # Classify the observation type from FITS header metadata so that the
         # task can route each visit to the correct measurement path explicitly
         # rather than relying on heuristics like the arc-line count.
-        obs_type, is_iis, seq_nam = self._classifyVisit(calexp, pfsConfig)
+        obs_type, is_iis, seq_nam = self._classifyVisit(calexp, pfsConfig, dataId.get("spectrograph"))
         self.log.debug(
             "Visit classification: obs_type=%r is_iis=%s seq_nam=%r for %s", obs_type, is_iis, seq_nam, dataId
         )
@@ -585,7 +662,10 @@ class ImageQualityQaTask(PipelineTask):
         # slit; without the trace centroids an arc also records, whose number
         # follows the illumination and the pipeline rather than the lamp.
         n_lines = len(data)
-        lit_fibers, n_fibers = litFibers(pfsConfig, detectorMap.fiberId)
+        # On an IIS frame the lit fibers are the engineering fibers: reduceExposure
+        # measures lines and traces on those alone (PIPE2D-1954).
+        lit_fibers, n_fibers = litFibers(pfsConfig, detectorMap.fiberId, engineering=is_iis)
+        illumination = "iis" if is_iis else "full"
         n_lit_fibers = len(lit_fibers) if lit_fibers is not None else None
         if "description" in data.columns:
             is_trace_row = (data["description"] == "Trace").to_numpy()
@@ -599,7 +679,7 @@ class ImageQualityQaTask(PipelineTask):
         # Lamp-line rows on lit fibers: what pctFlagged is computed over on the arc-line path.
         lamp_line_rows = ~is_trace_row & on_lit
         lines_per_fiber = np.nan
-        if n_lit_fibers and not is_iis and obs_type in ("arc", "trace"):
+        if n_lit_fibers and obs_type in ("arc", "trace"):
             counted = is_trace_row if obs_type == "trace" else ~is_trace_row
             if obs_type == "trace" and "description" not in data.columns:
                 counted = np.ones(len(data), dtype=bool)  # no descriptions: every row is a centroid
@@ -610,24 +690,28 @@ class ImageQualityQaTask(PipelineTask):
         using_fluxstd_filter = False
         # The FWHM is read from the fiberProfiles calibration (``traceOnly``).
         using_profile_widths = False
-        # force_sparse bypasses the n_good_arc check for visit types where we
-        # know the arc catalog will not match (IIS arcs/traces).
+        # force_sparse rules out the rows left for visit types the arc catalog says
+        # nothing about: a quartz without a usable calexp, a twilight, a dark.
         force_sparse = False
+        # The frame as the log names it: "Arc", "Quartz", "IIS arc", "IIS quartz".
+        kind = {"arc": "arc", "trace": "quartz"}.get(obs_type, obs_type)
+        kind = f"IIS {kind}" if is_iis else kind.capitalize()
 
-        if obs_type == "arc" and not is_iis:
-            # Regular arc (all 600 fibers, arc lamp): primary path is the
-            # arc-line shape measurements.  Fall back to calexp only when too
-            # few good catalog matches are found (e.g. b arm on sky fields
-            # where arc lines are not in the catalog).
+        if obs_type == "arc":
+            # Arc (the arc lamp on the lit fibers: all 600, one fiber group, or an
+            # IIS arc's 16 engineering fibers): primary path is the arc-line shape
+            # measurements.  Fall back to calexp only when too few good catalog
+            # matches are found (e.g. b arm on sky fields where arc lines are not
+            # in the catalog).
             if n_good_arc >= self.config.minGoodLines:
                 self.log.debug(
-                    "Regular arc %s: using %d good arc-line measurements.",
+                    f"{kind} %s: using %d good arc-line measurements.",
                     dataId,
                     n_good_arc,
                 )
             elif calexp is not None:
                 self.log.info(
-                    "Regular arc %s: only %d good arc lines (< minGoodLines=%d); trying calexp fallback.",
+                    f"{kind} %s: only %d good arc lines (< minGoodLines=%d); trying calexp fallback.",
                     dataId,
                     n_good_arc,
                     self.config.minGoodLines,
@@ -639,7 +723,7 @@ class ImageQualityQaTask(PipelineTask):
                 calexp_good_frac = n_good_calexp / max(len(calexp_data), 1)
                 if n_good_calexp > 0 and (1.0 - calexp_good_frac) < self.config.maxCalexpFlagRate:
                     self.log.info(
-                        "Regular arc calexp fallback: %d good samples (%.1f%% good) for %s.",
+                        f"{kind} calexp fallback: %d good samples (%.1f%% good) for %s.",
                         n_good_calexp,
                         100.0 * calexp_good_frac,
                         dataId,
@@ -648,7 +732,7 @@ class ImageQualityQaTask(PipelineTask):
                     dense_data = True
                 else:
                     self.log.warning(
-                        "Regular arc calexp fallback too sparse for %s"
+                        f"{kind} calexp fallback too sparse for %s"
                         " (%d good, %.1f%% flagged); keeping %d arc-line measurements.",
                         dataId,
                         n_good_calexp,
@@ -657,28 +741,17 @@ class ImageQualityQaTask(PipelineTask):
                     )
             else:
                 self.log.warning(
-                    "Regular arc %s: only %d good arc lines (< minGoodLines=%d)"
+                    f"{kind} %s: only %d good arc lines (< minGoodLines=%d)"
                     " and no calexp; FWHM will be sparse.",
                     dataId,
                     n_good_arc,
                     self.config.minGoodLines,
                 )
 
-        elif obs_type == "arc" and is_iis:
-            # IIS arc (16 engineering fibers): the science arc-line catalog
-            # does not match the engineering fiber positions, so n_good_arc is
-            # always near zero.  Skip calexp too — scattered light from the 16
-            # bright fibers produces a spuriously large (~7 px) FWHM.
-            force_sparse = True
-            self.log.info(
-                "IIS arc %s: science arc catalog does not match engineering"
-                " fibers; reporting sparse (no FWHM).",
-                dataId,
-            )
-
-        elif obs_type == "trace" and not is_iis:
-            # Regular quartz/trace (all fibers, quartz lamp): no arc lines to
-            # fit, so use calexp trace widths as the primary path.
+        elif obs_type == "trace":
+            # Quartz/trace (the quartz lamp on the lit fibers, an IIS quartz's
+            # engineering fibers included): no arc lines to fit, so use calexp
+            # trace widths as the primary path.
             # Any arc-line rows still held in ``data`` describe a catalog that
             # does not apply to a quartz frame, so the visit stays sparse
             # unless one of the two measurement paths succeeds.
@@ -686,7 +759,7 @@ class ImageQualityQaTask(PipelineTask):
             calexp_failed = False
             if calexp is not None:
                 self.log.info(
-                    "Regular trace/quartz %s: measuring FWHM from calexp.",
+                    f"{kind} %s: measuring FWHM from calexp.",
                     dataId,
                 )
                 # Only the lit fibers are sampled: on a design lighting one fiber
@@ -699,7 +772,7 @@ class ImageQualityQaTask(PipelineTask):
                 calexp_good_frac = n_good_calexp / max(len(calexp_data), 1)
                 if n_good_calexp > 0 and (1.0 - calexp_good_frac) < self.config.maxCalexpFlagRate:
                     self.log.info(
-                        "Quartz calexp: %d good samples (%.1f%% good) for %s.",
+                        f"{kind} calexp: %d good samples (%.1f%% good) for %s.",
                         n_good_calexp,
                         100.0 * calexp_good_frac,
                         dataId,
@@ -713,7 +786,7 @@ class ImageQualityQaTask(PipelineTask):
                     # alone read as a contradiction ("10 good, 100.0% flagged").
                     calexp_failed = True
                     self.log.warning(
-                        "Quartz calexp unusable for %s: %d of %d cross-dispersion samples measured"
+                        f"{kind} calexp unusable for %s: %d of %d cross-dispersion samples measured"
                         " cleanly (%.3f%%, need > %.0f%%).",
                         dataId,
                         n_good_calexp,
@@ -732,7 +805,7 @@ class ImageQualityQaTask(PipelineTask):
                 # filtering at WARNING who saw the failure also sees the outcome.
                 report = self.log.warning if calexp_failed else self.log.info
                 report(
-                    "Regular trace/quartz %s: using fiber profile calibration widths;"
+                    f"{kind} %s: using fiber profile calibration widths;"
                     " FWHM is not measured from this exposure.",
                     dataId,
                 )
@@ -742,15 +815,9 @@ class ImageQualityQaTask(PipelineTask):
                 force_sparse = False
             elif not dense_data:
                 self.log.warning(
-                    "Regular trace/quartz %s: neither a usable calexp nor fiberProfiles; FWHM will be sparse.",
+                    f"{kind} %s: neither a usable calexp nor fiberProfiles; FWHM will be sparse.",
                     dataId,
                 )
-
-        elif obs_type == "trace" and is_iis:
-            # IIS quartz (16 engineering fibers): too few fibers for a
-            # reliable full-detector calexp measurement.
-            force_sparse = True
-            self.log.info("IIS trace/quartz %s: too few fibers; reporting sparse.", dataId)
 
         elif obs_type == "twilight":
             # Twilight sky: every fiber sees the same sky. Its FWHM belongs to
@@ -948,11 +1015,11 @@ class ImageQualityQaTask(PipelineTask):
         if "status" in data.columns:
             good &= data["status"] == 0
         if force_sparse:
-            # The visit type rules out every row that is left: on IIS frames
-            # the arc catalog does not describe the illuminated fibers, and on
-            # quartz/science frames without a usable calexp the surviving arc
-            # lines are incidental.  The rows are still written to ``iqQaData``
-            # for inspection, but no summary metric may be derived from them.
+            # The visit type rules out every row that is left: on quartz/science
+            # frames without a usable calexp the surviving arc lines are
+            # incidental, and a twilight or dark has nothing to measure.  The rows
+            # are still written to ``iqQaData`` for inspection, but no summary
+            # metric may be derived from them.
             good = pd.Series(False, index=data.index)
         trace_only = bool(data["traceOnly"].all()) if "traceOnly" in data.columns else False
         med_fwhm = float(data.loc[good, "fwhm"].median())
@@ -967,8 +1034,8 @@ class ImageQualityQaTask(PipelineTask):
 
         # pctFlagged is only meaningful when data coverage is dense (calexp,
         # fiber-profile path, or ≥ minGoodLines arc lines with full-detector
-        # illumination).  For sparse illumination (IIS arcs/traces, or
-        # lamp-mismatched arc frames) pctFlagged reflects catalog quality
+        # illumination).  For sparse data (fewer than minGoodLines arc lines, as
+        # on a lamp-mismatched arc frame) pctFlagged reflects catalog quality
         # rather than optical quality and is set to NaN.
         #
         # The FLUXSTD calexp path also suppresses pctFlagged: stellar fibers
@@ -1018,6 +1085,7 @@ class ImageQualityQaTask(PipelineTask):
             "nTraceRows": [int(is_trace_row.sum())],
             "traceOnly": [trace_only],
             "obsType": [obs_type],
+            "illumination": [illumination],
             "seqName": [seq_nam],
             # Log-derived metrics
             "isrBadPixels": [logMetrics["isrBadPixels"]],
@@ -1068,6 +1136,7 @@ class ImageQualityQaTask(PipelineTask):
         position = metrics.columns.get_loc("seqName") + 1
         for offset, column in enumerate(verdict.columns):
             metrics.insert(position + offset, column, verdict[column].to_numpy())
+        metrics = metrics.assign(**self.thresholdsRecord)
         qa_status, reason = verdict["qaStatus"].iloc[0], verdict["qaReason"].iloc[0]
 
         dxStr = f"{medDxCenter:+.3f}px" if np.isfinite(medDxCenter) else "NaN"
@@ -1249,13 +1318,15 @@ class ImageQualityQaTask(PipelineTask):
         self,
         calexp: lsst.afw.image.Exposure | None,
         pfsConfig: PfsConfig | None,
+        spectrograph: int | None = None,
     ) -> tuple[str, bool, str]:
         """Classify the observation type from FITS header metadata.
 
         Reads ``W_SEQTYP`` and ``W_SEQNAM`` from either ``calexp`` metadata or
         ``pfsConfig.header``, and determines whether the illumination is IIS
-        (engineering fibers) or regular (all 600 science fibers) by inspecting
-        lamp headers via `~lsst.obs.pfs.utils.getLamps`.
+        (engineering fibers) or regular (all 600 science fibers) from the lamp
+        headers (`~lsst.obs.pfs.utils.getLamps`) or the pfsConfig
+        (`engineeringLit`), which decides when present.
 
         Parameters
         ----------
@@ -1263,6 +1334,8 @@ class ImageQualityQaTask(PipelineTask):
             Post-ISR calibrated image for this quantum.
         pfsConfig : `PfsConfig` or `None`
             Fiber configuration for this visit.
+        spectrograph : `int` or `None`, optional
+            The quantum's spectrograph, for `engineeringLit`.
 
         Returns
         -------
@@ -1273,7 +1346,10 @@ class ImageQualityQaTask(PipelineTask):
             absent or unrecognised).
         is_iis : `bool`
             True when the illumination comes from the 16 IIS engineering
-            fibers (lamp names end with ``"_eng"``).
+            fibers. The pfsConfig decides when there is one (`engineeringLit`:
+            the spectrograph's engineering fibers all ``GOOD``), since it is
+            what reduceExposure went by and so says which fibers ``lines``
+            holds; otherwise a lamp name ending in ``"_eng"``.
         seq_nam : `str`
             Raw ``W_SEQNAM`` header value (e.g. ``"Arc: HgCd"``), or an
             empty string when the header is absent.
@@ -1324,6 +1400,19 @@ class ImageQualityQaTask(PipelineTask):
             is_iis = any(name.endswith("_eng") for name in lamps)
         except Exception:
             pass  # obs_pfs unavailable or headers missing; assume regular
+        # The pfsConfig is the witness reduceExposure goes by, so it decides which fibers
+        # ``lines`` holds and which are lit; the headers decide only without one. Some n-arm
+        # raws record the IIS lamp off (PIPE2D-1954).
+        if pfsConfig is not None:
+            byConfig = engineeringLit(pfsConfig, spectrograph)
+            if byConfig != is_iis:
+                self.log.info(
+                    "The pfsConfig says %s (engineering fibers %sGOOD); the lamp headers say %s. Taking the pfsConfig.",
+                    "IIS" if byConfig else "not IIS",
+                    "" if byConfig else "not all ",
+                    "IIS" if is_iis else "not IIS",
+                )
+            is_iis = byConfig
 
         return obs_type, is_iis, seq_nam
 

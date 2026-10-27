@@ -62,7 +62,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from pfs.drp.qa.metrics.gate import STATUS_ORDER, judge
+from pfs.drp.qa.metrics.gate import STATUS_ORDER, judge, loadThresholds, thresholdsNames, thresholdsPath
 
 __all__ = [
     "BAD_STATUS",
@@ -85,10 +85,13 @@ __all__ = [
     "VISIT",
     "addObsType",
     "cameraSet",
+    "frameType",
+    "judgedRows",
     "lineResiduals",
     "lineTable",
     "longResiduals",
     "observationType",
+    "residualTaskThresholds",
     "residualThresholds",
     "residualVerdict",
     "robustRms",
@@ -225,9 +228,10 @@ def robustRms(values: Any) -> float:
 def cameraSet(pfsConfig: Any, arm: str | None = None) -> str | None:
     """Return the arms a visit read, e.g. ``"brn"``, ``"bmn"``, ``"br"`` or ``"bm"``.
 
-    b-arm offsets from the calibration depend on it: in Run25 the b cameras sit
-    +0.45 to +0.52 px from ``detectorMap_calib`` when read with m, and about 0
-    with r (PIPE2D-1927). It is a population column, nothing more.
+    b-arm offsets from the calibration depend on it: in Runs 25 and 28–30 the b
+    cameras sit −0.45 to −0.47 px from ``detectorMap_calib`` when read with m,
+    about 0 when read with r and n, and up to +0.11 px when read with r alone
+    (PIPE2D-1927). It is a population column, nothing more.
 
     Parameters
     ----------
@@ -291,11 +295,41 @@ def observationType(header: Any) -> str | None:
     return "unknown"
 
 
-def addObsType(metrics: pd.DataFrame, kinds: pd.DataFrame | None) -> pd.DataFrame:
-    """Return ``metrics`` with ``obsType`` filled from ``kinds`` where it is missing or null.
+def frameType(rawHeader: Any, pfsConfigHeader: Any) -> str | None:
+    """Return the frame's observation type from the raw header, the pfsConfig's standing in.
 
-    Tables stored before ``obsType`` was a column (PIPE2D-1956) have it from
-    ``iqQaMetrics``, which classifies the same header.
+    The raw header always carries ``W_SEQTYP``; Run25 and Run26 pfsConfigs do
+    not. The pfsConfig's type is used when the raw's is missing or
+    ``unknown`` and the pfsConfig's is known.
+
+    Parameters
+    ----------
+    rawHeader, pfsConfigHeader : mapping or `None`
+        The raw exposure's header and ``PfsConfig.header``.
+
+    Returns
+    -------
+    `str` or `None`
+        As `observationType`: ``unknown`` when neither header says, `None`
+        only when neither header is at hand.
+    """
+    obsType = observationType(rawHeader)
+    if obsType not in (None, "unknown"):
+        return obsType
+    fallback = observationType(pfsConfigHeader)
+    if fallback not in (None, "unknown"):
+        return fallback
+    # Neither says: unknown when either header is at hand, None when neither is.
+    return obsType or fallback
+
+
+def addObsType(metrics: pd.DataFrame, kinds: pd.DataFrame | None) -> pd.DataFrame:
+    """Return ``metrics`` with ``obsType`` filled from ``kinds`` where it is missing, null or ``unknown``.
+
+    Tables stored before ``obsType`` was a column (PIPE2D-1956), or by a task
+    whose header lacked ``W_SEQTYP`` (Run25 and Run26 pfsConfigs, before the
+    raw header was read), have it from ``iqQaMetrics``, which classifies the
+    same frame from the calexp's header.
 
     Parameters
     ----------
@@ -312,7 +346,8 @@ def addObsType(metrics: pd.DataFrame, kinds: pd.DataFrame | None) -> pd.DataFram
     merged = metrics.merge(lookup, on=keys, how="left")
     merged.index = metrics.index
     if "obsType" in merged.columns:
-        merged["obsType"] = merged["obsType"].where(merged["obsType"].notna(), merged["_obsType"])
+        known = merged["obsType"].notna() & (merged["obsType"] != "unknown")
+        merged["obsType"] = merged["obsType"].where(known, merged["_obsType"])
     else:
         merged["obsType"] = merged["_obsType"]
     return merged.drop(columns="_obsType")
@@ -442,9 +477,11 @@ def lineTable(
     """Return ``dmLineResidualData``: `lineResiduals` with the detector, in `LINE_COLUMNS`.
 
     A fit can keep millions of trace rows (twilight b3/b4 kept about 2
-    million), so the trace centroids a fit used may be sampled. Lamp lines,
-    and lines held back (``RESERVED``) or ``UNFITTED``, are always kept whole:
-    only the stored table is sampled, never the statistics.
+    million), so the trace centroids may be sampled: those the fit used, and
+    those it held back (``RESERVED``), each to at most ``maxTraceRowsPerFiber``
+    per fiber. Lamp and sky lines, and ``UNFITTED`` rows, are always kept
+    whole. Only the stored table is sampled, never the statistics, so a trace
+    statistic recomputed from the table is an estimate of the stored one.
 
     Parameters
     ----------
@@ -453,8 +490,8 @@ def lineTable(
     dataId : mapping
         ``visit``, ``arm``, ``spectrograph``.
     maxTraceRowsPerFiber : `int`, optional
-        Most ``USED`` trace rows kept per fiber, evenly spaced in y; 0 keeps
-        them all.
+        Most ``USED``, and most ``RESERVED``, trace rows kept per fiber,
+        evenly spaced in y; 0 keeps them all.
 
     Returns
     -------
@@ -463,22 +500,28 @@ def lineTable(
         columns, when there are no lines.
     """
     if maxTraceRowsPerFiber > 0:
-        residuals = residuals[_sampleUsedTraces(residuals, maxTraceRowsPerFiber)]
+        residuals = residuals[_sampleTraces(residuals, maxTraceRowsPerFiber)]
     frame = residuals.assign(visit=dataId["visit"], arm=dataId["arm"], spectrograph=dataId["spectrograph"])
     return frame.reindex(columns=list(LINE_COLUMNS)).astype(LINE_COLUMNS)
 
 
-def _sampleUsedTraces(residuals: pd.DataFrame, maxRows: int) -> np.ndarray:
-    """Return which rows to keep: ``USED`` trace rows, at most ``maxRows`` per fiber evenly in y, and all others."""
+def _sampleTraces(residuals: pd.DataFrame, maxRows: int) -> np.ndarray:
+    """Return which rows to keep: at most ``maxRows`` of each fiber's USED, and RESERVED, trace rows; all others.
+
+    Each fiber's rows of one status type are kept evenly spaced in y.
+    """
     keep = np.ones(len(residuals), dtype=bool)
-    used = ((residuals["description"] == TRACE) & (residuals["statusType"] == USED)).to_numpy()
-    if not used.any():
+    sampled = (
+        (residuals["description"] == TRACE) & residuals["statusType"].isin((USED, RESERVED))
+    ).to_numpy()
+    if not sampled.any():
         return keep
-    traces = residuals[used]
-    position = np.flatnonzero(used)
-    # Each row's rank in y within its fiber, and its fiber's row count.
-    rank = traces.groupby("fiberId")["y"].rank(method="first").to_numpy(dtype=int) - 1
-    count = traces.groupby("fiberId")["y"].transform("size").to_numpy(dtype=int)
+    traces = residuals[sampled]
+    position = np.flatnonzero(sampled)
+    # Each row's rank in y within its fiber and status type, and that group's row count.
+    groups = traces.groupby(["fiberId", "statusType"])["y"]
+    rank = groups.rank(method="first").to_numpy(dtype=int) - 1
+    count = groups.transform("size").to_numpy(dtype=int)
     # Keep the ranks nearest maxRows evenly spaced points, as np.linspace(0, count - 1, maxRows) would.
     # The point a rank falls nearest, capped at the last: with one point, both ends would round to it.
     step = (count - 1) / max(maxRows - 1, 1)
@@ -610,6 +653,63 @@ def residualThresholds(
     return pd.DataFrame(rows).astype({"reference": object, "description": object, "statusType": object})
 
 
+def residualTaskThresholds(config: Any) -> list[pd.DataFrame]:
+    """Return the thresholds a ``dmLineResiduals`` config judges with, as the task builds them.
+
+    Parameters
+    ----------
+    config : `Any`
+        A ``DmLineResidualsConfig``, or any object with its ``thresholdsFile``
+        and threshold fields; duck-typed so this is tested without the stack.
+
+    Returns
+    -------
+    `list` [`pandas.DataFrame`]
+        The thresholds file's table, if any, then the config's
+        (`residualThresholds`), highest priority first.
+    """
+    files = [thresholdsPath(name) for name in thresholdsNames(config)]
+    fields = residualThresholds(
+        config.xWarnThreshold,
+        config.xFailThreshold,
+        config.yWarnThreshold,
+        config.yFailThreshold,
+        config.xRmsWarnThreshold,
+        config.xRmsFailThreshold,
+        config.yRmsWarnThreshold,
+        config.yRmsFailThreshold,
+    )
+    return [*loadThresholds(files), fields]
+
+
+def judgedRows(species: pd.DataFrame) -> pd.DataFrame:
+    """Return the rows `residualVerdict` judges, with the metrics it does not judge on them NaN.
+
+    Parameters
+    ----------
+    species : `pandas.DataFrame`
+        Rows with ``reference``, ``statusType`` and the `RESIDUAL_METRICS`
+        present: `speciesResiduals`, or `wideResiduals` of either reference.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        The rows of each reference whose ``statusType`` `JUDGED` names,
+        reindexed from 0; a metric `JUDGED` leaves out for the reference is
+        NaN, so no thresholds file can give it a verdict.
+    """
+    keep = np.zeros(len(species), dtype=bool)
+    for reference, (statusTypes, _) in JUDGED.items():
+        keep |= (species["reference"] == reference).to_numpy() & species["statusType"].isin(
+            statusTypes
+        ).to_numpy()
+    rows = species[keep].reset_index(drop=True)
+    for reference, (_, metrics) in JUDGED.items():
+        blank = [metric for metric in RESIDUAL_METRICS if metric not in metrics and metric in rows]
+        rows.loc[rows["reference"] == reference, blank] = np.nan
+    return rows
+
+
 def residualVerdict(
     species: pd.DataFrame,
     dataId: Mapping[str, Any],
@@ -653,23 +753,13 @@ def residualVerdict(
         measurable, never measured but not combinable. ``qaDecidedBy`` is
         ``"<reference> <description> <metric>"``.
     """
-    keep = np.zeros(len(species), dtype=bool)
-    for reference, (statusTypes, _) in JUDGED.items():
-        keep |= (species["reference"] == reference).to_numpy() & species["statusType"].isin(statusTypes)
-    wide = (
-        species[keep]
-        .assign(
-            visit=dataId["visit"],
-            arm=dataId["arm"],
-            spectrograph=dataId["spectrograph"],
-            cameraSet=camera,
-            obsType=obsType,
-        )
-        .reset_index(drop=True)
+    wide = judgedRows(species).assign(
+        visit=dataId["visit"],
+        arm=dataId["arm"],
+        spectrograph=dataId["spectrograph"],
+        cameraSet=camera,
+        obsType=obsType,
     )
-    for reference, (_, metrics) in JUDGED.items():
-        blank = [metric for metric in RESIDUAL_METRICS if metric not in metrics]
-        wide.loc[wide["reference"] == reference, blank] = np.nan
     judged = judge(wide, thresholds)
     rows = judged["row"].to_numpy(dtype=int)
     for column in ("reference", "description", "statusType"):

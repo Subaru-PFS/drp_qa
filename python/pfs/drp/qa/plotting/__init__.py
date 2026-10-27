@@ -6,22 +6,11 @@ Butler, the LSST/PFS stack or a task class, so the plots can be drawn from
 stored data in a notebook and tested without the stack. Binding figures to a
 Butler storage class is the task's job.
 
-The old locations (``pfs.drp.qa.dmResiduals``, ``pfs.drp.qa.dmCombinedResiduals``,
-``pfs.drp.qa.iqQaPlots`` and ``pfs.drp.qa.utils.plotting``) re-export these names.
+The old locations (``pfs.drp.qa.iqQaPlots`` and ``pfs.drp.qa.utils.plotting``)
+re-export these names. The ``dmResiduals`` and ``dmCombined`` plots went with
+their tasks (PIPE2D-1956): ``dmLineResidualData`` is plotted after the fact.
 """
 
-from pfs.drp.qa.plotting.dmCombined import (
-    plot_detector_summary,
-    plot_detector_summary_per_desc,
-    plot_title,
-    plot_visits,
-    reportFigures,
-)
-from pfs.drp.qa.plotting.dmResiduals import (
-    DetectorGeometry,
-    plot_detectormap_residuals,
-    plot_residual,
-)
 from pfs.drp.qa.plotting.iqQa import plotIqTimeSeries
 from pfs.drp.qa.plotting.palettes import (
     description_palette,
@@ -34,7 +23,6 @@ from pfs.drp.qa.plotting.palettes import (
 from pfs.drp.qa.plotting.thresholds import plotThresholds, plotTolerances
 
 __all__ = [
-    "DetectorGeometry",
     "description_palette",
     "detector_palette",
     "div_palette",
@@ -42,13 +30,6 @@ __all__ = [
     "plotIqTimeSeries",
     "plotThresholds",
     "plotTolerances",
-    "plot_detector_summary",
-    "plot_detector_summary_per_desc",
-    "plot_detectormap_residuals",
-    "plot_residual",
-    "plot_title",
-    "plot_visits",
-    "reportFigures",
     "scatterplot_with_outliers",
     "spectrograph_plot_markers",
 ]

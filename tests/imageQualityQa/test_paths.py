@@ -6,7 +6,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.gate import configThresholds
+from pfs.drp.qa.metrics.gate import (
+    THRESHOLDS_COLUMNS,
+    configThresholds,
+    recordedThresholds,
+    sha256Of,
+    thresholdsPath,
+)
 
 FWHM_FACTOR = 2.0 * np.sqrt(2.0 * np.log(2.0))
 TRACE = ("scienceTrace", "Trace")
@@ -186,10 +192,13 @@ def testClassifyVisit(iqqa, fakes, seqType, seqName, obsType):
 
 
 def testDefaultConfigJudgesByTheShippedFile(iqqa):
-    """The default config puts the Run25 file ahead of its own fields."""
+    """The default config puts the Run25 file, then the IIS file, ahead of its own fields."""
     task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
-    assert len(task.thresholds) == 2
+    assert len(task.thresholds) == 3
     shipped = task.thresholds[0]
+    iis = task.thresholds[1]
+    assert (iis["illumination"] == "iis").all() and "illumination" not in shipped.columns
+    assert set(iis["metric"]) == {"medFwhm", "linesPerFiber", "medDxCenter", "pctFlagged"}
     assert set(shipped["metric"]) == {"medFwhm", "linesPerFiber", "pctFlagged"}
     flags = shipped[shipped["metric"] == "pctFlagged"]
     assert len(flags) == 1 and flags[["warn", "fail"]].isna().all(axis=None)  # not judged
@@ -209,12 +218,31 @@ def testDefaultConfigJudgesByTheShippedFile(iqqa):
     )
 
 
+def testMetricsRecordTheThresholdsFilesJudgedWith(iqqa, runTask, fakes):
+    """Each image's row names the files the task loaded, by content then (PIPE2D-1976)."""
+    detectorMap = fakes.DetectorMap()
+    calexp = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*ARC))
+    lines = fakes.arcLines(detectorMap, numPerFiber=30)
+
+    def layers(config=None):
+        row = runTask(lines, detectorMap=detectorMap, calexp=calexp, config=config).iqQaMetrics.iloc[0]
+        return recordedThresholds(*(row[column] for column in THRESHOLDS_COLUMNS))
+
+    assert layers(iqqa.ImageQualityQaConfig()) == [
+        (name, sha256Of(thresholdsPath(name)))
+        for name in ("iqQaThresholds-run25.yaml", "iqQaThresholds-iis-run30.yaml")
+    ]
+    # runTask's own config names no file: judged by the fields alone, which is recorded as such.
+    assert layers() == []
+
+
 def testRunQuantumRecordsTheCalexpRun(iqqa, monkeypatch):
     """IqQaMetrics names the RUN of the calexp judged, whose pfsArm records the pipeline."""
     from types import SimpleNamespace
 
     config = iqqa.ImageQualityQaConfig()
     config.thresholdsFile = ""
+    config.extraThresholdsFiles = []
     task = iqqa.ImageQualityQaTask(config=config)
     outputs = SimpleNamespace(iqQaData=pd.DataFrame(), iqQaSpeciesMetrics=pd.DataFrame())
     monkeypatch.setattr(

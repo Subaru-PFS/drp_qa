@@ -20,6 +20,8 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.collections import PathCollection
 from matplotlib.colors import to_rgb
 from matplotlib.figure import Figure
+from matplotlib.markers import MarkerStyle
+from matplotlib.text import Text
 
 from pfs.drp.qa.guiders.analysis import (
     GuiderFitConfig,
@@ -680,6 +682,34 @@ def testShowTelescopeErrorsTheta(realAgcData):
     assert not np.allclose(expected, theta)
 
 
+def testShowTelescopeErrorsAzimuthCosAlt(realAgcData):
+    """The azimuth offset is plotted on-sky, as δaz·cos(alt), against the on-sky δalt.
+
+    ``guide_delta_azimuth`` is a coordinate offset (PIPE2D-1971); plotted as
+    read with equal aspect, the δaz axis was stretched by 1/cos(alt).
+    """
+    agcData = realAgcData("raster")
+    shutterOpen = agcData[agcData.shutter_open > 0]
+    exposures = shutterOpen.groupby("agc_exposure_id").agg(
+        altitude=("altitude", "mean"),
+        daz=("guide_delta_azimuth", "mean"),
+        dalt=("guide_delta_altitude", "mean"),
+    )
+    expected = exposures.daz * np.cos(np.deg2rad(exposures.altitude))
+
+    plot = showTelescopeErrors(agcData, fig=Figure())
+    points = plot.axes[0, 1].collections[0].get_offsets()
+    np.testing.assert_allclose(points[:, 0], exposures.dalt)
+    np.testing.assert_allclose(points[:, 1], expected)
+    np.testing.assert_allclose(plot.data.daz_cosalt_arcsec, expected)
+    np.testing.assert_allclose(plot.data.daz_arcsec, exposures.daz)  # the column as read is kept
+    assert "cos" in plot.axes[0, 1].get_ylabel()
+    assert plot.axes[0, 1].get_aspect() == 1
+    # Negative control: the raw azimuth offset is 1.45-1.58 times larger at these altitudes.
+    assert not np.allclose(points[:, 1], exposures.daz, atol=1e-3)
+    assert (exposures.daz.abs() > 1.4 * np.abs(expected)).all()
+
+
 def testShowTelescopeErrorsColorbars(realAgcData):
     """ics_pfsPlotActor-style redraws update the four colorbars."""
     agcData = realAgcData("raster")
@@ -1192,3 +1222,262 @@ def testShowAGCameraCartoon(insrot_deg):
 def testPlotsCheckChoices(realAgcData, plot, kwargs):
     with pytest.raises(ValueError, match="Unknown"):
         plot(realAgcData("focusSweep"), fig=Figure(), **kwargs)
+
+
+# Disabled cameras (INSTRM-3057)
+
+DISABLED = 3  # AG4, which has data in every row of every fixture
+DISABLED_NAME = "AG4 (disabled)"
+
+
+def disableCamera(agcData: pd.DataFrame, cid: int = DISABLED) -> pd.DataFrame:
+    """Return a copy of AG data with camera ``cid`` disabled."""
+    return agcData.assign(camera_enabled=pd.array(agcData.agc_camera_id != cid, dtype="boolean"))
+
+
+def figureText(fig: Figure) -> str:
+    """Return every text a figure shows: titles, labels, legends and ticks."""
+    FigureCanvasAgg(fig).draw()
+    return "\n".join(text.get_text() for text in fig.findobj(Text))
+
+
+def nCrosses(fig: Figure) -> int:
+    """Return the number of points a figure's panels draw as crosses (not counting legends)."""
+    marker = MarkerStyle("x")
+    cross = marker.get_path().transformed(marker.get_transform()).vertices  # as scatter stores it
+    n = 0
+    for ax in fig.axes:
+        n += sum(len(line.get_xdata()) for line in ax.lines if line.get_marker() == "x")
+        for collection in ax.collections:
+            paths = collection.get_paths() if isinstance(collection, PathCollection) else []
+            if paths and np.array_equal(paths[0].vertices, cross):
+                n += len(collection.get_offsets())
+    return n
+
+
+def checkDisabledPlot(plot: GuiderPlot, crosses: bool | None = True) -> None:
+    """Check that a plot names the disabled camera, and draws crosses if ``crosses``, none if False."""
+    checkPlot(plot)
+    text = figureText(plot.fig)
+    assert DISABLED_NAME in text or "AG4 disabled" in text
+    if crosses is not None:
+        assert (nCrosses(plot.fig) > 0) if crosses else (nCrosses(plot.fig) == 0)
+    # Negative control: no other camera is called disabled.
+    assert "AG1 (disabled)" not in text and "AG1 disabled" not in text
+
+
+def hasCrosses(kwargs: dict) -> bool:
+    return not kwargs.get("showAltInsrot", False)
+
+
+@pytest.mark.parametrize("kwargs", BY_CAMERA_OPTIONS, ids=optionId)
+def testShowAgcErrorsForVisitsByCameraDisabled(realAgcData, kwargs):
+    agcData = disableCamera(realAgcData("raster"))
+    original = agcData.copy()
+
+    plot = showAgcErrorsForVisitsByCamera(agcData, fig=Figure(), **kwargs)
+
+    pd.testing.assert_frame_equal(agcData, original)
+    if DISABLED not in kwargs.get("agcCameraIds", range(6)):
+        assert "disabled" not in figureText(plot.fig)
+        return
+    checkDisabledPlot(plot, crosses=hasCrosses(kwargs))
+    pd.testing.assert_frame_equal(agcData, original)
+    if kwargs.get("plotPerCamera") or kwargs.get("showAltInsrot"):
+        greyed = [ax for ax in plot.axes.flat if ax.get_visible() and ax.get_facecolor() != (1, 1, 1, 1)]
+        assert greyed and all(to_rgb(ax.get_facecolor()) == to_rgb("0.9") for ax in greyed)
+
+
+def testShowAgcErrorsForVisitsByCameraPointing(realAgcData):
+    """Each exposure's mean, the pointing error, is over the enabled cameras."""
+    plot = showAgcErrorsForVisitsByCamera(disableCamera(realAgcData("raster")), fig=Figure())
+
+    offsets = plot.data
+    assert not offsets[offsets.agc_camera_id == DISABLED].camera_enabled.any()
+    enabled = offsets[offsets.camera_enabled]
+    np.testing.assert_allclose(enabled.groupby("agc_exposure_id").dx_um.mean(), 0, atol=1e-9)
+    # Negative control: the mean over every camera isn't 0.
+    assert not np.allclose(offsets.groupby("agc_exposure_id").dx_um.mean(), 0, atol=0.1)
+
+
+def testShowAgcErrorsForVisitsDisabled(realAgcData):
+    """The guide error of an exposure leaves the disabled camera out, and the title says so."""
+    raster = realAgcData("raster")
+    agcData = disableCamera(raster)
+
+    plot = showAgcErrorsForVisits(agcData, fig=Figure())
+
+    assert "AG4 disabled: left out of the guide errors" in figureText(plot.fig)
+    expected = showAgcErrorsForVisits(raster[raster.agc_camera_id != DISABLED], fig=Figure()).data
+    pd.testing.assert_frame_equal(plot.data, expected)
+    # Negative control: with the camera, the guide errors differ.
+    assert not np.allclose(showAgcErrorsForVisits(raster, fig=Figure()).data.dx_um, plot.data.dx_um)
+
+
+@pytest.mark.parametrize("kwargs", GUIDER_PLOT_OPTIONS, ids=optionId)
+def testShowGuiderErrorsDisabled(realAgcData, kwargs):
+    fit = fitGuiderModel(
+        disableCamera(realAgcData("raster")), GuiderFitConfig(maxGuideError_um=0, maxPosError_um=0)
+    )
+    config = GuiderPlotConfig(**kwargs)
+
+    plot = showGuiderErrors(fit, config, fig=Figure())
+
+    # Points take precedence over arrows, which have no marker; the cameras' means are points too.
+    points = config.showGuideStars and config.showGuideStarsAsPoints
+    checkDisabledPlot(plot, crosses=points or config.showAverageGuideStarPos)
+    assert "AG4 disabled: left out of the boresight fit" in figureText(plot.fig)
+
+
+def testShowGuiderErrorsByParamsDisabled(realAgcData):
+    fit = fitGuiderModel(disableCamera(realAgcData("raster")))
+    plot = showGuiderErrorsByParams(fit, ["altitude", "insrot"], fig=Figure())
+    checkDisabledPlot(plot)
+
+
+@pytest.mark.parametrize("showCamera", [True, False])
+def testPlotDriftRateDisabled(realAgcData, showCamera):
+    fit = fitDriftRate(disableCamera(realAgcData("allSky")))
+
+    plot = plotDriftRate(fit, showCamera=showCamera, fig=Figure())
+
+    checkDisabledPlot(plot)
+    assert "AG4 disabled: left out of the rates" in figureText(plot.fig)
+    nDisabled = int((~fit.offsets.camera_enabled).sum())
+    assert nCrosses(plot.fig) == 2 * nDisabled  # in both panels
+
+
+@pytest.mark.parametrize("showAGMean", [True, False])
+def testPlotGuideErrorsDisabled(realAgcData, showAGMean):
+    """The disabled camera's errors are crosses, and left out of the mean at the boresight."""
+    guideErrors = estimateGuideErrors(disableCamera(realAgcData("raster")))
+    nDisabled = int((~guideErrors.camera_enabled).sum())
+
+    plot = plotGuideErrors(guideErrors, showAGMean=showAGMean, fig=Figure())
+
+    checkDisabledPlot(plot)
+    assert nCrosses(plot.fig) == nDisabled
+    if showAGMean:
+        means = plot.artists[-1].get_offsets()
+        enabled = guideErrors[guideErrors.camera_enabled]
+        np.testing.assert_allclose(means[:, 0], enabled.groupby("agc_exposure_id").dx_um.mean())
+        # Negative control: the mean over every camera.
+        assert not np.allclose(means[:, 0], guideErrors.groupby("agc_exposure_id").dx_um.mean())
+
+
+def testPlotPfsUtilsComparisonDisabled(realAgcData, realAgcStars):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # pfs_utils's clamped parallaxes
+        comparison = comparePfsUtilsPositions(realAgcStars(148258), disableCamera(realAgcData("allSky")))
+
+    plot = plotPfsUtilsComparison(comparison, fig=Figure())
+
+    checkDisabledPlot(plot, crosses=False)
+
+
+def focusHasCrosses(kwargs: dict) -> bool:
+    """Whether plotFocus draws the disabled camera's points as crosses with these options.
+
+    Its focus errors are crosses when they are drawn per camera; the exposures' (other colorBy) aren't its.
+    Its stars' FWHM are crosses unless showCameraId uses the markers for the halves.
+    """
+    if kwargs.get("showOnlyMedian") or DISABLED not in kwargs.get("agcCameraIds", range(6)):
+        return False
+    focusRows = kwargs.get("showAGActorFocus", True) or kwargs.get("showOpdbFocus", True)
+    perCamera = kwargs.get("colorBy", "camera") == "camera" or kwargs.get("plotPerCamera", False)
+    fwhmCrosses = kwargs.get("showFWHM", True) and not kwargs.get("showCameraId", False)
+    return (focusRows and perCamera) or fwhmCrosses
+
+
+@pytest.mark.parametrize("kwargs", FOCUS_OPTIONS, ids=optionId)
+def testPlotFocusDisabled(realAgcData, kwargs):
+    agcData = disableCamera(realAgcData("focusSweep"))
+    original = agcData.copy()
+
+    plot = plotFocus(agcData, fig=Figure(), **kwargs)
+
+    pd.testing.assert_frame_equal(agcData, original)
+    if DISABLED not in kwargs.get("agcCameraIds", range(6)):
+        assert "disabled" not in figureText(plot.fig)
+        return
+    checkDisabledPlot(plot, crosses=focusHasCrosses(kwargs))
+    if kwargs.get("plotPerCamera"):
+        column = list(range(6)).index(DISABLED)
+        assert all(to_rgb(ax.get_facecolor()) == to_rgb("0.9") for ax in plot.axes[:, column])
+        assert all(to_rgb(ax.get_facecolor()) == (1, 1, 1) for ax in plot.axes[:, 0])
+
+
+def testPlotFocusExposureFocusDisabled(realAgcData):
+    """The exposures' focus errors from the stars leave the disabled camera out."""
+    focusSweep = realAgcData("focusSweep")
+    kwargs = {"colorBy": "visit", "showAGActorFocus": False, "showFWHM": False, "fig": Figure()}
+
+    plot = plotFocus(disableCamera(focusSweep), **kwargs)
+
+    assert "AG4 (disabled), AG5, AG6; disabled left out of the exposures' focus errors" in figureText(
+        plot.fig
+    )
+    points = np.concatenate([c.get_offsets() for c in plot.axes[0, 0].collections])
+    without = plotFocus(focusSweep[focusSweep.agc_camera_id != DISABLED], **{**kwargs, "fig": Figure()})
+    expected = np.concatenate([c.get_offsets() for c in without.axes[0, 0].collections])
+    np.testing.assert_allclose(points, expected)
+    # Negative control: with the camera, the exposures' focus errors differ.
+    withAll = plotFocus(focusSweep, **{**kwargs, "fig": Figure()})
+    allPoints = np.concatenate([c.get_offsets() for c in withAll.axes[0, 0].collections])
+    assert not (allPoints.shape == points.shape and np.allclose(allPoints, points))
+
+
+@pytest.mark.parametrize("byCamera", [True, False])
+def testPlotFocusByAGDisabled(realAgcData, byCamera):
+    """The disabled camera is left out of the reference, and drawn with crosses."""
+    focusSweep = realAgcData("focusSweep")
+
+    plot = plotFocusByAG(disableCamera(focusSweep), byCamera=byCamera, fig=Figure())
+
+    checkDisabledPlot(plot)
+    assert "AG4 (disabled), AG5, AG6; disabled left out of the reference mean" in figureText(plot.fig)
+    # Neither the reference nor the zero point uses the disabled camera: the others are as without its data.
+    enabled = plot.data[plot.data.camera_enabled].reset_index(drop=True)
+    without = plotFocusByAG(focusSweep[focusSweep.agc_camera_id != DISABLED], byCamera=byCamera, fig=Figure())
+    np.testing.assert_allclose(enabled.focus_error_um, without.data.focus_error_um)
+    # Negative control: counted as enabled, it moves the others.
+    withAll = plotFocusByAG(focusSweep, byCamera=byCamera, fig=Figure()).data
+    withAll = withAll[withAll.agc_camera_id != DISABLED].reset_index(drop=True)
+    assert not np.allclose(withAll.focus_error_um, enabled.focus_error_um, atol=1)
+
+
+def testPlotFocusPooledAgActorFocusLowestCameraDisabled(realAgcData):
+    """The exposures' AG actor focus errors aren't crosses when the exposure's first camera is disabled.
+
+    They are the guider's, of the whole exposure; drawing them took camera_enabled from its first camera.
+    """
+    focusSweep = realAgcData("focusSweep")
+    lowest = int(plotFocus(focusSweep, fig=Figure()).data.agc_camera_id.min())
+    data = disableCamera(focusSweep, lowest)
+    kwargs = {"showOpdbFocus": False, "showFWHM": False}
+
+    plot = plotFocus(data, colorBy="altitude", fig=Figure(), **kwargs)
+
+    assert nPoints(plot.axes[0, 0]) > 0
+    assert nCrosses(plot.fig) == 0
+    # Negative control: drawn per camera, the lowest camera's points are crosses.
+    assert nCrosses(plotFocus(data, colorBy="altitude", plotPerCamera=True, fig=Figure(), **kwargs).fig) > 0
+
+
+def testPlotFocusFwhmMediansDisabled(realAgcData):
+    """The halves' FWHM medians leave the disabled camera out, and the title says so."""
+    focusSweep = realAgcData("focusSweep")
+    kwargs = {"showAGActorFocus": False, "showOpdbFocus": False, "showMedian": True}
+
+    def medians(plot):
+        return [line.get_ydata() for line in plot.axes[0, 0].lines]
+
+    plot = plotFocus(disableCamera(focusSweep), fig=Figure(), **kwargs)
+
+    assert "disabled left out of the FWHM medians" in figureText(plot.fig)
+    without = plotFocus(focusSweep[focusSweep.agc_camera_id != DISABLED], fig=Figure(), **kwargs)
+    for got, expected in zip(medians(plot), medians(without), strict=True):
+        np.testing.assert_allclose(got, expected)
+    # Negative control: with the camera, the medians differ.
+    withAll = medians(plotFocus(focusSweep, fig=Figure(), **kwargs))
+    assert any(len(a) != len(b) or not np.allclose(a, b) for a, b in zip(withAll, medians(plot), strict=True))

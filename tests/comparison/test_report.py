@@ -136,6 +136,10 @@ def testLineResidualSection(periods, visit, listing):
     assert "<h2>Line residuals</h2>" in page and "Line residuals: worst verdict per night" in page
     assert "calib Trace medianDeltaX" in page and "APPLY_SHIFT" in page
     assert "Scatter of the lines held back" in page and "median run1" in page
+    # The heading names the groups the table has: the b arm's camera, and no observation type here.
+    assert "detectorMap, by arm, b-arm camera (m or r) and species (px)" in page  # the apostrophe is escaped
+    # Negative control: a heading that names a group the table lacks is not drawn.
+    assert "by arm, b-arm camera (m or r), observation type and species" not in page
     assert "have no line residuals" not in page
     # One judged image without a summary row is counted; without the task's output the section says so.
     page = buildReport(ReportInputs(**common, residualSummary=summary.iloc[1:], residualFindings=found))
@@ -381,11 +385,11 @@ def testNotJudgedIsToldFromUnknown():
     assert verdicts["status"].tolist() == ["PASS", *[NOT_JUDGED] * 5, "UNKNOWN"]
     assert verdicts["why"].tolist() == [
         "",
-        "IIS lamp: no FWHM; nLines not judged on daily",
+        "IIS lamp: FWHM not measured (before PIPE2D-1954); nLines not judged on daily",
         "FWHM from fiberProfiles; nLines not judged on daily",
         "no method for dotRoach",
         "FLUXSTD FWHM not measured",
-        "IIS lamp: no FWHM",  # the reason, not the missing nLines threshold
+        "IIS lamp: FWHM not measured (before PIPE2D-1954)",  # the reason, not the missing nLines threshold
         "no threshold: nLines",  # measured, nothing else explains it: a gap in the reference
     ]
     assert notJudgedSummary(verdicts)["images"].sum() == 6

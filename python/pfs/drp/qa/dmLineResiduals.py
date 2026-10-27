@@ -29,7 +29,7 @@ from lsst.pipe.base.connectionTypes import PrerequisiteInput as PrerequisiteConn
 
 from pfs.datamodel import PfsConfig
 from pfs.drp.qa.imageQualityQa import litFibers
-from pfs.drp.qa.metrics.gate import loadThresholds, thresholdsPath
+from pfs.drp.qa.metrics.gate import thresholdsNames, thresholdsRecord
 from pfs.drp.qa.metrics.lineResiduals import (
     BOTH,
     CALIB,
@@ -38,11 +38,11 @@ from pfs.drp.qa.metrics.lineResiduals import (
     UNFITTED,
     VISIT,
     cameraSet,
+    frameType,
     lineResiduals,
     lineTable,
     longResiduals,
-    observationType,
-    residualThresholds,
+    residualTaskThresholds,
     residualVerdict,
     speciesResiduals,
 )
@@ -71,6 +71,17 @@ class DmLineResidualsConnections(
         dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
 
+    rawMetadata = InputConnection(
+        name="raw.metadata",
+        doc=(
+            "The raw exposure's header: the frame's observation type (obsType) from W_SEQTYP and W_SEQNAM."
+            " The pfsConfig header stands in when the raw's lacks them; Run25 and Run26 pfsConfigs carry"
+            " neither, so the raw's is read first."
+        ),
+        storageClass="PropertyList",
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
+    )
+
     detectorMapCalib = PrerequisiteConnection(
         name="detectorMap_calib",
         doc="The calibration detectorMap the visit is reduced against: the ``calib`` reference.",
@@ -84,8 +95,8 @@ class DmLineResidualsConnections(
     pfsConfig = PrerequisiteConnection(
         name="pfsConfig",
         doc=(
-            "Fiber configuration: the lit fibers (linesPerFiber), the arms read (cameraSet) and the frame's"
-            " observation type (obsType, from its header's W_SEQTYP)."
+            "Fiber configuration: the lit fibers (linesPerFiber), the arms read (cameraSet) and, when the raw"
+            " header lacks it, the frame's observation type (obsType, from its header's W_SEQTYP)."
         ),
         storageClass="PfsConfig",
         dimensions=("instrument", "visit"),
@@ -97,8 +108,8 @@ class DmLineResidualsConnections(
         doc=(
             "Line residuals in long format, one row per reference, line species, line set and metric:"
             " ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``obsType`` (the frame's observation type"
-            " as imageQualityQa classifies it: ``trace`` for a quartz, ``arc``, ``twilight``, ...; null"
-            " without a pfsConfig), ``reference`` (``calib``:"
+            " as imageQualityQa classifies it, from the raw or the pfsConfig header: ``trace`` for a quartz,"
+            " ``arc``, ``twilight``, ...; ``unknown`` when neither header says), ``reference`` (``calib``:"
             " detectorMap_calib; ``visit``: the visit's adjusted detectorMap), ``description``,"
             " ``statusType`` (``BOTH``, ``USED``, ``RESERVED`` lines of the visit's detectorMap fit, or"
             " ``UNFITTED``, every good line, when the fit marked none), ``metric`` (``nLines``,"
@@ -122,7 +133,9 @@ class DmLineResidualsConnections(
             " (``NOMINAL``, ``APPLY_SHIFT``, ``RECALIBRATE``, ``INSUFFICIENT_DATA``, ``UNJUDGED``), and"
             " the calibration: ``calibId`` and ``calibRun`` (look up its validity range with"
             " `pfs.drp.qa.metrics.readers.readCalibValidity`), ``calibCreated``,"
-            " ``calibFirstVisit`` and ``calibLastVisit`` (the visits it was made from)."
+            " ``calibFirstVisit`` and ``calibLastVisit`` (the visits it was made from); and the thresholds"
+            " file judged with, ``thresholdsFiles`` and ``thresholdsSha256`` (its content then; empty when"
+            " none: `pfs.drp.qa.metrics.gate.thresholdsRecord`)."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -131,7 +144,7 @@ class DmLineResidualsConnections(
     dmLineResidualData = OutputConnection(
         name="dmLineResidualData",
         doc=(
-            "One row per line measured (USED trace rows sampled: maxTraceRowsPerFiber), for plots drawn"
+            "One row per line measured (USED and RESERVED trace rows sampled: maxTraceRowsPerFiber), for plots drawn"
             " later (pfs.drp.qa.plotting): ``visit``, ``arm``,"
             " ``spectrograph``, ``fiberId``, ``wavelength``, ``x``, ``y``, ``xErr``, ``yErr``,"
             " ``description``, ``statusType``, and the residual against each reference, measured minus"
@@ -163,9 +176,10 @@ class DmLineResidualsConfig(PipelineTaskConfig, pipelineConnections=DmLineResidu
         dtype=int,
         default=100,
         doc=(
-            "Most USED trace rows per fiber stored in dmLineResidualData, evenly spaced in y; 0 for all."
-            " Lamp lines and RESERVED lines are always stored, and the statistics use every line: a fit can"
-            " keep millions of trace rows (twilight b3/b4 kept about 2 million)."
+            "Most USED, and most RESERVED, trace rows per fiber stored in dmLineResidualData, evenly spaced"
+            " in y; 0 for all. Lamp and sky lines and UNFITTED rows are always stored, and the statistics use"
+            " every line: a fit can keep millions of trace rows (twilight b3/b4 kept about 2 million), and"
+            " RESERVED trace rows were ~80% of a quartz or twilight visit's table before they were sampled."
         ),
     )
     thresholdsFile = Field(
@@ -181,8 +195,9 @@ class DmLineResidualsConfig(PipelineTaskConfig, pipelineConnections=DmLineResidu
             " (u/wtg/qa-thresholds/010, PIPE2D-1938) and adopted in PIPE2D-1956 by"
             " ``makeLineResidualThresholds.py`` beside it: trace centroids on quartz frames (obsType"
             " ``trace``) and the Ar, Kr, Ne and Xe lines judged in x per detector, WARN 20 % and FAIL 50 %"
-            " above the detector's known-good median. Not judged: the lamps' y scatter; the mercury and"
-            " cadmium lines, whose y scatter is intrinsically variable; trace centroids on arcs and"
+            " above the detector's known-good median, and the lamp lines in y at WARN 50 % and FAIL 150 %."
+            " Not judged: the mercury and cadmium lines, whose y scatter is intrinsically variable; trace"
+            " centroids on arcs and"
             " twilights, whose faint continuum scatters them two to three times more; and sky-line species"
             " on twilights. The median offsets from detectorMap_calib stay with the fields below."
         ),
@@ -258,18 +273,9 @@ class DmLineResidualsTask(PipelineTask):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # Highest priority first; see pfs.drp.qa.metrics.gate.
-        files = [thresholdsPath(self.config.thresholdsFile)] if self.config.thresholdsFile else []
-        fields = residualThresholds(
-            self.config.xWarnThreshold,
-            self.config.xFailThreshold,
-            self.config.yWarnThreshold,
-            self.config.yFailThreshold,
-            self.config.xRmsWarnThreshold,
-            self.config.xRmsFailThreshold,
-            self.config.yRmsWarnThreshold,
-            self.config.yRmsFailThreshold,
-        )
-        self.thresholds = [*loadThresholds(files), fields]
+        self.thresholds = residualTaskThresholds(self.config)
+        # Which file judged, by content, for qadb: the loader's drp_qa may ship another (PIPE2D-1976).
+        self.thresholdsRecord = thresholdsRecord(thresholdsNames(self.config))
 
     def runQuantum(
         self,
@@ -299,6 +305,7 @@ class DmLineResidualsTask(PipelineTask):
         detectorMapCalib: DetectorMap,
         dataId: dict,
         pfsConfig: PfsConfig | None = None,
+        rawMetadata: Any = None,
     ) -> Struct:
         """Measure and judge the line residuals of one detector.
 
@@ -314,6 +321,8 @@ class DmLineResidualsTask(PipelineTask):
             ``visit``, ``arm``, ``spectrograph``.
         pfsConfig : `PfsConfig`, optional
             Fiber configuration of the visit.
+        rawMetadata : `lsst.daf.base.PropertyList`, optional
+            The raw exposure's header, for the observation type.
 
         Returns
         -------
@@ -330,13 +339,14 @@ class DmLineResidualsTask(PipelineTask):
         lit, _ = litFibers(pfsConfig, np.asarray(detectorMapCalib.fiberId))
         species = speciesResiduals(residuals, self.config.minLines, lit)
         camera = cameraSet(pfsConfig, dataId.get("arm"))
-        obsType = observationType(getattr(pfsConfig, "header", None))
+        obsType = frameType(rawMetadata, getattr(pfsConfig, "header", None))
         judged, verdict = residualVerdict(
             species, dataId, self.thresholds, self.config.minLines, camera, obsType
         )
 
         summary = {key: dataId.get(key) for key in ("visit", "arm", "spectrograph")}
         summary |= {"cameraSet": camera, "obsType": obsType} | verdict | _calibProvenance(detectorMapCalib)
+        summary |= self.thresholdsRecord
         self.log.info(
             "DM line residuals %-7s %s%s %s: %s [%s]",
             verdict["qaStatus"],

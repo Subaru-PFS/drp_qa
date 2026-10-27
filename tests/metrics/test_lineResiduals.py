@@ -26,10 +26,13 @@ from pfs.drp.qa.metrics.lineResiduals import (
     VISIT,
     addObsType,
     cameraSet,
+    frameType,
+    judgedRows,
     lineResiduals,
     lineTable,
     longResiduals,
     observationType,
+    residualTaskThresholds,
     residualThresholds,
     residualVerdict,
     robustRms,
@@ -367,6 +370,27 @@ def testObservationType(header, expected):
     assert observationType(None if header is None else Header(header)) == expected
     # Negative control: a quartz is never read as an arc, whatever its sequence name says.
     assert observationType(Header({"W_SEQTYP": "scienceTrace", "W_SEQNAM": "Arc: Neon"})) != "arc"
+
+
+@pytest.mark.parametrize(
+    "raw, config, expected",
+    [
+        ({"W_SEQTYP": "scienceTrace"}, {}, QUARTZ),  # a Run25/26 pfsConfig lacks the card
+        ({}, {"W_SEQTYP": "scienceArc"}, "arc"),  # the pfsConfig stands in for a raw without it
+        (None, {"W_SEQTYP": "scienceArc"}, "arc"),
+        ({"W_SEQTYP": "ditheredFlats"}, {"W_SEQTYP": "scienceArc"}, "arc"),
+        ({}, {}, "unknown"),
+        (None, {}, "unknown"),
+        ({}, None, "unknown"),
+        (None, None, None),
+    ],
+)
+def testFrameTypeReadsTheRawFirst(raw, config, expected):
+    """The raw header's type, the pfsConfig's when the raw's is missing or unknown."""
+    assert frameType(*(None if header is None else Header(header) for header in (raw, config))) == expected
+    # Negative control: when both say, the raw wins over the pfsConfig.
+    both = frameType(Header({"W_SEQTYP": "scienceArc"}), Header({"W_SEQTYP": "scienceTrace"}))
+    assert both == "arc" and both != QUARTZ
 
 
 def testTraceScatterIsJudgedPerFrame():
@@ -753,24 +777,28 @@ def testLineTable():
     assert empty.empty and list(empty.columns) == list(LINE_COLUMNS)
 
 
-def testLineTableSamplesUsedTraces():
+def testLineTableSamplesTraces():
     calib = FakeCalib()
     lines, marked = withReserved(makeLines(calib, traceRows=200))
     offsets = residuals(lines, calib)
     table = lineTable(offsets, DATA_ID, maxTraceRowsPerFiber=10)
-    usedTraces = table[(table["description"] == TRACE) & (table["statusType"] == USED)]
-    assert usedTraces.groupby("fiberId").size().max() <= 10
-    assert usedTraces.groupby("fiberId").size().min() >= 9
-    # Spread over the detector, not the first rows: the lowest and highest y of each fiber are kept.
-    first = offsets[(offsets["description"] == TRACE) & (offsets["statusType"] == USED)]
-    assert set(usedTraces.groupby("fiberId")["y"].max()) == set(first.groupby("fiberId")["y"].max())
-    assert set(usedTraces.groupby("fiberId")["y"].min()) == set(first.groupby("fiberId")["y"].min())
-    # Lamp lines and RESERVED lines are all kept.
-    assert (table["statusType"] == RESERVED).sum() == marked.sum()
-    assert (table["description"] == "NeI").sum() == (lines["description"] == "NeI").sum()
-    # Negative control: with no limit, every USED trace row is stored.
+    isTrace = (offsets["description"] == TRACE).to_numpy()
+    # Every fifth line is RESERVED: 40 trace rows per fiber, above the limit like the USED ones.
+    for statusType in (USED, RESERVED):
+        stored = table[(table["description"] == TRACE) & (table["statusType"] == statusType)]
+        assert (stored.groupby("fiberId").size() == 10).all()
+        # Spread over the detector, not the first rows: the lowest and highest y of each fiber are kept.
+        first = offsets[isTrace & (offsets["statusType"] == statusType).to_numpy()]
+        assert set(stored.groupby("fiberId")["y"].max()) == set(first.groupby("fiberId")["y"].max())
+        assert set(stored.groupby("fiberId")["y"].min()) == set(first.groupby("fiberId")["y"].min())
+    # Lamp lines, RESERVED ones included, are all kept.
+    lamp = table[table["description"] == "NeI"]
+    assert len(lamp) == (lines["description"] == "NeI").sum()
+    assert (lamp["statusType"] == RESERVED).sum() == (marked & ~isTrace).sum()
+    # Negative control: with no limit, every trace row is stored, RESERVED ones included.
     whole = lineTable(offsets, DATA_ID)
     assert len(whole) == len(offsets) > len(table)
+    assert (whole["statusType"] == RESERVED).sum() == marked.sum() > (table["statusType"] == RESERVED).sum()
     # The statistics do not depend on it: speciesResiduals reads lineResiduals, not the table.
     assert both(speciesResiduals(offsets, 10)).loc[TRACE, "nLines"] == (lines["description"] == TRACE).sum()
 
@@ -778,13 +806,18 @@ def testLineTableSamplesUsedTraces():
 @pytest.mark.parametrize("limit", [1, 2, 7])
 def testLineTableSamplingNeverExceedsTheLimit(limit):
     calib = FakeCalib(numFibers=3)
-    offsets = residuals(makeLines(calib, traceRows=50, lampLines=0), calib)
+    lines, _ = withReserved(makeLines(calib, traceRows=50, lampLines=0))
+    offsets = residuals(lines, calib)
     table = lineTable(offsets, DATA_ID, maxTraceRowsPerFiber=limit)
-    perFiber = table.groupby("fiberId").size()
-    assert (perFiber == limit).all()
+    # Both status types have more rows per fiber than any limit: each keeps exactly the limit.
+    assert (offsets.groupby(["fiberId", "statusType"]).size() > max(limit, 7)).all()
+    perGroup = table.groupby(["fiberId", "statusType"]).size()
+    assert set(perGroup.index.get_level_values("statusType")) == {USED, RESERVED}
+    assert (perGroup == limit).all()
     if limit == 1:
         # As np.linspace(0, n - 1, 1): the lowest row only.
-        assert (table.groupby("fiberId")["y"].min() == offsets["y"].min()).all()
+        lowest = offsets.groupby(["fiberId", "statusType"])["y"].min()
+        assert table.groupby(["fiberId", "statusType"])["y"].min().equals(lowest)
 
 
 def testVisitVerdictStandsWhenTheCalibrationMeasuresNothing():
@@ -905,6 +938,11 @@ def testWideResiduals():
     )
     assert partial["obsType"].iloc[0] == "trace" and (partial["obsType"].iloc[1:] == "arc").all()
     assert addObsType(older, None) is older
+    # A task whose header lacked W_SEQTYP stored "unknown": as good as missing.
+    unknown = addObsType(metrics.assign(obsType="unknown"), kinds.assign(obsType="trace"))
+    assert (unknown["obsType"] == "trace").all()
+    # Negative control: without kinds "unknown" stays, so a thresholds entry naming a frame type never matches.
+    assert (addObsType(metrics.assign(obsType="unknown"), None)["obsType"] == "unknown").all()
 
 
 def _driftFixture() -> pd.DataFrame:
@@ -935,38 +973,45 @@ def testShippedScatterFileIsTheAdopted():
     # its tolerance rows alone (quartz traces, lamp species but HgCd); the others keep their percentile rows.
     assert len(derivedDocument["thresholds"]) == 329
     assert len(remade["thresholds"]) == 168
-    methods = {e["method"] for e in remade["thresholds"]}
-    assert methods == {"percentile", "tolerance"}
+    assert {e["method"] for e in remade["thresholds"]} == {"percentile", "tolerance"}
     perDetector = [module.judgedByTolerance(e["population"]) for e in remade["thresholds"]]
     assert all(
         (e["method"] == "tolerance") == flag
         for e, flag in zip(remade["thresholds"], perDetector, strict=True)
     )
     judged = [e for e in remade["thresholds"] if e["warn"] is not None or e["fail"] is not None]
-    # Judged, per detector, WARN 20 % and FAIL 50 % above the detector's known-good median, in x: trace
-    # centroids on quartz frames and the Ar, Kr, Ne and Xe lines, on every arm that reads them.
-    assert len(judged) == 76
-    assert all(
-        e["method"] == "tolerance" and e["metric"] == "robustRmsDeltaX" and e["reliable"] for e in judged
-    )
-    assert all(e["warn"] / e["fail"] == pytest.approx(1.2 / 1.5, rel=0.03) for e in judged)
-    assert all("WARN 20% and FAIL 50% above the known-good median" in e["provenance"] for e in judged)
-    assert {(e["population"]["arm"], e["population"]["description"]) for e in judged} == {
+    # Judged, per detector, above the detector's known-good median: trace centroids on quartz frames and the
+    # Ar, Kr, Ne and Xe lines in x (WARN 20 %, FAIL 50 %), the lamp lines in y too (WARN 50 %, FAIL 150 %).
+    assert len(judged) == 136
+    assert all(e["method"] == "tolerance" and e["reliable"] for e in judged)
+    x = [e for e in judged if e["metric"] == "robustRmsDeltaX"]
+    y = [e for e in judged if e["metric"] == "robustRmsDeltaY"]
+    assert len(x) == 76 and len(y) == 60
+    assert all(e["warn"] / e["fail"] == pytest.approx(1.2 / 1.5, rel=0.03) for e in x)
+    assert all("WARN 20% and FAIL 50% above the known-good median" in e["provenance"] for e in x)
+    assert all(e["warn"] / e["fail"] == pytest.approx(1.5 / 2.5, rel=0.03) for e in y)
+    assert all("WARN 50% and FAIL 150% above the known-good median" in e["provenance"] for e in y)
+    lamps = {
         (arm, species)
         for arm in "bmnr"
-        for species in ("Trace", "ArI", "KrI", "NeI", "XeI")
+        for species in ("ArI", "KrI", "NeI", "XeI")
         if (arm, species) != ("b", "ArI")
     }  # the b arm's Argon has too few lines for a RESERVED set
+    assert {(e["population"]["arm"], e["population"]["description"]) for e in x} == lamps | {
+        (arm, TRACE) for arm in "bmnr"
+    }
+    assert {
+        (e["population"]["arm"], e["population"]["description"]) for e in y
+    } == lamps  # traces measure x only
     assert all(
         e["population"]["obsType"] == (QUARTZ if e["population"]["description"] == TRACE else "arc")
         for e in judged
     )
     assert {e["nGood"] for e in judged} == {4, 5, 8, 10, 14}  # the calibration's own inputs count
-    # Not judged, with the reason: lamp y, sky species, HgCd lines, trace centroids on arcs and twilights.
+    # Not judged, with the reason: sky species, HgCd lines, trace centroids on arcs and twilights.
     unjudged = [e for e in remade["thresholds"] if e["warn"] is None and e["fail"] is None]
-    assert len(unjudged) == 92 and all(e["provenance"].startswith("Not judged (") for e in unjudged)
+    assert len(unjudged) == 32 and all(e["provenance"].startswith("Not judged (") for e in unjudged)
     reasons = {
-        "lampY": [e for e in unjudged if e["metric"] == "robustRmsDeltaY" and e["method"] == "tolerance"],
         "sky": [e for e in unjudged if e["population"]["description"] in SKY_SPECIES],
         "hgcd": [e for e in unjudged if e["population"]["description"] in module.HGCD_SPECIES],
         "arcTraces": [
@@ -975,15 +1020,14 @@ def testShippedScatterFileIsTheAdopted():
             if e["population"]["description"] == TRACE and e["population"]["obsType"] != QUARTZ
         ],
     }
-    assert {k: len(v) for k, v in reasons.items()} == {"lampY": 60, "sky": 14, "hgcd": 10, "arcTraces": 8}
-    assert all("y scatter" in e["provenance"] for e in reasons["lampY"])
+    assert {k: len(v) for k, v in reasons.items()} == {"sky": 14, "hgcd": 10, "arcTraces": 8}
     assert all("sky lines' fit" in e["provenance"] for e in reasons["sky"])
     assert all(
         "mercury or cadmium" in e["provenance"] and e["method"] == "percentile" for e in reasons["hgcd"]
     )
     assert all("faint" in e["provenance"] and e["method"] == "percentile" for e in reasons["arcTraces"])
     # Negative control: the derivation gave the arc-frame traces reliable percentile thresholds, the pooled
-    # quartz traces a FAIL and 80 lamp populations a reliable y tolerance; withholding them is the adoption's rule.
+    # quartz traces a FAIL and the HgCd lines 40 reliable tolerances; withholding them is the adoption's rule.
     percentile = {
         (
             e["population"]["arm"],
@@ -997,21 +1041,19 @@ def testShippedScatterFileIsTheAdopted():
     }
     assert sum(percentile[k]["reliable"] for k in percentile if k[1] == TRACE and k[3] == "arc") == 5
     assert percentile[("r", TRACE, "brn", "trace", "robustRmsDeltaX")]["fail"] is not None
-    lampY = [
+    hgcd = [
         e
         for e in derivedDocument["thresholds"]
-        if e["method"] == "tolerance"
-        and e["metric"] == "robustRmsDeltaY"
-        and e["population"]["description"] not in (TRACE, *SKY_SPECIES)
+        if e["method"] == "tolerance" and e["population"]["description"] in module.HGCD_SPECIES
     ]
-    assert sum(e["reliable"] for e in lampY) == 80
+    assert sum(e["reliable"] for e in hgcd) == 40
 
 
 def testShippedScatterVerdicts():
     """The adopted file on the validation run (u/wtg/qa-thresholds/010).
 
-    Trace centroids on quartz frames and the Ar, Kr, Ne and Xe lines are judged in x per detector;
-    trace centroids on arcs and twilights, the lamps' y scatter, the HgCd lines and the sky species
+    Trace centroids on quartz frames and the Ar, Kr, Ne and Xe lines are judged in x per detector, the
+    lamp lines in y too; trace centroids on arcs and twilights, the HgCd lines and the sky species
     are not. Counts are the fixture's, whose ``obsType`` is imageQualityQa's.
     """
     from pfs.drp.qa.metrics.calibration import labelRows
@@ -1050,18 +1092,20 @@ def testShippedScatterVerdicts():
             "lamps": {"PASS": 468, "FAIL": 63, "WARN": 23},
             "goodQuartzTraces": {"PASS": 144},  # every known-good quartz trace passes
             "goodLamps": {"PASS": 357, "WARN": 3},  # three b-arm Xenon arcs at the 20 % WARN
-            "unconfirmedQuartzTraces": {"FAIL": 7, "PASS": 3, "WARN": 2},  # 150661, Run30
-            "unconfirmedLamps": {"PASS": 12},
+            # The SM1 defocus (Run27), known-bad in the scatter too (PIPE2D-1934): every quartz
+            # trace and every lamp it names fails.
+            "badQuartzTraces": {"FAIL": 36},
+            "badLamps": {"FAIL": 34},
         },
         "robustRmsDeltaY": {
             "quartzTraces": {},  # traces measure x only
             "quartzByArm": {},
             "otherTraces": 0,
-            "lamps": {"": 554},  # measured, not judged
+            "lamps": {"PASS": 450, "FAIL": 55, "WARN": 49},
             "goodQuartzTraces": {"": 144},
-            "goodLamps": {"": 360},
-            "unconfirmedQuartzTraces": {"": 12},
-            "unconfirmedLamps": {"": 12},
+            "goodLamps": {"PASS": 358, "WARN": 2},  # two b-arm Krypton arcs at the 50 % WARN
+            "badQuartzTraces": {},  # the defocus is known-bad in x only
+            "badLamps": {},
         },
     }
     for metric, expected in counts.items():
@@ -1090,18 +1134,79 @@ def testShippedScatterVerdicts():
             status.loc[good[(traces & quartz)[good]]].value_counts().to_dict() == expected["goodQuartzTraces"]
         )
         assert status.loc[good[lamps[good]]].value_counts().to_dict() == expected["goodLamps"]
-        unconfirmed = labelled.index[labelled["validation"] == "unconfirmed"]
-        assert (
-            status.loc[unconfirmed[(traces & quartz)[unconfirmed]]].value_counts().to_dict()
-            == expected["unconfirmedQuartzTraces"]
-        )
-        assert (
-            status.loc[unconfirmed[lamps[unconfirmed]]].value_counts().to_dict()
-            == expected["unconfirmedLamps"]
-        )
+        assert not (labelled["validation"] == "unconfirmed").any()  # no scatter verdict is a suspicion
+        bad = labelled.index[labelled["validation"].str.startswith("bad")]
+        assert status.loc[bad[(traces & quartz)[bad]]].value_counts().to_dict() == expected["badQuartzTraces"]
+        assert status.loc[bad[lamps[bad]]].value_counts().to_dict() == expected["badLamps"]
     # Negative control: a flat 0.03/0.04 px scatter threshold fails or warns most known-good quartz traces.
     strict = judge(reserved, [residualThresholds(1.0, 2.0, 1.0, 2.0, 0.03, 0.04, 0.03, 0.04)])
     strictX = strict.set_index(["row", "metric"]).xs("robustRmsDeltaX", level="metric")["status"]
     labelled = labelRows(reserved, visitSet, "robustRmsDeltaX")
     goodTraces = labelled.index[(labelled["validation"] == "good") & (traces & quartz)[labelled.index]]
     assert strictX.loc[goodTraces].value_counts().to_dict() == {"FAIL": 96, "PASS": 30, "WARN": 18}
+
+
+def testJudgedRowsAreWhatTheTaskJudges():
+    """Drift against the calibration on BOTH and UNFITTED rows; scatter against the visit on RESERVED ones.
+
+    Coverage judges stored tables with `judge` (PIPE2D-1934), so it needs the same selection as
+    `residualVerdict`: a thresholds file whose entries don't name the reference would otherwise
+    judge rows the task never does.
+    """
+    values = {"medianDeltaX": 3.0, "robustRmsDeltaX": 3.0, "medianDeltaY": 3.0, "robustRmsDeltaY": 3.0}
+    species = pd.DataFrame(
+        [
+            {"reference": reference, "statusType": statusType, "description": "ArI", **values}
+            for reference in (CALIB, VISIT)
+            for statusType in (BOTH, USED, RESERVED, UNFITTED)
+        ]
+    )
+    rows = judgedRows(species)
+    assert sorted(zip(rows["reference"], rows["statusType"], strict=True)) == [
+        (CALIB, BOTH),
+        (CALIB, UNFITTED),
+        (VISIT, RESERVED),
+    ]
+    visit = rows[rows["reference"] == VISIT]
+    assert visit[["medianDeltaX", "medianDeltaY"]].isna().all().all()
+    assert (visit[["robustRmsDeltaX", "robustRmsDeltaY"]] == 3.0).all().all()
+    assert (rows.loc[rows["reference"] == CALIB, list(values)] == 3.0).all().all()
+    # Negative control: a threshold naming no reference judges the visit's medianDeltaX
+    # on the whole table, and on the selection only the calibration's.
+    loose = pd.DataFrame(
+        [
+            {
+                "metric": "medianDeltaX",
+                "warn": 1.0,
+                "fail": 2.0,
+                "higherIsWorse": True,
+                "absolute": True,
+                "provenance": "t",
+            }
+        ]
+    )
+    everything = judge(species, [loose])
+    assert (everything["status"] == "FAIL").sum() == 8
+    selected = judge(rows, [loose])
+    assert (selected["status"] == "FAIL").sum() == 2
+
+
+def testResidualTaskThresholdsLayerTheFileOverTheConfig():
+    """The task's thresholds: the file, if one is named, over the config's fields."""
+    config = SimpleNamespace(
+        thresholdsFile="dmLineResidualThresholds-run25.yaml",
+        xWarnThreshold=1.0,
+        xFailThreshold=2.0,
+        yWarnThreshold=1.0,
+        yFailThreshold=2.0,
+        xRmsWarnThreshold=NAN,
+        xRmsFailThreshold=NAN,
+        yRmsWarnThreshold=NAN,
+        yRmsFailThreshold=NAN,
+    )
+    tables = residualTaskThresholds(config)
+    assert len(tables) == 2 and len(tables[0]) > 100
+    pd.testing.assert_frame_equal(tables[1], residualThresholds(1.0, 2.0, 1.0, 2.0))
+    # With no file, the config's fields alone.
+    (only,) = residualTaskThresholds(SimpleNamespace(**{**vars(config), "thresholdsFile": ""}))
+    pd.testing.assert_frame_equal(only, tables[1])
