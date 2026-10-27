@@ -387,6 +387,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Fixed
 
+- **`loadQadb.py` names a missing collection** (PIPE2D-1385) — `pfs.drp.qa.qadb.collectionExists` is checked before
+  anything is read, so a mistyped collection is one line, not daf_butler's traceback from the first query.
+
 - **`showTelescopeErrors` plots the azimuth offset on-sky** (PIPE2D-1971) — `agc_guide_offset.guide_delta_az` is a
   coordinate offset, the difference of two azimuths, where `guide_delta_el` is on-sky (likewise `guide_delta_ra`
   and `guide_delta_dec`, INSTRM-2923). Plotted as read against δalt with equal aspect, as drp_stella did, the δaz
