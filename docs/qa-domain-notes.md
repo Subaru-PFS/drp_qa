@@ -89,6 +89,18 @@ low, 2–3× the lines), which the fresh reduction removed, so the data were fin
 pipeline was not; and one engineering fiber per spectrograph (316, 967, 1618, 2269) is faint on
 every quartz.
 
+**Out of sample, Run29** (`u/wtg/qa-iis/run29`: its 18 nightly ImageQuality nights of 2026-07-07 to
+07-24, reduced on the same pipeline; `reports/PIPE2D-1954/compareRuns.py`). The FWHM thresholds
+transfer: Run29's per-camera medians sit within 2 % of Run30's except b1 quartz (+3.6 %), b2 quartz
+(−3.7 %), r1 (+2.9 %) and n4 (+2.7 %), which WARN as a 3 % per-camera tolerance should. The
+`linesPerFiber` thresholds do not: Run29's Ne arcs count 73 % fewer unflagged lines per fiber on b
+and 35 % fewer on r than Run30's (n unchanged), Kr 16–36 % fewer on every arm, constant across
+Run29's nights, so the IIS lamps' output changed between the runs (the IIS hardware changed in
+September 2026; INSTRM-3020, INSTRM-3032). **An IIS lamp change invalidates the IIS
+`linesPerFiber` reference**: rerun `makeIisThresholds.py` on an export of the first nights with
+the new lamps, with those nights added to the validation set, and expect the gate to flag the
+change until then. Run29 is not in the validation set.
+
 ### Key config fields
 
 | Config field | Purpose |
