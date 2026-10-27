@@ -323,15 +323,16 @@ def runTask(iqqa, monkeypatch):
     task's other inputs as keywords; ``thresholds``, when given, replaces the
     task's threshold tables (highest priority first). Otherwise the task
     judges by its config fields alone: these tests are about paths, not the
-    shipped thresholds file.
+    shipped thresholds file. ``config``, when given, is the task's config.
     """
 
-    def run(lines: pd.DataFrame, arm: str = "r", thresholds=None, **inputs):
+    def run(lines: pd.DataFrame, arm: str = "r", thresholds=None, config=None, **inputs):
         monkeypatch.setattr(iqqa, "addTraceLambdaToArclines", lambda arcLines, detectorMap: arcLines)
         monkeypatch.setattr(iqqa, "computeImageQuality", lambda arcLines: arcLines.copy())
-        config = iqqa.ImageQualityQaConfig()
-        config.thresholdsFile = ""
-        config.extraThresholdsFiles = []
+        if config is None:
+            config = iqqa.ImageQualityQaConfig()
+            config.thresholdsFile = ""
+            config.extraThresholdsFiles = []
         task = iqqa.ImageQualityQaTask(config=config)
         if thresholds is not None:
             task.thresholds = thresholds

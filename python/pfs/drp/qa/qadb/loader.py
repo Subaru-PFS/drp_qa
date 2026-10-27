@@ -206,13 +206,26 @@ def _recordedId(qadb: Any, name: str, digest: str, now: datetime, log: Callable)
     By content: qadb's row with that SHA-256, else a file this drp_qa ships
     with it, registered under the name judged with. `None`, with a log line,
     when there is neither: the file changed or went before it was registered.
+    A row with fewer entries than it counts (a registration that stopped
+    between its two writes) is registered again when the file is shipped.
     """
-    found = qadb.query_scalar(
-        "SELECT thresholds_id FROM qa_thresholds WHERE sha256 = :sha256", params={"sha256": digest}
+    found = qadb.query_dataframe(
+        "SELECT t.thresholds_id, t.n_entries,"
+        " (SELECT count(*) FROM qa_threshold_entry e WHERE e.thresholds_id = t.thresholds_id) AS stored"
+        " FROM qa_thresholds t WHERE t.sha256 = :sha256",
+        params={"sha256": digest},
     )
-    if found is not None:
-        return int(found)
+    complete = found.empty or (
+        pd.notna(found["n_entries"].iloc[0]) and found["stored"].iloc[0] >= found["n_entries"].iloc[0]
+    )
+    if not found.empty and complete:
+        return int(found["thresholds_id"].iloc[0])
     path = _shippedWith(name, digest)
+    if path is None and not found.empty:
+        log(
+            f"thresholds {name} (sha256 {digest[:12]}) has entries missing in qadb, and this drp_qa has no copy to restore them"
+        )
+        return int(found["thresholds_id"].iloc[0])
     if path is None:
         log(
             f"thresholds {name} (sha256 {digest[:12]}) is neither in qadb nor shipped with this drp_qa;"
@@ -245,7 +258,13 @@ def _thresholdsIds(
     fromConfig: dict[str, int | None] = {}
     ids = []
     for (files, digests), run in zip(recorded, judged["run"], strict=True):
-        layers = recordedThresholds(files, digests)
+        try:
+            layers = recordedThresholds(files, digests)
+        except ValueError as error:
+            # One unreadable record must not stop the load (qaActor runs it for every visit).
+            log(f"{run}: {task} {error}; thresholds left null")
+            ids.append(None)
+            continue
         if layers is None:
             if run not in fromConfig:
                 fromConfig[run] = _thresholdsIdOf(qadb, butler, run, task, now, log)

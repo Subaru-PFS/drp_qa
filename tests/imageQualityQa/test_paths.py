@@ -220,19 +220,20 @@ def testDefaultConfigJudgesByTheShippedFile(iqqa):
 
 def testMetricsRecordTheThresholdsFilesJudgedWith(iqqa, runTask, fakes):
     """Each image's row names the files the task loaded, by content then (PIPE2D-1976)."""
-    task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
-    layers = recordedThresholds(*(task.thresholdsRecord[column] for column in THRESHOLDS_COLUMNS))
-    assert layers == [
+    detectorMap = fakes.DetectorMap()
+    calexp = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*ARC))
+    lines = fakes.arcLines(detectorMap, numPerFiber=30)
+
+    def layers(config=None):
+        row = runTask(lines, detectorMap=detectorMap, calexp=calexp, config=config).iqQaMetrics.iloc[0]
+        return recordedThresholds(*(row[column] for column in THRESHOLDS_COLUMNS))
+
+    assert layers(iqqa.ImageQualityQaConfig()) == [
         (name, sha256Of(thresholdsPath(name)))
         for name in ("iqQaThresholds-run25.yaml", "iqQaThresholds-iis-run30.yaml")
     ]
-
-    # runTask's config names no file: judged by the fields alone, which is recorded as such.
-    detectorMap = fakes.DetectorMap()
-    calexp = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*ARC))
-    metrics = runTask(fakes.arcLines(detectorMap, numPerFiber=30), detectorMap=detectorMap, calexp=calexp)
-    row = metrics.iqQaMetrics.iloc[0]
-    assert recordedThresholds(row["thresholdsFiles"], row["thresholdsSha256"]) == []
+    # runTask's own config names no file: judged by the fields alone, which is recorded as such.
+    assert layers() == []
 
 
 def testRunQuantumRecordsTheCalexpRun(iqqa, monkeypatch):

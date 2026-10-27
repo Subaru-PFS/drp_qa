@@ -15,7 +15,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   and the sha256 of its content then, comma-separated (empty when judged by the config fields alone;
   `gate.thresholdsRecord`). The qadb loader cites those, by content, rather than what the drp_qa that loads ships
   under the names the stored config gives: a file changed or renamed since is cited as it judged, and a layer the
-  config class gained later is not registered. `registerThresholds` takes the `name` to record.
+  config class gained later is not registered. A registration that stopped before its entries is completed on the
+  next load, and a malformed record leaves that image's id null, logged, rather than stopping the load.
+  `registerThresholds` takes the `name` to record.
 
 - **QA results load into qadb** (PIPE2D-1385) — `pfs.drp.qa.qadb` copies the tables `imageQualityQa` and
   `dmLineResiduals` write to the Butler (`iqQaMetrics`, `iqQaSpeciesMetrics`, `dmLineResidualSummary`,

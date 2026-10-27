@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -545,3 +546,77 @@ class TestRecordedThresholds:
         gate = self.gate(qadb).set_index("pfs_visit_id")["iq_thresholds_id"]
         assert set(gate[133025]) == {self.idOf(qadb, "iqQaThresholds-run25.yaml")}
         assert set(gate[133040]) == {self.idOf(qadb, "iqQaThresholds-iis-run30.yaml")}
+
+    def logged(self, butler, qadb):
+        messages = []
+        loadCollection(
+            butler,
+            qadb,
+            COLLECTION,
+            visits=VISITS,
+            pipelineVersions=False,
+            log=messages.append,
+            now=lambda: NOW,
+        )
+        return messages
+
+    def testOldAndNewTablesTogether(self, StubButler, tables, configs, qadb):
+        """A RUN written before PIPE2D-1976 falls back on its config; one written after, in the same load, does not."""
+        runs = {
+            (133025, "b", 1): "new",
+            (133025, "r", 1): "new",
+            (133040, "b", 1): "old",
+            (133040, "r", 1): "old",
+        }
+        iq = recorded(tables, iq=["iqQaThresholds-iis-run30.yaml"])["iqQaMetrics"]
+        old = (iq["visit"] == 133040).to_numpy()
+        iq.loc[old, ["thresholdsFiles", "thresholdsSha256"]] = (
+            np.nan
+        )  # as concatenation with an old table leaves it
+        messages = self.logged(
+            StubButler({**recorded(tables), "iqQaMetrics": iq}, runs=runs, datasets=configs), qadb
+        )
+        gate = self.gate(qadb).set_index("pfs_visit_id")["iq_thresholds_id"]
+        assert set(gate[133025]) == {self.idOf(qadb, "iqQaThresholds-iis-run30.yaml")}
+        assert set(gate[133040]) == {
+            self.idOf(qadb, "iqQaThresholds-run25.yaml")
+        }  # what the old RUN's config names
+        fallbacks = [m for m in messages if "recorded no thresholds files" in m]
+        assert fallbacks == [
+            "old: imageQualityQa recorded no thresholds files; citing those its stored config names,"
+            " as this drp_qa has them"
+        ]
+
+    def testInterruptedRegistrationIsRepaired(self, StubButler, tables, configs, qadb):
+        """A row whose entries were never written gets them on the next load of a table recording its file."""
+        thresholdsId = registerThresholds(qadb, thresholdsPath("iqQaThresholds-run25.yaml"), NOW)
+        complete = qadb.count("qa_threshold_entry", f"thresholds_id = {thresholdsId}")
+        qadb.commit("DELETE FROM qa_threshold_entry WHERE thresholds_id = :i", params={"i": thresholdsId})
+        assert (
+            qadb.count("qa_threshold_entry", f"thresholds_id = {thresholdsId}") == 0
+        )  # the interrupted state
+        load(StubButler(recorded(tables), datasets=configs), qadb)
+        assert qadb.count("qa_threshold_entry", f"thresholds_id = {thresholdsId}") == complete > 0
+        assert set(self.gate(qadb)["iq_thresholds_id"]) == {thresholdsId}
+
+    def testIncompleteRowWithoutACopyIsCitedAndLogged(self, StubButler, tables, configs, qadb, tmp_path):
+        then = tmp_path / "iqQaThresholds-run25.yaml"
+        then.write_bytes(thresholdsPath(then.name).read_bytes() + b"\n# as it was\n")
+        thresholdsId = registerThresholds(qadb, then, NOW)
+        qadb.commit("DELETE FROM qa_threshold_entry WHERE thresholds_id = :i", params={"i": thresholdsId})
+        iq = recorded(tables)["iqQaMetrics"].assign(thresholdsSha256=sha256Of(then))
+        messages = self.logged(StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs), qadb)
+        assert set(self.gate(qadb)["iq_thresholds_id"]) == {thresholdsId}
+        assert sum("entries missing" in m for m in messages) == 1
+
+    def testMalformedRecordIsNullAndLogged(self, StubButler, tables, configs, qadb):
+        """A record naming one file with two hashes leaves that image's id null; the load goes on."""
+        iq = recorded(tables)["iqQaMetrics"]
+        bad = (iq["visit"] == 133025).to_numpy()
+        iq.loc[bad, "thresholdsSha256"] = "f" * 64 + "," + "e" * 64
+        messages = self.logged(StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs), qadb)
+        gate = self.gate(qadb).set_index("pfs_visit_id")
+        assert gate.loc[133025, "iq_thresholds_id"].isna().all()
+        assert gate.loc[133040, "iq_thresholds_id"].notna().all()
+        assert gate["dm_thresholds_id"].notna().all()
+        assert sum("1 thresholds files recorded with 2 SHA-256s" in m for m in messages) == 2  # one per image
