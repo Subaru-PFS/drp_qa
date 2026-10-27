@@ -388,6 +388,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Removed
 
+- **`iqQaData` is no longer stored** (PIPE2D-1962) — `imageQualityQa` wrote every row of `lines` it measured, with
+  its width and centre offset, and nothing read it back: about 21 MB per detector for an arc and 80 MB for a twilight
+  (~390 MB a visit on Run25's three validation visits), mostly unsampled trace centroids. Gating and threshold
+  derivation read `iqQaMetrics`. `run` still returns the per-line table, as `lineData`, for re-measuring one dataId by
+  hand; its inputs stay in the Butler. Collections written before keep their `iqQaData`.
 - **`dmResiduals` and `dmCombinedResiduals`** (PIPE2D-1956) — replaced by `dmLineResiduals`, which measures the same
   lines against the calibration and the visit's detectorMap without re-selecting or clipping them. Retired after a
   comparison on Run30's fresh reductions: medians agree to under 0.002 px, robust RMS to 5–14 %, and the two tasks

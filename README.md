@@ -200,7 +200,7 @@ For arc visits, FWHM is computed as the Gaussian-equivalent width `2√(2 ln 2) 
 arc-line profile. On the calexp, every `profileYStride`-th row is fitted with `pfs.drp.qa.crossDispersion`: each fiber
 jointly with its neighbours, as pixel-integrated Gaussians sharing one width, plus a background, with no aperture
 (fibers are 6.17 px apart). The `fiberProfiles` fallback reads each profile's width at half its maximum. Every FWHM
-includes the pixel response, as the arc-line moments do; `iqQaData.fwhmIntrinsic` leaves it out.
+includes the pixel response, as the arc-line moments do; `fwhmIntrinsic` in the per-line data leaves it out.
 
 The PFS trace profile is not Gaussian, so these readings were chosen by comparing them on real quartz
 ([`docs/trace-widths.ipynb`](docs/trace-widths.ipynb), PIPE2D-1918): the joint fit recovers the profile's half-maximum
@@ -367,7 +367,6 @@ does not exist in `drp_stella`, so the permissive thresholds above are the curre
 
 | DataSet Type  | Dimensions                             | Description                                                                                                                                                                       |
 |---------------|----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `iqQaData`    | `instrument, visit, arm, spectrograph` | Per-line or per-trace-sample measurements: `fiberId`, `x`, `y`, `lam`, `fwhm`, `fwhmIntrinsic` (calexp only), `theta`, `dxCenter`, `flux`, `fluxErr`, `flag`, `traceOnly`, `peakRatio`, `snr` (calexp only), `status`, plus `visit`/`arm`/`spectrograph`. |
 | `iqQaMetrics` | `instrument, visit, arm, spectrograph` | Single-row summary; see below.                                                                                                                                                    |
 | `iqQaSpeciesMetrics` | `instrument, visit, arm, spectrograph` | Per-species `fitDetectorMap` statistics from the `reduceExposure` log, one row per species and metric: `visit`, `arm`, `spectrograph`, `description` (line species, e.g. `NeI`, or `Trace`), `metric` (`fitXRms`, `fitYRms`: weighted RMS; `fitXSoften`, `fitYSoften`: softening), `value`. |
 

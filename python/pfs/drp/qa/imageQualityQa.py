@@ -158,16 +158,6 @@ class ImageQualityQaConnections(
         dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
 
-    iqQaData = OutputConnection(
-        name="iqQaData",
-        doc=(
-            "Per-line image quality measurements, including FWHM,"
-            " position angle, and spatial offset (dxCenter)."
-        ),
-        storageClass="DataFrame",
-        dimensions=("instrument", "visit", "arm", "spectrograph"),
-    )
-
     iqQaMetrics = OutputConnection(
         name="iqQaMetrics",
         doc=(
@@ -532,7 +522,6 @@ class ImageQualityQaTask(PipelineTask):
             # that reduced it, which the gate checks against the thresholds' (PIPE2D-1938).
             calexpRef = getattr(inputRefs, "calexp", None)
             outputs.iqQaMetrics["calexpRun"] = calexpRef.run if calexpRef is not None else None
-            butlerQC.put(outputs.iqQaData, outputRefs.iqQaData)
             butlerQC.put(outputs.iqQaMetrics, outputRefs.iqQaMetrics)
             butlerQC.put(outputs.iqQaSpeciesMetrics, outputRefs.iqQaSpeciesMetrics)
 
@@ -608,9 +597,11 @@ class ImageQualityQaTask(PipelineTask):
 
         Returns
         -------
-        iqQaData : `pandas.DataFrame`
-            Per-line image quality data including ``dxCenter`` (spatial
-            offset from static calibration detectorMap, in pixels).
+        lineData : `pandas.DataFrame`
+            Per-line (or per-trace-sample) image quality data including
+            ``dxCenter`` (spatial offset from static calibration detectorMap,
+            in pixels).  Returned for inspection only: ``runQuantum`` does not
+            store it (PIPE2D-1962).
         iqQaMetrics : `pandas.DataFrame`
             Single-row summary with ``medFwhm``, ``medDxCenter``,
             ``dxCenterRms``, ``pctFlagged``, ``nLines``, ``linesPerFiber``,
@@ -1018,7 +1009,7 @@ class ImageQualityQaTask(PipelineTask):
             # The visit type rules out every row that is left: on quartz/science
             # frames without a usable calexp the surviving arc lines are
             # incidental, and a twilight or dark has nothing to measure.  The rows
-            # are still written to ``iqQaData`` for inspection, but no summary
+            # are still returned in ``lineData`` for inspection, but no summary
             # metric may be derived from them.
             good = pd.Series(False, index=data.index)
         trace_only = bool(data["traceOnly"].all()) if "traceOnly" in data.columns else False
@@ -1152,7 +1143,7 @@ class ImageQualityQaTask(PipelineTask):
         )
 
         return Struct(
-            iqQaData=data,
+            lineData=data,
             iqQaMetrics=metrics,
             iqQaSpeciesMetrics=speciesFrame(dataId, logMetrics["speciesStats"]),
         )
