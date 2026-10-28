@@ -453,6 +453,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
+- **`iqQaData` is written only on request** (PIPE2D-1962) — `imageQualityQa` gains `doWriteLineData`, default off.
+  The table holds every row of `lines` measured, with its width and centre offset, and nothing reads it back: about
+  21 MB per detector for an arc, 2 MB for a quartz and 80 MB for a twilight, mostly unsampled trace centroids
+  (1.18 GB for the 34 detectors of Run25 visits 140005, 140141 and 134336). Gating and threshold derivation read
+  `iqQaMetrics`. The connection stays, so the `imageQualityQa_config` of earlier RUNs, which names it, can still be
+  read (the qadb loader and `qaComparison report --version` read it). `run` returns the table as `lineData` (was
+  `iqQaData`). Collections written before keep their `iqQaData`.
 - **Validation set** (PIPE2D-1934) — the Run27 SM1 defocus is known-bad for the line scatter, `robustRmsDeltaX`,
   as well as `medFwhm`: the trace sets and the Ar, Ne, Kr and r/n Xe arcs, which fail at 1.7–4× each detector's
   Run25 median (not HgCd, whose scatter is not judged, nor b-arm Xenon, the one noisy population). Removed: the
