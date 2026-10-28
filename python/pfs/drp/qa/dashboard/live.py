@@ -8,6 +8,7 @@ skipped, so many sessions polling it make one query. Offline, the same store
 reads a snapshot of qadb (`qadbSource.writeSnapshot`) once.
 """
 
+import logging
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -33,6 +34,8 @@ from pfs.drp.qa.dashboard.store import MetricsStore
 __all__ = ["HST", "OpdbTables", "QadbMetricsStore", "opdbReader", "qadbProvenance"]
 
 HST = ZoneInfo("Pacific/Honolulu")
+
+_log = logging.getLogger(__name__)
 
 _IMAGE = ["visit", "arm", "spectrograph"]
 
@@ -169,6 +172,10 @@ class QadbMetricsStore(MetricsStore):
         store.live = False
         return store
 
+    @property
+    def hasOpdb(self) -> bool:
+        return self._readOpdb is not None
+
     def _times(self) -> pd.DataFrame:
         """Return each visit's time and sequence: the opdb's where it has the visit, else qadb's."""
         qadbOnly = self._qadbTimes[~self._qadbTimes["pfs_visit_id"].isin(self._opdbTimes["pfs_visit_id"])]
@@ -190,7 +197,11 @@ class QadbMetricsStore(MetricsStore):
             changed = self._takeLoads(self._read(self.since))
             self.updatedAt = datetime.now(HST)
             if self._readOpdb is not None and len(self.table):
-                changed = self._takeOpdb() or changed
+                try:
+                    changed = self._takeOpdb() or changed
+                except Exception:
+                    # Show the images just read; their sequences, times and notes wait for the next refresh.
+                    _log.exception("Reading the opdb failed; keeping its last answer")
             if changed:
                 self.table = withSequences(self.table, self._times())
                 self.version += 1

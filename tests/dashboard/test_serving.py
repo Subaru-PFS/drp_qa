@@ -164,6 +164,35 @@ def testLineThresholdsAreRecorded():
     assert bare.loc[bare["source"] == "dmLineResidualMetrics", ["warn", "fail"]].isna().all().all()
 
 
+def testLineThresholdsMatchTheSummarysCameraSetAndObsType():
+    """Qadb's metric rows lack cameraSet and obsType, which file entries name: they come from the summary."""
+    summary, metrics = _lines()
+    summary = summary.assign(cameraSet="brn", obsType="arc")
+    metrics = metrics.drop(columns="cameraSet")
+    entry = pd.DataFrame(
+        {
+            "metric": ["medianDeltaY"],
+            "reference": ["calib"],
+            "statusType": ["BOTH"],
+            "cameraSet": ["brn"],
+            "obsType": ["arc"],
+            "warn": [0.5],
+            "fail": [1.5],
+            "higherIsWorse": [True],
+            "absolute": [True],
+            "provenance": ["file"],
+        }
+    )
+    table = buildMetricsTable(_iq(), _thresholds(), summary, metrics, lineThresholds=[entry])
+    calib = table[(table["source"] == "dmLineResidualMetrics") & (table["reference"] == "calib")]
+    assert calib[["warn", "fail"]].values.tolist() == [[0.5, 1.5]]
+    # Negative control: without the summary's columns the entry matches nothing.
+    bare = buildMetricsTable(
+        _iq(), _thresholds(), summary.drop(columns=["cameraSet", "obsType"]), metrics, lineThresholds=[entry]
+    )
+    assert bare.loc[bare["source"] == "dmLineResidualMetrics", ["warn", "fail"]].isna().all().all()
+
+
 def testConfigDefaultsReadFromSource():
     defaults = configDefaults("pfs.drp.qa.imageQualityQa", "ImageQualityQaConfig")
     assert defaults.thresholdsFile == "iqQaThresholds-run25.yaml"

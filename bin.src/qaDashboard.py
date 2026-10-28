@@ -63,7 +63,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--show", action="store_true", help="open a browser")
     args = parser.parse_args(argv)
     if (args.snapshot is None) == (args.collection is None):
-        parser.error("give --snapshot or --collection, not both")
+        parser.error("give one of --snapshot and --collection")
 
     # One line per request, with the client's address: shows whether a browser reached the server.
     logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(name)s %(message)s")

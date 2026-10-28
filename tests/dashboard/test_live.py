@@ -172,9 +172,12 @@ class FakeOpdb:
         self.visitNotes = []  # (visit, camera, note, source)
         self.sequenceNotes = []  # (sequence, note)
         self.calls = []
+        self.down = False
 
     def read(self, visits):
         self.calls.append(list(visits))
+        if self.down:
+            raise ConnectionError("opdb tunnel closed")
         times = pd.DataFrame(
             {
                 "pfs_visit_id": visits,
@@ -210,7 +213,7 @@ def testOpdbGivesSequencesTimesAndLateNotes(clock, layers):
     assert (visits["sequenceSource"] == "opdb").all()
     assert visits.loc[1001, "sequenceKey"] == 77 and visits.loc[1002, "sequenceKey"] == 78
     assert visits.loc[1001, "timeExpStart"] == pd.Timestamp("2026-11-01 20:01")
-    assert store.notes().empty and store.version == 1
+    assert store.notes().empty and store.version == 1 and store.hasOpdb
 
     opdb.visitNotes.append((1001, "r1", "ghost", "sps_annotation"))
     opdb.sequenceNotes.append((78, "Dome light on"))
@@ -227,7 +230,7 @@ def testOpdbGivesSequencesTimesAndLateNotes(clock, layers):
     visits = bare.visits().set_index("visit")
     assert (visits["sequenceSource"] == "inferred").all()
     assert visits.loc[1001, "sequenceKey"] == visits.loc[1002, "sequenceKey"]
-    assert bare.notes().empty
+    assert bare.notes().empty and not bare.hasOpdb
 
 
 def testOpdbIsReadForRecentVisitsAfterTheFirst(clock, layers):
@@ -251,3 +254,22 @@ def testSnapshotKeepsTheOpdbNotes(tmp_path, clock, layers):
     store = QadbMetricsStore.fromSnapshot(writeSnapshot(tables, tmp_path / "snap", {"collection": "c"}))
     assert store.notes()["note"].tolist() == ["Cloudy"]
     assert store.visits()["sequenceSource"].tolist() == ["opdb"]
+
+
+def testOpdbFailureKeepsTheNewImages(clock, layers):
+    """A failed opdb read still shows the images qadb just gave; the opdb's answer comes on the next refresh."""
+    qadb = FakeQadb()
+    qadb.loads.append([image(1001, "b", "PASS", 2.5, "t1")])
+    opdb = FakeOpdb({1001: 77, 1002: 78})
+    store = QadbMetricsStore(qadb.read, layers, {}, minInterval=0, clock=clock, readOpdb=opdb.read)
+
+    opdb.down = True
+    qadb.loads.append([image(1002, "b", "FAIL", 9.0, "t2")])
+    assert store.refresh()
+    visits = store.visits().set_index("visit")
+    assert visits.loc[1002, "sequenceSource"] == "inferred"
+    assert store.images().set_index("visit").loc[1002, "status"] == "FAIL"
+
+    opdb.down = False
+    assert store.refresh()
+    assert store.visits().set_index("visit").loc[1002, "sequenceKey"] == 78

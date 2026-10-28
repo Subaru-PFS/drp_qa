@@ -203,6 +203,11 @@ def _lineRows(
     summary: pd.DataFrame, metrics: pd.DataFrame, thresholds: Sequence[ThresholdsLike] | None = None
 ) -> pd.DataFrame:
     """Rows of ``dmLineResidualMetrics`` as stored, with their thresholds, and ``dmLineResidualSummary``'s verdicts."""
+    # The thresholds name each row's camera set and observation type, which only the summary holds in qadb.
+    keys = ["visit", "arm", "spectrograph"]
+    context = [column for column in ("cameraSet", "obsType") if column in summary and column not in metrics]
+    if context:
+        metrics = metrics.merge(summary[[*keys, *context]].drop_duplicates(keys), on=keys, how="left")
     rows = metrics.assign(source="dmLineResidualMetrics", population="", reason="")
     if thresholds:
         rows[["warn", "fail", "population"]] = _lineLimits(metrics, thresholds)

@@ -467,10 +467,10 @@ def thresholdDistance(checks: pd.DataFrame) -> hv.Overlay | hv.Text:
     layers = [
         hv.VSpan(0, high).opts(color=STATUS_COLORS["FAIL"], alpha=0.08),
         hv.VLine(0).opts(color=STATUS_COLORS["FAIL"], line_width=1.5),
-        hv.Scatter(warns, ["x", "check"], ["warn"]).opts(
+        hv.Points(warns, ["x", "check"], ["warn"]).opts(
             marker="dash", angle=90, size=16, color=STATUS_COLORS["WARN"], line_width=3
         ),
-        hv.Scatter(frame, ["x", "check"], ["camera", "status", "shown", "warn", "fail", "pastFail"]).opts(
+        hv.Points(frame, ["x", "check"], ["camera", "status", "shown", "warn", "fail", "pastFail"]).opts(
             color="status",
             cmap=STATUS_COLORS,
             size=9,
@@ -540,6 +540,7 @@ class Dashboard(param.Parameterized):
         self.images = self.store.images()
         self.notes = self.store.notes()
         self.timeline = visitTimeline(self.visits)
+        self._visitTimes = self.timeline.set_index("visit")["time"]
         self.visitIds = [int(v) for v in self.visits["visit"]]
 
     def refresh(self) -> None:
@@ -574,7 +575,7 @@ class Dashboard(param.Parameterized):
             f"<b>Built</b> {prov.get('builtAt', '?')}",
         ]
         warnings = []
-        if (self.visits["sequenceSource"] == "inferred").all():
+        if not self.store.hasOpdb:
             warnings.append(
                 "No opdb: sequences are inferred from runs of one seqName (qadb holds no IIC sequence), times "
                 "are qadb's pfs_visit.issued_at (HST)"
@@ -598,12 +599,12 @@ class Dashboard(param.Parameterized):
 
     def _when(self, visit: int, seconds: bool = False) -> str:
         """Return when a visit began, ``2026-03-09 19:42 HST``; empty without the opdb listing."""
-        time = self.timeline.set_index("visit").loc[visit, "time"]
+        time = self._visitTimes.loc[visit]
         return "" if pd.isna(time) else f"{pd.Timestamp(time):%Y-%m-%d %H:%M{':%S' if seconds else ''}} HST"
 
     def _span(self, visits) -> str:
         """Return when some visits ran, ``03-09 19:40–19:52 · ``; empty without times."""
-        times = self.timeline.set_index("visit").loc[list(visits), "time"].dropna()
+        times = self._visitTimes.loc[list(visits)].dropna()
         if times.empty:
             return ""
         first, last = pd.Timestamp(times.min()), pd.Timestamp(times.max())
@@ -855,8 +856,8 @@ class Dashboard(param.Parameterized):
                 chosen = chosen[chosen["timeExpStart"].between(*dateRange)]
             return [int(v) for v in chosen["visit"]]
 
-        @pn.depends(visitRange, dates, obsType, arms)
-        def summary(rng, dateRange, types, armList):
+        @pn.depends(visitRange, dates, obsType, arms, self.param.dataVersion)
+        def summary(rng, dateRange, types, armList, _version):
             visits = selectedVisits(rng, dateRange, types)
             images = self.images[self.images["visit"].isin(visits) & self.images["arm"].isin(armList)]
             counts = images["status"].value_counts()
@@ -880,7 +881,7 @@ class Dashboard(param.Parameterized):
         for title, source, metrics, reference, statusType in TRENDS:
             choice = pn.widgets.RadioButtonGroup(options=list(metrics), value=metrics[0], button_type="light")
 
-            @pn.depends(choice, visitRange, dates, obsType, arms, xAxis)
+            @pn.depends(choice, visitRange, dates, obsType, arms, xAxis, self.param.dataVersion)
             def plot(
                 metric,
                 rng,
@@ -888,6 +889,7 @@ class Dashboard(param.Parameterized):
                 types,
                 armList,
                 axis,
+                _version,
                 source=source,
                 reference=reference,
                 statusType=statusType,
@@ -941,7 +943,7 @@ class Dashboard(param.Parameterized):
         def labels() -> dict[str, int]:
             return {
                 (
-                    f"{visit} · {self._when(visit).removesuffix(' HST')}" if self._when(visit) else str(visit)
+                    f"{visit} · {when.removesuffix(' HST')}" if (when := self._when(visit)) else str(visit)
                 ): visit
                 for visit in self.visitIds
             }

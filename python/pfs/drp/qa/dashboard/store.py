@@ -61,6 +61,9 @@ class MetricsStore:
     #: Counts the changes `refresh` made.
     version = 0
 
+    #: Whether the visits' sequences, times and notes come from the opdb.
+    hasOpdb = False
+
     def __init__(
         self,
         table: pd.DataFrame | None = None,
