@@ -37,6 +37,7 @@ _STACK_MODULES: list[str] = []
 _OPTIONAL_DIRS = [
     "comparison",
     "dashboard",
+    "dashboardApp",
     "guiders",
     "imageQualityQa",
     "metrics",

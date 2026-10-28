@@ -130,3 +130,18 @@ def testTaskThresholdsIncludeTheIisLayer():
     files = [layer.name for layer in layers["iqQaMetrics"] if hasattr(layer, "name")]
     assert files[:2] == ["iqQaThresholds-run25.yaml", "iqQaThresholds-iis-run30.yaml"]
     assert "iqQaThresholds-iis-run30.yaml" in sources["iqQaMetrics"]
+
+
+def testUnchangedRefreshIsNotNew(clock, layers):
+    """``since`` is inclusive, so the last load comes back on every read: that is not new data."""
+    qadb = FakeQadb()
+    qadb.loads.append([image(1001, "b", "PASS", 2.5, "t1")])
+    store = QadbTier1Store(qadb.read, layers, {}, minInterval=0, clock=clock)
+    assert not store.refresh() and not store.refresh()
+    assert store.version == 1 and qadb.calls[-1] == "t1"
+
+    # Negative control: an image loaded in the same instant, read only now, is new.
+    qadb.loads.append([image(1001, "r", "WARN", 2.9, "t1")])
+    assert store.refresh() and store.version == 2
+    assert sorted(store.images()["arm"]) == ["b", "r"]
+    assert not store.refresh()

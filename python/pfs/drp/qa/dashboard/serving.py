@@ -50,6 +50,7 @@ __all__ = [
     "VERDICT",
     "buildTier1",
     "configDefaults",
+    "firstThresholdsFile",
     "inferSequences",
     "noteRows",
     "rollupStatus",
@@ -275,6 +276,8 @@ def buildTier1(
     -------
     `pandas.DataFrame`
         `TIER1_COLUMNS`, sorted by visit, arm, spectrograph and source.
+        Only visits in ``iqQaMetrics``: rows on any other visit (a note on a
+        visit that was not judged) are left out.
     """
     parts = [_iqRows(iqQaMetrics, thresholds)]
     if dmLineResidualSummary is not None and dmLineResidualMetrics is not None:
@@ -282,6 +285,8 @@ def buildTier1(
     if notes is not None:
         parts.append(noteRows(notes, visitTimes))
     table = pd.concat(parts, ignore_index=True)
+    # A visit without an iqQaMetrics row has no sequence to file its rows under.
+    table = table[table["visit"].isin(iqQaMetrics["visit"])]
     images = iqQaMetrics[["visit", "arm", "spectrograph", "obsType", "seqName"]].drop_duplicates(
         ["visit", "arm", "spectrograph"]
     )
@@ -333,6 +338,14 @@ def thresholdsProvenance(thresholds: Path | str) -> dict:
     return {"file": Path(thresholds).name, "nEntries": len(header.get("thresholds", []))} | {
         k: header.get(k) for k in keep
     }
+
+
+def firstThresholdsFile(layers: Sequence[ThresholdsLike]) -> Path:
+    """Return the highest-priority thresholds file among ``layers`` (`taskThresholds`), for the provenance."""
+    try:
+        return next(Path(layer) for layer in layers if isinstance(layer, Path | str))
+    except StopIteration:
+        raise ValueError("No thresholds file among the layers: only config fields") from None
 
 
 def verdictDisagreements(table: pd.DataFrame, source: str = "iqQaMetrics") -> pd.DataFrame:

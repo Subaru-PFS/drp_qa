@@ -20,9 +20,8 @@ import pandas as pd
 
 from pfs.drp.qa.dashboard.qadbSource import FIRST_VISIT, LAST_VISIT, readQadb, tier1FromQadb, withSequences
 from pfs.drp.qa.dashboard.schema import TIER1_COLUMNS
-from pfs.drp.qa.dashboard.serving import taskThresholds, thresholdsProvenance
+from pfs.drp.qa.dashboard.serving import firstThresholdsFile, taskThresholds, thresholdsProvenance
 from pfs.drp.qa.dashboard.store import Tier1Store
-from pfs.drp.qa.metrics.gate import thresholdsPath
 
 __all__ = ["HST", "QadbTier1Store", "emptyTier1"]
 
@@ -72,6 +71,7 @@ class QadbTier1Store(Tier1Store):
         self._lock = threading.Lock()
         self._lastRead: float | None = None
         self.since: Any = None
+        self._seenAtSince: set[tuple] = set()
         self.updatedAt: datetime | None = None
         self.version = 0
         self.table = emptyTier1()
@@ -93,7 +93,7 @@ class QadbTier1Store(Tier1Store):
         layers, sources = taskThresholds()
         provenance = {
             "collection": f"{collection} (qadb, live)",
-            "thresholds": thresholdsProvenance(thresholdsPath("iqQaThresholds-run25.yaml")),
+            "thresholds": thresholdsProvenance(firstThresholdsFile(layers["iqQaMetrics"])),
             "thresholdLayers": [f"{key}: {source}" for key, source in sources.items()],
             "drpQaVersion": _drpQaVersion(),
             "builtAt": "live",
@@ -125,6 +125,11 @@ class QadbTier1Store(Tier1Store):
             iq = tables["iqQaMetrics"]
             if iq.empty:
                 return False
+            # ``since`` is inclusive, so the last read's newest loads come back every time: only
+            # an image load not seen before (image and time) is new.
+            loads = set(iq[[*_IMAGE, "decidedAt"]].itertuples(index=False, name=None))
+            if loads <= self._seenAtSince:
+                return False
             new = tier1FromQadb(tables, self.layers)
             judged = pd.MultiIndex.from_frame(iq[_IMAGE])
             kept = self.table[~pd.MultiIndex.from_frame(self.table[_IMAGE]).isin(judged)]
@@ -138,6 +143,7 @@ class QadbTier1Store(Tier1Store):
                 [tables[name]["decidedAt"] for name in ("iqQaMetrics", "dmLineResidualSummary")]
             )
             self.since = stamps.max()
+            self._seenAtSince = {load for load in loads if load[-1] == self.since}
             self.version += 1
             self._register()
             return True

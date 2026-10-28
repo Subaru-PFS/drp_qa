@@ -1,15 +1,20 @@
 """Tests of the dashboard's Tier 1 table and its DuckDB store."""
 
+import importlib.util
+import shutil
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 
 from pfs.drp.qa.dashboard import schema
-from pfs.drp.qa.dashboard.schema import NOTE
+from pfs.drp.qa.dashboard.schema import NOTE, readProvenance
 from pfs.drp.qa.dashboard.serving import (
     VERDICT,
     buildTier1,
     configDefaults,
+    firstThresholdsFile,
     inferSequences,
     noteRows,
     rollupStatus,
@@ -17,7 +22,7 @@ from pfs.drp.qa.dashboard.serving import (
     writeTier1,
 )
 from pfs.drp.qa.dashboard.store import Tier1Store, visitTimeline
-from pfs.drp.qa.metrics.gate import STATUS_ORDER
+from pfs.drp.qa.metrics.gate import STATUS_ORDER, thresholdsPath
 
 
 def _thresholds() -> pd.DataFrame:
@@ -262,3 +267,54 @@ def testVisitTimelineNights():
     assert timeline.loc[11, "clock"] == "06:13"
     # Negative control: the calendar date would split the first night at midnight.
     assert timeline.loc[11, "time"].strftime("%Y-%m-%d") != timeline.loc[11, "night"]
+
+
+def testNotesOnVisitsNotJudgedAreLeftOut():
+    """A note on a visit with no iqQaMetrics row has no sequence: it is dropped, not a crash."""
+    notes = pd.DataFrame(
+        {
+            "pfs_visit_id": pd.array([100, 999], dtype="Int64"),
+            "iic_sequence_id": pd.array([pd.NA, pd.NA], dtype="Int64"),
+            "camera": [None, None],
+            "data_flag": pd.array([pd.NA, pd.NA], dtype="Int64"),
+            "note": ["Cloudy", "Not reduced"],
+            "source": ["obslog", "obslog"],
+        }
+    )
+    table = buildTier1(_iq(), _thresholds(), notes=notes)
+    notesKept = table[table["metric"] == NOTE]
+    assert notesKept[["visit", "reason"]].values.tolist() == [[100, "Cloudy"]]
+    assert set(table["visit"]) == {100, 101, 102, 200}
+
+
+def testFirstThresholdsFile(tmp_path):
+    table = _thresholds()
+    assert firstThresholdsFile([tmp_path / "a.yaml", table]) == tmp_path / "a.yaml"
+    assert firstThresholdsFile([table, "b.yaml", "c.yaml"]) == Path("b.yaml")
+    with pytest.raises(ValueError):
+        firstThresholdsFile([table])
+
+
+def _exportScript():
+    path = Path(__file__).parents[2] / "bin.src" / "exportDashboardTier1.py"
+    spec = importlib.util.spec_from_file_location("exportDashboardTier1", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def testExportTakesThresholdsRelativeToTheCurrentDirectory(tmp_path, monkeypatch):
+    """``--thresholds my.yaml`` is the file here, and the provenance names it, not run25."""
+    monkeypatch.chdir(tmp_path)
+    # The other metrics run25 names: not measured here.
+    iq = _iq().assign(**dict.fromkeys(("medDxCenter", "pctFlagged", "linesPerFiber"), np.nan))
+    iq.to_parquet(tmp_path / "iqQaMetrics-c.parquet")
+    shutil.copy(thresholdsPath("iqQaThresholds-run25.yaml"), tmp_path / "my.yaml")
+    export = _exportScript()
+
+    export.main(["-c", "c", "-t", "my.yaml", "-o", "withMine.parquet"])
+    assert readProvenance(tmp_path / "withMine.parquet")["thresholds"]["file"] == "my.yaml"
+
+    # Negative control: without --thresholds the provenance names the task's own file.
+    export.main(["-c", "c", "-o", "default.parquet"])
+    assert readProvenance(tmp_path / "default.parquet")["thresholds"]["file"] == "iqQaThresholds-run25.yaml"

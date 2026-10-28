@@ -26,6 +26,7 @@ import pandas as pd
 from pfs.drp.qa.comparison.cli import drpQaVersion
 from pfs.drp.qa.dashboard.serving import (
     buildTier1,
+    firstThresholdsFile,
     taskThresholds,
     thresholdsProvenance,
     verdictDisagreements,
@@ -48,7 +49,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         help="directories holding the exported tables",
     )
     parser.add_argument(
-        "-t", "--thresholds", help="a thresholds file judged before imageQualityQa's own (default: none)"
+        "-t",
+        "--thresholds",
+        help="a thresholds file judged before imageQualityQa's own: a path, else a name in the package's "
+        "thresholds data (default: none)",
     )
     parser.add_argument("--visit-times", type=Path, nargs="+", help="opdb visit listings (parquet)")
     parser.add_argument(
@@ -86,7 +90,8 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     layers, sources = taskThresholds()
     if args.thresholds:
-        layers["iqQaMetrics"][0:0] = [thresholdsPath(args.thresholds)]
+        given = Path(args.thresholds)
+        layers["iqQaMetrics"][0:0] = [given.resolve() if given.exists() else thresholdsPath(args.thresholds)]
         sources["iqQaMetrics"] = f"{args.thresholds} + " + sources["iqQaMetrics"]
     for key, source in sources.items():
         print(f"{key} thresholds: {source}", flush=True)
@@ -98,7 +103,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     provenance = {
         "collection": " + ".join(args.collection),
         "collections": args.collection,
-        "thresholds": thresholdsProvenance(thresholdsPath(args.thresholds or "iqQaThresholds-run25.yaml")),
+        "thresholds": thresholdsProvenance(firstThresholdsFile(layers["iqQaMetrics"])),
         "thresholdLayers": [f"{key}: {source}" for key, source in sources.items()],
         "drpQaVersion": drpQaVersion(),
         "builtAt": datetime.now(UTC).isoformat(timespec="seconds"),

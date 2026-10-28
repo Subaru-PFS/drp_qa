@@ -23,6 +23,7 @@ computes no metric and holds no threshold of its own.
 """
 
 import html
+from collections.abc import Sequence
 from functools import lru_cache
 from pathlib import Path
 
@@ -97,6 +98,11 @@ def _badge(status: str, text: str | None = None) -> str:
     )
 
 
+def _sliderEnd(visitIds: Sequence[int]) -> int:
+    """Return the end of a slider over ``visitIds``: past the start, which a slider needs, with one visit."""
+    return max(visitIds[-1], visitIds[0] + 1)
+
+
 def verdictGrid(images: pd.DataFrame, size: int = 46) -> str:
     """Return an HTML arm × spectrograph grid of image statuses; reasons on hover."""
     byCamera = {
@@ -114,7 +120,7 @@ def verdictGrid(images: pd.DataFrame, size: int = 46) -> str:
                     f'color:#9aa0a6;text-align:center" title="no image">–</td>'
                 )
                 continue
-            title = (row.reasons or row.status).replace('"', "'")
+            title = html.escape(row.reasons or row.status)
             cells.append(
                 f'<td style="width:{size}px;height:{size * 0.6}px;background:{STATUS_COLORS[row.status]};'
                 f'color:white;text-align:center;border-radius:4px;font-size:0.8em" title="{title}">'
@@ -727,7 +733,8 @@ class Dashboard(param.Parameterized):
             images = self._imagesOf(visit)
             problems = images[images["status"].isin(["WARN", "FAIL"])].assign(camera=_camera)
             reasons = "".join(
-                f"<li>{_badge(row.status, row.camera)} {row.reasons}</li>" for row in problems.itertuples()
+                f"<li>{_badge(row.status, row.camera)} {html.escape(row.reasons)}</li>"
+                for row in problems.itertuples()
             )
             openButton = pn.widgets.Button(name=f"Open visit {visit} ↗", width=160)
             openButton.on_click(lambda _: self.openVisit(visit))
@@ -822,20 +829,11 @@ class Dashboard(param.Parameterized):
         visitRange = pn.widgets.IntRangeSlider(
             name="Visits",
             start=self.visitIds[0],
-            end=self.visitIds[-1],
+            end=_sliderEnd(self.visitIds),
             value=(self.visitIds[0], self.visitIds[-1]),
             step=1,
             sizing_mode="stretch_width",
         )
-
-        def grow(_):
-            # Keep the range's end on the latest visit if it was there.
-            end = visitRange.end
-            visitRange.end = self.visitIds[-1]
-            if visitRange.value[1] == end:
-                visitRange.value = (visitRange.value[0], self.visitIds[-1])
-
-        self.param.watch(grow, "dataVersion")
         hasTimes = self.visits["timeExpStart"].notna().any()
         dates = pn.widgets.DatetimeRangePicker(
             name="HST dates" + ("" if hasTimes else " (needs the opdb visit listing)"), disabled=not hasTimes
@@ -843,6 +841,22 @@ class Dashboard(param.Parameterized):
         obsTypes = sorted(self.visits["obsType"].dropna().unique())
         obsType = pn.widgets.MultiChoice(name="Exposure type", options=obsTypes, value=obsTypes)
         arms = pn.widgets.MultiChoice(name="Arm", options=list(ARMS), value=list(ARMS))
+
+        latestShown = [self.visitIds[-1]]
+
+        def grow(_):
+            # Keep the range's end on the latest visit if it was there.
+            visitRange.end = _sliderEnd(self.visitIds)
+            if visitRange.value[1] >= latestShown[0]:
+                visitRange.value = (visitRange.value[0], self.visitIds[-1])
+            latestShown[0] = self.visitIds[-1]
+            # Exposure types first seen live are shown; ones the user left out stay out.
+            types = sorted(self.visits["obsType"].dropna().unique())
+            added = [t for t in types if t not in obsType.options]
+            obsType.options = types
+            obsType.value = [*obsType.value, *added]
+
+        self.param.watch(grow, "dataVersion")
 
         def selectedVisits(rng, dateRange, types) -> list[int]:
             chosen = self.visits[self.visits["visit"].between(*rng) & self.visits["obsType"].isin(types)]
