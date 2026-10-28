@@ -124,7 +124,8 @@ def plotCameraPresence(run: AgRun) -> Figure:
             ax.add_patch(
                 Rectangle((slot, y), 1 / 12, 0.9, color=cmap((judged != CameraState.OK).mean()), lw=0)
             )
-            if (judged == CameraState.DARK).mean() > 0.5:
+            misses = judged[judged != CameraState.OK]
+            if len(misses) and (misses == CameraState.DARK).mean() > 0.5:
                 ax.plot(slot + 1 / 24, y + 0.45, marker="x", ms=3.5, color="white", mew=0.9)
     ax.set_ylim(len(CAMERA_ORDER) + 0.5, 0)
     ax.set_yticks([y + 0.45 for y in rowY.values()])
@@ -276,7 +277,8 @@ def plotGuiding(run: AgRun, jitter: pd.DataFrame) -> Figure:
         _scatterByCameras(ax, jitter.x, jitter[axis], full)
         median = (jitter[axis][full] if full.any() else jitter[axis]).median()
         ax.axhline(median, color=INK, lw=0.8, ls="--")
-        top = np.nanpercentile(jitter[axis], 99) * 1.15 if len(jitter) else 1.0
+        top = np.nanpercentile(jitter[axis], 99) * 1.15 if jitter[axis].notna().any() else np.nan
+        top = top if np.isfinite(top) and top > 0 else 1.0
         ax.set_ylim(0, top)
         for _, visit in jitter[jitter[axis] > top].iterrows():
             ax.annotate(

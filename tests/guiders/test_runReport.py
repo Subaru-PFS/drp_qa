@@ -4,6 +4,7 @@ import datetime
 import json
 import re
 
+import numpy as np
 import pandas as pd
 import pytest
 from matplotlib.figure import Figure
@@ -11,7 +12,7 @@ from matplotlib.figure import Figure
 from pfs.drp.qa.comparison.runs import Period
 from pfs.drp.qa.guiders import runPlotting
 from pfs.drp.qa.guiders.queries import AG_RUN_TABLES, readAgRun
-from pfs.drp.qa.guiders.runAnalysis import prepareRun, settledJitter
+from pfs.drp.qa.guiders.runAnalysis import nightPosition, prepareRun, settledJitter
 from pfs.drp.qa.guiders.runReport import fetchRun, loadRun, main
 
 # The table behind each readAgRun query, as FakeOpDB looks them up.
@@ -69,6 +70,27 @@ def testPlots(makeAgRunTables):
     assert [t.get_text() for t in presence.get_yticklabels()] == ["AG1", "AG3", "AG5", "AG2", "AG4", "AG6"]
 
 
+def testGuidingPlotWithAnAxisAllNaN(makeAgRunTables):
+    """A jitter axis with no values (here ΔInR) leaves an empty panel rather than failing."""
+    tables = makeAgRunTables()
+    tables["exposures"]["guide_delta_insrot"] = float("nan")
+    run = prepareRun(tables)
+    fig = runPlotting.plotGuiding(run, settledJitter(run))
+
+    assert fig.axes[2].get_ylim() == (0.0, 1.0)
+
+
+def testPresenceCrossesDeadCameras(makeAgRunTables):
+    """A cell is crossed when most of a camera's misses detected nothing, even if most frames matched."""
+    run = prepareRun(makeAgRunTables(nNights=1, nVisits=4, nExp=90, deadFrom={0: 330}))
+    crosses = [line for line in runPlotting.plotCameraPresence(run).axes[0].lines if line.get_marker() == "x"]
+    # AG1 dies 55 min into the night: its first hour is 8% dead, and still crossed; the hours after are all dead.
+    hours = np.floor(nightPosition(run.frames.taken_at, run.plottedNights) * 12)
+    assert len(crosses) == len(np.unique(hours[330:]))
+    # Negative control: a camera that never died is never crossed.
+    assert all(line.get_ydata()[0] < 1 for line in crosses)
+
+
 def testFetchAndLoad(opdb, tmp_path):
     paths = fetchRun(opdb, PERIOD, tmp_path, now=datetime.datetime(2026, 10, 1))
     tables, stamp = loadRun(PERIOD, tmp_path)
@@ -85,6 +107,14 @@ def testFetchStopsNow(opdb, tmp_path):
     fetchRun(opdb, PERIOD, tmp_path, now=now)
 
     assert opdb.calls[0].params["end"] == now
+
+
+def testHostDefaultsToPortForward():
+    """The fetch step reads through the ssh port-forward unless told otherwise: on the VPN, pfsa-db refuses public_user."""
+    from pfs.drp.qa.guiders.runReport import _parser
+
+    args = _parser().parse_args(["fetch", "--period", "run30"])
+    assert (args.host, args.port, args.user) == ("127.0.0.1", 5432, "public_user")
 
 
 def testLoadUnfetched(tmp_path):

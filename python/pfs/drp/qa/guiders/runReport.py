@@ -16,6 +16,7 @@ The report holds science visit IDs and guiding statistics, so it stays local.
 import argparse
 import datetime
 import json
+import zoneinfo
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -78,7 +79,8 @@ def fetchRun(opdb, period: Period, dataDir: Path, magLimit: float = 20.0, now=No
     """
     from pfs.drp.qa.guiders.queries import readAgRun
 
-    now = now or datetime.datetime.now()
+    # Periods and opdb times are HST, whatever the machine's time zone.
+    now = now or datetime.datetime.now(zoneinfo.ZoneInfo("Pacific/Honolulu")).replace(tzinfo=None)
     end = min(period.end, now)
     tables = readAgRun(opdb, period.start, end, magLimit=magLimit)
     paths, stampPath = _paths(period, dataDir)
@@ -174,9 +176,9 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
             md += ["### AG1/3/5 against AG2/4/6", "", *_table(groups), ""]
         if name == "guiding":
             md += [
-                f"Settled: science visits' accepted guide offsets after the first {config.nSettle}, in visits with "
-                f"at least {config.minSettled} ({len(jitter)} visits). Jitter: the standard deviation of "
-                "consecutive differences / √2.",
+                f"Settled: science visits' accepted guide offsets after their first {config.nSettle} guide frames, "
+                f"in visits with at least {config.minSettled} ({len(jitter)} visits). Jitter: the standard "
+                "deviation of consecutive differences / √2.",
                 "",
             ]
     md += ["## AG exposures", "", *_table(populations.rename_axis(None), "{:.0f}"), ""]
@@ -214,7 +216,11 @@ def _parser() -> argparse.ArgumentParser:
         "--data-dir", default="~/.cache/drp_qa/agRun", help="where opdb reads and reports are kept"
     )
     parser.add_argument("--runs", default=None, help="the run table (default: comparison mode's)")
-    parser.add_argument("--host", default="pfsa-db", help="opdb host, for fetch")
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="opdb host, for fetch (default: an ssh port-forward to pfsa-db; give pfsa-db at the summit)",
+    )
     parser.add_argument("--port", type=int, default=5432, help="opdb port, for fetch")
     parser.add_argument("--user", default="public_user", help="opdb user (read-only), for fetch")
     parser.add_argument("--mag-limit", type=float, default=20.0, help="bright guide stars, for fetch")

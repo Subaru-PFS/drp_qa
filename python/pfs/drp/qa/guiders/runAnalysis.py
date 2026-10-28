@@ -266,8 +266,10 @@ def onSkyRa(frames: pd.DataFrame) -> pd.Series:
 def settledJitter(run: AgRun) -> pd.DataFrame:
     """Return the settled frame-to-frame jitter of each science visit.
 
-    A visit's settled frames are its accepted guide offsets after the first
-    ``nSettle``; visits with fewer than ``minSettled`` are left out. The
+    A visit's settled frames are its accepted guide offsets after its first
+    ``nSettle`` guide frames, rejected ones counted among those (the loop is
+    still converging, whatever it did with them); visits with fewer than
+    ``minSettled`` settled frames are left out. The
     jitter is the standard deviation of consecutive differences over √2,
     which a slow drift barely changes.
 
@@ -291,7 +293,9 @@ def settledJitter(run: AgRun) -> pd.DataFrame:
     frames["ra"] = onSkyRa(frames)
 
     def jitter(values: pd.Series) -> float:
-        return float(np.nanstd(np.diff(values.to_numpy(float))) / np.sqrt(2))
+        differences = np.diff(values.to_numpy(float))
+        differences = differences[np.isfinite(differences)]
+        return float(np.std(differences) / np.sqrt(2)) if len(differences) else np.nan
 
     columns = ["pfs_visit_id", "night", "taken_at", "n_frames", "n_good", "n_cams", "ra", "dec", "inr"]
     rows = []
@@ -544,11 +548,12 @@ def findFlags(run: AgRun, jitter: pd.DataFrame, dropouts: pd.DataFrame) -> list[
 
 
 def describePeriod(run: AgRun) -> str:
-    """Return one line naming the run's span, visits and AG exposures."""
+    """Return one line naming the run's nights (by their evening's date), visits and AG exposures."""
     frames = run.frames
-    first, last = frames.taken_at.min(), frames.taken_at.max()
+    first, last = run.nights.index.min(), run.nights.index.max()
     return (
-        f"{first:%Y-%m-%d} to {last:%Y-%m-%d}, visits {frames.pfs_visit_id.min()}–{frames.pfs_visit_id.max()}, "
+        f"nights {first:%Y-%m-%d} to {last:%Y-%m-%d}, "
+        f"visits {frames.pfs_visit_id.min()}–{frames.pfs_visit_id.max()}, "
         f"{len(frames)} AG exposures on {len(run.plottedNights)} nights"
     )
 

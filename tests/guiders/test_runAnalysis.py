@@ -8,6 +8,7 @@ from pfs.drp.qa.guiders.runAnalysis import (
     CAMERA_GROUPS,
     CameraState,
     RunConfig,
+    describePeriod,
     findDropouts,
     findFlags,
     groupSummary,
@@ -136,7 +137,7 @@ def testFindFlags(makeAgRunTables):
     exposures = tables["exposures"]
     exposures.loc[50:51, "mask"] = 1  # rejected
     exposures.loc[60, "mask"] = np.nan  # not written
-    # Visit 150001's offsets were accepted from 2 stars on one camera.
+    # Three of visit 150002's offsets were accepted from 1 star on one camera.
     lone = exposures.agc_exposure_id.iloc[100:103]
     cameras = tables["cameras"]
     cameras.loc[cameras.agc_exposure_id.isin(lone) & (cameras.agc_camera_id > 0), "n_good"] = 0
@@ -148,7 +149,7 @@ def testFindFlags(makeAgRunTables):
 
     assert "AG5: no detections at all in 120 consecutive AG exposures" in text
     assert "2 guide frames rejected" in text and "150001" in text
-    assert "3 guide offsets accepted from fewer than 3 matched stars" in text
+    assert "3 guide offsets accepted from fewer than 3 matched stars" in text and "visit 150002 (3)" in text
     assert "1 of 320 AG exposures have no guide offset" in text
     assert all(flag.kind in ("camera", "guiding", "image") for flag in flags)
     # Negative control: a clean run raises no flag.
@@ -167,6 +168,17 @@ def testFindFlagsJitterAndFwhm(makeAgRunTables):
     assert "1 of 8 science visits have settled jitter over 3× the median" in text and "150002" in text
     assert "AG6: FWHM +" in text
     assert "AG5: FWHM" not in text
+
+
+def testDescribePeriodNamesNights(makeAgRunTables):
+    """Nights are named by their evening, though the last exposures are taken after midnight."""
+    tables = makeAgRunTables()
+    tables["exposures"].loc[len(tables["exposures"]) - 1, "taken_at"] = pd.Timestamp("2026-09-03 04:00")
+    text = describePeriod(prepareRun(tables))
+
+    assert text.startswith("nights 2026-09-01 to 2026-09-02,")
+    # Negative control: the last exposure's calendar date is the next day.
+    assert "2026-09-03" not in text
 
 
 def testNightPosition():
