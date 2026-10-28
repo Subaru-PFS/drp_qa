@@ -5,7 +5,7 @@ import pandas as pd
 import panel as pn
 
 from pfs.drp.qa.dashboard.app import Dashboard, verdictGrid
-from pfs.drp.qa.dashboard.live import QadbTier1Store
+from pfs.drp.qa.dashboard.live import QadbMetricsStore
 from pfs.drp.qa.dashboard.serving import taskThresholds
 
 # As the app's main does.
@@ -53,7 +53,7 @@ def _liveStore(loads):
             ),
         }
 
-    return QadbTier1Store(read, taskThresholds()[0], {}, minInterval=0)
+    return QadbMetricsStore(read, taskThresholds()[0], {}, minInterval=0)
 
 
 def testRunTabFollowsLiveVisits():

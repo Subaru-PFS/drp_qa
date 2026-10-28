@@ -1,42 +1,55 @@
-"""A Tier 1 table kept up to date from qadb while a run is observed (PIPE2D-1924).
+"""The metrics table of a collection in qadb, kept up to date while a run is observed (PIPE2D-1924).
 
-`QadbTier1Store` answers the app's queries as `store.Tier1Store` does, from a
-table held in memory instead of a file. `refresh` reads from qadb only the
-images loaded since the last read (`qadbSource.readQadb`'s ``since``) and
-replaces their rows, so a refresh costs what the new visits cost. One store
+`QadbMetricsStore` is a `store.MetricsStore` whose `refresh` reads from qadb
+only the images loaded since the last read (`qadbSource.readQadb`'s ``since``)
+and replaces their rows, so a refresh costs what the new visits cost. One store
 serves every browser session; a refresh within ``minInterval`` of the last is
-skipped, so many sessions polling it make one query.
+skipped, so many sessions polling it make one query. Offline, the same store
+reads a snapshot of qadb (`qadbSource.writeSnapshot`) once.
 """
 
 import threading
 import time
 from collections.abc import Callable, Mapping
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-import duckdb
 import pandas as pd
 
-from pfs.drp.qa.dashboard.qadbSource import FIRST_VISIT, LAST_VISIT, readQadb, tier1FromQadb, withSequences
-from pfs.drp.qa.dashboard.schema import TIER1_COLUMNS
+from pfs.drp.qa.dashboard.qadbSource import (
+    FIRST_VISIT,
+    LAST_VISIT,
+    metricsTableFromQadb,
+    readQadb,
+    readSnapshot,
+    withSequences,
+)
 from pfs.drp.qa.dashboard.serving import firstThresholdsFile, taskThresholds, thresholdsProvenance
-from pfs.drp.qa.dashboard.store import Tier1Store
+from pfs.drp.qa.dashboard.store import MetricsStore
 
-__all__ = ["HST", "QadbTier1Store", "emptyTier1"]
+__all__ = ["HST", "QadbMetricsStore", "qadbProvenance"]
 
 HST = ZoneInfo("Pacific/Honolulu")
 
 _IMAGE = ["visit", "arm", "spectrograph"]
 
 
-def emptyTier1() -> pd.DataFrame:
-    """Return a Tier 1 table with no rows and `TIER1_COLUMNS`' types."""
-    return pd.DataFrame({column: pd.Series(dtype=dtype) for column, dtype in TIER1_COLUMNS.items()})
+def qadbProvenance(collection: str, **extra: Any) -> dict:
+    """Return the provenance of a collection read from qadb: the thresholds and drp_qa judging it, and ``extra``."""
+    layers, sources = taskThresholds()
+    return {
+        "collection": collection,
+        "thresholds": thresholdsProvenance(firstThresholdsFile(layers["iqQaMetrics"])),
+        "thresholdLayers": [f"{key}: {source}" for key, source in sources.items()],
+        "drpQaVersion": _drpQaVersion(),
+        **extra,
+    }
 
 
-class QadbTier1Store(Tier1Store):
-    """The Tier 1 table of a collection in qadb, re-read as visits are loaded.
+class QadbMetricsStore(MetricsStore):
+    """The metrics table of a collection in qadb, re-read as visits are loaded.
 
     Parameters
     ----------
@@ -65,7 +78,6 @@ class QadbTier1Store(Tier1Store):
     ):
         self._read = read
         self.layers = layers
-        self.provenance = dict(provenance)
         self.minInterval = minInterval
         self._clock = clock
         self._lock = threading.Lock()
@@ -74,10 +86,8 @@ class QadbTier1Store(Tier1Store):
         self._seenAtSince: set[tuple] = set()
         self.updatedAt: datetime | None = None
         self.version = 0
-        self.table = emptyTier1()
         self._visitTimes = pd.DataFrame(columns=["pfs_visit_id", "time_exp_start", "iic_sequence_id"])
-        self._db = duckdb.connect()
-        self._register()
+        super().__init__(provenance=provenance)
         self.refresh()
 
     @classmethod
@@ -88,24 +98,26 @@ class QadbTier1Store(Tier1Store):
         first: int = FIRST_VISIT,
         last: int = LAST_VISIT,
         minInterval: float = 15.0,
-    ) -> "QadbTier1Store":
+    ) -> "QadbMetricsStore":
         """Return the store of one collection's visits ``first``..``last`` in a qadb (read-only)."""
-        layers, sources = taskThresholds()
-        provenance = {
-            "collection": f"{collection} (qadb, live)",
-            "thresholds": thresholdsProvenance(firstThresholdsFile(layers["iqQaMetrics"])),
-            "thresholdLayers": [f"{key}: {source}" for key, source in sources.items()],
-            "drpQaVersion": _drpQaVersion(),
-            "builtAt": "live",
-        }
         return cls(
-            lambda since: readQadb(qadb, collection, first, last, since), layers, provenance, minInterval
+            lambda since: readQadb(qadb, collection, first, last, since),
+            taskThresholds()[0],
+            qadbProvenance(f"{collection} (qadb, live)", builtAt="live"),
+            minInterval,
         )
 
-    def _register(self) -> None:
-        strings = [column for column, dtype in TIER1_COLUMNS.items() if dtype == "string"]
-        frame = self.table.astype(dict.fromkeys(strings, "string"))
-        self._db.register("t1", frame)
+    @classmethod
+    def fromSnapshot(cls, directory: Path | str) -> "QadbMetricsStore":
+        """Return the store of a qadb snapshot (`qadbSource.writeSnapshot`), read once; it never refreshes.
+
+        The stored verdicts are the snapshot's; the limits shown beside each value are this drp_qa's.
+        """
+        tables, provenance = readSnapshot(directory)
+        none = {name: frame.iloc[:0] for name, frame in tables.items()}
+        store = cls(lambda since: tables if since is None else none, taskThresholds()[0], provenance, 0)
+        store.live = False
+        return store
 
     def refresh(self) -> bool:
         """Read the images loaded since the last read and replace their rows.
@@ -130,7 +142,7 @@ class QadbTier1Store(Tier1Store):
             loads = set(iq[[*_IMAGE, "decidedAt"]].itertuples(index=False, name=None))
             if loads <= self._seenAtSince:
                 return False
-            new = tier1FromQadb(tables, self.layers)
+            new = metricsTableFromQadb(tables, self.layers)
             judged = pd.MultiIndex.from_frame(iq[_IMAGE])
             kept = self.table[~pd.MultiIndex.from_frame(self.table[_IMAGE]).isin(judged)]
             times = pd.concat([self._visitTimes, tables["visitTimes"]], ignore_index=True)

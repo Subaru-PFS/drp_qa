@@ -1,24 +1,24 @@
-"""Query a Tier 1 table with DuckDB: what the dashboard reads, and nothing else.
+"""Query the metrics table with DuckDB: what the dashboard reads, and nothing else.
 
-Each method is one SQL query over the Parquet file `serving.writeTier1` wrote,
+Each method is one SQL query over the table `serving.buildMetricsTable` built,
 with bound parameters, returning a DataFrame. No Butler, no opdb.
 """
 
-from pathlib import Path
+from collections.abc import Mapping
 
 import duckdb
 import numpy as np
 import pandas as pd
 
-from pfs.drp.qa.dashboard.schema import IMAGE_STATUS_ORDER, NOTE, VERDICT, readProvenance
+from pfs.drp.qa.dashboard.schema import IMAGE_STATUS_ORDER, METRICS_COLUMNS, NOTE, VERDICT
 
-__all__ = ["VERDICT_SOURCES", "Tier1Store", "visitTimeline"]
+__all__ = ["VERDICT_SOURCES", "MetricsStore", "emptyMetricsTable", "visitTimeline"]
 
 #: Sources whose verdicts roll up into an image's status.
 VERDICT_SOURCES = ("iqQaMetrics", "dmLineResidualSummary")
 
 # Worst verdict of an image over VERDICT_SOURCES. Standing in for the visit
-# rollup of PIPE2D-1923 (qaVisitSummary), which should store it in Tier 1.
+# rollup of PIPE2D-1923 (qaVisitSummary), which should store it in the metrics table.
 _RANK = "CASE status WHEN 'FAIL' THEN 3 WHEN 'WARN' THEN 2 WHEN 'PASS' THEN 1 ELSE 0 END"
 _IMAGES_SQL = f"""
 SELECT visit, arm, spectrograph,
@@ -29,7 +29,7 @@ SELECT visit, arm, spectrograph,
     max(CASE WHEN source = 'iqQaMetrics' THEN status END) AS iqStatus,
     max(CASE WHEN source = 'dmLineResidualSummary' THEN status END) AS lineStatus,
     string_agg(CASE WHEN reason <> '' THEN source || ': ' || reason END, ' | ') AS reasons
-FROM t1
+FROM metrics
 WHERE metric = $verdict AND source IN ('iqQaMetrics', 'dmLineResidualSummary')
     AND visit BETWEEN $first AND $last
 GROUP BY visit, arm, spectrograph
@@ -37,30 +37,41 @@ ORDER BY visit, arm, spectrograph
 """
 
 
-class Tier1Store:
-    """A Tier 1 Parquet file, queried with DuckDB.
+def emptyMetricsTable() -> pd.DataFrame:
+    """Return a metrics table with no rows and `METRICS_COLUMNS`' types."""
+    return pd.DataFrame({column: pd.Series(dtype=dtype) for column, dtype in METRICS_COLUMNS.items()})
+
+
+class MetricsStore:
+    """A metrics table in memory, queried with DuckDB.
 
     Parameters
     ----------
-    path : path
-        The file `pfs.drp.qa.dashboard.serving.writeTier1` wrote.
+    table : `pandas.DataFrame`, optional
+        From `pfs.drp.qa.dashboard.serving.buildMetricsTable`; empty by default.
+    provenance : mapping, optional
+        What the app's provenance bar shows (``collection``, ``thresholds``, ...).
     """
 
-    #: Whether `refresh` can bring new visits (`pfs.drp.qa.dashboard.live.QadbTier1Store`).
+    #: Whether `refresh` can bring new visits (`pfs.drp.qa.dashboard.live.QadbMetricsStore` over qadb).
     live = False
 
     #: Counts the changes `refresh` made.
     version = 0
 
-    def __init__(self, path: Path | str):
-        self.path = Path(path)
-        self.provenance = readProvenance(self.path)
+    def __init__(self, table: pd.DataFrame | None = None, provenance: Mapping | None = None):
+        self.table = emptyMetricsTable() if table is None else table
+        self.provenance = dict(provenance or {})
         self._db = duckdb.connect()
-        # A view, not a copy: every query reads the file.
-        self._db.execute(f"CREATE VIEW t1 AS SELECT * FROM read_parquet('{self.path.as_posix()}')")
+        self._register()
+
+    def _register(self) -> None:
+        """Let the queries see ``table`` as ``metrics``; again after replacing it."""
+        strings = [column for column, dtype in METRICS_COLUMNS.items() if dtype == "string"]
+        self._db.register("metrics", self.table.astype(dict.fromkeys(strings, "string")))
 
     def refresh(self) -> bool:
-        """Read what changed since the last call; a file never changes. Return whether anything did."""
+        """Read what changed since the last call; a fixed table never changes. Return whether anything did."""
         return False
 
     def _query(self, sql: str, **params) -> pd.DataFrame:
@@ -76,7 +87,7 @@ class Tier1Store:
             SELECT visit, any_value(obsType) AS obsType, any_value(seqName) AS seqName,
                 any_value(sequenceKey) AS sequenceKey, any_value(sequenceSource) AS sequenceSource,
                 any_value(timeExpStart) AS timeExpStart
-            FROM t1 GROUP BY visit ORDER BY visit
+            FROM metrics GROUP BY visit ORDER BY visit
             """
         )
 
@@ -96,7 +107,7 @@ class Tier1Store:
         return self._query(
             """
             SELECT DISTINCT visit, arm, spectrograph, source, reason AS note
-            FROM t1 WHERE metric = $note AND visit BETWEEN $first AND $last
+            FROM metrics WHERE metric = $note AND visit BETWEEN $first AND $last
             ORDER BY visit, arm, spectrograph, source, note
             """,
             note=NOTE,
@@ -108,7 +119,7 @@ class Tier1Store:
         """Return every row of one visit, verdicts first."""
         return self._query(
             """
-            SELECT * FROM t1 WHERE visit = $visit
+            SELECT * FROM metrics WHERE visit = $visit
             ORDER BY arm, spectrograph, metric <> $verdict, source, metric, reference, statusType, description
             """,
             visit=visit,
@@ -145,7 +156,7 @@ class Tier1Store:
             """
             SELECT visit, arm, spectrograph, obsType, seqName, description, value, status, warn, fail,
                 population, timeExpStart
-            FROM t1
+            FROM metrics
             WHERE source = $source AND metric = $metric AND visit BETWEEN $first AND $last
                 AND ($reference IS NULL OR reference = $reference)
                 AND ($statusType IS NULL OR statusType = $statusType)

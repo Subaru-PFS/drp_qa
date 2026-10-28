@@ -1,28 +1,22 @@
-"""Tests of the dashboard's Tier 1 table and its DuckDB store."""
+"""Tests of the dashboard's metrics table and its DuckDB store."""
 
-import importlib.util
-import shutil
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import pytest
 
 from pfs.drp.qa.dashboard import schema
-from pfs.drp.qa.dashboard.schema import NOTE, readProvenance
+from pfs.drp.qa.dashboard.schema import NOTE
 from pfs.drp.qa.dashboard.serving import (
     VERDICT,
-    buildTier1,
+    buildMetricsTable,
     configDefaults,
     firstThresholdsFile,
     inferSequences,
     noteRows,
-    rollupStatus,
-    verdictDisagreements,
-    writeTier1,
 )
-from pfs.drp.qa.dashboard.store import Tier1Store, visitTimeline
-from pfs.drp.qa.metrics.gate import STATUS_ORDER, thresholdsPath
+from pfs.drp.qa.dashboard.store import MetricsStore, visitTimeline
+from pfs.drp.qa.metrics.gate import STATUS_ORDER
 
 
 def _thresholds() -> pd.DataFrame:
@@ -92,14 +86,6 @@ def testStatusOrderMatchesGate():
     assert schema.STATUS_ORDER == STATUS_ORDER
 
 
-def testRollupStatus():
-    assert rollupStatus(["PASS", "FAIL", "WARN"]) == "FAIL"
-    assert rollupStatus(["PASS", "", np.nan, "UNKNOWN"]) == "PASS"
-    assert rollupStatus(["", "UNKNOWN"]) == "UNKNOWN"
-    # Negative control: the best is not the rollup.
-    assert rollupStatus(["PASS", "WARN"]) != "PASS"
-
-
 def testInferSequences():
     """A new seqName or a gap of more than three visits starts a sequence; opdb ids win."""
     images = pd.DataFrame({"visit": [1, 2, 3, 10, 11, 12], "seqName": ["A", "A", "B", "B", "B", "B"]})
@@ -127,10 +113,10 @@ def testInferSequences():
     assert withOpdb.loc[2, "timeExpStart"] == pd.Timestamp("2026-03-01 18:05")
 
 
-def testBuildTier1():
+def testBuildMetricsTable():
     summary, metrics = _lines()
-    table = buildTier1(_iq(), _thresholds(), summary, metrics)
-    assert list(table.columns) == list(schema.TIER1_COLUMNS)
+    table = buildMetricsTable(_iq(), _thresholds(), summary, metrics)
+    assert list(table.columns) == list(schema.METRICS_COLUMNS)
     fwhm = table[(table["source"] == "iqQaMetrics") & (table["metric"] == "medFwhm")].set_index("visit")
     assert fwhm["status"].to_dict() == {100: "PASS", 101: "WARN", 102: "FAIL", 200: "PASS"}
     assert (fwhm["warn"] == 3.0).all() and (fwhm["fail"] == 4.0).all()
@@ -143,22 +129,9 @@ def testBuildTier1():
     assert table["obsType"].ne("").all()
 
 
-def testVerdictDisagreements():
+def testStore():
     summary, metrics = _lines()
-    table = buildTier1(_iq(), _thresholds(), summary, metrics)
-    disagree = verdictDisagreements(table)
-    assert disagree[["visit", "stored", "rejudged"]].values.tolist() == [[101, "PASS", "WARN"]]
-    # Negative control: verdicts gated with these thresholds agree.
-    consistent = _iq().assign(qaStatus=["PASS", "WARN", "FAIL", "PASS"])
-    assert verdictDisagreements(buildTier1(consistent, _thresholds())).empty
-
-
-def testStore(tmp_path):
-    summary, metrics = _lines()
-    path = writeTier1(
-        buildTier1(_iq(), _thresholds(), summary, metrics), tmp_path / "t1.parquet", {"collection": "c"}
-    )
-    store = Tier1Store(path)
+    store = MetricsStore(buildMetricsTable(_iq(), _thresholds(), summary, metrics), {"collection": "c"})
     assert store.provenance == {"collection": "c"}
     images = store.images().set_index("visit")
     # Worst of the sources: 100 is PASS in iqQaMetrics but WARN in dmLineResidualSummary.
@@ -180,14 +153,14 @@ def testLineThresholdsAreRecorded():
 
     summary, metrics = _lines()
     layers = [residualThresholds(1.0, 2.0, 1.0, 2.0, 0.1, 0.2, 0.1, 0.2)]
-    table = buildTier1(_iq(), _thresholds(), summary, metrics, lineThresholds=layers)
+    table = buildMetricsTable(_iq(), _thresholds(), summary, metrics, lineThresholds=layers)
     lines = table[(table["source"] == "dmLineResidualMetrics")].set_index("reference")
     assert lines.loc["calib", ["warn", "fail"]].tolist() == [1.0, 2.0]
     assert lines.loc["visit", ["warn", "fail"]].tolist() == [0.1, 0.2]
     # The stored verdict is kept as it is.
     assert lines.loc["calib", "status"] == "WARN" and lines.loc["visit", "status"] == ""
     # Negative control: without the layers, no thresholds are invented.
-    bare = buildTier1(_iq(), _thresholds(), summary, metrics)
+    bare = buildMetricsTable(_iq(), _thresholds(), summary, metrics)
     assert bare.loc[bare["source"] == "dmLineResidualMetrics", ["warn", "fail"]].isna().all().all()
 
 
@@ -230,7 +203,7 @@ def testNoteRows():
     assert "SM1 lamp off" not in set(noteRows(notes)["reason"])
 
 
-def testStoreNotesKeepImagesClean(tmp_path):
+def testStoreNotesKeepImagesClean():
     notes = pd.DataFrame(
         {
             "pfs_visit_id": pd.array([100], dtype="Int64"),
@@ -242,10 +215,7 @@ def testStoreNotesKeepImagesClean(tmp_path):
         }
     )
     summary, metrics = _lines()
-    path = writeTier1(
-        buildTier1(_iq(), _thresholds(), summary, metrics, notes=notes), tmp_path / "t1.parquet", {}
-    )
-    store = Tier1Store(path)
+    store = MetricsStore(buildMetricsTable(_iq(), _thresholds(), summary, metrics, notes=notes))
     assert store.notes()[["visit", "note"]].values.tolist() == [[100, "Cloudy"]]
     # The note is not an image: the rollup still has one row per image.
     assert len(store.images()) == 4
@@ -281,7 +251,7 @@ def testNotesOnVisitsNotJudgedAreLeftOut():
             "source": ["obslog", "obslog"],
         }
     )
-    table = buildTier1(_iq(), _thresholds(), notes=notes)
+    table = buildMetricsTable(_iq(), _thresholds(), notes=notes)
     notesKept = table[table["metric"] == NOTE]
     assert notesKept[["visit", "reason"]].values.tolist() == [[100, "Cloudy"]]
     assert set(table["visit"]) == {100, 101, 102, 200}
@@ -293,28 +263,3 @@ def testFirstThresholdsFile(tmp_path):
     assert firstThresholdsFile([table, "b.yaml", "c.yaml"]) == Path("b.yaml")
     with pytest.raises(ValueError):
         firstThresholdsFile([table])
-
-
-def _exportScript():
-    path = Path(__file__).parents[2] / "bin.src" / "exportDashboardTier1.py"
-    spec = importlib.util.spec_from_file_location("exportDashboardTier1", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def testExportTakesThresholdsRelativeToTheCurrentDirectory(tmp_path, monkeypatch):
-    """``--thresholds my.yaml`` is the file here, and the provenance names it, not run25."""
-    monkeypatch.chdir(tmp_path)
-    # The other metrics run25 names: not measured here.
-    iq = _iq().assign(**dict.fromkeys(("medDxCenter", "pctFlagged", "linesPerFiber"), np.nan))
-    iq.to_parquet(tmp_path / "iqQaMetrics-c.parquet")
-    shutil.copy(thresholdsPath("iqQaThresholds-run25.yaml"), tmp_path / "my.yaml")
-    export = _exportScript()
-
-    export.main(["-c", "c", "-t", "my.yaml", "-o", "withMine.parquet"])
-    assert readProvenance(tmp_path / "withMine.parquet")["thresholds"]["file"] == "my.yaml"
-
-    # Negative control: without --thresholds the provenance names the task's own file.
-    export.main(["-c", "c", "-o", "default.parquet"])
-    assert readProvenance(tmp_path / "default.parquet")["thresholds"]["file"] == "iqQaThresholds-run25.yaml"

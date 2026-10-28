@@ -1,9 +1,10 @@
-"""Read the QA results qadb holds back as the dashboard's Tier 1 table (PIPE2D-1924).
+"""Read the QA results qadb holds back as the dashboard's metrics table (PIPE2D-1924).
 
 During a run qaActor loads every visit it judges into qadb (INSTRM-3040). This
 reads them back in the Butler tables' shapes (`pfs.drp.qa.qadb.tables`, in
-reverse) and builds the Tier 1 table `serving.buildTier1` builds from an
-export, so the app shows a run as it happens the same way it shows a past one.
+reverse) for `serving.buildMetricsTable`. A run judged after the fact is loaded
+into a qadb the same way (``bin.src/loadQadb.py``). `writeSnapshot` saves a read
+to parquet, for the dashboard offline.
 
 Read-only: one query per table, with bound parameters. An image judged in more
 than one Butler RUN of the collection is shown as the latest RUN judged it.
@@ -12,12 +13,14 @@ from runs of one ``seqName`` (`serving.inferSequences`), as qadb holds no IIC
 sequence.
 """
 
+import json
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from pfs.drp.qa.dashboard.serving import buildTier1, inferSequences
+from pfs.drp.qa.dashboard.serving import buildMetricsTable, inferSequences
 from pfs.drp.qa.qadb.tables import (
     IMAGE_QUALITY,
     LINE_RESIDUAL,
@@ -26,7 +29,15 @@ from pfs.drp.qa.qadb.tables import (
     snakeCase,
 )
 
-__all__ = ["FIRST_VISIT", "LAST_VISIT", "readQadb", "tier1FromQadb", "withSequences"]
+__all__ = [
+    "FIRST_VISIT",
+    "LAST_VISIT",
+    "metricsTableFromQadb",
+    "readQadb",
+    "readSnapshot",
+    "withSequences",
+    "writeSnapshot",
+]
 
 #: The widest visit range: every visit.
 FIRST_VISIT, LAST_VISIT = 0, 2**31 - 1
@@ -132,8 +143,8 @@ def readQadb(
     return tables
 
 
-def tier1FromQadb(tables: Mapping[str, pd.DataFrame], layers: Mapping[str, Sequence]) -> pd.DataFrame:
-    """Return the Tier 1 table for what `readQadb` read; empty when it read no image.
+def metricsTableFromQadb(tables: Mapping[str, pd.DataFrame], layers: Mapping[str, Sequence]) -> pd.DataFrame:
+    """Return the metrics table for what `readQadb` read; empty when it read no image.
 
     Parameters
     ----------
@@ -148,7 +159,7 @@ def tier1FromQadb(tables: Mapping[str, pd.DataFrame], layers: Mapping[str, Seque
         return pd.DataFrame()
     summary, metrics = tables["dmLineResidualSummary"], tables["dmLineResidualMetrics"]
     hasLines = not summary.empty and not metrics.empty
-    return buildTier1(
+    return buildMetricsTable(
         iq.drop(columns="decidedAt"),
         layers["iqQaMetrics"],
         summary.drop(columns="decidedAt") if hasLines else None,
@@ -159,7 +170,7 @@ def tier1FromQadb(tables: Mapping[str, pd.DataFrame], layers: Mapping[str, Seque
 
 
 def withSequences(table: pd.DataFrame, visitTimes: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Return a Tier 1 table with its sequences and times inferred again over all its visits.
+    """Return a metrics table with its sequences and times inferred again over all its visits.
 
     A table put together from several reads has each read's sequences, numbered
     apart; this numbers them as one (`serving.inferSequences`).
@@ -171,3 +182,20 @@ def withSequences(table: pd.DataFrame, visitTimes: pd.DataFrame | None = None) -
         .merge(sequences, on="visit", how="left")
         .reindex(columns=table.columns)
     )
+
+
+def writeSnapshot(tables: Mapping[str, pd.DataFrame], directory: Path | str, provenance: Mapping) -> Path:
+    """Write what `readQadb` read to ``directory``: ``<table>.parquet`` each, and ``provenance.json``."""
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    for name, frame in tables.items():
+        frame.to_parquet(directory / f"{name}.parquet")
+    (directory / "provenance.json").write_text(json.dumps(dict(provenance), indent=2, default=str) + "\n")
+    return directory
+
+
+def readSnapshot(directory: Path | str) -> tuple[dict[str, pd.DataFrame], dict]:
+    """Return the tables and provenance `writeSnapshot` wrote to ``directory``."""
+    directory = Path(directory)
+    tables = {path.stem: pd.read_parquet(path) for path in sorted(directory.glob("*.parquet"))}
+    return tables, json.loads((directory / "provenance.json").read_text())

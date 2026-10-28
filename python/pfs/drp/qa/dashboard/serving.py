@@ -1,37 +1,31 @@
-"""Build the dashboard's Tier 1 table: one long-format Parquet file per collection.
+"""Build the dashboard's metrics table: one long-format table per collection.
 
-The dashboard reads only this file (with DuckDB), never a Butler (rebuild plan
-5.1). It is made by a post-run job from the per-detector tables
-`pfs.drp.qa.metrics.readers.exportMetrics` writes, so every number in it was
-stored by the pipeline or judged by `pfs.drp.qa.metrics.gate`: the dashboard
-derives none (5.7).
+The dashboard reads only this table (with DuckDB), never a Butler. It is built
+from the QA tasks' per-detector tables as qadb holds them
+(`qadbSource.readQadb`), so every number in it was stored by the pipeline or
+judged by `pfs.drp.qa.metrics.gate`: the dashboard derives none.
 
-One row per (image, source, metric, population), in `TIER1_COLUMNS`. An image's
+One row per (image, source, metric, population), in `METRICS_COLUMNS`. An image's
 verdict from each source is a row too, with ``metric`` `VERDICT`. The thresholds
-file, collections and pipeline versions go in the Parquet key-value metadata
-under `PROVENANCE_KEY` (5.5), so a reader can show "gated with thresholds v2".
+file and drp_qa version go in the store's provenance (`thresholdsProvenance`),
+so a reader can show "gated with thresholds v2".
 """
 
 import ast
 import importlib.util
-import json
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
 import yaml
 
 from pfs.drp.qa.dashboard.schema import (
     IMAGE_STATUS_ORDER,
+    METRICS_COLUMNS,
     NOTE,
-    PROVENANCE_KEY,
-    STATUS_ORDER,
-    TIER1_COLUMNS,
     VERDICT,
 )
 from pfs.drp.qa.metrics.gate import (
@@ -46,18 +40,15 @@ from pfs.drp.qa.metrics.lineResiduals import residualThresholds
 
 __all__ = [
     "IMAGE_STATUS_ORDER",
-    "TIER1_COLUMNS",
+    "METRICS_COLUMNS",
     "VERDICT",
-    "buildTier1",
+    "buildMetricsTable",
     "configDefaults",
     "firstThresholdsFile",
     "inferSequences",
     "noteRows",
-    "rollupStatus",
     "taskThresholds",
     "thresholdsProvenance",
-    "verdictDisagreements",
-    "writeTier1",
 ]
 
 #: iqQaMetrics columns kept as values when no threshold judges them.
@@ -74,15 +65,6 @@ _IQ_EXTRA = (
 
 #: Visits further apart than this, or of another seqName, start a new inferred sequence.
 _SEQUENCE_GAP = 3
-
-
-def rollupStatus(statuses) -> str:
-    """Return the worst of some statuses; ``UNKNOWN`` when none was judged.
-
-    Empty strings, NaN and ``UNKNOWN`` count as not judged.
-    """
-    judged = [s for s in statuses if isinstance(s, str) and s in STATUS_ORDER]
-    return max(judged, key=STATUS_ORDER.index) if judged else "UNKNOWN"
 
 
 def inferSequences(images: pd.DataFrame, visitTimes: pd.DataFrame | None = None) -> pd.DataFrame:
@@ -154,7 +136,7 @@ def _iqRows(iq: pd.DataFrame, thresholds: ThresholdsLike | Sequence[ThresholdsLi
 
 
 def noteRows(notes: pd.DataFrame, visitTimes: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Return opdb's notes as Tier 1 rows: ``metric`` `NOTE`, the text in ``reason``.
+    """Return opdb's notes as metrics-table rows: ``metric`` `NOTE`, the text in ``reason``.
 
     A note on a visit applies to all its cameras (``arm`` empty, ``spectrograph`` 0); an
     ``sps_annotation`` to its camera; a sequence's note to each of its visits in ``visitTimes``.
@@ -241,7 +223,7 @@ def _lineRows(
     return pd.concat([rows.drop(columns=["cameraSet"], errors="ignore"), verdicts], ignore_index=True)
 
 
-def buildTier1(
+def buildMetricsTable(
     iqQaMetrics: pd.DataFrame,
     thresholds: ThresholdsLike | Sequence[ThresholdsLike],
     dmLineResidualSummary: pd.DataFrame | None = None,
@@ -250,7 +232,7 @@ def buildTier1(
     lineThresholds: Sequence[ThresholdsLike] | None = None,
     notes: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Return the Tier 1 table for one collection.
+    """Return the metrics table for one collection.
 
     Parameters
     ----------
@@ -260,7 +242,7 @@ def buildTier1(
         The thresholds the images are judged with, highest priority first, as
         `pfs.drp.qa.metrics.gate.judge` takes them: each metric's verdict and
         limits are recorded. The stored verdict of each image is kept as it
-        is; `verdictDisagreements` finds where the two differ.
+        is.
     dmLineResidualSummary, dmLineResidualMetrics : `pandas.DataFrame`, optional
         The same collection's ``dmLineResiduals`` outputs.
     visitTimes : `pandas.DataFrame`, optional
@@ -275,7 +257,7 @@ def buildTier1(
     Returns
     -------
     `pandas.DataFrame`
-        `TIER1_COLUMNS`, sorted by visit, arm, spectrograph and source.
+        `METRICS_COLUMNS`, sorted by visit, arm, spectrograph and source.
         Only visits in ``iqQaMetrics``: rows on any other visit (a note on a
         visit that was not judged) are left out.
     """
@@ -294,45 +276,19 @@ def buildTier1(
         images, on=["visit", "arm", "spectrograph"], how="left"
     )
     table = table.merge(inferSequences(images, visitTimes), on="visit", how="left")
-    for column, dtype in TIER1_COLUMNS.items():
+    for column, dtype in METRICS_COLUMNS.items():
         if column not in table:
             table[column] = np.nan if dtype in ("float64",) else ""
         if dtype == "string":
             table[column] = table[column].fillna("").astype(str)
-    table = table[list(TIER1_COLUMNS)].astype(
-        {k: v for k, v in TIER1_COLUMNS.items() if v not in ("string", "datetime64[ns]")}
+    table = table[list(METRICS_COLUMNS)].astype(
+        {k: v for k, v in METRICS_COLUMNS.items() if v not in ("string", "datetime64[ns]")}
     )
     return table.sort_values(["visit", "arm", "spectrograph", "source"], kind="stable", ignore_index=True)
 
 
-def writeTier1(table: pd.DataFrame, path: Path | str, provenance: Mapping) -> Path:
-    """Write the Tier 1 table with its provenance in the Parquet metadata.
-
-    Parameters
-    ----------
-    table : `pandas.DataFrame`
-        From `buildTier1`.
-    path : path
-        The file to write.
-    provenance : mapping
-        JSON-serializable: at least ``collection`` and ``thresholds``; see
-        `thresholdsProvenance`.
-
-    Returns
-    -------
-    `pathlib.Path`
-        ``path``.
-    """
-    path = Path(path)
-    arrow = pa.Table.from_pandas(table, preserve_index=False)
-    metadata = dict(arrow.schema.metadata or {})
-    metadata[PROVENANCE_KEY] = json.dumps(provenance, default=str).encode()
-    pq.write_table(arrow.replace_schema_metadata(metadata), path, compression="zstd")
-    return path
-
-
 def thresholdsProvenance(thresholds: Path | str) -> dict:
-    """Return what a thresholds file says about itself, for `writeTier1`."""
+    """Return what a thresholds file says about itself, for a store's provenance."""
     header = yaml.safe_load(Path(thresholds).read_text())
     keep = ("version", "derivedOn", "collection", "referenceRuns", "drpQaVersion", "pipelineVersions")
     return {"file": Path(thresholds).name, "nEntries": len(header.get("thresholds", []))} | {
@@ -346,35 +302,6 @@ def firstThresholdsFile(layers: Sequence[ThresholdsLike]) -> Path:
         return next(Path(layer) for layer in layers if isinstance(layer, Path | str))
     except StopIteration:
         raise ValueError("No thresholds file among the layers: only config fields") from None
-
-
-def verdictDisagreements(table: pd.DataFrame, source: str = "iqQaMetrics") -> pd.DataFrame:
-    """Return the images whose stored verdict differs from the worst per-metric verdict.
-
-    A difference means the images were gated with other thresholds than the
-    ones the table was built with: an older thresholds file, or a layer (the
-    task config) missing from them.
-
-    Parameters
-    ----------
-    table : `pandas.DataFrame`
-        From `buildTier1`.
-    source : `str`, optional
-        The source to compare.
-
-    Returns
-    -------
-    `pandas.DataFrame`
-        ``visit``, ``arm``, ``spectrograph``, ``stored``, ``rejudged`` and the
-        stored ``reason``, one row per image that differs.
-    """
-    rows = table[table["source"] == source]
-    keys = ["visit", "arm", "spectrograph"]
-    stored = rows[rows["metric"] == VERDICT].set_index(keys)[["status", "reason"]]
-    rejudged = rows[rows["metric"] != VERDICT].groupby(keys)["status"].agg(rollupStatus)
-    both = stored.rename(columns={"status": "stored"}).join(rejudged.rename("rejudged"), how="left")
-    both["rejudged"] = both["rejudged"].fillna("UNKNOWN")
-    return both[both["stored"] != both["rejudged"]].reset_index()[[*keys, "stored", "rejudged", "reason"]]
 
 
 def configDefaults(module: str, configClass: str) -> SimpleNamespace:
@@ -437,7 +364,7 @@ def taskThresholds() -> tuple[dict[str, list], dict[str, str]]:
     -------
     layers : `dict` [`str`, `list`]
         ``"iqQaMetrics"`` and ``"dmLineResidualMetrics"``: threshold tables or
-        files, highest priority first, for `buildTier1`.
+        files, highest priority first, for `buildMetricsTable`.
     sources : `dict` [`str`, `str`]
         How each was found, for the provenance.
     """

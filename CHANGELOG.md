@@ -136,20 +136,18 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `scienceTrace` or `scienceArc` lights a handful of fibers or takes lamps off the calibration recipe, and its lines
   scatter like a fault's; they are judged and reported in the *Unvalidated* section, not gated.
 
-- **QA dashboard prototype** (PIPE2D-1924) — `pfs.drp.qa.dashboard`. `serving` builds one long-format Tier 1
-  Parquet file from one or more collections: `iqQaMetrics` and `dmLineResidualMetrics` with each row's verdict and
-  the WARN/FAIL it was judged against (the tasks' own layers: thresholds file, then config fields, read from the
-  config classes or, without the stack, their source), each source's image verdict, and opdb visit times, sequences
-  and notes; the thresholds, pipeline and drp_qa versions go in its metadata. `store` queries it with DuckDB. `app`
-  is a Panel app: Live (a replay per visit and sequence group), Run (visit or HST range; verdict heat map and trends
-  with each value's thresholds, by night, gaps between runs labelled) and Visit (a check × camera verdict grid,
-  each value's distance past FAIL, the pipeline's PDFs, Tier 2 line residuals rasterised with Datashader).
-  `bin.src/exportDashboardTier1.py` builds the file from `exportMetrics.py`'s tables; `bin.src/qaDashboard.py`
-  serves it. The app needs panel, holoviews, datashader and duckdb, which are not dependencies of the package.
-  **Live from qadb**: `qaDashboard.py --collection qaActor/reductions` reads the images qaActor loads
-  (`qadbSource`, read-only, one query per table) into the same table and, every `--refresh` seconds, only those
-  loaded since (`live.QadbTier1Store`, one read for every session); the Live tab follows the latest visit, and it
-  waits for the first. An image judged in more than one RUN of the collection shows the latest.
+- **QA dashboard prototype** (PIPE2D-1924) — `pfs.drp.qa.dashboard`. `qadbSource` reads a collection's QA
+  results back from qadb (read-only, one query per table); `serving` builds them into one long-format metrics table:
+  `iqQaMetrics` and `dmLineResidualMetrics` with each row's verdict and the WARN/FAIL it was judged against (the
+  tasks' own layers: thresholds files, then config fields, read from the config classes or, without the stack,
+  their source) and each source's image verdict. `store` queries it with DuckDB. `app` is a Panel app: Live (the
+  latest visit and sequence group), Run (visit or HST range; verdict heat map and trends with each value's
+  thresholds, by night, gaps between runs labelled) and Visit (a check × camera verdict grid, each value's distance
+  past FAIL, the pipeline's PDFs, line residuals rasterised with Datashader). `bin.src/qaDashboard.py
+  --collection` serves it live: every `--refresh` seconds it reads only the images loaded since
+  (`live.QadbMetricsStore`, one read for every session), and the Live tab follows the latest visit. With
+  `--write-snapshot` it saves one read, with its provenance, for `--snapshot` to serve offline. The app needs
+  panel, holoviews, datashader and duckdb, which are not dependencies of the package.
 
 - **b2 and n4 quartz take their reference from Run29** (PIPE2D-1938) — reduced with one pipeline, Runs 25–30 agree
   with Run25 in `medFwhm` to within 3 % everywhere but b2 quartz (SM2's slit refocused on 2026-03-11) and n4 quartz

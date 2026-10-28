@@ -1,9 +1,10 @@
-"""Tests for the live Tier 1 store (`pfs.drp.qa.dashboard.live.QadbTier1Store`), with a stand-in for qadb."""
+"""Tests for the qadb store (`pfs.drp.qa.dashboard.live.QadbMetricsStore`), with a stand-in for qadb."""
 
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.dashboard.live import QadbTier1Store
+from pfs.drp.qa.dashboard.live import QadbMetricsStore, qadbProvenance
+from pfs.drp.qa.dashboard.qadbSource import writeSnapshot
 from pfs.drp.qa.dashboard.serving import taskThresholds
 
 
@@ -78,7 +79,7 @@ def layers():
 def testRefreshReplacesRejudgedImagesAndAddsNewOnes(clock, layers):
     qadb = FakeQadb()
     qadb.loads.append([image(1001, "b", "PASS", 2.5, "t1"), image(1001, "r", "PASS", 2.7, "t1")])
-    store = QadbTier1Store(qadb.read, layers, {"collection": "c"}, minInterval=10, clock=clock)
+    store = QadbMetricsStore(qadb.read, layers, {"collection": "c"}, minInterval=10, clock=clock)
     assert store.version == 1 and store.since == "t1"
     assert store.images()["status"].tolist() == ["PASS", "PASS"]
 
@@ -103,7 +104,7 @@ def testSequencesAreNumberedOverTheWholeTable(clock, layers):
     """Visits read apart but of one sequence share its key; another seqName starts a new one."""
     qadb = FakeQadb()
     qadb.loads.append([image(1001, "b", "PASS", 2.5, "t1")])
-    store = QadbTier1Store(qadb.read, layers, {}, minInterval=0, clock=clock)
+    store = QadbMetricsStore(qadb.read, layers, {}, minInterval=0, clock=clock)
     qadb.loads.append(
         [image(1002, "b", "PASS", 2.5, "t2"), image(1003, "b", "PASS", 3.0, "t2", seqName="Trace")]
     )
@@ -117,7 +118,7 @@ def testSequencesAreNumberedOverTheWholeTable(clock, layers):
 
 def testEmptyUntilTheFirstLoad(clock, layers):
     qadb = FakeQadb()
-    store = QadbTier1Store(qadb.read, layers, {}, minInterval=0, clock=clock)
+    store = QadbMetricsStore(qadb.read, layers, {}, minInterval=0, clock=clock)
     assert store.version == 0 and store.visits().empty and store.since is None
     assert not store.refresh()
     qadb.loads.append([image(1001, "b", "WARN", 2.9, "t1")])
@@ -136,7 +137,7 @@ def testUnchangedRefreshIsNotNew(clock, layers):
     """``since`` is inclusive, so the last load comes back on every read: that is not new data."""
     qadb = FakeQadb()
     qadb.loads.append([image(1001, "b", "PASS", 2.5, "t1")])
-    store = QadbTier1Store(qadb.read, layers, {}, minInterval=0, clock=clock)
+    store = QadbMetricsStore(qadb.read, layers, {}, minInterval=0, clock=clock)
     assert not store.refresh() and not store.refresh()
     assert store.version == 1 and qadb.calls[-1] == "t1"
 
@@ -145,3 +146,19 @@ def testUnchangedRefreshIsNotNew(clock, layers):
     assert store.refresh() and store.version == 2
     assert sorted(store.images()["arm"]) == ["b", "r"]
     assert not store.refresh()
+
+
+def testSnapshotServesWhatQadbHeld(tmp_path, clock, layers):
+    """A snapshot of a read gives the live store's table and the provenance written, and never refreshes."""
+    qadb = FakeQadb()
+    qadb.loads.append([image(1001, "b", "PASS", 2.5, "t1"), image(1002, "r", "FAIL", 9.0, "t1")])
+    liveStore = QadbMetricsStore(qadb.read, layers, {}, minInterval=0, clock=clock)
+    provenance = qadbProvenance("c (qadb snapshot)", builtAt="2026-10-28T10:00:00-10:00")
+    store = QadbMetricsStore.fromSnapshot(writeSnapshot(qadb.read(None), tmp_path / "snap", provenance))
+
+    pd.testing.assert_frame_equal(store.images(), liveStore.images())
+    assert store.provenance == provenance
+    assert provenance["thresholds"]["file"] == "iqQaThresholds-run25.yaml"
+    assert not store.live and not store.refresh()
+    # Negative control: the store reading qadb itself is live.
+    assert liveStore.live

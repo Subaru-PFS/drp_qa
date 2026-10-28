@@ -1,11 +1,11 @@
-"""The QA dashboard prototype: a Panel app over a Tier 1 table (PIPE2D-1924).
+"""The QA dashboard prototype: a Panel app over the metrics table (PIPE2D-1924).
 
 Three tabs:
 
 Live
     The latest visit: its arm × spectrograph verdict grid, the recent visits,
-    and the sequences they belong to. Over qadb (`live.QadbTier1Store`) it
-    follows the visits as qaActor loads them; over a file it replays the
+    and the sequences they belong to. Over qadb (`live.QadbMetricsStore`) it
+    follows the visits as qaActor loads them; over a snapshot it replays the
     table in visit order.
 Run
     A visit range (or HST date range, when the table has visit times), the
@@ -14,12 +14,12 @@ Run
     thresholds. Tap a point to open its visit.
 Visit
     One visit: the verdicts and every metric behind them, the pipeline's PDFs,
-    and the Tier 2 line residuals rasterised server-side with Datashader.
+    and the per-line residuals rasterised server-side with Datashader.
 
-Everything shown comes from the Tier 1 table (`store.Tier1Store`, or
-`live.QadbTier1Store` read from qadb) or, for the
-Visit tab's detail, from files fetched per visit into ``detailDir``; the app
-computes no metric and holds no threshold of its own.
+Everything shown comes from the metrics table (`live.QadbMetricsStore`, read
+from qadb or a snapshot of it) or, for the Visit tab's detail, from files
+fetched per visit into ``detailDir``; the app computes no metric and holds no
+threshold of its own.
 """
 
 import html
@@ -34,7 +34,7 @@ import panel as pn
 import param
 
 from pfs.drp.qa.dashboard.schema import IMAGE_STATUS_ORDER, NOTE, STATUS_ORDER, VERDICT
-from pfs.drp.qa.dashboard.store import Tier1Store, visitTimeline
+from pfs.drp.qa.dashboard.store import MetricsStore, visitTimeline
 from pfs.drp.qa.metrics.registry import specFor
 
 __all__ = ["Dashboard", "createApp"]
@@ -321,7 +321,7 @@ def readLines(path: Path) -> pd.DataFrame:
 
 
 def residualRaster(lines: pd.DataFrame, reference: str = "Calib", component: str = "y"):
-    """Return one detector's Tier 2 line residuals rasterised server-side: position, mean residual.
+    """Return one detector's line residuals rasterised server-side: position, mean residual.
 
     Parameters
     ----------
@@ -512,7 +512,7 @@ class Dashboard(param.Parameterized):
 
     def __init__(
         self,
-        store: Tier1Store,
+        store: MetricsStore,
         detailDir: Path | None = None,
         startVisit: int | None = None,
         refreshSeconds: float = 30.0,
@@ -574,21 +574,11 @@ class Dashboard(param.Parameterized):
             f"<b>Built</b> {prov.get('builtAt', '?')}",
         ]
         warnings = []
-        if prov.get("nVerdictDisagreements"):
+        if (self.visits["sequenceSource"] == "inferred").all():
             warnings.append(
-                f"{prov['nVerdictDisagreements']} of {prov.get('nImages', '?')} stored image verdicts differ "
-                "from these thresholds: the collection was gated with an earlier thresholds file, and does "
-                "not record which. Stored verdicts are shown; per-metric verdicts are re-judged."
-            )
-        if self.store.live:
-            warnings.append(
-                "Live from qadb: times are qadb's pfs_visit.issued_at (HST), and sequences are inferred from "
-                "runs of one seqName (qadb holds no IIC sequence)."
-            )
-        elif (self.visits["sequenceSource"] == "inferred").all():
-            warnings.append(
-                "No opdb visit listing: sequences are inferred from runs of one seqName, and there are no "
-                "visit times (date picker disabled)."
+                "Sequences are inferred from runs of one seqName (qadb holds no IIC sequence); times are "
+                "qadb's pfs_visit.issued_at (HST)"
+                + ("." if self.visits["timeExpStart"].notna().any() else ", and there are none here.")
             )
         html = '<div style="font-size:0.85em;line-height:1.5">' + " · ".join(parts) + "</div>"
         for warning in warnings:
@@ -1029,7 +1019,7 @@ class Dashboard(param.Parameterized):
                 pn.pane.HTML(
                     "<span style='font-size:0.85em;color:#777'>Not placed: "
                     + ", ".join(unthresholded)
-                    + " — their Tier 1 rows store the verdict but not the thresholds.</span>"
+                    + " — their rows store the verdict but not the thresholds.</span>"
                     if unthresholded
                     else ""
                 ),
@@ -1056,8 +1046,7 @@ class Dashboard(param.Parameterized):
                             f"**No PDFs fetched for visit {visit}.** The pipeline writes "
                             + ", ".join(f"`{kind}`" for kind in PDF_TYPES)
                             + "; the dashboard would show them here, fetched from the Butler for this dataId "
-                            "only when this tab opens and cached on the dataset UUID (plan 5.3).\n\n"
-                            + DETAIL_SEARCH
+                            "only when this tab opens and cached on the dataset UUID.\n\n" + DETAIL_SEARCH
                         )
                     ]
                 ),
@@ -1066,7 +1055,7 @@ class Dashboard(param.Parameterized):
 
             lineFiles = files.get("dmLineResidualData", [])
             if lineFiles and camera != "all" and camera not in set(images["camera"]):
-                tier2 = pn.pane.Markdown(f"**Visit {visit} has no {camera} image.**")
+                lineDetail = pn.pane.Markdown(f"**Visit {visit} has no {camera} image.**")
             elif lineFiles:
                 lines = pd.concat([readLines(path) for path in lineFiles], ignore_index=True)
                 # Detectors share pixel coordinates: one at a time, by default the worst.
@@ -1093,7 +1082,7 @@ class Dashboard(param.Parameterized):
                         ),
                     )
 
-                tier2 = pn.Column(
+                lineDetail = pn.Column(
                     pn.pane.HTML(
                         f"<b>{detector}</b> ({images.set_index('camera')['status'].get(detector, 'no verdict')})"
                         + (" — the worst detector; pick another with Camera above" if camera == "all" else "")
@@ -1102,11 +1091,11 @@ class Dashboard(param.Parameterized):
                     pn.bind(raster, reference, component, which),
                 )
             else:
-                tier2 = pn.pane.Markdown(
-                    f"**No Tier 2 fetched for visit {visit}.** Here: `dmLineResidualData` (one row per "
-                    "line or trace centroid, ~5×10⁴–3×10⁵ per detector) drawn as detector position × "
+                lineDetail = pn.pane.Markdown(
+                    f"**No line residuals fetched for visit {visit}.** Here: `dmLineResidualData` (one row "
+                    "per line or trace centroid, ~5×10⁴–3×10⁵ per detector) drawn as detector position × "
                     "residual against `detectorMap_calib` or the visit's detectorMap, rasterised "
-                    "server-side with Datashader (plan 5.2). Read from the Butler for this dataId only.\n\n"
+                    "server-side with Datashader. Read from the Butler for this dataId only.\n\n"
                     + DETAIL_SEARCH
                 )
 
@@ -1118,7 +1107,7 @@ class Dashboard(param.Parameterized):
                 pn.Tabs(
                     ("Gate verdicts", verdictPlots),
                     ("PDFs", pdfTab),
-                    ("Tier 2 (Datashader)", tier2),
+                    ("Line residuals (Datashader)", lineDetail),
                     dynamic=True,
                 ),
                 sizing_mode="stretch_width",
@@ -1162,18 +1151,17 @@ class Dashboard(param.Parameterized):
 
 
 def createApp(
-    tier1: Path | str | Tier1Store,
+    store: MetricsStore,
     detailDir: Path | str | None = None,
     startVisit: int | None = None,
     refreshSeconds: float = 30.0,
 ) -> pn.template.FastListTemplate:
-    """Return the dashboard for a Tier 1 file or store; ``detailDir/<visit>/`` holds fetched detail files.
+    """Return the dashboard over a store; ``detailDir/<visit>/`` holds fetched detail files.
 
-    Over a file the Live replay starts at ``startVisit``, or the first visit after it. A store that
-    is `~Tier1Store.live` (`live.QadbTier1Store`) is polled every ``refreshSeconds``, and one store
-    may serve every session.
+    Over a snapshot the Live replay starts at ``startVisit``, or the first visit after it. A store
+    that is `~MetricsStore.live` (`live.QadbMetricsStore` over qadb) is polled every
+    ``refreshSeconds``, and one store may serve every session.
     """
     hv.extension("bokeh")
     pn.extension("tabulator", sizing_mode="stretch_width")
-    store = tier1 if isinstance(tier1, Tier1Store) else Tier1Store(tier1)
     return Dashboard(store, detailDir, startVisit, refreshSeconds).view()

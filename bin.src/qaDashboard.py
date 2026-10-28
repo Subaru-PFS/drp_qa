@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-r"""Serve the QA dashboard over a Tier 1 table, or live from qadb (PIPE2D-1924).
+r"""Serve the QA dashboard live from qadb, or over a snapshot of it (PIPE2D-1924).
 
 Stack-free; needs panel, holoviews, datashader and duckdb, and psycopg for qadb.
-Over a file, build the table with ``bin.src/exportDashboardTier1.py`` first.
 
 Examples::
 
-    python bin.src/qaDashboard.py tier1-u_wtg_qa-thresholds_010.parquet --detail-dir detail --port 5006
     # A run as qaActor loads it: read-only, every 30 s (credentials in ~/.pgpass)
     python bin.src/qaDashboard.py --collection qaActor/reductions --first-visit 151000 \
         --qadb-host 127.0.0.1 --qadb-port 5436 --qadb-user public_user
+    # Read it once into a snapshot (parquet and provenance.json), then serve that offline
+    python bin.src/qaDashboard.py --collection qaActor/reductions --write-snapshot run31-qadb
+    python bin.src/qaDashboard.py --snapshot run31-qadb --detail-dir detail
 
 then open http://localhost:5006. To serve the local network, add
 ``--address 0.0.0.0 --allow-origin <this host's name or IP>``. ``--detail-dir/<visit>/`` may hold the
@@ -18,15 +19,20 @@ visit's fetched PDFs (``extQaStats*.pdf``, ...) and ``dmLineResidualData*.parque
 
 import argparse
 import logging
+import time
 from collections.abc import Sequence
+from datetime import datetime
 from pathlib import Path
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Serve the QA dashboard.")
-    parser.add_argument("tier1", type=Path, nargs="?", help="Tier 1 parquet file (or --collection)")
-    qadb = parser.add_argument_group("live from qadb, instead of a file")
+    parser.add_argument("--snapshot", type=Path, help="serve a snapshot written by --write-snapshot")
+    qadb = parser.add_argument_group("from qadb")
     qadb.add_argument("--collection", help="the collection loaded into qadb, e.g. qaActor/reductions")
+    qadb.add_argument(
+        "--write-snapshot", type=Path, metavar="DIR", help="read the collection once into DIR and exit"
+    )
     qadb.add_argument("--first-visit", type=int, default=0, help="first visit shown")
     qadb.add_argument("--last-visit", type=int, default=2**31 - 1, help="last visit shown")
     qadb.add_argument("--qadb-host", default="127.0.0.1")
@@ -50,43 +56,68 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     parser.add_argument("--show", action="store_true", help="open a browser")
     args = parser.parse_args(argv)
-    if (args.tier1 is None) == (args.collection is None):
-        parser.error("give a Tier 1 file or --collection, not both")
+    if (args.snapshot is None) == (args.collection is None):
+        parser.error("give --snapshot or --collection, not both")
 
     # One line per request, with the client's address: shows whether a browser reached the server.
     logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(name)s %(message)s")
     logging.getLogger("tornado.access").setLevel(logging.INFO)
     logging.getLogger("bokeh").setLevel(logging.INFO)
 
-    import panel as pn
-
-    from pfs.drp.qa.dashboard.app import createApp
+    from pfs.drp.qa.dashboard.live import QadbMetricsStore
 
     if args.collection:
-        from pfs.drp.qa.dashboard.live import QadbTier1Store
         from pfs.utils.database.qadb import QaDB
 
         db = QaDB(host=args.qadb_host, port=args.qadb_port, dbname=args.qadb_dbname, user=args.qadb_user)
         print(f"Reading {args.collection} from qadb at {args.qadb_host}:{args.qadb_port} ...", flush=True)
+        if args.write_snapshot:
+            writeSnapshot(db, args)
+            return
         # One store for every session: each refresh reads qadb once, whoever asks.
-        source = QadbTier1Store.fromQadb(
+        store = QadbMetricsStore.fromQadb(
             db, args.collection, args.first_visit, args.last_visit, minInterval=args.refresh / 2
         )
-        print(f"{source.table['visit'].nunique()} visits so far", flush=True)
+        print(f"{store.table['visit'].nunique()} visits so far", flush=True)
     else:
-        source = args.tier1
+        store = QadbMetricsStore.fromSnapshot(args.snapshot)
+        print(f"{store.table['visit'].nunique()} visits in {args.snapshot}", flush=True)
+
+    import panel as pn
+
+    from pfs.drp.qa.dashboard.app import createApp
 
     origins = [f"localhost:{args.port}", f"127.0.0.1:{args.port}"]
     origins += [origin if ":" in origin else f"{origin}:{args.port}" for origin in args.allow_origin]
     print(f"Serving on {args.address}:{args.port}, for {', '.join(origins)}", flush=True)
     pn.serve(
-        lambda: createApp(source, args.detail_dir, args.start_visit, args.refresh),
+        lambda: createApp(store, args.detail_dir, args.start_visit, args.refresh),
         address=args.address,
         port=args.port,
         show=args.show,
         title="PFS QA dashboard",
         websocket_origin=origins,
     )
+
+
+def writeSnapshot(db, args: argparse.Namespace) -> None:
+    """Read the collection from qadb once and write it, with its provenance, to ``--write-snapshot``."""
+    from pfs.drp.qa.dashboard.live import HST, qadbProvenance
+    from pfs.drp.qa.dashboard.qadbSource import readQadb
+    from pfs.drp.qa.dashboard.qadbSource import writeSnapshot as write
+
+    start = time.monotonic()
+    tables = readQadb(db, args.collection, args.first_visit, args.last_visit)
+    provenance = qadbProvenance(
+        f"{args.collection} (qadb snapshot)",
+        builtAt=datetime.now(HST).isoformat(timespec="seconds"),
+        qadb=f"{args.qadb_host}:{args.qadb_port}/{args.qadb_dbname}",
+        visits=[args.first_visit, args.last_visit],
+    )
+    out = write(tables, args.write_snapshot, provenance)
+    size = sum(path.stat().st_size for path in out.iterdir()) / 1e6
+    rows = ", ".join(f"{name} {len(frame)}" for name, frame in tables.items())
+    print(f"{rows} rows -> {out} ({size:.2f} MB) in {time.monotonic() - start:.1f} s", flush=True)
 
 
 if __name__ == "__main__":

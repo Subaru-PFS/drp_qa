@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.dashboard.qadbSource import readQadb, tier1FromQadb
+from pfs.drp.qa.dashboard.qadbSource import metricsTableFromQadb, readQadb
 from pfs.drp.qa.dashboard.schema import VERDICT
 from pfs.drp.qa.dashboard.serving import taskThresholds
 from pfs.drp.qa.qadb.loader import loadCollection
@@ -87,9 +87,9 @@ def testSinceReadsOnlyNewerLoads(butler, qadb):
     assert set(newer["dmLineResidualMetrics"]["visit"]) == {133040}
 
 
-def testTier1HasEachTasksVerdict(butler, fixtures, qadb):
+def testMetricsTableHasEachTasksVerdict(butler, fixtures, qadb):
     load(butler, qadb)
-    table = tier1FromQadb(readQadb(qadb, COLLECTION), taskThresholds()[0])
+    table = metricsTableFromQadb(readQadb(qadb, COLLECTION), taskThresholds()[0])
     verdicts = table[table["metric"] == VERDICT]
     assert len(verdicts) == 8  # four images, two tasks
     iq = byImage(verdicts[verdicts["source"] == "iqQaMetrics"])
@@ -101,4 +101,4 @@ def testTier1HasEachTasksVerdict(butler, fixtures, qadb):
 
 
 def testNothingReadIsAnEmptyTable(qadb):
-    assert tier1FromQadb(readQadb(qadb, COLLECTION), taskThresholds()[0]).empty
+    assert metricsTableFromQadb(readQadb(qadb, COLLECTION), taskThresholds()[0]).empty
