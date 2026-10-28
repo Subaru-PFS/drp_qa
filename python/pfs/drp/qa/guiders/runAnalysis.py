@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from pfs.utils.datamodel.ag import GuideOffsetFlag
+
 __all__ = [
     "CAMERA_GROUPS",
     "SCIENCE_TYPES",
@@ -33,6 +35,7 @@ __all__ = [
     "findRejectionClusters",
     "fitModelErrors",
     "groupSummary",
+    "isRejectedOffset",
     "nightOf",
     "nightPosition",
     "onSkyRa",
@@ -334,6 +337,25 @@ def onSkyRa(frames: pd.DataFrame) -> pd.Series:
     return frames.guide_delta_ra * np.cos(np.radians(dec))
 
 
+def isRejectedOffset(mask: pd.Series, flag: GuideOffsetFlag = GuideOffsetFlag.INVALID_OFFSET) -> pd.Series:
+    """Which guide offsets ics_agActor did not use, from ``agc_guide_offset.mask``.
+
+    Parameters
+    ----------
+    mask : `pandas.Series`
+        ``agc_guide_offset.mask`` (`GuideOffsetFlag`); NaN where a frame has no offset.
+    flag : `GuideOffsetFlag`, optional
+        The bit to test: ``INVALID_OFFSET`` (the default) for every offset not used,
+        ``TOO_FEW_STARS`` for those rejected because too few guide stars matched.
+
+    Returns
+    -------
+    rejected : `pandas.Series` [`bool`]
+        True where ``flag`` is set; False where it isn't or there is no offset.
+    """
+    return (mask.fillna(int(GuideOffsetFlag.OK)).astype(int) & int(flag)) != 0
+
+
 def settledJitter(run: AgRun) -> pd.DataFrame:
     """Return the settled frame-to-frame jitter of each science visit.
 
@@ -360,7 +382,7 @@ def settledJitter(run: AgRun) -> pd.DataFrame:
     config = run.config
     frames = run.frames[run.frames.population.eq("science") & run.frames["mask"].notna()].copy()
     frames["n"] = frames.groupby("pfs_visit_id").cumcount() + 1
-    frames = frames[(frames.n > config.nSettle) & frames["mask"].eq(0)]
+    frames = frames[(frames.n > config.nSettle) & frames["mask"].eq(int(GuideOffsetFlag.OK))]
     frames["ra"] = onSkyRa(frames)
 
     def jitter(values: pd.Series) -> float:
@@ -609,17 +631,19 @@ def findFlags(
 
     frames = run.frames
     mask = frames["mask"]
-    rejected = frames[(mask.fillna(0).astype(int) & 1) == 1]
+    rejected = frames[isRejectedOffset(mask)]
     if len(rejected):
+        nTooFew = int(isRejectedOffset(rejected["mask"], GuideOffsetFlag.TOO_FEW_STARS).sum())
+        tooFew = f", {nTooFew} of them TOO_FEW_STARS" if nTooFew else ""
         flags.append(
             Flag(
                 "guiding",
                 True,
-                f"**{len(rejected)} guide frames rejected** (INVALID_OFFSET: not sent to the telescope), in "
+                f"**{len(rejected)} guide frames rejected** (INVALID_OFFSET: not sent to the telescope{tooFew}), in "
                 f"{rejected.pfs_visit_id.nunique()} visits: {_visitList(sorted(rejected.pfs_visit_id.unique()))}.",
             )
         )
-    fewStars = frames[mask.eq(0) & (frames.n_good < config.minFitStars)]
+    fewStars = frames[mask.eq(int(GuideOffsetFlag.OK)) & (frames.n_good < config.minFitStars)]
     if len(fewStars):
         counts = fewStars.pfs_visit_id.value_counts()
         flags.append(

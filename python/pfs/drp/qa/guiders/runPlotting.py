@@ -26,6 +26,7 @@ from pfs.drp.qa.guiders.runAnalysis import (
     AgRun,
     CameraState,
     _meanAngle,
+    isRejectedOffset,
     nightPosition,
     onSkyRa,
     summariseModelErrors,
@@ -358,7 +359,7 @@ def plotGuiding(run: AgRun, jitter: pd.DataFrame) -> Figure:
     ax = axes[3]
     frames = run.frames[run.frames.night.isin(nights)]
     perNight = frames.groupby("night")["mask"].agg(
-        rejected=lambda mask: int((mask.fillna(0).astype(int) & 1).sum()),
+        rejected=lambda mask: int(isRejectedOffset(mask).sum()),
         missing=lambda mask: int(mask.isna().sum()),
     )
     x = np.array([list(nights).index(night) + 0.5 for night in perNight.index])

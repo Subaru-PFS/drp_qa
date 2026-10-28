@@ -20,6 +20,7 @@ from pfs.drp.qa.guiders.runAnalysis import (
     settledJitter,
 )
 from pfs.drp.qa.guiders.runReport import fetchRun, loadRun, main
+from pfs.utils.datamodel.ag import SourceDetectionFlags, SourceMatchingFlags
 
 # The table behind each readAgRun query, as FakeOpDB looks them up.
 RUN_QUERIES = {
@@ -49,6 +50,20 @@ def testReadAgRun(opdb):
         assert not re.search(r"2026", call.sql)  # bound, not formatted
     assert opdb.calls[-1].params["magLimit"] == 19.0
     assert isinstance(opdb.calls[-1].params["magLimit"], float)
+
+
+def testReadAgRunBindsFlagValues(opdb):
+    readAgRun(opdb, datetime.datetime(2026, 9, 1, 12), datetime.datetime(2026, 9, 3, 12))
+    literal = r"flags\s*(=|<>)\s*1\b|&\s*1\b"
+    withFlags = [call for call in opdb.calls if "agc_match.flags" in call.sql]
+    assert len(withFlags) == 2  # cameras and grid
+    for call in withFlags:
+        assert not re.search(literal, call.sql)
+        assert call.params["goodMatch"] == int(SourceMatchingFlags.GOOD_MATCH)
+        assert call.params["right"] == int(SourceDetectionFlags.RIGHT)
+    # Negative control: the pattern finds the literals the SQL used to hold.
+    assert re.search(literal, "FILTER (WHERE agc_match.flags = 1)")
+    assert re.search(literal, "AS INTEGER)) & 1 AS right_half")
 
 
 def testReadAgRunNeedsOpdb():

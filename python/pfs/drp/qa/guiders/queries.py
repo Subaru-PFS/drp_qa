@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from pfs.drp.qa.guiders.coordinates import opdbToHardware
+from pfs.utils.datamodel.ag import SourceDetectionFlags, SourceMatchingFlags
 
 __all__ = [
     "AGC_DATA_COLUMNS",
@@ -673,22 +674,26 @@ def readTelStatus(opdb, pfs_visit_id: int | Iterable[int]) -> pd.DataFrame:
     return opdb.query_dataframe(sql, params={"visits": _visitList(pfs_visit_id)}).reset_index(drop=True)
 
 
+# The flag values the readAgRun SQL compares with, bound rather than written into it.
+AG_RUN_FLAGS = {"goodMatch": int(SourceMatchingFlags.GOOD_MATCH), "right": int(SourceDetectionFlags.RIGHT)}
+
 # The reads behind readAgRun: aggregates over every AG exposure taken in [start, end), so that a whole run is a
 # few MB rather than every spot. agc_camera_id is 0-5 (AG1 is 0) throughout.
 _AG_RUN_SQL = {
     # One row per (AG exposure, camera, detector half) with at least one detection. A good match is
-    # agc_match.flags = 1 (GOOD_MATCH alone since ics_agActor 1.1.78; before that 1 for any match). The
-    # no-glass half is RIGHT, inferred from the centroid where flags is NULL, as in readAgcData.
+    # agc_match.flags = :goodMatch (GOOD_MATCH alone since ics_agActor 1.1.78; before that 1, the same value, for
+    # any match). The no-glass half is :right (RIGHT), inferred from the centroid where flags is NULL, as in
+    # readAgcData.
     "cameras": """
     SELECT
         agc_data.agc_exposure_id,
         agc_data.agc_camera_id,
-        COALESCE(agc_data.flags, CAST(agc_data.centroid_x_pix >= 511.5 + 24 AS INTEGER)) & 1 AS right_half,
+        COALESCE(agc_data.flags, CAST(agc_data.centroid_x_pix >= 511.5 + 24 AS INTEGER)) & :right AS right_half,
         count(*) AS n_spots,
-        count(*) FILTER (WHERE agc_match.flags = 1) AS n_good,
+        count(*) FILTER (WHERE agc_match.flags = :goodMatch) AS n_good,
         percentile_cont(0.5) WITHIN GROUP (
             ORDER BY sqrt(greatest(agc_data.central_image_moment_20_pix + agc_data.central_image_moment_02_pix, 0) / 2)
-        ) FILTER (WHERE agc_match.flags = 1) AS sigma_pix,
+        ) FILTER (WHERE agc_match.flags = :goodMatch) AS sigma_pix,
         percentile_cont(0.5) WITHIN GROUP (ORDER BY agc_data.background) AS background
     FROM agc_exposure
     JOIN agc_data ON agc_data.agc_exposure_id = agc_exposure.agc_exposure_id
@@ -708,13 +713,13 @@ _AG_RUN_SQL = {
         LEAST(CAST(floor(agc_data.centroid_y_pix / :rowCell) AS INTEGER), 3) AS row_cell,
         LEAST(CAST(floor(agc_data.centroid_x_pix / :columnCell) AS INTEGER), 3) AS column_cell,
         count(*) AS n_paired,
-        count(*) FILTER (WHERE agc_match.flags = 1) AS n_good,
-        avg(agc_data.centroid_x_pix) FILTER (WHERE agc_match.flags = 1) AS x_good_pix,
-        avg(agc_data.centroid_y_pix) FILTER (WHERE agc_match.flags = 1) AS y_good_pix,
-        avg(agc_data.centroid_x_pix) FILTER (WHERE agc_match.flags <> 1) AS x_rejected_pix,
-        avg(agc_data.centroid_y_pix) FILTER (WHERE agc_match.flags <> 1) AS y_rejected_pix,
-        1000 * avg(agc_match.agc_center_x_mm - agc_match.agc_nominal_x_mm) FILTER (WHERE agc_match.flags = 1) AS dx_um,
-        1000 * avg(agc_match.agc_center_y_mm - agc_match.agc_nominal_y_mm) FILTER (WHERE agc_match.flags = 1) AS dy_um
+        count(*) FILTER (WHERE agc_match.flags = :goodMatch) AS n_good,
+        avg(agc_data.centroid_x_pix) FILTER (WHERE agc_match.flags = :goodMatch) AS x_good_pix,
+        avg(agc_data.centroid_y_pix) FILTER (WHERE agc_match.flags = :goodMatch) AS y_good_pix,
+        avg(agc_data.centroid_x_pix) FILTER (WHERE agc_match.flags <> :goodMatch) AS x_rejected_pix,
+        avg(agc_data.centroid_y_pix) FILTER (WHERE agc_match.flags <> :goodMatch) AS y_rejected_pix,
+        1000 * avg(agc_match.agc_center_x_mm - agc_match.agc_nominal_x_mm) FILTER (WHERE agc_match.flags = :goodMatch) AS dx_um,
+        1000 * avg(agc_match.agc_center_y_mm - agc_match.agc_nominal_y_mm) FILTER (WHERE agc_match.flags = :goodMatch) AS dy_um
     FROM agc_exposure
     JOIN agc_data ON agc_data.agc_exposure_id = agc_exposure.agc_exposure_id
     JOIN agc_match ON agc_match.agc_exposure_id = agc_data.agc_exposure_id
@@ -839,7 +844,8 @@ def readAgRun(
     for name, sql in _AG_RUN_SQL.items():
         bound = {
             "designStars": {**params, "magLimit": float(magLimit)},
-            "grid": {**params, **AG_GRID_CELL_PIX},
+            "cameras": {**params, **AG_RUN_FLAGS},
+            "grid": {**params, **AG_GRID_CELL_PIX, **AG_RUN_FLAGS},
         }.get(name, params)
         tables[name] = opdb.query_dataframe(sql, params=bound).reset_index(drop=True)
     return tables

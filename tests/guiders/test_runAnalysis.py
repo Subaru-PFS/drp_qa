@@ -16,12 +16,14 @@ from pfs.drp.qa.guiders.runAnalysis import (
     findRejectionClusters,
     fitModelErrors,
     groupSummary,
+    isRejectedOffset,
     nightPosition,
     onSkyRa,
     prepareRun,
     settledJitter,
     summariseModelErrors,
 )
+from pfs.utils.datamodel.ag import GuideOffsetFlag
 
 # makeAgRunTables' defaults: 2 nights x 4 visits x 40 exposures.
 N_EXPOSURES = 2 * 4 * 40
@@ -161,6 +163,33 @@ def testFindFlags(makeAgRunTables):
     # Negative control: a clean run raises no flag.
     clean = prepareRun(makeAgRunTables())
     assert findFlags(clean, settledJitter(clean), findDropouts(clean)) == []
+
+
+def testIsRejectedOffset():
+    tooFew = int(GuideOffsetFlag.INVALID_OFFSET | GuideOffsetFlag.TOO_FEW_STARS)
+    mask = pd.Series([0, 1, tooFew, np.nan])
+    assert isRejectedOffset(mask).tolist() == [False, True, True, False]
+    assert isRejectedOffset(mask, GuideOffsetFlag.TOO_FEW_STARS).tolist() == [False, False, True, False]
+    # Negative control: testing for the value 1 would count a TOO_FEW_STARS offset (3) as used.
+    assert (mask == 1).tolist() == [False, True, False, False]
+
+
+def testFindFlagsCountsTooFewStars(makeAgRunTables):
+    tables = makeAgRunTables()
+    exposures = tables["exposures"]
+    exposures.loc[50:52, "mask"] = int(GuideOffsetFlag.INVALID_OFFSET | GuideOffsetFlag.TOO_FEW_STARS)
+    exposures.loc[53, "mask"] = int(GuideOffsetFlag.INVALID_OFFSET)
+    run = prepareRun(tables)
+    text = "\n".join(flag.text for flag in findFlags(run, settledJitter(run), findDropouts(run)))
+    assert (
+        "4 guide frames rejected** (INVALID_OFFSET: not sent to the telescope, 3 of them TOO_FEW_STARS)"
+        in text
+    )
+    # Negative control: out of range alone names no TOO_FEW_STARS.
+    exposures.loc[50:52, "mask"] = int(GuideOffsetFlag.INVALID_OFFSET)
+    run = prepareRun(tables)
+    text = "\n".join(flag.text for flag in findFlags(run, settledJitter(run), findDropouts(run)))
+    assert "4 guide frames rejected** (INVALID_OFFSET: not sent to the telescope)" in text
 
 
 def testFindFlagsJitterAndFwhm(makeAgRunTables):

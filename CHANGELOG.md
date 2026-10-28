@@ -461,6 +461,12 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
+- **The AG run report names the flag bits it reads** (INSTRM-2800) — `agc_guide_offset.mask` is tested with
+  pfs_utils's `GuideOffsetFlag` (new `runAnalysis.isRejectedOffset`) instead of `& 1`, and `readAgRun` binds
+  `GOOD_MATCH` and `RIGHT` instead of writing `1` into its SQL (the tables it returns are unchanged). The
+  rejected-frames flag also says how many were `TOO_FEW_STARS`, which ics_agActor writes (with `INVALID_OFFSET`)
+  when fewer than 3 guide stars matched. Needs the first pfs_utils version after 7.4.39.
+
 - **`iqQaData` is written only on request** (PIPE2D-1962) — `imageQualityQa` gains `doWriteLineData`, default off.
   The table holds every row of `lines` measured, with its width and centre offset, and nothing reads it back: about
   21 MB per detector for an arc, 2 MB for a quartz and 80 MB for a twilight, mostly unsampled trace centroids
