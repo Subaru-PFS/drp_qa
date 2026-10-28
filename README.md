@@ -823,6 +823,47 @@ The tests (`tests/qadb/`) run the writer's statements on SQLite through SQLAlche
 schema the tests create (`tests/qadb/conftest.py`) mirrors `spt_qa_database`'s migration `a7c3e5d91b24`: change both
 together.
 
+## QA dashboard
+
+`pfs.drp.qa.dashboard` (PIPE2D-1924) serves QA results in a browser without a Butler in the request path. It reads
+a collection from qadb, or from a snapshot of a qadb read, into one long-format metrics table, which DuckDB queries.
+Stack-free; the app needs panel, holoviews, datashader and duckdb, which are not package dependencies, and psycopg
+for qadb.
+
+**Live, from qadb.** qaActor loads every visit it judges into qadb (`pfs.drp.qa.qadb.loadVisit`; INSTRM-3040). The
+dashboard reads a collection's images back (`dashboard.qadbSource`) and every `--refresh` seconds reads only those
+loaded since (`qa_gate.decided_at`), so the Live tab follows the latest visit and the Run tab's range grows with
+the run. One read serves every browser session. An image judged in more than one RUN of the collection shows the
+latest. Each metric's limits are those of the thresholds files this drp_qa ships, at the tasks' defaults
+(`serving.taskThresholds`, the IIS layer included); the verdicts are the ones stored.
+
+**With the opdb** (`--opdb-host`, read-only `public_user`), each visit has its IIC sequence and the start of its
+first SpS exposure (`comparison.queries.readVisitTimes`), and the observers' notes on it, its cameras and its
+sequence (`readNotes`). Notes are often written after a visit is judged, so each refresh re-reads them for the
+latest 300 visits. Without it, times are qadb's `pfs_visit.issued_at` (HST), sequences are inferred from runs of
+one `seqName` (qadb holds no IIC sequence), and there are no notes.
+
+```bash
+# Read-only users; credentials in ~/.pgpass
+python bin.src/qaDashboard.py --collection qaActor/reductions --first-visit <first visit of the run> \
+    --qadb-host 127.0.0.1 --qadb-port 5436 --opdb-host 127.0.0.1 --opdb-port 5432 [--refresh 30]
+```
+
+**Offline, from a snapshot.** `--write-snapshot <dir>` reads the collection once and writes what qadb returned, one
+parquet file per table (with the opdb's times and notes, given `--opdb-host`), with `provenance.json` (the
+thresholds file and drp_qa version, the databases and the time read).
+`--snapshot <dir>` serves it without a database. A run judged after the fact is loaded into a qadb first
+(`bin.src/loadQadb.py`; a local copy will do) and read the same way.
+
+```bash
+python bin.src/qaDashboard.py --collection <collection> --write-snapshot <dir> [--qadb-... as above]
+# --detail-dir/<visit>/ may hold fetched PDFs and dmLineResidualData
+python bin.src/qaDashboard.py --snapshot <dir> [--detail-dir <dir>] [--start-visit <visit>]
+```
+
+Either way the server listens on localhost:5006; add `--address 0.0.0.0 --allow-origin <host>` to serve the
+network.
+
 ## Command-line tools
 
 Scripts live in `bin.src/` and are run directly — there is no SCons step to copy them into a `bin/` directory on `PATH`:
