@@ -149,7 +149,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `--opdb-host` it adds each visit's IIC sequence, SpS start time and observers' notes, re-reading the notes of
   recent visits (`comparison.queries.readVisitTimes` is new). With
   `--write-snapshot` it saves one read, with its provenance, for `--snapshot` to serve offline. The app needs
-  panel, holoviews, datashader and duckdb, which are not dependencies of the package.
+  panel, holoviews, datashader and duckdb, which are not dependencies of the package. The dashboard's files are in
+  comparison mode's `RESULT_NEUTRAL_PATHS`: changing them keeps a comparison's collection.
 
 - **b2 and n4 quartz take their reference from Run29** (PIPE2D-1938) — reduced with one pipeline, Runs 25–30 agree
   with Run25 in `medFwhm` to within 3 % everywhere but b2 quartz (SM2's slit refocused on 2026-03-11) and n4 quartz

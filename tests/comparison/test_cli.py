@@ -1,11 +1,12 @@
 """Tests for `pfs.drp.qa.comparison.cli` that need neither the opdb nor a Butler."""
 
 import datetime
+import subprocess
 
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.comparison.cli import fetch, fetchSummary, loadFetched
+from pfs.drp.qa.comparison.cli import drpQaVersion, fetch, fetchSummary, loadFetched
 
 
 def testFetchAndLoad(tmp_path, periods, visit, listing, FakeOpDB):
@@ -170,3 +171,37 @@ def testUnexpectedPipeline():
     assert unexpectedPipeline("pfs-w.2026.39", [], ["other"], 0) is None
     assert unexpectedPipeline("pfs-w.2026.39", [], [], 2152) is None
     assert unexpectedPipeline("", [], ["other"], 2152) is None
+
+
+def testDrpQaVersionIgnoresTheDashboard(tmp_path):
+    """A commit to the dashboard keeps the comparison's version, so its collection; one to a task does not."""
+
+    def git(*args):
+        config = [
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "tag.gpgsign=false",
+        ]
+        subprocess.run(["git", "-C", str(tmp_path), *config, *args], check=True, capture_output=True)
+
+    def commit(path, text):
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / path).write_text(text)
+        git("add", path)
+        git("commit", "-q", "-m", path)
+
+    git("init", "-q")
+    commit("python/pfs/drp/qa/imageQualityQa.py", "v1")
+    git("tag", "w.2026.40")
+    commit("python/pfs/drp/qa/dashboard/app.py", "app")
+    commit("bin.src/qaDashboard.py", "cli")
+    assert drpQaVersion(tmp_path) == "w.2026.40"
+
+    # Negative control: a change to a task names a new version.
+    commit("python/pfs/drp/qa/imageQualityQa.py", "v2")
+    assert drpQaVersion(tmp_path) != "w.2026.40"

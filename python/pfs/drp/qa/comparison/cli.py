@@ -228,6 +228,9 @@ RESULT_NEUTRAL_PATHS = (
     ),
     "python/pfs/drp/qa/plotting/comparison.py",
     "bin.src/qaComparison.py",
+    # The dashboard reads what the pipeline wrote; the pipeline never imports it.
+    "python/pfs/drp/qa/dashboard",
+    "bin.src/qaDashboard.py",
     "tests",
     "docs",
     "examples",
