@@ -75,7 +75,7 @@ the pipeline/config glue to run them.
   (needs the opdb; committed without outputs): keep it in step with renamed arguments.
   The end-of-run report (INSTRM-2466) adds `queries.readAgRun` (aggregates over a period's AG
   exposures), `runAnalysis` (stack-free: per-exposure camera states, dropouts, settled jitter,
-  flags), `runPlotting` (figures from an `AgRun`) and `runReport` (fetch to parquet, then the
+  clusters of rejected matches, position-model errors, flags), `runPlotting` (figures from an `AgRun`) and `runReport` (fetch to parquet, then the
   Markdown report), driven by `bin.src/agRunReport.py` with comparison mode's runs; tested in
   `tests/guiders/test_runAnalysis.py` and `test_runReport.py` on a synthetic run (`makeAgRunTables`). Its plots are not in `docs/guider-plots.ipynb`: a run
   holds science visits, which can't be committed, so each run's `report.md` is their description.
