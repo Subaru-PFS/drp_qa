@@ -26,9 +26,12 @@ __all__ = [
     "CameraState",
     "Flag",
     "RunConfig",
+    "cameraSummary",
     "describePeriod",
     "findDropouts",
     "findFlags",
+    "findRejectionClusters",
+    "fitModelErrors",
     "groupSummary",
     "nightOf",
     "nightPosition",
@@ -98,6 +101,28 @@ class RunConfig:
         Nights with fewer AG exposures are left out of the plots.
     maxCorrection : `float`
         The guider's ``max_correction`` (arcsec), drawn on the acquisition plot.
+    minClusterPaired, minClusterRejected : `int`
+        A camera's AG exposure is judged for a cluster of rejected matches
+        when it has at least ``minClusterPaired`` detections paired with a
+        guide star and ``minClusterRejected`` of them rejected.
+    clusterFraction : `float`
+        A cluster needs at least this fraction of the pairs rejected...
+    clusterOffsetPix : `float`
+        ...and their mean position this far (pixels) from the good ones'.
+    minClusters, clusterFactor : `float`
+        A camera is flagged for clusters on it alone (no other camera had
+        one in that AG exposure: clusters on several cameras at once are the
+        whole solution stressed) in at least ``minClusters`` AG exposures,
+        and in over ``clusterFactor`` times the other cameras' median (at
+        least 1).
+    modelErrorRadiusPix : `float`
+        A camera's position-model error is quoted at this distance (pixels)
+        from its detector's centre.
+    maxModelError, modelErrorFactor : `float`
+        A camera is flagged when its position-model error (µm, at
+        ``modelErrorRadiusPix``) is over ``maxModelError`` and over
+        ``modelErrorFactor`` times the cameras' median, in the run's nightly
+        median. The error measured is never zero: the matches are noisy.
     """
 
     minDesignStars: int = 3
@@ -110,6 +135,15 @@ class RunConfig:
     fwhmTolerance: float = 0.15
     minFramesNight: int = 20
     maxCorrection: float = 10.0
+    minClusterPaired: int = 16
+    minClusterRejected: int = 5
+    clusterFraction: float = 0.25
+    clusterOffsetPix: float = 250.0
+    minClusters: int = 10
+    clusterFactor: float = 2.5
+    modelErrorRadiusPix: float = 500.0
+    maxModelError: float = 4.0
+    modelErrorFactor: float = 1.5
 
 
 @dataclass
@@ -132,6 +166,8 @@ class AgRun:
         The ``focus`` table with ``night``.
     nights : `pandas.Series`
         AG exposures per night.
+    grid : `pandas.DataFrame`
+        The ``grid`` table with ``night`` (empty if it wasn't read).
     config : `RunConfig`
         The parameters it was prepared with.
     """
@@ -140,6 +176,7 @@ class AgRun:
     cameras: pd.DataFrame
     focus: pd.DataFrame
     nights: pd.Series
+    grid: pd.DataFrame = field(default_factory=pd.DataFrame)
     config: RunConfig = field(default_factory=RunConfig)
 
     @property
@@ -160,11 +197,33 @@ class Flag:
         Whether it is a fault rather than something to look at.
     text : `str`
         One sentence, in Markdown.
+    agc_camera_id : `int` or `None`
+        The camera it is about, if one.
     """
 
     kind: str
     severe: bool
     text: str
+    agc_camera_id: int | None = None
+
+
+GRID_COLUMNS = [
+    "agc_exposure_id",
+    "agc_camera_id",
+    "row_cell",
+    "column_cell",
+    "n_paired",
+    "n_good",
+    "x_good_pix",
+    "y_good_pix",
+    "x_rejected_pix",
+    "y_rejected_pix",
+    "dx_um",
+    "dy_um",
+]
+
+#: An AG detector's centre (pixels), about which pfs_utils' camera model rotates it.
+DETECTOR_CENTRE_PIX = (511.5 + 24, 511.5 + 9)
 
 
 def nightOf(times: pd.Series) -> pd.Series:
@@ -250,7 +309,11 @@ def prepareRun(tables: dict[str, pd.DataFrame], config: RunConfig | None = None)
     )
     focus = tables["focus"].assign(night=lambda df: nightOf(df.created_at))
     nights = frames.groupby("night").size()
-    return AgRun(frames=frames, cameras=cameras, focus=focus, nights=nights, config=config)
+    grid = tables.get("grid")
+    if grid is None:
+        grid = pd.DataFrame(columns=GRID_COLUMNS)
+    grid = grid.merge(frames[["agc_exposure_id", "night"]], on="agc_exposure_id")
+    return AgRun(frames=frames, cameras=cameras, focus=focus, nights=nights, grid=grid, config=config)
 
 
 def onSkyRa(frames: pd.DataFrame) -> pd.Series:
@@ -434,7 +497,13 @@ def _visitList(visits, limit: int = 12) -> str:
     return ", ".join(visits[:limit]) + (" …" if len(visits) > limit else "")
 
 
-def findFlags(run: AgRun, jitter: pd.DataFrame, dropouts: pd.DataFrame) -> list[Flag]:
+def findFlags(
+    run: AgRun,
+    jitter: pd.DataFrame,
+    dropouts: pd.DataFrame,
+    clusters: pd.DataFrame | None = None,
+    modelErrors: pd.DataFrame | None = None,
+) -> list[Flag]:
     """List what the run's AG data show is wrong or worth a look.
 
     Parameters
@@ -445,14 +514,19 @@ def findFlags(run: AgRun, jitter: pd.DataFrame, dropouts: pd.DataFrame) -> list[
         From `settledJitter`.
     dropouts : `pandas.DataFrame`
         From `findDropouts`.
+    clusters : `pandas.DataFrame`, optional
+        From `findRejectionClusters`.
+    modelErrors : `pandas.DataFrame`, optional
+        From `fitModelErrors`.
 
     Returns
     -------
     flags : `list` [`Flag`]
-        Camera dropouts; guide frames rejected, missing, or accepted from
-        too few stars; visits with unusual settled jitter; cameras with
-        unusual image sizes. The FWHM of a camera's two halves is not
-        flagged: they focus differently by design.
+        Camera dropouts; cameras whose matches are often rejected in a
+        cluster on one side of the detector, or whose position model is off; guide frames rejected,
+        missing, or accepted from too few stars; visits with unusual settled
+        jitter; cameras with unusual image sizes. The FWHM of a camera's two
+        halves is not flagged: they focus differently by design.
     """
     config = run.config
     flags = []
@@ -467,6 +541,7 @@ def findFlags(run: AgRun, jitter: pd.DataFrame, dropouts: pd.DataFrame) -> list[
                 True,
                 f"**AG{d.agc_camera_id + 1}: {what} in {d.n_frames} consecutive AG exposures** from "
                 f"{_hst(d.start)} (visit {d.start_visit}) {until}{last}.",
+                int(d.agc_camera_id),
             )
         )
     short = dropouts[~long]
@@ -482,6 +557,43 @@ def findFlags(run: AgRun, jitter: pd.DataFrame, dropouts: pd.DataFrame) -> list[
                 + ".",
             )
         )
+
+    if clusters is not None and len(clusters):
+        alone = clusters[clusters.alone.astype(bool)]
+        counts = alone.groupby("agc_camera_id").size().reindex(range(6), fill_value=0)
+        for cid, group in alone.groupby("agc_camera_id"):
+            others = counts.drop(cid).median()
+            if len(group) < config.minClusters or len(group) <= config.clusterFactor * max(others, 1):
+                continue
+            flags.append(
+                Flag(
+                    "camera",
+                    True,
+                    f"**AG{cid + 1}: matches rejected in a cluster on one side of its detector, on it alone, in "
+                    f"{len(group)} AG exposures** (the other cameras' median: {others:g}), toward "
+                    f"{_meanAngle(group.angle_deg):.0f}° (0° = +x, 90° = +y on the detector; direction consistency "
+                    f"{_consistency(group.angle_deg):.2f}, 1 if always the same), in "
+                    f"{group.pfs_visit_id.nunique()} visits: "
+                    f"{_visitList(group.pfs_visit_id.value_counts().index)}.",
+                    int(cid),
+                )
+            )
+    if modelErrors is not None and len(modelErrors):
+        median = modelErrors.groupby("agc_camera_id").error_um.median()
+        typical = median.median()
+        for cid, error in median.items():
+            if error > max(config.maxModelError, config.modelErrorFactor * typical):
+                angle = _meanAngle(2 * modelErrors[modelErrors.agc_camera_id == cid].angle_deg) / 2 % 180
+                flags.append(
+                    Flag(
+                        "camera",
+                        False,
+                        f"AG{cid + 1}: its position model is off by {error:.1f} µm at "
+                        f"{config.modelErrorRadiusPix:g} px from its detector's centre, growing toward {angle:.0f}° "
+                        f"(nightly median; the cameras' median {typical:.1f} µm).",
+                        int(cid),
+                    )
+                )
 
     frames = run.frames
     mask = frames["mask"]
@@ -542,6 +654,7 @@ def findFlags(run: AgRun, jitter: pd.DataFrame, dropouts: pd.DataFrame) -> list[
                     False,
                     f"AG{cid + 1}: FWHM {100 * (value / fwhm.median() - 1):+.0f}% from the cameras' median "
                     f"({value:.2f}″ against {fwhm.median():.2f}″).",
+                    int(cid),
                 )
             )
     return flags
@@ -568,3 +681,205 @@ def nightPosition(times: pd.Series, nights: pd.DatetimeIndex) -> pd.Series:
     index = pd.Series(np.arange(len(nights)), index=nights)
     hours = (pd.to_datetime(times) - night - pd.Timedelta(hours=18)).dt.total_seconds() / 3600
     return night.map(index) + 0.05 + 0.9 * hours.clip(0, 12) / 12
+
+
+def _meanAngle(degrees: pd.Series) -> float:
+    """Return the circular mean of some angles (degrees, in [0, 360))."""
+    radians = np.radians(np.asarray(degrees, dtype=float))
+    return float(np.degrees(np.arctan2(np.sin(radians).mean(), np.cos(radians).mean())) % 360)
+
+
+def _consistency(degrees: pd.Series) -> float:
+    """Return how consistent some directions are: 1 if all the same, ~0 if random (mean resultant length)."""
+    radians = np.radians(np.asarray(degrees, dtype=float))
+    return float(np.hypot(np.sin(radians).mean(), np.cos(radians).mean())) if len(radians) else np.nan
+
+
+def findRejectionClusters(run: AgRun) -> pd.DataFrame:
+    """Find the AG exposures in which a camera's rejected matches cluster on one side of its detector.
+
+    A rejected match is a detection paired with a guide star but not
+    counted as a good match. A few are rejected anywhere on a detector;
+    when a camera's position model is off, those far from where it fits best
+    are rejected first, wherever that is: AG3's top half in Run 29, a corner
+    of AG4. So the measure is direction-free: the distance and direction from
+    the good matches' mean position to the rejected ones'.
+
+    Parameters
+    ----------
+    run : `AgRun`
+        The run.
+
+    Returns
+    -------
+    clusters : `pandas.DataFrame`
+        One row per (AG exposure, camera) with a cluster (see
+        `RunConfig`): ``agc_exposure_id``, ``pfs_visit_id``, ``taken_at``,
+        ``night``, ``agc_camera_id``, ``n_paired``, ``n_rejected``,
+        ``offset_pix``, ``angle_deg`` (from the good matches to the
+        rejected ones: 0° = +x, 90° = +y on the detector) and ``alone`` (no
+        other camera had a cluster in that AG exposure).
+    """
+    config = run.config
+    columns = [
+        "agc_exposure_id",
+        "pfs_visit_id",
+        "taken_at",
+        "night",
+        "agc_camera_id",
+        "n_paired",
+        "n_rejected",
+        "offset_pix",
+        "angle_deg",
+        "alone",
+    ]
+    grid = run.grid
+    if grid.empty:
+        return pd.DataFrame(columns=columns)
+    rejected = grid.n_paired - grid.n_good
+    weighted = pd.DataFrame(
+        {
+            "agc_exposure_id": grid.agc_exposure_id,
+            "agc_camera_id": grid.agc_camera_id,
+            "n_paired": grid.n_paired,
+            "n_good": grid.n_good,
+            "n_rejected": rejected,
+            "xg": grid.x_good_pix.fillna(0) * grid.n_good,
+            "yg": grid.y_good_pix.fillna(0) * grid.n_good,
+            "xr": grid.x_rejected_pix.fillna(0) * rejected,
+            "yr": grid.y_rejected_pix.fillna(0) * rejected,
+        }
+    )
+    sums = weighted.groupby(["agc_exposure_id", "agc_camera_id"]).sum()
+    judged = (sums.n_paired >= config.minClusterPaired) & (sums.n_rejected >= config.minClusterRejected)
+    sums = sums[judged & (sums.n_good > 0)]
+    dx = sums.xr / sums.n_rejected - sums.xg / sums.n_good
+    dy = sums.yr / sums.n_rejected - sums.yg / sums.n_good
+    sums = sums.assign(offset_pix=np.hypot(dx, dy), angle_deg=np.degrees(np.arctan2(dy, dx)) % 360)
+    found = sums[
+        (sums.n_rejected / sums.n_paired >= config.clusterFraction)
+        & (sums.offset_pix >= config.clusterOffsetPix)
+    ].reset_index()
+    found = found.merge(
+        run.frames[["agc_exposure_id", "pfs_visit_id", "taken_at", "night"]], on="agc_exposure_id"
+    )
+    found["alone"] = found.groupby("agc_exposure_id").agc_camera_id.transform("size") == 1
+    return found[columns].sort_values(["taken_at", "agc_camera_id"], ignore_index=True)
+
+
+def fitModelErrors(run: AgRun) -> pd.DataFrame:
+    """Fit how far off each camera's position model is, night by night.
+
+    From the ``grid``, each cell's good matches give a mean position
+    (pixels) and mean residual (measured minus expected, µm). In each AG
+    exposure each camera's mean residual and position are subtracted,
+    removing the pointing, which moves a camera's stars together; per night
+    and camera a 2x2 matrix A is then fitted, residual = A (position - mean),
+    weighted by the matches. A camera model whose position, rotation or scale
+    is right leaves A at the noise; its largest singular value, times
+    ``modelErrorRadiusPix``, is the error at that distance from the centre,
+    in the direction of its right singular vector. Field rotation adds the
+    same small rotation to every camera.
+
+    Parameters
+    ----------
+    run : `AgRun`
+        The run.
+
+    Returns
+    -------
+    errors : `pandas.DataFrame`
+        One row per (``night``, ``agc_camera_id``): ``error_um``, the
+        model error (µm) at ``modelErrorRadiusPix``; ``angle_deg``, the
+        direction on the detector (0-180°; 0° = +x, 90° = +y) it grows
+        fastest in; ``n_good``; and ``A11``-``A22`` (µm per pixel).
+    """
+    columns = ["night", "agc_camera_id", "error_um", "angle_deg", "n_good", "A11", "A12", "A21", "A22"]
+    grid = run.grid[run.grid.n_good > 0].dropna(subset=["x_good_pix", "y_good_pix", "dx_um", "dy_um"])
+    if grid.empty:
+        return pd.DataFrame(columns=columns)
+    grid = grid.copy()
+    keys = [grid.agc_exposure_id, grid.agc_camera_id]
+    total = grid.n_good.groupby(keys).transform("sum")
+    for column in ("x_good_pix", "y_good_pix", "dx_um", "dy_um"):
+        grid[column] = grid[column] - (grid[column] * grid.n_good).groupby(keys).transform("sum") / total
+    rows = []
+    for (night, cid), cells in grid.groupby(["night", "agc_camera_id"]):
+        weight = np.sqrt(cells.n_good.to_numpy(float))
+        X = cells[["x_good_pix", "y_good_pix"]].to_numpy() * weight[:, None]
+        if np.linalg.matrix_rank(X) < 2:
+            continue
+        A = np.vstack(
+            [np.linalg.lstsq(X, cells[c].to_numpy() * weight, rcond=None)[0] for c in ("dx_um", "dy_um")]
+        )
+        _, singular, vt = np.linalg.svd(A)
+        rows.append(
+            [
+                night,
+                cid,
+                singular[0] * run.config.modelErrorRadiusPix,
+                np.degrees(np.arctan2(vt[0, 1], vt[0, 0])) % 180,
+                int(cells.n_good.sum()),
+                *A.ravel(),
+            ]
+        )
+    return pd.DataFrame(rows, columns=columns)
+
+
+def cameraSummary(run: AgRun, clusters: pd.DataFrame, modelErrors: pd.DataFrame) -> pd.DataFrame:
+    """Summarise each camera over the run.
+
+    Parameters
+    ----------
+    run : `AgRun`
+        The run.
+    clusters : `pandas.DataFrame`
+        From `findRejectionClusters`.
+    modelErrors : `pandas.DataFrame`
+        From `fitModelErrors`.
+
+    Returns
+    -------
+    summary : `pandas.DataFrame`
+        One column per camera (``AG1``-``AG6``), one row per quantity:
+        the percentage of judged AG exposures in which it matched a star,
+        its median good matches per exposure, its median FWHM (arcsec) on
+        each half, its focus minus the six cameras' median (µm), its AG
+        exposures with a cluster of rejected matches on it alone, their mean
+        direction and its consistency, and its position-model error (µm, nightly median) and the
+        direction it grows in.
+    """
+    frames = run.frames[run.frames.night.isin(run.plottedNights)]
+    cameras = run.cameras[run.cameras.night.isin(run.plottedNights)]
+    zColumns = [f"guide_delta_z{cid + 1}" for cid in range(6)]
+    z = frames[zColumns].dropna().to_numpy() * 1e3
+    zMedian = np.median(z, axis=1) if len(z) else np.array([])
+    judged = [CameraState.OK, CameraState.UNMATCHED, CameraState.DARK]
+    radius = run.config.modelErrorRadiusPix
+    summary = {}
+    for cid in range(6):
+        states = frames[f"state{cid}"]
+        states = states[states.isin(judged)]
+        own = clusters[(clusters.agc_camera_id == cid) & clusters.alone.astype(bool)]
+        errors = modelErrors[modelErrors.agc_camera_id == cid]
+        summary[f"AG{cid + 1}"] = {
+            "matched (% of judged exposures)": 100 * float((states == CameraState.OK).mean())
+            if len(states)
+            else np.nan,
+            "good matches per exposure": float(frames[f"n_good{cid}"].median()) if len(frames) else np.nan,
+            "FWHM, glass half (″)": cameras[
+                (cameras.agc_camera_id == cid) & cameras.right_half.eq(0)
+            ].fwhm.median(),
+            "FWHM, no-glass half (″)": cameras[
+                (cameras.agc_camera_id == cid) & cameras.right_half.eq(1)
+            ].fwhm.median(),
+            "focus minus 6-camera median (µm)": float(np.median(z[:, cid] - zMedian)) if len(z) else np.nan,
+            "exposures with rejected matches clustered on it alone": len(own),
+            "their direction (°)": _meanAngle(own.angle_deg) if len(own) else np.nan,
+            "their direction's consistency (0-1)": _consistency(own.angle_deg),
+            f"position-model error at {radius:g} px (µm)": errors.error_um.median()
+            if len(errors)
+            else np.nan,
+            "its direction (°, 0-180)": _meanAngle(2 * errors.angle_deg) / 2 % 180 if len(errors) else np.nan,
+        }
+    return pd.DataFrame(summary)

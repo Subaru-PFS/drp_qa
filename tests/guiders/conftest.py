@@ -372,12 +372,17 @@ def makeAgRunTables(
     deadFrom: dict[int, int] | None = None,
     designStars: dict[int, int] | None = None,
     dec: float = 0.0,
+    modelError: dict[int, list[list[float]]] | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Make the tables of `readAgRun` for a synthetic run.
 
     Each night has ``nVisits`` science visits of ``nExp`` AG exposures 10 s
-    apart, starting at 19:00 HST. Every camera detects 8 spots, 6 of them
-    matched (sigma 2 pixels on the glass half, 2.2 on the other), and the
+    apart, starting at 19:00 HST. Every camera detects 8 spots, 4 on each
+    half, 3 of them good matches (sigma 2 pixels on the glass half, 2.2 on
+    the other). In ``grid`` each of a camera's 16 cells has 2 detections
+    paired with guide stars, both good, at the cell's centre, whose mean
+    residual is the exposure's pointing error (~20 µm, the same for every
+    camera) plus 1 µm noise, plus the camera's ``modelError``; and the
     guide offsets are small Gaussian noise (0.05″ in RA and Dec, 1″ in InR)
     at Dec ``dec``. Each camera's focus is offset from the others' by a
     fixed amount: AG1/3/5 by +10 µm, AG2/4/6 by -10 µm.
@@ -395,15 +400,21 @@ def makeAgRunTables(
         Bright guide stars per camera in the design (default 10).
     dec : `float`
         The field's declination (deg).
+    modelError : `dict` [`int`, 2x2 `list`], optional
+        For a camera, a matrix A (µm per pixel): its residuals are moved by
+        A (position - detector centre).
 
     Returns
     -------
     tables : `dict` [`str`, `pandas.DataFrame`]
-        ``cameras``, ``exposures``, ``visits``, ``focus`` and ``designStars``.
+        ``cameras``, ``grid``, ``exposures``, ``visits``, ``focus`` and
+        ``designStars``.
     """
     deadFrom = deadFrom or {}
+    modelError = {cid: np.asarray(m, dtype=float) for cid, m in (modelError or {}).items()}
+    centre = np.array([511.5 + 24, 511.5 + 9])
     stars = dict.fromkeys(range(6), 10) | (designStars or {})
-    exposures, cameras, visits = [], [], []
+    exposures, cameras, visits, grid = [], [], [], []
     aid, index = 2000, 0
     for night in range(nNights):
         t = RUN_START + pd.Timedelta(days=night)
@@ -434,11 +445,19 @@ def makeAgRunTables(
                         **z,
                     )
                 )
+                pointing = rng.normal(0, 20, 2)
                 for cid in range(6):
                     if index >= deadFrom.get(cid, np.inf):
                         continue
                     for half, sigma in ((0, 2.0), (1, 2.2)):
                         cameras.append((aid, cid, half, 4, 3, sigma, 100.0))
+                    for row in range(4):
+                        for column in range(4):
+                            xy = np.array([(column + 0.5) * 268, (row + 0.5) * 260])
+                            dxy = pointing + rng.normal(0, 1, 2)
+                            if cid in modelError:
+                                dxy = dxy + modelError[cid] @ (xy - centre)
+                            grid.append((aid, cid, row, column, 2, 2, *xy, np.nan, np.nan, *dxy))
                 index += 1
     exposures = pd.DataFrame(exposures)
     return {
@@ -452,6 +471,23 @@ def makeAgRunTables(
                 "n_good",
                 "sigma_pix",
                 "background",
+            ],
+        ),
+        "grid": pd.DataFrame(
+            grid,
+            columns=[
+                "agc_exposure_id",
+                "agc_camera_id",
+                "row_cell",
+                "column_cell",
+                "n_paired",
+                "n_good",
+                "x_good_pix",
+                "y_good_pix",
+                "x_rejected_pix",
+                "y_rejected_pix",
+                "dx_um",
+                "dy_um",
             ],
         ),
         "exposures": exposures,

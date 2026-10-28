@@ -10,6 +10,14 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **The end-of-run AG report has a section per camera** (INSTRM-2466, INSTRM-2982) — each camera's flags and a
+  figure of its matched stars, FWHM per detector half, focus against the others, presence, clusters of rejected
+  matches and position-model error. Two new flags, both direction-free: rejected matches clustered on one side of a
+  camera's detector, on it alone (`runAnalysis.findRejectionClusters`), and a camera position model that is off,
+  from a 2×2 fit of its residuals across the detector (`runAnalysis.fitModelErrors`). `readAgRun` reads a sixth
+  table, `grid`: the paired and good matches, their positions and residuals on a 4×4 grid over each detector.
+  `runPlotting.plotCamera` replaces `plotPerCamera`, and `plotFocus` keeps the run-wide panels.
+
 - **End-of-run AG report** (INSTRM-2466) — `bin.src/agRunReport.py fetch|report --period runNN` reports how the AG
   cameras and the guide loop did over an observing run: flags (a camera that stopped matching stars, rejected or
   missing guide frames, offsets accepted from fewer than 3 matched stars, visits with unusual settled jitter,

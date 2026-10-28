@@ -8,9 +8,12 @@ from pfs.drp.qa.guiders.runAnalysis import (
     CAMERA_GROUPS,
     CameraState,
     RunConfig,
+    cameraSummary,
     describePeriod,
     findDropouts,
     findFlags,
+    findRejectionClusters,
+    fitModelErrors,
     groupSummary,
     nightPosition,
     onSkyRa,
@@ -140,8 +143,9 @@ def testFindFlags(makeAgRunTables):
     # Three of visit 150002's offsets were accepted from 1 star on one camera.
     lone = exposures.agc_exposure_id.iloc[100:103]
     cameras = tables["cameras"]
-    cameras.loc[cameras.agc_exposure_id.isin(lone) & (cameras.agc_camera_id > 0), "n_good"] = 0
-    cameras.loc[cameras.agc_exposure_id.isin(lone) & (cameras.agc_camera_id == 0), "n_good"] = 1
+    cameras.loc[cameras.agc_exposure_id.isin(lone), "n_good"] = 0
+    oneHalf = (cameras.agc_camera_id == 0) & (cameras.right_half == 0)
+    cameras.loc[cameras.agc_exposure_id.isin(lone) & oneHalf, "n_good"] = 1
     run = prepareRun(tables)
     jitter = settledJitter(run)
     flags = findFlags(run, jitter, findDropouts(run))
@@ -190,3 +194,94 @@ def testNightPosition():
 
     assert np.allclose(x[:3], [0.05, 0.5, 1.95])  # 06:00 or later is put at the night's end
     assert np.isnan(x.iloc[3])  # a night that isn't plotted
+
+
+def _reject(tables, exposures, cid, cells, fraction=1.0):
+    """Reject a camera's paired detections in some cells of the grid, in some exposures.
+
+    ``fraction`` of each cell's 2 pairs are rejected (1 or 0.5), at the cell's centre.
+    """
+    grid = tables["grid"]
+    rows = grid.agc_exposure_id.isin(exposures) & (grid.agc_camera_id == cid)
+    rows &= pd.Series(list(zip(grid.row_cell, grid.column_cell, strict=True)), index=grid.index).isin(cells)
+    grid.loc[rows, "n_good"] = round(2 * (1 - fraction))
+    grid.loc[rows, "x_rejected_pix"] = grid.loc[rows, "x_good_pix"]
+    grid.loc[rows, "y_rejected_pix"] = grid.loc[rows, "y_good_pix"]
+    if fraction == 1.0:
+        grid.loc[rows, ["x_good_pix", "y_good_pix"]] = np.nan
+
+
+TOP_HALF = [(row, column) for row in (2, 3) for column in range(4)]
+CORNER = [(0, 2), (0, 3), (1, 2), (1, 3), (2, 3)]  # +x, -y: a corner, at an angle to the rows and the halves
+ALL_CELLS = [(row, column) for row in range(4) for column in range(4)]
+
+
+def testFindRejectionClusters(makeAgRunTables):
+    """Rejected matches on one side of a detector are a cluster, whatever the side; spread out, they're not."""
+    tables = makeAgRunTables()
+    exposures = tables["exposures"].agc_exposure_id
+    _reject(tables, exposures.iloc[:5], 2, TOP_HALF)  # AG3's top half, as in Run 29
+    _reject(tables, exposures.iloc[10:13], 3, CORNER)  # AG4's corner
+    _reject(tables, exposures.iloc[20:22], 1, TOP_HALF)  # AG2 and AG5 together
+    _reject(tables, exposures.iloc[20:22], 4, CORNER)
+    # Negative control: AG6 loses half its pairs everywhere, which is no cluster.
+    _reject(tables, exposures.iloc[30:33], 5, ALL_CELLS, fraction=0.5)
+    clusters = findRejectionClusters(prepareRun(tables))
+
+    assert clusters.groupby("agc_camera_id").size().to_dict() == {1: 2, 2: 5, 3: 3, 4: 2}
+    ag3, ag4 = (clusters[clusters.agc_camera_id == cid].iloc[0] for cid in (2, 3))
+    assert np.isclose(ag3.angle_deg, 90, atol=1)  # toward +y
+    assert 290 < ag4.angle_deg < 345  # toward +x, -y
+    assert clusters[clusters.agc_camera_id.isin([2, 3])].alone.all()
+    assert not clusters[clusters.agc_camera_id.isin([1, 4])].alone.any()  # two cameras at once
+
+
+def testClusterFlags(makeAgRunTables):
+    """A camera is flagged for clusters on it alone, far more often than the others."""
+    tables = makeAgRunTables()
+    exposures = tables["exposures"].agc_exposure_id
+    _reject(tables, exposures.iloc[:12], 2, TOP_HALF)
+    for cid in range(6):  # 12 more exposures in which every camera has a cluster at once
+        _reject(tables, exposures.iloc[100:112], cid, CORNER)
+    run = prepareRun(tables)
+    flags = findFlags(
+        run, settledJitter(run), findDropouts(run), findRejectionClusters(run), fitModelErrors(run)
+    )
+    clustered = [flag for flag in flags if "cluster" in flag.text]
+
+    assert [(flag.agc_camera_id, flag.severe) for flag in clustered] == [(2, True)]
+    assert "on it alone, in 12 AG exposures" in clustered[0].text and "toward 90°" in clustered[0].text
+    assert "consistency 1.00" in clustered[0].text
+    # Negative control: the clusters on every camera at once flag none of them.
+    assert not any(flag.agc_camera_id != 2 for flag in clustered)
+
+
+def testFitModelErrors(makeAgRunTables):
+    """A camera's model error is found at its size and direction; the pointing, common to all, isn't one."""
+    rowScale = [[0.0, 0.0], [0.0, 0.013]]  # 13 µm per 1000 rows: 6.5 µm at 500 px, along y
+    diagonal = (0.01 * np.outer([1, 0], [np.cos(np.radians(45)), np.sin(np.radians(45))])).tolist()
+    run = prepareRun(makeAgRunTables(modelError={2: rowScale, 3: diagonal}))
+    errors = fitModelErrors(run).groupby("agc_camera_id")[["error_um", "angle_deg"]].median()
+
+    assert np.isclose(errors.error_um[2], 6.5, atol=0.3) and np.isclose(errors.angle_deg[2], 90, atol=2)
+    assert np.isclose(errors.error_um[3], 5.0, atol=0.3) and np.isclose(errors.angle_deg[3], 45, atol=3)
+    # Negative control: the 20 µm pointing error moves every camera's stars together, and is no model error.
+    assert (errors.drop([2, 3]).error_um < 0.6).all()
+    flags = findFlags(run, settledJitter(run), findDropouts(run), None, fitModelErrors(run))
+    assert [flag.agc_camera_id for flag in flags if "position model" in flag.text] == [2, 3]
+
+
+def testCameraSummary(makeAgRunTables):
+    tables = makeAgRunTables(deadFrom={4: 160}, modelError={2: [[0.0, 0.0], [0.0, 0.013]]})
+    _reject(tables, tables["exposures"].agc_exposure_id.iloc[:7], 2, TOP_HALF)
+    run = prepareRun(tables)
+    summary = cameraSummary(run, findRejectionClusters(run), fitModelErrors(run))
+
+    assert list(summary.columns) == [f"AG{n}" for n in range(1, 7)]
+    assert summary.loc["matched (% of judged exposures)", "AG5"] == pytest.approx(50.0)
+    assert summary.loc["matched (% of judged exposures)", "AG1"] == 100.0
+    assert summary.loc["good matches per exposure", "AG1"] == 6
+    assert summary.loc["exposures with rejected matches clustered on it alone", "AG3"] == 7
+    assert summary.loc["their direction (°)", "AG3"] == pytest.approx(90, abs=1)
+    assert np.isclose(summary.loc["position-model error at 500 px (µm)", "AG3"], 6.5, atol=0.3)
+    assert summary.loc["focus minus 6-camera median (µm)", "AG1"] == pytest.approx(10.0, abs=1.0)

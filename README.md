@@ -656,10 +656,11 @@ python bin.src/agRunReport.py fetch --period run30     # the opdb, once: ~10 MB,
 python bin.src/agRunReport.py report --period run30 --title "Run 30" [--notes notes.md]
 ```
 
-`fetch` reads five aggregated tables (`queries.readAgRun`) into `~/.cache/drp_qa/agRun/opdb/`; `report` writes
+`fetch` reads six aggregated tables (`queries.readAgRun`, the matches on a 4×4 grid over each detector among them) into `~/.cache/drp_qa/agRun/opdb/`; `report` writes
 `<period>/report.md`, its figures and `metrics.json` from them, without the database. The report opens with its
-flags, then a camera-presence map, stars and FWHM (per detector half) per camera, AG1/3/5 against AG2/4/6, the
-settled guiding of each science visit, focus and acquisition. Cameras are shown and compared by group, AG1/3/5 and
+flags, then a camera-presence map, AG1/3/5 against AG2/4/6, the settled guiding of each science visit, focus and
+acquisition, and a section per camera: its flags, and its matched stars, FWHM per detector half, focus against the
+others, presence, clusters of rejected matches and position-model error, night by night. Cameras are shown and compared by group, AG1/3/5 and
 AG2/4/6: they are wired and placed separately, and can fail together (Run 30 lost AG1/3/5 after 2026-09-08).
 
 What it flags (`runAnalysis.RunConfig` holds the numbers):
@@ -669,6 +670,16 @@ What it flags (`runAnalysis.RunConfig` holds the numbers):
   undetected), and whether it detected anything at all.
 - Guide frames rejected (INVALID_OFFSET), frames with no guide offset, and **offsets accepted from fewer than 3
   matched stars**, which the guider sends to the telescope while they are under `max_correction`.
+- **Rejected matches clustered on one side of a detector**: detections paired with guide stars but not counted as
+  good matches, whose mean position is far from the good ones', on that camera alone in its AG exposure. When a
+  camera's position model is off, the matches far from where it fits best go first, always on the same side: AG3's
+  top half in Run 29 visit 147728 (INSTRM-2982), a corner of AG4 in the same visit. Flagged at 2.5× the other
+  cameras' median, with the clusters' mean direction and how consistent it is (Runs 29 and 30: AG3 toward ~115°,
+  consistency 0.9; AG1 in Run 30).
+- **A camera position model that is off**: a 2×2 fit, per night, of the good matches' residuals (measured minus
+  expected position, less the camera's mean in each AG exposure, so the pointing drops out) against their position
+  on the detector; quoted as the error 500 px from the centre and the direction it grows in. Flagged over 4 µm and
+  1.5× the cameras' median (Runs 29 and 30: AG3 8 µm toward ~113°, the others 3–6 µm).
 - Science visits whose settled jitter (frame-to-frame, after the first 5 frames) is over 3× the run's median, and
   cameras whose FWHM is 15% from the others'. The two detector halves focus differently by design, so their FWHM
   difference is plotted, not flagged.
