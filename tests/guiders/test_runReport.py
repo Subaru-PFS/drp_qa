@@ -180,3 +180,20 @@ def testReportCommand(opdb, tmp_path):
 def testUnknownPeriod(tmp_path):
     with pytest.raises(SystemExit, match="Unknown period"):
         main(["report", "--period", "run99", "--data-dir", str(tmp_path)])
+
+
+def testReportFromAnOlderFetch(opdb, tmp_path):
+    """A fetch made before the grid table existed still reports, and says what it left out."""
+    runs = tmp_path / "runs.yaml"
+    runs.write_text('runs:\n  - name: runX\n    nights: ["2026-09-01", "2026-09-02"]\n')
+    fetchRun(opdb, PERIOD, tmp_path, now=datetime.datetime(2026, 10, 1))
+    (tmp_path / "opdb" / "agRun-runX-grid.parquet").unlink()
+    tables, stamp = loadRun(PERIOD, tmp_path)
+
+    assert "grid" not in tables and stamp["missing"] == ["grid"]
+    assert main(["report", "--period", "runX", "--runs", str(runs), "--data-dir", str(tmp_path)]) == 0
+    assert "**No `grid` table was read**" in (tmp_path / "runX" / "report.md").read_text()
+    # Negative control: any other table is required.
+    (tmp_path / "opdb" / "agRun-runX-exposures.parquet").unlink()
+    with pytest.raises(FileNotFoundError, match="run fetch again"):
+        loadRun(PERIOD, tmp_path)

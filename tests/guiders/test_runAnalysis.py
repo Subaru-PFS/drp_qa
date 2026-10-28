@@ -8,6 +8,7 @@ from pfs.drp.qa.guiders.runAnalysis import (
     CAMERA_GROUPS,
     CameraState,
     RunConfig,
+    axialMean,
     cameraSummary,
     describePeriod,
     findDropouts,
@@ -19,6 +20,7 @@ from pfs.drp.qa.guiders.runAnalysis import (
     onSkyRa,
     prepareRun,
     settledJitter,
+    summariseModelErrors,
 )
 
 # makeAgRunTables' defaults: 2 nights x 4 visits x 40 exposures.
@@ -285,3 +287,68 @@ def testCameraSummary(makeAgRunTables):
     assert summary.loc["their direction (°)", "AG3"] == pytest.approx(90, abs=1)
     assert np.isclose(summary.loc["position-model error at 500 px (µm)", "AG3"], 6.5, atol=0.3)
     assert summary.loc["focus minus 6-camera median (µm)", "AG1"] == pytest.approx(10.0, abs=1.0)
+
+
+def testAxialMeanWraps():
+    """Axes at 1° and 179° are nearly the same axis, so their mean is 0°, not 90°."""
+    assert axialMean([1.0, 179.0]) == pytest.approx(0.0, abs=1e-9) or axialMean(
+        [1.0, 179.0]
+    ) == pytest.approx(180.0)
+    assert axialMean([40.0, 50.0]) == pytest.approx(45.0)
+    # Negative control: a plain median of the same axes is perpendicular to them.
+    assert np.median([1.0, 179.0]) == pytest.approx(90.0)
+
+
+def testModelErrorDirectionAtTheWrap(makeAgRunTables):
+    """An error growing along x (0°) is reported at ~0°, though its nights straddle 0° and 180°."""
+    alongX = (0.01 * np.outer([1, 0], [1, 0])).tolist()
+    run = prepareRun(makeAgRunTables(nNights=6, modelError={3: alongX}))
+    errors = fitModelErrors(run)
+    nightly = errors[errors.agc_camera_id == 3].angle_deg
+    angle = summariseModelErrors(run, errors).angle_deg[3]
+
+    assert min(angle, 180 - angle) < 3
+    assert (nightly > 90).any() and (nightly < 90).any()  # the nights do straddle the wrap
+
+
+def testModelErrorWithoutADirection(makeAgRunTables):
+    """A rotation or uniform scale moves stars equally in every direction: no direction is quoted."""
+    rotation = [[0.0, -0.01], [0.01, 0.0]]
+    rowScale = [[0.0, 0.0], [0.0, 0.013]]
+    run = prepareRun(makeAgRunTables(modelError={2: rotation, 3: rowScale}))
+    errors = fitModelErrors(run)
+    summary = summariseModelErrors(run, errors)
+
+    assert summary.ratio[2] > 0.9 and np.isnan(summary.angle_deg[2])
+    # Negative control: a scale along one axis has a direction.
+    assert summary.ratio[3] < 0.2 and summary.angle_deg[3] == pytest.approx(90, abs=2)
+    flags = findFlags(run, settledJitter(run), findDropouts(run), None, errors)
+    assert "AG3: its position model is off by 5.0 µm" in "\n".join(f.text for f in flags)
+    assert any("no one direction" in f.text for f in flags if f.agc_camera_id == 2)
+
+
+def testModelErrorsNeedMatchesSpreadAcrossTheDetector(makeAgRunTables):
+    """A camera whose good matches are all in one cell can't show a model error, and isn't fitted."""
+    tables = makeAgRunTables(modelError={2: [[0.0, 0.0], [0.0, 0.013]]})
+    grid = tables["grid"]
+    elsewhere = (grid.agc_camera_id == 4) & ~((grid.row_cell == 1) & (grid.column_cell == 2))
+    grid.loc[elsewhere, ["n_good", "n_paired"]] = 0
+    grid.loc[elsewhere, ["x_good_pix", "y_good_pix", "dx_um", "dy_um"]] = np.nan
+    grid.loc[grid.agc_camera_id == 4, ["x_good_pix", "y_good_pix"]] += [0.37, 0.61]  # rounding noise, if any
+    fitted = set(fitModelErrors(prepareRun(tables)).agc_camera_id)
+
+    assert 4 not in fitted
+    # Negative control: the other cameras, spread over all 16 cells, are fitted.
+    assert fitted == {0, 1, 2, 3, 5}
+
+
+def testCameraChecksUsePlottedNightsOnly(makeAgRunTables):
+    """Clusters and model errors count only the nights the figures show."""
+    tables = makeAgRunTables(modelError={2: [[0.0, 0.0], [0.0, 0.013]]})
+    _reject(tables, tables["exposures"].agc_exposure_id.iloc[:5], 2, TOP_HALF)
+    hidden = prepareRun(tables, RunConfig(minFramesNight=1000))  # no night has enough frames to be plotted
+
+    assert findRejectionClusters(hidden).empty and fitModelErrors(hidden).empty
+    # Negative control: plotted, the same run has both.
+    shown = prepareRun(tables)
+    assert len(findRejectionClusters(shown)) == 5 and len(fitModelErrors(shown))

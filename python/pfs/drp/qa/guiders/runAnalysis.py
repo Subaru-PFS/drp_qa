@@ -38,6 +38,7 @@ __all__ = [
     "onSkyRa",
     "prepareRun",
     "settledJitter",
+    "summariseModelErrors",
 ]
 
 #: The two groups of AG cameras, by ``agc_camera_id``.
@@ -118,6 +119,13 @@ class RunConfig:
     modelErrorRadiusPix : `float`
         A camera's position-model error is quoted at this distance (pixels)
         from its detector's centre.
+    minModelMatches, minModelSpreadPix : `float`
+        A night's position-model fit for a camera needs this many good
+        matches, spread at least this far (pixels, the smaller axis of their
+        spread about each exposure's mean) across the detector.
+    isotropicRatio : `float`
+        A model error whose two singular values are closer than this ratio
+        (a rotation or uniform scale) has no direction, and none is quoted.
     maxModelError, modelErrorFactor : `float`
         A camera is flagged when its position-model error (µm, at
         ``modelErrorRadiusPix``) is over ``maxModelError`` and over
@@ -142,6 +150,9 @@ class RunConfig:
     minClusters: int = 10
     clusterFactor: float = 2.5
     modelErrorRadiusPix: float = 500.0
+    minModelMatches: int = 100
+    minModelSpreadPix: float = 50.0
+    isotropicRatio: float = 0.7
     maxModelError: float = 4.0
     modelErrorFactor: float = 1.5
 
@@ -221,9 +232,6 @@ GRID_COLUMNS = [
     "dx_um",
     "dy_um",
 ]
-
-#: An AG detector's centre (pixels), about which pfs_utils' camera model rotates it.
-DETECTOR_CENTRE_PIX = (511.5 + 24, 511.5 + 9)
 
 
 def nightOf(times: pd.Series) -> pd.Series:
@@ -579,17 +587,21 @@ def findFlags(
                 )
             )
     if modelErrors is not None and len(modelErrors):
-        median = modelErrors.groupby("agc_camera_id").error_um.median()
-        typical = median.median()
-        for cid, error in median.items():
-            if error > max(config.maxModelError, config.modelErrorFactor * typical):
-                angle = _meanAngle(2 * modelErrors[modelErrors.agc_camera_id == cid].angle_deg) / 2 % 180
+        summary = summariseModelErrors(run, modelErrors)
+        typical = summary.error_um.median()
+        for cid, row in summary.iterrows():
+            if row.error_um > max(config.maxModelError, config.modelErrorFactor * typical):
+                direction = (
+                    f"growing toward {row.angle_deg:.0f}°"
+                    if np.isfinite(row.angle_deg)
+                    else "in no one direction (a rotation or uniform scale)"
+                )
                 flags.append(
                     Flag(
                         "camera",
                         False,
-                        f"AG{cid + 1}: its position model is off by {error:.1f} µm at "
-                        f"{config.modelErrorRadiusPix:g} px from its detector's centre, growing toward {angle:.0f}° "
+                        f"AG{cid + 1}: its position model is off by {row.error_um:.1f} µm at "
+                        f"{config.modelErrorRadiusPix:g} px from its detector's centre, {direction} "
                         f"(nightly median; the cameras' median {typical:.1f} µm).",
                         int(cid),
                     )
@@ -695,6 +707,44 @@ def _consistency(degrees: pd.Series) -> float:
     return float(np.hypot(np.sin(radians).mean(), np.cos(radians).mean())) if len(radians) else np.nan
 
 
+def axialMean(degrees: pd.Series) -> float:
+    """Return the mean of some axes (directions modulo 180°), in [0, 180).
+
+    An axis at 1° and one at 179° average to 0°, not 90°: the angles are
+    doubled, averaged on the circle, and halved.
+    """
+    return _meanAngle(2 * np.asarray(degrees, dtype=float)) / 2 % 180 if len(degrees) else np.nan
+
+
+def summariseModelErrors(run: AgRun, modelErrors: pd.DataFrame) -> pd.DataFrame:
+    """Summarise each camera's nightly position-model errors over the run.
+
+    Parameters
+    ----------
+    run : `AgRun`
+        The run.
+    modelErrors : `pandas.DataFrame`
+        From `fitModelErrors`.
+
+    Returns
+    -------
+    summary : `pandas.DataFrame`
+        Indexed by ``agc_camera_id``: the median ``error_um`` and
+        ``ratio``, and ``angle_deg``, the axial mean of the nights'
+        directions, NaN when the median ratio is over
+        ``RunConfig.isotropicRatio`` (no direction).
+    """
+    rows = {}
+    for cid, errors in modelErrors.groupby("agc_camera_id"):
+        ratio = errors.ratio.median()
+        rows[cid] = {
+            "error_um": errors.error_um.median(),
+            "angle_deg": axialMean(errors.angle_deg) if ratio < run.config.isotropicRatio else np.nan,
+            "ratio": ratio,
+        }
+    return pd.DataFrame.from_dict(rows, orient="index", columns=["error_um", "angle_deg", "ratio"])
+
+
 def findRejectionClusters(run: AgRun) -> pd.DataFrame:
     """Find the AG exposures in which a camera's rejected matches cluster on one side of its detector.
 
@@ -718,7 +768,8 @@ def findRejectionClusters(run: AgRun) -> pd.DataFrame:
         ``night``, ``agc_camera_id``, ``n_paired``, ``n_rejected``,
         ``offset_pix``, ``angle_deg`` (from the good matches to the
         rejected ones: 0° = +x, 90° = +y on the detector) and ``alone`` (no
-        other camera had a cluster in that AG exposure).
+        other camera had a cluster in that AG exposure); on the plotted
+        nights only.
     """
     config = run.config
     columns = [
@@ -733,7 +784,7 @@ def findRejectionClusters(run: AgRun) -> pd.DataFrame:
         "angle_deg",
         "alone",
     ]
-    grid = run.grid
+    grid = run.grid[run.grid.night.isin(run.plottedNights)]
     if grid.empty:
         return pd.DataFrame(columns=columns)
     rejected = grid.n_paired - grid.n_good
@@ -801,10 +852,26 @@ def fitModelErrors(run: AgRun) -> pd.DataFrame:
         One row per (``night``, ``agc_camera_id``): ``error_um``, the
         model error (µm) at ``modelErrorRadiusPix``; ``angle_deg``, the
         direction on the detector (0-180°; 0° = +x, 90° = +y) it grows
-        fastest in; ``n_good``; and ``A11``-``A22`` (µm per pixel).
+        fastest in; ``ratio``, its smaller singular value over its larger
+        (near 1, a rotation or uniform scale, has no direction); ``n_good``;
+        and ``A11``-``A22`` (µm per pixel). On the plotted nights, with
+        enough matches spread across the detector (`RunConfig`).
     """
-    columns = ["night", "agc_camera_id", "error_um", "angle_deg", "n_good", "A11", "A12", "A21", "A22"]
-    grid = run.grid[run.grid.n_good > 0].dropna(subset=["x_good_pix", "y_good_pix", "dx_um", "dy_um"])
+    config = run.config
+    columns = [
+        "night",
+        "agc_camera_id",
+        "error_um",
+        "angle_deg",
+        "ratio",
+        "n_good",
+        "A11",
+        "A12",
+        "A21",
+        "A22",
+    ]
+    grid = run.grid[(run.grid.n_good > 0) & run.grid.night.isin(run.plottedNights)]
+    grid = grid.dropna(subset=["x_good_pix", "y_good_pix", "dx_um", "dy_um"])
     if grid.empty:
         return pd.DataFrame(columns=columns)
     grid = grid.copy()
@@ -814,21 +881,29 @@ def fitModelErrors(run: AgRun) -> pd.DataFrame:
         grid[column] = grid[column] - (grid[column] * grid.n_good).groupby(keys).transform("sum") / total
     rows = []
     for (night, cid), cells in grid.groupby(["night", "agc_camera_id"]):
-        weight = np.sqrt(cells.n_good.to_numpy(float))
-        X = cells[["x_good_pix", "y_good_pix"]].to_numpy() * weight[:, None]
-        if np.linalg.matrix_rank(X) < 2:
+        weight = cells.n_good.to_numpy(float)
+        positions = cells[["x_good_pix", "y_good_pix"]].to_numpy()
+        # The fit needs matches spread across the detector: with one cell per exposure, the de-meaned positions
+        # are rounding noise, which a relative rank test would take for a spread.
+        spread = np.sqrt(np.linalg.eigvalsh(positions.T @ (positions * weight[:, None]) / weight.sum()).min())
+        if weight.sum() < config.minModelMatches or spread < config.minModelSpreadPix:
             continue
+        X = positions * np.sqrt(weight)[:, None]
         A = np.vstack(
-            [np.linalg.lstsq(X, cells[c].to_numpy() * weight, rcond=None)[0] for c in ("dx_um", "dy_um")]
+            [
+                np.linalg.lstsq(X, cells[c].to_numpy() * np.sqrt(weight), rcond=None)[0]
+                for c in ("dx_um", "dy_um")
+            ]
         )
         _, singular, vt = np.linalg.svd(A)
         rows.append(
             [
                 night,
                 cid,
-                singular[0] * run.config.modelErrorRadiusPix,
+                singular[0] * config.modelErrorRadiusPix,
                 np.degrees(np.arctan2(vt[0, 1], vt[0, 0])) % 180,
-                int(cells.n_good.sum()),
+                singular[1] / singular[0] if singular[0] > 0 else np.nan,
+                int(weight.sum()),
                 *A.ravel(),
             ]
         )
@@ -865,12 +940,12 @@ def cameraSummary(run: AgRun, clusters: pd.DataFrame, modelErrors: pd.DataFrame)
     zMedian = np.median(z, axis=1) if len(z) else np.array([])
     judged = [CameraState.OK, CameraState.UNMATCHED, CameraState.DARK]
     radius = run.config.modelErrorRadiusPix
+    models = summariseModelErrors(run, modelErrors)
     summary = {}
     for cid in range(6):
         states = frames[f"state{cid}"]
         states = states[states.isin(judged)]
         own = clusters[(clusters.agc_camera_id == cid) & clusters.alone.astype(bool)]
-        errors = modelErrors[modelErrors.agc_camera_id == cid]
         summary[f"AG{cid + 1}"] = {
             "matched (% of judged exposures)": 100 * float((states == CameraState.OK).mean())
             if len(states)
@@ -886,9 +961,8 @@ def cameraSummary(run: AgRun, clusters: pd.DataFrame, modelErrors: pd.DataFrame)
             "exposures with rejected matches clustered on it alone": len(own),
             "their direction (°)": _meanAngle(own.angle_deg) if len(own) else np.nan,
             "their direction's consistency (0-1)": _consistency(own.angle_deg),
-            f"position-model error at {radius:g} px (µm)": errors.error_um.median()
-            if len(errors)
-            else np.nan,
-            "its direction (°, 0-180)": _meanAngle(2 * errors.angle_deg) / 2 % 180 if len(errors) else np.nan,
+            f"position-model error at {radius:g} px (µm)": models.error_um.get(cid, np.nan),
+            "its direction (°, 0-180)": models.angle_deg.get(cid, np.nan),
+            "its anisotropy (s2/s1; near 1: no direction)": models.ratio.get(cid, np.nan),
         }
     return pd.DataFrame(summary)

@@ -377,10 +377,11 @@ def makeAgRunTables(
     """Make the tables of `readAgRun` for a synthetic run.
 
     Each night has ``nVisits`` science visits of ``nExp`` AG exposures 10 s
-    apart, starting at 19:00 HST. Every camera detects 8 spots, 4 on each
-    half, 3 of them good matches (sigma 2 pixels on the glass half, 2.2 on
-    the other). In ``grid`` each of a camera's 16 cells has 2 detections
-    paired with guide stars, both good, at the cell's centre, whose mean
+    apart, starting at 19:00 HST. In ``cameras`` every camera detects 8
+    spots, 4 on each half, 3 of them good matches (sigma 2 pixels on the
+    glass half, 2.2 on the other). ``grid`` is made separately and needn't
+    agree: each of a camera's 16 cells has 2 detections paired with guide
+    stars (32 per camera), both good, at the cell's centre, whose mean
     residual is the exposure's pointing error (~20 µm, the same for every
     camera) plus 1 µm noise, plus the camera's ``modelError``; and the
     guide offsets are small Gaussian noise (0.05″ in RA and Dec, 1″ in InR)

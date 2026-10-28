@@ -28,6 +28,7 @@ from pfs.drp.qa.guiders.runAnalysis import (
     _meanAngle,
     nightPosition,
     onSkyRa,
+    summariseModelErrors,
 )
 
 __all__ = [
@@ -286,11 +287,11 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
         ax.axhline(typical, color=QUIET, lw=0.8, ls="--", label="all cameras' median")
     ax.set_ylim(0, max(12, np.nanmax(errors.error_um.to_numpy(float), initial=0) * 1.1))
     if len(errors):
-        angle = _meanAngle(2 * errors.angle_deg) / 2 % 180
+        angle = summariseModelErrors(run, errors).angle_deg.iloc[0]
         ax.text(
             0.98,
             0.04,
-            f"growing toward {angle:.0f}° (mod 180)",
+            f"growing toward {angle:.0f}° (mod 180)" if np.isfinite(angle) else "no one direction",
             transform=ax.transAxes,
             ha="right",
             fontsize=7,

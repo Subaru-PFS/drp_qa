@@ -37,10 +37,14 @@ from pfs.drp.qa.guiders.runAnalysis import (
     groupSummary,
     prepareRun,
     settledJitter,
+    summariseModelErrors,
 )
 from pfs.drp.qa.guiders.runPlotting import CAMERA_ORDER
 
 __all__ = ["fetchRun", "loadRun", "main", "writeReport"]
+
+#: Tables an older fetch lacks; without them the report leaves out the checks that need them.
+OPTIONAL_TABLES = ("grid",)
 
 #: The run-wide figures of a report, by file name; each camera's follows, as ``camera-AG<n>``.
 FIGURES = {
@@ -119,7 +123,15 @@ def loadRun(period: Period, dataDir: Path) -> tuple[dict[str, pd.DataFrame], dic
     paths, stampPath = _paths(period, dataDir)
     if not stampPath.exists():
         raise FileNotFoundError(f"{period.name} hasn't been fetched into {stampPath.parent}: run fetch first")
-    return {name: pd.read_parquet(path) for name, path in paths.items()}, json.loads(stampPath.read_text())
+    stamp = json.loads(stampPath.read_text())
+    tables = {}
+    for name, path in paths.items():
+        if path.exists():
+            tables[name] = pd.read_parquet(path)
+        elif name not in OPTIONAL_TABLES:
+            raise FileNotFoundError(f"{path} is missing: run fetch again")
+    stamp["missing"] = sorted(set(paths) - set(tables))
+    return tables, stamp
 
 
 def _table(frame: pd.DataFrame, fmt: str = "{:.2f}") -> list[str]:
@@ -213,6 +225,15 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
         "",
         *_table(cameras),
         "",
+        *(
+            [
+                "**No `grid` table was read** (a fetch older than these checks): run `fetch` again for the "
+                "clusters of rejected matches and the position-model errors.",
+                "",
+            ]
+            if run.grid.empty
+            else []
+        ),
     ]
     for cid in CAMERA_ORDER:
         own = [flag for flag in flags if flag.agc_camera_id == cid]
@@ -247,9 +268,7 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
             .reset_index()
             .to_json(orient="records")
         ),
-        "modelErrors": json.loads(
-            modelErrors.groupby("agc_camera_id")[["error_um", "angle_deg"]].median().to_json()
-        ),
+        "modelErrors": json.loads(summariseModelErrors(run, modelErrors).to_json()),
         "dropouts": json.loads(dropouts.to_json(orient="records", date_format="iso")),
     }
     (outDir / "metrics.json").write_text(json.dumps(metrics, indent=1) + "\n")
@@ -314,5 +333,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     outDir = Path(args.out).expanduser() if args.out else dataDir / period.name
     path = writeReport(run, outDir, args.title or period.name, notes)
     print(f"{period.name}: {describePeriod(run)}; read {stamp['fetchedAt']}")
+    if stamp["missing"]:
+        print(f"not fetched: {', '.join(stamp['missing'])} (run fetch again for the checks that need them)")
     print(f"wrote {path}")
     return 0
