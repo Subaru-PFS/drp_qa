@@ -781,6 +781,15 @@ def fitModelErrors(run: AgRun) -> pd.DataFrame:
     in the direction of its right singular vector. Field rotation adds the
     same small rotation to every camera.
 
+    The residual is the one the guider's own fit sees (agc_match): the
+    detection taken to the focal plane by pfs_utils' ``coordinates.det2dp``
+    (the camera model ``_DXDP``, ``_DYDP``, ``_DTDP``), against the guide
+    star placed by ``Subaru_POPT2_PFS`` (``makeBasis``). It doesn't test
+    pfs_utils' other AG chain, ``CoordTransp``'s ``sky_pfi_ag`` and
+    ``ag_pfimm_to_pixel``, which places guide stars in pfsDesign and
+    pfsConfig; nor can it tell a camera-model error from a distortion-model
+    error at that camera.
+
     Parameters
     ----------
     run : `AgRun`

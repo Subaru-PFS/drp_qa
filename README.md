@@ -678,7 +678,7 @@ What it flags (`runAnalysis.RunConfig` holds the numbers):
   consistency 0.9; AG1 in Run 30).
 - **A camera position model that is off**: a 2×2 fit, per night, of the good matches' residuals (measured minus
   expected position, less the camera's mean in each AG exposure, so the pointing drops out) against their position
-  on the detector; quoted as the error 500 px from the centre and the direction it grows in. Flagged over 4 µm and
+  on the detector; quoted as the error 500 px from the centre and the direction it grows in. The residual is the guide fit's own: the detection through pfs_utils' `coordinates.det2dp` against the guide star through `Subaru_POPT2_PFS`, not the `CoordTransp` (`sky_pfi_ag`, `ag_pfimm_to_pixel`) chain that places guide stars in pfsDesign and pfsConfig. Flagged over 4 µm and
   1.5× the cameras' median (Runs 29 and 30: AG3 8 µm toward ~113°, the others 3–6 µm).
 - Science visits whose settled jitter (frame-to-frame, after the first 5 frames) is over 3× the run's median, and
   cameras whose FWHM is 15% from the others'. The two detector halves focus differently by design, so their FWHM
