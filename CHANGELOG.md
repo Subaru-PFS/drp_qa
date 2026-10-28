@@ -10,6 +10,14 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **End-of-run AG report** (INSTRM-2466) — `bin.src/agRunReport.py fetch|report --period runNN` reports how the AG
+  cameras and the guide loop did over an observing run: flags (a camera that stopped matching stars, rejected or
+  missing guide frames, offsets accepted from fewer than 3 matched stars, visits with unusual settled jitter,
+  cameras with unusual image sizes), a camera-presence map, stars and FWHM per camera and detector half, AG1/3/5
+  against AG2/4/6, guiding, focus and acquisition plots, and `metrics.json`. New `guiders.queries.readAgRun`
+  (five aggregated reads of a period) and the stack-free `guiders.runAnalysis`, `guiders.runPlotting` and
+  `guiders.runReport`.
+
 - **The QA tasks record the thresholds files they judged with** (PIPE2D-1976) — `iqQaMetrics` and
   `dmLineResidualSummary` gain `thresholdsFiles` and `thresholdsSha256`: each file judged with, in the order judged,
   and the sha256 of its content then, comma-separated (empty when judged by the config fields alone;
@@ -460,6 +468,13 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
+- **`iqQaData` is written only on request** (PIPE2D-1962) — `imageQualityQa` gains `doWriteLineData`, default off.
+  The table holds every row of `lines` measured, with its width and centre offset, and nothing reads it back: about
+  21 MB per detector for an arc, 2 MB for a quartz and 80 MB for a twilight, mostly unsampled trace centroids
+  (1.18 GB for the 34 detectors of Run25 visits 140005, 140141 and 134336). Gating and threshold derivation read
+  `iqQaMetrics`. The connection stays, so the `imageQualityQa_config` of earlier RUNs, which names it, can still be
+  read (the qadb loader and `qaComparison report --version` read it). `run` returns the table as `lineData` (was
+  `iqQaData`). Collections written before keep their `iqQaData`.
 - **Validation set** (PIPE2D-1934) — the Run27 SM1 defocus is known-bad for the line scatter, `robustRmsDeltaX`,
   as well as `medFwhm`: the trace sets and the Ar, Ne, Kr and r/n Xe arcs, which fail at 1.7–4× each detector's
   Run25 median (not HgCd, whose scatter is not judged, nor b-arm Xenon, the one noisy population). Removed: the

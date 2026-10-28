@@ -58,7 +58,7 @@ def testTraceFallsBackWhenCalexpUnusable(runTask, fakes, caplog):
     assert np.isnan(metrics["pctFlagged"])
     # nLines counts the rows of ``lines``, not the 50 profile swaths.
     assert metrics["nLines"] == len(lines)
-    assert len(outputs.iqQaData) == 50 and outputs.iqQaData["traceOnly"].all()
+    assert len(outputs.lineData) == 50 and outputs.lineData["traceOnly"].all()
     assert metrics["qaStatus"] == "UNKNOWN"
     assert "fiberProfiles" in metrics["qaReason"]
 
@@ -139,7 +139,7 @@ def testQuartzAtThePfsPitchIsMeasuredFromTheCalexp(runTask, fakes):
     metrics = outputs.iqQaMetrics.iloc[0]
     assert not metrics["traceOnly"]
     assert metrics["medFwhm"] == pytest.approx(FWHM_FACTOR * 1.3, rel=0.02)
-    assert (~outputs.iqQaData["flag"]).mean() > 0.9
+    assert (~outputs.lineData["flag"]).mean() > 0.9
 
 
 def testNothingMeasuredIsUnknown(runTask, fakes):
@@ -244,7 +244,7 @@ def testRunQuantumRecordsTheCalexpRun(iqqa, monkeypatch):
     config.thresholdsFile = ""
     config.extraThresholdsFiles = []
     task = iqqa.ImageQualityQaTask(config=config)
-    outputs = SimpleNamespace(iqQaData=pd.DataFrame(), iqQaSpeciesMetrics=pd.DataFrame())
+    outputs = SimpleNamespace(lineData=pd.DataFrame(), iqQaSpeciesMetrics=pd.DataFrame())
     monkeypatch.setattr(
         task,
         "run",
@@ -253,13 +253,50 @@ def testRunQuantumRecordsTheCalexpRun(iqqa, monkeypatch):
     put = {}
     butlerQC = SimpleNamespace(get=lambda refs: {}, put=lambda value, ref: put.__setitem__(ref, value))
     dataId = SimpleNamespace(mapping={"visit": 1, "arm": "r", "spectrograph": 2})
-    outputRefs = SimpleNamespace(iqQaData="data", iqQaMetrics="metrics", iqQaSpeciesMetrics="species")
+    outputRefs = SimpleNamespace(iqQaMetrics="metrics", iqQaSpeciesMetrics="species")
     withCalexp = SimpleNamespace(
         arcLines=SimpleNamespace(dataId=dataId), calexp=SimpleNamespace(run="PFS/r/1")
     )
     task.runQuantum(butlerQC, withCalexp, outputRefs)
     assert put["metrics"]["calexpRun"].tolist() == ["PFS/r/1"]
+    # The per-line data is not stored by default (PIPE2D-1962).
+    assert set(put) == {"metrics", "species"}
     task.runQuantum(
         butlerQC, SimpleNamespace(arcLines=SimpleNamespace(dataId=dataId), calexp=None), outputRefs
     )
     assert put["metrics"]["calexpRun"].isna().all()
+
+
+def testLineDataIsWrittenOnlyWhenAskedFor(iqqa, monkeypatch):
+    """``iqQaData`` is an output, and is written, only with ``doWriteLineData`` (PIPE2D-1962).
+
+    The connection itself stays: stored configs set ``config.connections.iqQaData``.
+    """
+    from types import SimpleNamespace
+
+    assert hasattr(iqqa.ImageQualityQaConnections, "iqQaData")
+    config = iqqa.ImageQualityQaConfig()
+    config.thresholdsFile = ""
+    config.extraThresholdsFiles = []
+    assert config.doWriteLineData is False
+    assert "iqQaData" not in iqqa.ImageQualityQaConnections(config=config).outputs
+
+    config.doWriteLineData = True
+    assert "iqQaData" in iqqa.ImageQualityQaConnections(config=config).outputs
+    task = iqqa.ImageQualityQaTask(config=config)
+    lineData = pd.DataFrame({"fwhm": [2.5]})
+    monkeypatch.setattr(
+        task,
+        "run",
+        lambda **inputs: SimpleNamespace(
+            lineData=lineData, iqQaMetrics=pd.DataFrame({"medFwhm": [2.0]}), iqQaSpeciesMetrics=pd.DataFrame()
+        ),
+    )
+    put = {}
+    butlerQC = SimpleNamespace(get=lambda refs: {}, put=lambda value, ref: put.__setitem__(ref, value))
+    dataId = SimpleNamespace(mapping={"visit": 1, "arm": "r", "spectrograph": 2})
+    outputRefs = SimpleNamespace(iqQaData="data", iqQaMetrics="metrics", iqQaSpeciesMetrics="species")
+    task.runQuantum(
+        butlerQC, SimpleNamespace(arcLines=SimpleNamespace(dataId=dataId), calexp=None), outputRefs
+    )
+    assert set(put) == {"data", "metrics", "species"} and put["data"] is lineData

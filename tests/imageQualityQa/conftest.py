@@ -76,18 +76,31 @@ class _Config:
                     )
 
 
-class _Connections:
-    """Stand-in for ``PipelineTaskConnections``."""
-
-    def __init_subclass__(cls, dimensions=(), **kwargs):
-        super().__init_subclass__(**kwargs)
-
-
 class _Connection:
     """Stand-in for a connection type."""
 
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
+
+
+class _Output(_Connection):
+    """Stand-in for ``connectionTypes.Output``."""
+
+
+class _Connections:
+    """Stand-in for ``PipelineTaskConnections``: ``outputs``, the output connections' names, editable."""
+
+    def __init_subclass__(cls, dimensions=(), **kwargs):
+        super().__init_subclass__(**kwargs)
+
+    def __init__(self, *, config=None):
+        self.config = config
+        self.outputs = {
+            name
+            for klass in type(self).__mro__
+            for name, value in vars(klass).items()
+            if isinstance(value, _Output)
+        }
 
 
 class _Task:
@@ -105,7 +118,7 @@ def _standIns() -> dict[str, ModuleType]:
         connectionTypes = _module(
             "lsst.pipe.base.connectionTypes",
             Input=_Connection,
-            Output=_Connection,
+            Output=_Output,
             PrerequisiteInput=_Connection,
         )
         pipeBase = _module(
