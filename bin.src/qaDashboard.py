@@ -5,11 +5,12 @@ Stack-free; needs panel, holoviews, datashader and duckdb, and psycopg for qadb.
 
 Examples::
 
-    # A run as qaActor loads it: read-only, every 30 s (credentials in ~/.pgpass)
+    # A run as qaActor loads it, with the opdb's sequences and notes: read-only, every 30 s
+    # (credentials in ~/.pgpass)
     python bin.src/qaDashboard.py --collection qaActor/reductions --first-visit 151000 \
-        --qadb-host 127.0.0.1 --qadb-port 5436 --qadb-user public_user
+        --qadb-host 127.0.0.1 --qadb-port 5436 --opdb-host 127.0.0.1 --opdb-port 5432
     # Read it once into a snapshot (parquet and provenance.json), then serve that offline
-    python bin.src/qaDashboard.py --collection qaActor/reductions --write-snapshot run31-qadb
+    python bin.src/qaDashboard.py --collection qaActor/reductions --opdb-host 127.0.0.1 --write-snapshot run31-qadb
     python bin.src/qaDashboard.py --snapshot run31-qadb --detail-dir detail
 
 then open http://localhost:5006. To serve the local network, add
@@ -40,6 +41,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     qadb.add_argument("--qadb-dbname", default="qadb")
     qadb.add_argument("--qadb-user", default="public_user", help="a read-only user (default public_user)")
     qadb.add_argument("--refresh", type=float, default=30.0, help="seconds between qadb reads (default 30)")
+    opdb = parser.add_argument_group("the opdb's IIC sequences, visit times and notes (default: none)")
+    opdb.add_argument("--opdb-host")
+    opdb.add_argument("--opdb-port", type=int, default=5432)
+    opdb.add_argument("--opdb-dbname", default="opdb")
+    opdb.add_argument("--opdb-user", default="public_user", help="a read-only user (default public_user)")
     parser.add_argument("--detail-dir", type=Path, help="per-visit detail files")
     parser.add_argument("--port", type=int, default=5006)
     parser.add_argument(
@@ -70,13 +76,25 @@ def main(argv: Sequence[str] | None = None) -> None:
         from pfs.utils.database.qadb import QaDB
 
         db = QaDB(host=args.qadb_host, port=args.qadb_port, dbname=args.qadb_dbname, user=args.qadb_user)
-        print(f"Reading {args.collection} from qadb at {args.qadb_host}:{args.qadb_port} ...", flush=True)
+        opdb = None
+        if args.opdb_host:
+            from pfs.utils.database.opdb import OpDB
+
+            opdb = OpDB(
+                host=args.opdb_host, port=args.opdb_port, dbname=args.opdb_dbname, user=args.opdb_user
+            )
+        print(
+            f"Reading {args.collection} from qadb at {args.qadb_host}:{args.qadb_port}"
+            + (f", with the opdb at {args.opdb_host}:{args.opdb_port}" if opdb else ", without the opdb")
+            + " ...",
+            flush=True,
+        )
         if args.write_snapshot:
-            writeSnapshot(db, args)
+            writeSnapshot(db, opdb, args)
             return
-        # One store for every session: each refresh reads qadb once, whoever asks.
+        # One store for every session: each refresh reads qadb (and the opdb) once, whoever asks.
         store = QadbMetricsStore.fromQadb(
-            db, args.collection, args.first_visit, args.last_visit, minInterval=args.refresh / 2
+            db, args.collection, args.first_visit, args.last_visit, minInterval=args.refresh / 2, opdb=opdb
         )
         print(f"{store.table['visit'].nunique()} visits so far", flush=True)
     else:
@@ -100,18 +118,22 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
 
-def writeSnapshot(db, args: argparse.Namespace) -> None:
-    """Read the collection from qadb once and write it, with its provenance, to ``--write-snapshot``."""
-    from pfs.drp.qa.dashboard.live import HST, qadbProvenance
+def writeSnapshot(db, opdb, args: argparse.Namespace) -> None:
+    """Read the collection from qadb (and the opdb) once and write it, with its provenance, to ``--write-snapshot``."""
+    from pfs.drp.qa.dashboard.live import HST, opdbReader, qadbProvenance
     from pfs.drp.qa.dashboard.qadbSource import readQadb
     from pfs.drp.qa.dashboard.qadbSource import writeSnapshot as write
 
     start = time.monotonic()
     tables = readQadb(db, args.collection, args.first_visit, args.last_visit)
+    if opdb is not None:
+        visits = sorted({int(visit) for visit in tables["iqQaMetrics"]["visit"]})
+        tables["opdbVisitTimes"], tables["notes"] = opdbReader(opdb)(visits)
     provenance = qadbProvenance(
         f"{args.collection} (qadb snapshot)",
         builtAt=datetime.now(HST).isoformat(timespec="seconds"),
         qadb=f"{args.qadb_host}:{args.qadb_port}/{args.qadb_dbname}",
+        opdb=f"{args.opdb_host}:{args.opdb_port}/{args.opdb_dbname}" if opdb is not None else None,
         visits=[args.first_visit, args.last_visit],
     )
     out = write(tables, args.write_snapshot, provenance)

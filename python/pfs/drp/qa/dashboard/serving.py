@@ -25,7 +25,7 @@ import yaml
 from pfs.drp.qa.dashboard.schema import (
     IMAGE_STATUS_ORDER,
     METRICS_COLUMNS,
-    NOTE,
+    NOTE_COLUMNS,
     VERDICT,
 )
 from pfs.drp.qa.metrics.gate import (
@@ -136,7 +136,7 @@ def _iqRows(iq: pd.DataFrame, thresholds: ThresholdsLike | Sequence[ThresholdsLi
 
 
 def noteRows(notes: pd.DataFrame, visitTimes: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Return opdb's notes as metrics-table rows: ``metric`` `NOTE`, the text in ``reason``.
+    """Return opdb's notes as the dashboard shows them, one row per visit (or camera) a note is on.
 
     A note on a visit applies to all its cameras (``arm`` empty, ``spectrograph`` 0); an
     ``sps_annotation`` to its camera; a sequence's note to each of its visits in ``visitTimes``.
@@ -151,8 +151,8 @@ def noteRows(notes: pd.DataFrame, visitTimes: pd.DataFrame | None = None) -> pd.
     Returns
     -------
     `pandas.DataFrame`
-        ``visit``, ``arm``, ``spectrograph``, ``source`` (``opdb:`` and the
-        note's source), ``metric``, ``value``, ``status``, ``reason``.
+        `NOTE_COLUMNS`: ``visit``, ``arm``, ``spectrograph``, ``source``
+        (``opdb:`` and the note's source) and ``note``, sorted.
     """
     onVisits = notes[notes["pfs_visit_id"].notna()].rename(columns={"pfs_visit_id": "visit"})
     onSequences = notes[notes["pfs_visit_id"].isna() & notes["iic_sequence_id"].notna()]
@@ -174,12 +174,9 @@ def noteRows(notes: pd.DataFrame, visitTimes: pd.DataFrame | None = None) -> pd.
             .astype("int64")
             .to_numpy(),
             "source": ("opdb:" + onVisits["source"].astype(str)).to_numpy(),
-            "metric": NOTE,
-            "value": np.nan,
-            "status": "",
-            "reason": onVisits["note"].astype(str).str.strip().to_numpy(),
+            "note": onVisits["note"].astype(str).str.strip().to_numpy(),
         }
-    )
+    ).sort_values(NOTE_COLUMNS, ignore_index=True)
 
 
 def _lineLimits(metrics: pd.DataFrame, thresholds: Sequence[ThresholdsLike]) -> pd.DataFrame:
@@ -230,7 +227,6 @@ def buildMetricsTable(
     dmLineResidualMetrics: pd.DataFrame | None = None,
     visitTimes: pd.DataFrame | None = None,
     lineThresholds: Sequence[ThresholdsLike] | None = None,
-    notes: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Return the metrics table for one collection.
 
@@ -250,22 +246,16 @@ def buildMetricsTable(
     lineThresholds : sequence, optional
         The thresholds ``dmLineResiduals`` judges with, highest priority
         first, to record beside each stored line-residual verdict.
-    notes : `pandas.DataFrame`, optional
-        opdb's notes (`pfs.drp.qa.comparison.queries.readNotes`), recorded
-        as `noteRows`; a sequence's notes need ``visitTimes``.
 
     Returns
     -------
     `pandas.DataFrame`
         `METRICS_COLUMNS`, sorted by visit, arm, spectrograph and source.
-        Only visits in ``iqQaMetrics``: rows on any other visit (a note on a
-        visit that was not judged) are left out.
+        Only visits in ``iqQaMetrics``: rows on any other visit are left out.
     """
     parts = [_iqRows(iqQaMetrics, thresholds)]
     if dmLineResidualSummary is not None and dmLineResidualMetrics is not None:
         parts.append(_lineRows(dmLineResidualSummary, dmLineResidualMetrics, lineThresholds))
-    if notes is not None:
-        parts.append(noteRows(notes, visitTimes))
     table = pd.concat(parts, ignore_index=True)
     # A visit without an iqQaMetrics row has no sequence to file its rows under.
     table = table[table["visit"].isin(iqQaMetrics["visit"])]

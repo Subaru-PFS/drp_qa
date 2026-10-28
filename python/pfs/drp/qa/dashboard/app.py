@@ -33,7 +33,7 @@ import pandas as pd
 import panel as pn
 import param
 
-from pfs.drp.qa.dashboard.schema import IMAGE_STATUS_ORDER, NOTE, STATUS_ORDER, VERDICT
+from pfs.drp.qa.dashboard.schema import IMAGE_STATUS_ORDER, STATUS_ORDER, VERDICT
 from pfs.drp.qa.dashboard.store import MetricsStore, visitTimeline
 from pfs.drp.qa.metrics.registry import specFor
 
@@ -576,9 +576,10 @@ class Dashboard(param.Parameterized):
         warnings = []
         if (self.visits["sequenceSource"] == "inferred").all():
             warnings.append(
-                "Sequences are inferred from runs of one seqName (qadb holds no IIC sequence); times are "
-                "qadb's pfs_visit.issued_at (HST)"
-                + ("." if self.visits["timeExpStart"].notna().any() else ", and there are none here.")
+                "No opdb: sequences are inferred from runs of one seqName (qadb holds no IIC sequence), times "
+                "are qadb's pfs_visit.issued_at (HST)"
+                + ("" if self.visits["timeExpStart"].notna().any() else ", and there are none here")
+                + ", and there are no observers' notes."
             )
         html = '<div style="font-size:0.85em;line-height:1.5">' + " · ".join(parts) + "</div>"
         for warning in warnings:
@@ -959,7 +960,7 @@ class Dashboard(param.Parameterized):
                 metrics = metrics[metrics["camera"] == camera]
             files = self._detailFiles(visit)
 
-            shown = metrics[~metrics["metric"].isin([VERDICT, NOTE])][
+            shown = metrics[metrics["metric"] != VERDICT][
                 [
                     "camera",
                     "source",

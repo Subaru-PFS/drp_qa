@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from pfs.drp.qa.dashboard import schema
-from pfs.drp.qa.dashboard.schema import NOTE
+from pfs.drp.qa.dashboard.schema import NOTE_COLUMNS
 from pfs.drp.qa.dashboard.serving import (
     VERDICT,
     buildMetricsTable,
@@ -191,16 +191,16 @@ def testNoteRows():
     listing = pd.DataFrame(
         {"pfs_visit_id": [100, 101, 102], "iic_sequence_id": pd.array([7, 7, 8], dtype="Int64")}
     )
-    rows = noteRows(notes, listing).sort_values(["visit", "reason"]).reset_index(drop=True)
-    assert rows[["visit", "arm", "spectrograph", "reason"]].values.tolist() == [
+    rows = noteRows(notes, listing).sort_values(["visit", "note"]).reset_index(drop=True)
+    assert rows[["visit", "arm", "spectrograph", "note"]].values.tolist() == [
         [100, "", 0, "Cloudy"],
         [100, "", 0, "SM1 lamp off"],
         [101, "", 0, "SM1 lamp off"],
         [101, "r", 2, "bad amp"],
     ]
-    assert (rows["metric"] == NOTE).all()
+    assert list(rows.columns) == NOTE_COLUMNS
     # Negative control: without the listing, a sequence's note reaches no visit.
-    assert "SM1 lamp off" not in set(noteRows(notes)["reason"])
+    assert "SM1 lamp off" not in set(noteRows(notes)["note"])
 
 
 def testStoreNotesKeepImagesClean():
@@ -215,7 +215,7 @@ def testStoreNotesKeepImagesClean():
         }
     )
     summary, metrics = _lines()
-    store = MetricsStore(buildMetricsTable(_iq(), _thresholds(), summary, metrics, notes=notes))
+    store = MetricsStore(buildMetricsTable(_iq(), _thresholds(), summary, metrics), notes=noteRows(notes))
     assert store.notes()[["visit", "note"]].values.tolist() == [[100, "Cloudy"]]
     # The note is not an image: the rollup still has one row per image.
     assert len(store.images()) == 4
@@ -239,22 +239,14 @@ def testVisitTimelineNights():
     assert timeline.loc[11, "time"].strftime("%Y-%m-%d") != timeline.loc[11, "night"]
 
 
-def testNotesOnVisitsNotJudgedAreLeftOut():
-    """A note on a visit with no iqQaMetrics row has no sequence: it is dropped, not a crash."""
-    notes = pd.DataFrame(
-        {
-            "pfs_visit_id": pd.array([100, 999], dtype="Int64"),
-            "iic_sequence_id": pd.array([pd.NA, pd.NA], dtype="Int64"),
-            "camera": [None, None],
-            "data_flag": pd.array([pd.NA, pd.NA], dtype="Int64"),
-            "note": ["Cloudy", "Not reduced"],
-            "source": ["obslog", "obslog"],
-        }
-    )
-    table = buildMetricsTable(_iq(), _thresholds(), notes=notes)
-    notesKept = table[table["metric"] == NOTE]
-    assert notesKept[["visit", "reason"]].values.tolist() == [[100, "Cloudy"]]
+def testVisitsNotJudgedAreLeftOut():
+    """A line-residual row on a visit with no iqQaMetrics row has no sequence: it is dropped, not a crash."""
+    summary, metrics = _lines()
+    summary = pd.concat([summary, summary.iloc[[0]].assign(visit=999)], ignore_index=True)
+    table = buildMetricsTable(_iq(), _thresholds(), summary, metrics)
     assert set(table["visit"]) == {100, 101, 102, 200}
+    # Negative control: the judged visits' line-residual verdicts are all kept.
+    assert (table["source"] == "dmLineResidualSummary").sum() == 4
 
 
 def testFirstThresholdsFile(tmp_path):

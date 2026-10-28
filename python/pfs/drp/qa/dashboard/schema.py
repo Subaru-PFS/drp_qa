@@ -6,7 +6,7 @@ Imports nothing, so the store needs no scipy or stack.
 __all__ = [
     "IMAGE_STATUS_ORDER",
     "METRICS_COLUMNS",
-    "NOTE",
+    "NOTE_COLUMNS",
     "STATUS_ORDER",
     "VERDICT",
 ]
@@ -17,8 +17,8 @@ STATUS_ORDER = ("PASS", "WARN", "FAIL")
 #: The ``metric`` of a row holding a source's verdict on a whole image.
 VERDICT = "<verdict>"
 
-#: The ``metric`` of a row holding an opdb note on a visit, its sequence, or one camera (``reason``).
-NOTE = "<note>"
+#: Columns of the notes table (`serving.noteRows`).
+NOTE_COLUMNS = ["visit", "arm", "spectrograph", "source", "note"]
 
 #: Image statuses from best to worst; ``UNKNOWN`` (nothing judged) ranks below ``PASS``.
 IMAGE_STATUS_ORDER = ("UNKNOWN", *STATUS_ORDER)

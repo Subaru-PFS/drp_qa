@@ -145,7 +145,9 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   thresholds, by night, gaps between runs labelled) and Visit (a check × camera verdict grid, each value's distance
   past FAIL, the pipeline's PDFs, line residuals rasterised with Datashader). `bin.src/qaDashboard.py
   --collection` serves it live: every `--refresh` seconds it reads only the images loaded since
-  (`live.QadbMetricsStore`, one read for every session), and the Live tab follows the latest visit. With
+  (`live.QadbMetricsStore`, one read for every session), and the Live tab follows the latest visit; with
+  `--opdb-host` it adds each visit's IIC sequence, SpS start time and observers' notes, re-reading the notes of
+  recent visits (`comparison.queries.readVisitTimes` is new). With
   `--write-snapshot` it saves one read, with its provenance, for `--snapshot` to serve offline. The app needs
   panel, holoviews, datashader and duckdb, which are not dependencies of the package.
 

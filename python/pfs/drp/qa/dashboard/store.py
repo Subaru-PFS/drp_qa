@@ -10,7 +10,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from pfs.drp.qa.dashboard.schema import IMAGE_STATUS_ORDER, METRICS_COLUMNS, NOTE, VERDICT
+from pfs.drp.qa.dashboard.schema import IMAGE_STATUS_ORDER, METRICS_COLUMNS, NOTE_COLUMNS, VERDICT
 
 __all__ = ["VERDICT_SOURCES", "MetricsStore", "emptyMetricsTable", "visitTimeline"]
 
@@ -51,6 +51,8 @@ class MetricsStore:
         From `pfs.drp.qa.dashboard.serving.buildMetricsTable`; empty by default.
     provenance : mapping, optional
         What the app's provenance bar shows (``collection``, ``thresholds``, ...).
+    notes : `pandas.DataFrame`, optional
+        opdb's notes on the visits (`pfs.drp.qa.dashboard.serving.noteRows`); none by default.
     """
 
     #: Whether `refresh` can bring new visits (`pfs.drp.qa.dashboard.live.QadbMetricsStore` over qadb).
@@ -59,9 +61,15 @@ class MetricsStore:
     #: Counts the changes `refresh` made.
     version = 0
 
-    def __init__(self, table: pd.DataFrame | None = None, provenance: Mapping | None = None):
+    def __init__(
+        self,
+        table: pd.DataFrame | None = None,
+        provenance: Mapping | None = None,
+        notes: pd.DataFrame | None = None,
+    ):
         self.table = emptyMetricsTable() if table is None else table
         self.provenance = dict(provenance or {})
+        self.noteTable = pd.DataFrame(columns=NOTE_COLUMNS) if notes is None else notes
         self._db = duckdb.connect()
         self._register()
 
@@ -104,16 +112,8 @@ class MetricsStore:
 
     def notes(self, first: int = 0, last: int = 2**31) -> pd.DataFrame:
         """Return the opdb notes on visits ``first``..``last``: ``visit``, ``arm``, ``spectrograph``, ``source``, ``note``."""
-        return self._query(
-            """
-            SELECT DISTINCT visit, arm, spectrograph, source, reason AS note
-            FROM metrics WHERE metric = $note AND visit BETWEEN $first AND $last
-            ORDER BY visit, arm, spectrograph, source, note
-            """,
-            note=NOTE,
-            first=first,
-            last=last,
-        )
+        notes = self.noteTable[self.noteTable["visit"].between(first, last)]
+        return notes.drop_duplicates().sort_values(NOTE_COLUMNS, ignore_index=True)
 
     def visitMetrics(self, visit: int) -> pd.DataFrame:
         """Return every row of one visit, verdicts first."""

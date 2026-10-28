@@ -18,6 +18,7 @@ __all__ = [
     "readNotes",
     "readTelStatus",
     "readVisitListing",
+    "readVisitTimes",
 ]
 
 #: The columns of `readVisitListing`.
@@ -66,6 +67,14 @@ WHERE sps_exposure.time_exp_start >= :start AND sps_exposure.time_exp_start < :e
 GROUP BY pfs_visit.pfs_visit_id, sps_visit.exp_type, visit_set.iic_sequence_id,
     iic_sequence.iic_sequence_id, sequence_group.group_name
 ORDER BY pfs_visit.pfs_visit_id
+"""
+
+_VISIT_TIMES_SQL = """
+SELECT sps_exposure.pfs_visit_id, min(sps_exposure.time_exp_start) AS time_exp_start, visit_set.iic_sequence_id
+FROM sps_exposure
+LEFT JOIN visit_set ON visit_set.pfs_visit_id = sps_exposure.pfs_visit_id
+WHERE sps_exposure.pfs_visit_id = ANY(:visits)
+GROUP BY sps_exposure.pfs_visit_id, visit_set.iic_sequence_id
 """
 
 _SEQUENCE_NOTES_SQL = """
@@ -133,6 +142,32 @@ def readVisitListing(opdb, start, end) -> pd.DataFrame:
     listing["pfs_design_id"] = listing["pfs_design_id"].astype("Int64")
     listing["time_exp_start"] = pd.to_datetime(listing["time_exp_start"])
     return listing.sort_values("pfs_visit_id").reset_index(drop=True)
+
+
+def readVisitTimes(opdb, visits: Iterable[int]) -> pd.DataFrame:
+    """Read some visits' start times and IIC sequences: `readVisitListing`'s first columns, by visit.
+
+    Parameters
+    ----------
+    opdb : `pfs.utils.database.opdb.OpDB`
+        The opdb, read-only.
+    visits : iterable of `int`
+        PFS visits; one without an SpS exposure is left out.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``pfs_visit_id``, ``time_exp_start`` (HST) and ``iic_sequence_id``
+        (NA outside any sequence), sorted by visit.
+    """
+    visits = sorted({int(visit) for visit in visits})
+    columns = ["pfs_visit_id", "time_exp_start", "iic_sequence_id"]
+    times = opdb.query_dataframe(_VISIT_TIMES_SQL, params={"visits": visits}) if visits else None
+    times = pd.DataFrame(columns=columns) if times is None else times.reindex(columns=columns)
+    times["pfs_visit_id"] = times["pfs_visit_id"].astype("int64")
+    times["time_exp_start"] = pd.to_datetime(times["time_exp_start"])
+    times["iic_sequence_id"] = pd.to_numeric(times["iic_sequence_id"]).astype("Int64")
+    return times.sort_values("pfs_visit_id").reset_index(drop=True)
 
 
 def readNotes(opdb, visits: Iterable[int], sequences: Iterable[int]) -> pd.DataFrame:

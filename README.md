@@ -823,19 +823,24 @@ for qadb.
 dashboard reads a collection's images back (`dashboard.qadbSource`) and every `--refresh` seconds reads only those
 loaded since (`qa_gate.decided_at`), so the Live tab follows the latest visit and the Run tab's range grows with
 the run. One read serves every browser session. An image judged in more than one RUN of the collection shows the
-latest. Times are qadb's `pfs_visit.issued_at` (HST, copied from the opdb when the loader is given one); qadb holds
-no IIC sequence, so sequences are inferred from runs of one `seqName`, and no opdb notes. Each metric's limits are
-those of the thresholds files this drp_qa ships, at the tasks' defaults (`serving.taskThresholds`, the IIS layer
-included); the verdicts are the ones stored.
+latest. Each metric's limits are those of the thresholds files this drp_qa ships, at the tasks' defaults
+(`serving.taskThresholds`, the IIS layer included); the verdicts are the ones stored.
+
+**With the opdb** (`--opdb-host`, read-only `public_user`), each visit has its IIC sequence and the start of its
+first SpS exposure (`comparison.queries.readVisitTimes`), and the observers' notes on it, its cameras and its
+sequence (`readNotes`). Notes are often written after a visit is judged, so each refresh re-reads them for the
+latest 300 visits. Without it, times are qadb's `pfs_visit.issued_at` (HST), sequences are inferred from runs of
+one `seqName` (qadb holds no IIC sequence), and there are no notes.
 
 ```bash
-# Read-only user; credentials in ~/.pgpass
+# Read-only users; credentials in ~/.pgpass
 python bin.src/qaDashboard.py --collection qaActor/reductions --first-visit <first visit of the run> \
-    --qadb-host 127.0.0.1 --qadb-port 5436 --qadb-user public_user [--refresh 30]
+    --qadb-host 127.0.0.1 --qadb-port 5436 --opdb-host 127.0.0.1 --opdb-port 5432 [--refresh 30]
 ```
 
 **Offline, from a snapshot.** `--write-snapshot <dir>` reads the collection once and writes what qadb returned, one
-parquet file per table, with `provenance.json` (the thresholds file and drp_qa version, the qadb and the time read).
+parquet file per table (with the opdb's times and notes, given `--opdb-host`), with `provenance.json` (the
+thresholds file and drp_qa version, the databases and the time read).
 `--snapshot <dir>` serves it without a database. A run judged after the fact is loaded into a qadb first
 (`bin.src/loadQadb.py`; a local copy will do) and read the same way.
 
