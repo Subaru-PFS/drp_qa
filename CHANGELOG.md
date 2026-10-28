@@ -10,6 +10,14 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **End-of-run AG report** (INSTRM-2466) — `bin.src/agRunReport.py fetch|report --period runNN` reports how the AG
+  cameras and the guide loop did over an observing run: flags (a camera that stopped matching stars, rejected or
+  missing guide frames, offsets accepted from fewer than 3 matched stars, visits with unusual settled jitter,
+  cameras with unusual image sizes), a camera-presence map, stars and FWHM per camera and detector half, AG1/3/5
+  against AG2/4/6, guiding, focus and acquisition plots, and `metrics.json`. New `guiders.queries.readAgRun`
+  (five aggregated reads of a period) and the stack-free `guiders.runAnalysis`, `guiders.runPlotting` and
+  `guiders.runReport`.
+
 - **The QA tasks record the thresholds files they judged with** (PIPE2D-1976) — `iqQaMetrics` and
   `dmLineResidualSummary` gain `thresholdsFiles` and `thresholdsSha256`: each file judged with, in the order judged,
   and the sha256 of its content then, comma-separated (empty when judged by the config fields alone;

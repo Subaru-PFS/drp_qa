@@ -11,6 +11,7 @@ they are read.
 Butler readers take a Gen3 butler whose default collections include the raws.
 """
 
+import datetime
 import logging
 from collections.abc import Iterable, Mapping
 
@@ -21,8 +22,10 @@ from pfs.drp.qa.guiders.coordinates import opdbToHardware
 
 __all__ = [
     "AGC_DATA_COLUMNS",
+    "AG_RUN_TABLES",
     "find_W_M2OFF3",
     "readAGCStars",
+    "readAgRun",
     "readAgcData",
     "readInstPa",
     "readPfsDesign",
@@ -667,3 +670,135 @@ def readTelStatus(opdb, pfs_visit_id: int | Iterable[int]) -> pd.DataFrame:
     """
 
     return opdb.query_dataframe(sql, params={"visits": _visitList(pfs_visit_id)}).reset_index(drop=True)
+
+
+# The reads behind readAgRun: aggregates over every AG exposure taken in [start, end), so that a whole run is a
+# few MB rather than every spot. agc_camera_id is 0-5 (AG1 is 0) throughout.
+_AG_RUN_SQL = {
+    # One row per (AG exposure, camera, detector half) with at least one detection. A good match is
+    # agc_match.flags = 1 (GOOD_MATCH alone since ics_agActor 1.1.78; before that 1 for any match). The
+    # no-glass half is RIGHT, inferred from the centroid where flags is NULL, as in readAgcData.
+    "cameras": """
+    SELECT
+        agc_data.agc_exposure_id,
+        agc_data.agc_camera_id,
+        COALESCE(agc_data.flags, CAST(agc_data.centroid_x_pix >= 511.5 + 24 AS INTEGER)) & 1 AS right_half,
+        count(*) AS n_spots,
+        count(*) FILTER (WHERE agc_match.flags = 1) AS n_good,
+        percentile_cont(0.5) WITHIN GROUP (
+            ORDER BY sqrt(greatest(agc_data.central_image_moment_20_pix + agc_data.central_image_moment_02_pix, 0) / 2)
+        ) FILTER (WHERE agc_match.flags = 1) AS sigma_pix,
+        percentile_cont(0.5) WITHIN GROUP (ORDER BY agc_data.background) AS background
+    FROM agc_exposure
+    JOIN agc_data ON agc_data.agc_exposure_id = agc_exposure.agc_exposure_id
+    LEFT JOIN agc_match ON agc_match.agc_exposure_id = agc_data.agc_exposure_id
+        AND agc_match.agc_camera_id = agc_data.agc_camera_id AND agc_match.spot_id = agc_data.spot_id
+    WHERE agc_exposure.taken_at >= :start AND agc_exposure.taken_at < :end
+    GROUP BY 1, 2, 3
+    """,
+    # Every AG exposure, with its guide offset if the guider wrote one.
+    "exposures": """
+    SELECT
+        agc_exposure.agc_exposure_id, agc_exposure.pfs_visit_id, agc_exposure.taken_at, agc_exposure.agc_exptime,
+        agc_exposure.altitude, agc_exposure.azimuth,
+        agc_guide_offset.mask, agc_guide_offset.guide_dec,
+        agc_guide_offset.guide_delta_ra, agc_guide_offset.guide_delta_dec, agc_guide_offset.guide_delta_insrot,
+        agc_guide_offset.guide_delta_z,
+        agc_guide_offset.guide_delta_z1, agc_guide_offset.guide_delta_z2, agc_guide_offset.guide_delta_z3,
+        agc_guide_offset.guide_delta_z4, agc_guide_offset.guide_delta_z5, agc_guide_offset.guide_delta_z6
+    FROM agc_exposure
+    LEFT JOIN agc_guide_offset ON agc_guide_offset.agc_exposure_id = agc_exposure.agc_exposure_id
+    WHERE agc_exposure.taken_at >= :start AND agc_exposure.taken_at < :end
+    ORDER BY agc_exposure.taken_at
+    """,
+    # Each visit with AG exposures: its design and centre, and its latest IIC sequence.
+    "visits": """
+    SELECT DISTINCT ON (pfs_visit.pfs_visit_id)
+        pfs_visit.pfs_visit_id, pfs_visit.pfs_design_id, pfs_design.dec_center_designed,
+        iic_sequence.iic_sequence_id, iic_sequence.sequence_type
+    FROM pfs_visit
+    LEFT JOIN pfs_design ON pfs_design.pfs_design_id = pfs_visit.pfs_design_id
+    LEFT JOIN visit_set ON visit_set.pfs_visit_id = pfs_visit.pfs_visit_id
+    LEFT JOIN iic_sequence ON iic_sequence.iic_sequence_id = visit_set.iic_sequence_id
+    WHERE pfs_visit.pfs_visit_id IN (
+        SELECT pfs_visit_id FROM agc_exposure WHERE taken_at >= :start AND taken_at < :end
+    )
+    ORDER BY pfs_visit.pfs_visit_id, iic_sequence.iic_sequence_id DESC NULLS LAST
+    """,
+    # The telescope focus offset, from every caller's status rows.
+    "focus": """
+    SELECT pfs_visit_id, created_at, m2_off3
+    FROM tel_status
+    WHERE created_at >= :start AND created_at < :end AND m2_off3 IS NOT NULL
+    ORDER BY created_at
+    """,
+    # The guide stars each of those visits' designs put on each camera, all and those brighter than magLimit.
+    "designStars": """
+    SELECT
+        pfs_design_agc.pfs_design_id, pfs_design_agc.agc_camera_id, count(*) AS n_stars,
+        count(*) FILTER (WHERE pfs_design_agc.guide_star_magnitude <= :magLimit) AS n_bright
+    FROM pfs_design_agc
+    WHERE pfs_design_agc.pfs_design_id IN (
+        SELECT pfs_visit.pfs_design_id FROM pfs_visit
+        JOIN agc_exposure ON agc_exposure.pfs_visit_id = pfs_visit.pfs_visit_id
+        WHERE agc_exposure.taken_at >= :start AND agc_exposure.taken_at < :end
+    )
+    GROUP BY 1, 2
+    """,
+}
+
+#: The tables `readAgRun` returns.
+AG_RUN_TABLES = tuple(_AG_RUN_SQL)
+
+
+def readAgRun(
+    opdb, start: datetime.datetime, end: datetime.datetime, magLimit: float = 20.0
+) -> dict[str, pd.DataFrame]:
+    """Read what an end-of-run AG report needs about every AG exposure in a period.
+
+    Five queries, aggregated in the database (a run of about 20,000 AG
+    exposures comes back as ~300,000 rows in a few seconds), rather than one
+    row per spot as `readAgcData` returns.
+
+    Parameters
+    ----------
+    opdb : `pfs.utils.database.opdb.OpDB`
+        The operational database.
+    start, end : `datetime.datetime`
+        The period (HST, as ``agc_exposure.taken_at``): ``start`` inclusive,
+        ``end`` exclusive.
+    magLimit : `float`
+        Guide stars brighter than this count in ``designStars.n_bright``.
+
+    Returns
+    -------
+    tables : `dict` [`str`, `pandas.DataFrame`]
+        By name, in the order of `AG_RUN_TABLES`:
+
+        ``cameras``
+            One row per (``agc_exposure_id``, ``agc_camera_id``,
+            ``right_half``) with a detection: ``n_spots`` detections,
+            ``n_good`` good matches, and the median Gaussian ``sigma_pix``
+            (from the second moments) of the good matches and median
+            ``background`` of the detections. ``right_half`` is 1 on the
+            no-glass half.
+        ``exposures``
+            One row per AG exposure, time-ordered, with its
+            ``agc_guide_offset`` columns (NaN where there's none):
+            ``guide_delta_ra`` is a coordinate offset, ΔRA.
+        ``visits``
+            One row per visit: ``pfs_design_id``, ``dec_center_designed`` and
+            its latest ``iic_sequence_id`` and ``sequence_type``.
+        ``focus``
+            ``tel_status.m2_off3`` by ``created_at``, from every caller.
+        ``designStars``
+            ``n_stars`` and ``n_bright`` per (``pfs_design_id``,
+            ``agc_camera_id``); a camera with no guide star has no row.
+    """
+    _checkOpdb(opdb)
+    params = {"start": start, "end": end}
+    tables = {}
+    for name, sql in _AG_RUN_SQL.items():
+        bound = {**params, "magLimit": float(magLimit)} if name == "designStars" else params
+        tables[name] = opdb.query_dataframe(sql, params=bound).reset_index(drop=True)
+    return tables

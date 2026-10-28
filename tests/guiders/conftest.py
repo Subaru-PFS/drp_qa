@@ -357,3 +357,129 @@ def realAgcStarsFixture():
         return agcStars[agcStars.pfs_visit_id == visit].reset_index(drop=True)
 
     return read
+
+
+# A synthetic run, as pfs.drp.qa.guiders.queries.readAgRun returns it.
+RUN_START = pd.Timestamp("2026-09-01 19:00")
+RUN_DESIGN = 1001
+
+
+def makeAgRunTables(
+    rng: np.random.RandomState,
+    nNights: int = 2,
+    nVisits: int = 4,
+    nExp: int = 40,
+    deadFrom: dict[int, int] | None = None,
+    designStars: dict[int, int] | None = None,
+    dec: float = 0.0,
+) -> dict[str, pd.DataFrame]:
+    """Make the tables of `readAgRun` for a synthetic run.
+
+    Each night has ``nVisits`` science visits of ``nExp`` AG exposures 10 s
+    apart, starting at 19:00 HST. Every camera detects 8 spots, 6 of them
+    matched (sigma 2 pixels on the glass half, 2.2 on the other), and the
+    guide offsets are small Gaussian noise (0.05″ in RA and Dec, 1″ in InR)
+    at Dec ``dec``. Each camera's focus is offset from the others' by a
+    fixed amount: AG1/3/5 by +10 µm, AG2/4/6 by -10 µm.
+
+    Parameters
+    ----------
+    rng : `numpy.random.RandomState`
+        Random number generator.
+    nNights, nVisits, nExp : `int`
+        Nights, visits per night and AG exposures per visit.
+    deadFrom : `dict` [`int`, `int`], optional
+        For a camera (0-5), the index of the run's AG exposure from which it
+        detects nothing.
+    designStars : `dict` [`int`, `int`], optional
+        Bright guide stars per camera in the design (default 10).
+    dec : `float`
+        The field's declination (deg).
+
+    Returns
+    -------
+    tables : `dict` [`str`, `pandas.DataFrame`]
+        ``cameras``, ``exposures``, ``visits``, ``focus`` and ``designStars``.
+    """
+    deadFrom = deadFrom or {}
+    stars = dict.fromkeys(range(6), 10) | (designStars or {})
+    exposures, cameras, visits = [], [], []
+    aid, index = 2000, 0
+    for night in range(nNights):
+        t = RUN_START + pd.Timedelta(days=night)
+        for v in range(nVisits):
+            visit = 150000 + 10 * night + v
+            visits.append((visit, RUN_DESIGN, dec, 9000 + visit, "scienceObject"))
+            for _ in range(nExp):
+                aid += 1
+                t += pd.Timedelta(seconds=10)
+                z = {
+                    f"guide_delta_z{cid + 1}": (0.01 if cid % 2 == 0 else -0.01) + rng.normal(0, 1e-3)
+                    for cid in range(6)
+                }
+                exposures.append(
+                    dict(
+                        agc_exposure_id=aid,
+                        pfs_visit_id=visit,
+                        taken_at=t,
+                        agc_exptime=3.0,
+                        altitude=60.0,
+                        azimuth=10.0,
+                        mask=0,
+                        guide_dec=dec,
+                        guide_delta_ra=rng.normal(0, 0.05) / np.cos(np.radians(dec)),
+                        guide_delta_dec=rng.normal(0, 0.05),
+                        guide_delta_insrot=rng.normal(0, 1.0),
+                        guide_delta_z=np.median(list(z.values())),
+                        **z,
+                    )
+                )
+                for cid in range(6):
+                    if index >= deadFrom.get(cid, np.inf):
+                        continue
+                    for half, sigma in ((0, 2.0), (1, 2.2)):
+                        cameras.append((aid, cid, half, 4, 3, sigma, 100.0))
+                index += 1
+    exposures = pd.DataFrame(exposures)
+    return {
+        "cameras": pd.DataFrame(
+            cameras,
+            columns=[
+                "agc_exposure_id",
+                "agc_camera_id",
+                "right_half",
+                "n_spots",
+                "n_good",
+                "sigma_pix",
+                "background",
+            ],
+        ),
+        "exposures": exposures,
+        "visits": pd.DataFrame(
+            visits,
+            columns=[
+                "pfs_visit_id",
+                "pfs_design_id",
+                "dec_center_designed",
+                "iic_sequence_id",
+                "sequence_type",
+            ],
+        ),
+        "focus": pd.DataFrame(
+            {"pfs_visit_id": exposures.pfs_visit_id, "created_at": exposures.taken_at, "m2_off3": 3.25}
+        ),
+        "designStars": pd.DataFrame(
+            [(RUN_DESIGN, cid, n + 2, n) for cid, n in stars.items() if n > 0],
+            columns=["pfs_design_id", "agc_camera_id", "n_stars", "n_bright"],
+        ),
+    }
+
+
+@pytest.fixture(name="makeAgRunTables")
+def makeAgRunTablesFixture(rng):
+    """Return `makeAgRunTables` bound to the test's ``rng``."""
+
+    def make(**kwargs) -> dict[str, pd.DataFrame]:
+        return makeAgRunTables(rng, **kwargs)
+
+    return make

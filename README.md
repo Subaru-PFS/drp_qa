@@ -645,6 +645,36 @@ A raster scan visit holds two pointings: once its shutters close, the telescope 
 `boresight` reference, and the plots using it, are only right for its shutter-open rows (`shutter_open == 1`)
 (PIPE2D-1910).
 
+### End-of-run report
+
+`bin.src/agRunReport.py` reports how the AG cameras and the guide loop did over an observing run (INSTRM-2466), so
+problems are caught once the run is over. The runs are comparison mode's
+([`observingRuns.yaml`](python/pfs/drp/qa/comparison/data/observingRuns.yaml)).
+
+```bash
+python bin.src/agRunReport.py fetch --period run30     # the opdb, once: ~10 MB, a few seconds
+python bin.src/agRunReport.py report --period run30 --title "Run 30" [--notes notes.md]
+```
+
+`fetch` reads five aggregated tables (`queries.readAgRun`) into `~/.cache/drp_qa/agRun/opdb/`; `report` writes
+`<period>/report.md`, its figures and `metrics.json` from them, without the database. The report opens with its
+flags, then a camera-presence map, stars and FWHM (per detector half) per camera, AG1/3/5 against AG2/4/6, the
+settled guiding of each science visit, focus and acquisition. Cameras are shown and compared by group, AG1/3/5 and
+AG2/4/6: they are wired and placed separately, and can fail together (Run 30 lost AG1/3/5 after 2026-09-08).
+
+What it flags (`runAnalysis.RunConfig` holds the numbers):
+
+- **A camera that matched no star** in 30 or more consecutive AG exposures, among those in which some camera
+  matched one and its design had 3 or more guide stars brighter than mag 20 there (fewer may well go
+  undetected), and whether it detected anything at all.
+- Guide frames rejected (INVALID_OFFSET), frames with no guide offset, and **offsets accepted from fewer than 3
+  matched stars**, which the guider sends to the telescope while they are under `max_correction`.
+- Science visits whose settled jitter (frame-to-frame, after the first 5 frames) is over 3× the run's median, and
+  cameras whose FWHM is 15% from the others'. The two detector halves focus differently by design, so their FWHM
+  difference is plotted, not flagged.
+
+The report holds science visit IDs and guiding statistics: keep it within the team.
+
 ## Comparison mode
 
 `bin.src/qaComparison.py` gates every image of an observing run, or of the calibrations taken before it, against
