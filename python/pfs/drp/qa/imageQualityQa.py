@@ -151,6 +151,19 @@ class ImageQualityQaConnections(
         dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
 
+    # Written only with doWriteLineData (PIPE2D-1962). The connection stays even when off: every
+    # stored imageQualityQa_config sets config.connections.iqQaData, and a config with no such
+    # field can't be read back.
+    iqQaData = OutputConnection(
+        name="iqQaData",
+        doc=(
+            "Per-line image quality measurements, including FWHM,"
+            " position angle, and spatial offset (dxCenter); only with ``doWriteLineData``."
+        ),
+        storageClass="DataFrame",
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
+    )
+
     detectorMap = InputConnection(
         name="detectorMap",
         doc="Calibrated detector mapping from fiberId,wavelength to x,y",
@@ -276,9 +289,26 @@ class ImageQualityQaConnections(
         minimum=0,
     )
 
+    def __init__(self, *, config=None):
+        super().__init__(config=config)
+        if not config:
+            return
+        if not config.doWriteLineData:
+            self.outputs.remove("iqQaData")
+
 
 class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQaConnections):
     """Configuration for ImageQualityQaTask."""
+
+    doWriteLineData = Field(
+        dtype=bool,
+        default=False,
+        doc=(
+            "Write the per-line measurements (``iqQaData``)? About 21 MB per detector for an arc and"
+            " 80 MB for a twilight, mostly unsampled trace centroids, and nothing reads them back;"
+            " gating and threshold derivation read ``iqQaMetrics`` (PIPE2D-1962)."
+        ),
+    )
 
     profileHalfWidth = Field(
         dtype=int,
@@ -522,6 +552,8 @@ class ImageQualityQaTask(PipelineTask):
             # that reduced it, which the gate checks against the thresholds' (PIPE2D-1938).
             calexpRef = getattr(inputRefs, "calexp", None)
             outputs.iqQaMetrics["calexpRun"] = calexpRef.run if calexpRef is not None else None
+            if self.config.doWriteLineData:
+                butlerQC.put(outputs.lineData, outputRefs.iqQaData)
             butlerQC.put(outputs.iqQaMetrics, outputRefs.iqQaMetrics)
             butlerQC.put(outputs.iqQaSpeciesMetrics, outputRefs.iqQaSpeciesMetrics)
 
@@ -600,8 +632,8 @@ class ImageQualityQaTask(PipelineTask):
         lineData : `pandas.DataFrame`
             Per-line (or per-trace-sample) image quality data including
             ``dxCenter`` (spatial offset from static calibration detectorMap,
-            in pixels).  Returned for inspection only: ``runQuantum`` does not
-            store it (PIPE2D-1962).
+            in pixels).  Stored as ``iqQaData`` only with ``doWriteLineData``
+            (PIPE2D-1962).
         iqQaMetrics : `pandas.DataFrame`
             Single-row summary with ``medFwhm``, ``medDxCenter``,
             ``dxCenterRms``, ``pctFlagged``, ``nLines``, ``linesPerFiber``,

@@ -446,7 +446,7 @@ drpQA.yaml#imageQualityQa            dims: (instrument, visit, arm, spectrograph
              fiberProfiles, detectorMap_calib (calibrations),
              calexp, pfsConfig (optional),
              isr_log, cosmicray_log, reduceExposure_log (optional)
-    → writes: iqQaMetrics, iqQaSpeciesMetrics
+    → writes: iqQaMetrics, iqQaSpeciesMetrics; iqQaData only with doWriteLineData
 
 drpQA.yaml#dmLineResiduals           dims: (instrument, visit, arm, spectrograph)
     ← reads: lines, detectorMap, raw.metadata, detectorMap_calib (calibration), pfsConfig (optional)

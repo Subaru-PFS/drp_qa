@@ -367,6 +367,7 @@ does not exist in `drp_stella`, so the permissive thresholds above are the curre
 
 | DataSet Type  | Dimensions                             | Description                                                                                                                                                                       |
 |---------------|----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `iqQaData`    | `instrument, visit, arm, spectrograph` | Only with `doWriteLineData` (default off; PIPE2D-1962). Per-line or per-trace-sample measurements: `fiberId`, `x`, `y`, `lam`, `fwhm`, `fwhmIntrinsic` (calexp only), `theta`, `dxCenter`, `flux`, `fluxErr`, `flag`, `traceOnly`, `peakRatio`, `snr` (calexp only), `status`, plus `visit`/`arm`/`spectrograph`. |
 | `iqQaMetrics` | `instrument, visit, arm, spectrograph` | Single-row summary; see below.                                                                                                                                                    |
 | `iqQaSpeciesMetrics` | `instrument, visit, arm, spectrograph` | Per-species `fitDetectorMap` statistics from the `reduceExposure` log, one row per species and metric: `visit`, `arm`, `spectrograph`, `description` (line species, e.g. `NeI`, or `Trace`), `metric` (`fitXRms`, `fitYRms`: weighted RMS; `fitXSoften`, `fitYSoften`: softening), `value`. |
 

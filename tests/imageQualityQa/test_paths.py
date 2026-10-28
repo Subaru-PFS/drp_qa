@@ -259,9 +259,44 @@ def testRunQuantumRecordsTheCalexpRun(iqqa, monkeypatch):
     )
     task.runQuantum(butlerQC, withCalexp, outputRefs)
     assert put["metrics"]["calexpRun"].tolist() == ["PFS/r/1"]
-    # The per-line data is not stored (PIPE2D-1962).
+    # The per-line data is not stored by default (PIPE2D-1962).
     assert set(put) == {"metrics", "species"}
     task.runQuantum(
         butlerQC, SimpleNamespace(arcLines=SimpleNamespace(dataId=dataId), calexp=None), outputRefs
     )
     assert put["metrics"]["calexpRun"].isna().all()
+
+
+def testLineDataIsWrittenOnlyWhenAskedFor(iqqa, monkeypatch):
+    """``iqQaData`` is an output, and is written, only with ``doWriteLineData`` (PIPE2D-1962).
+
+    The connection itself stays: stored configs set ``config.connections.iqQaData``.
+    """
+    from types import SimpleNamespace
+
+    assert hasattr(iqqa.ImageQualityQaConnections, "iqQaData")
+    config = iqqa.ImageQualityQaConfig()
+    config.thresholdsFile = ""
+    config.extraThresholdsFiles = []
+    assert config.doWriteLineData is False
+    assert "iqQaData" not in iqqa.ImageQualityQaConnections(config=config).outputs
+
+    config.doWriteLineData = True
+    assert "iqQaData" in iqqa.ImageQualityQaConnections(config=config).outputs
+    task = iqqa.ImageQualityQaTask(config=config)
+    lineData = pd.DataFrame({"fwhm": [2.5]})
+    monkeypatch.setattr(
+        task,
+        "run",
+        lambda **inputs: SimpleNamespace(
+            lineData=lineData, iqQaMetrics=pd.DataFrame({"medFwhm": [2.0]}), iqQaSpeciesMetrics=pd.DataFrame()
+        ),
+    )
+    put = {}
+    butlerQC = SimpleNamespace(get=lambda refs: {}, put=lambda value, ref: put.__setitem__(ref, value))
+    dataId = SimpleNamespace(mapping={"visit": 1, "arm": "r", "spectrograph": 2})
+    outputRefs = SimpleNamespace(iqQaData="data", iqQaMetrics="metrics", iqQaSpeciesMetrics="species")
+    task.runQuantum(
+        butlerQC, SimpleNamespace(arcLines=SimpleNamespace(dataId=dataId), calexp=None), outputRefs
+    )
+    assert set(put) == {"data", "metrics", "species"} and put["data"] is lineData

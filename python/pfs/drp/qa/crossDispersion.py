@@ -54,8 +54,8 @@ predicted center.
 
 `measureImageWidths` applies `measureRow` to the sampled rows of a whole
 detector and returns the per-sample table ``imageQualityQa`` measures
-from (its ``run`` returns it as ``lineData``). It takes the detector-map predictions as arrays, so the task does
-the stack calls and everything after them is testable here. `profileFwhm`
+from (``lineData``; ``iqQaData`` with ``doWriteLineData``). It takes the
+detector-map predictions as arrays, so the task does the stack calls and everything after them is testable here. `profileFwhm`
 reads the half-maximum width of an oversampled fiber profile, such as
 drp_stella's ``FiberProfile``, on the same convention.
 
