@@ -15,12 +15,15 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   its header, before the pfsArm is read), and
   `bin.src/twilightQa.py` compares each sequence's exposures (`pfs.drp.qa.metrics.twilight`): each detector's level
   (`twilightLevelOffset`, every exposure), and on exposures bright enough to be flats (b-arm S/N ≥ 15) the field's
-  RMS beyond noise (`twilightResidRms`) and its deepest coherent patch (`twilightPatch`), with the residual split
-  into the part b and r share (sky) and the part they don't (instrument). Verdicts per exposure and arm: `PASS`,
+  RMS beyond noise (`twilightResidRms`) and its deepest coherent patch (`twilightPatch`), with the RMS of the mean
+  and half-difference of each fiber's b and r residuals as diagnostics. Verdicts per exposure and arm: `PASS`,
   `WARN`, `FAIL` or `TOO_FAINT`. Thresholds are provisional (level 2/3 %, RMS 1.5/2.5 %, patch 2.5/4 %; the n arm is
-  not judged). The validation set gains Run21 and its two twilight detector faults (b1 through 121949–121952, b4 in
+  not judged). The validation set gains Run21 and two twilight known-bad entries (b1 through 121949–121952, b4 in
   123320), checked by known-bad coverage, and Run29's b-arm patch in 145073 as unconfirmed. Raws from before the
   `W_SEQTYP`, `W_SEQNAM` and `W_SEQID` cards (Run21) need the task's `assumeTwilight` and the CLI's `--sequences`.
+  `twilightQa.py --sequence-of-visit VISIT` judges a visit's sequence only once it is a finished twilight with every
+  visit's tables stored (the opdb's `iic_sequence_status` and `visit_set`), and otherwise does nothing: for running
+  after every visit.
 
 - **The end-of-run AG report has a section per camera** (INSTRM-2466, INSTRM-2982) — each camera's flags and a
   figure of its matched stars, FWHM per detector half, focus against the others, presence, clusters of rejected

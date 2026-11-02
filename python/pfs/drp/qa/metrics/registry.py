@@ -135,8 +135,8 @@ _CALIB = (
 )
 
 _TWILIGHT = (
-    "The other exposures of the same twilight sequence, minutes apart with the same instrument: "
-    "each fiber's flux / norm against their median."
+    "The other exposures of the same twilight sequence, minutes apart: each fiber's flux / norm against their "
+    "median."
 )
 
 _LINE_REFERENCES = (
@@ -254,7 +254,7 @@ METRIC_SPECS = {
             unitSuffix="px",
         ),
         # Twilight sky flats (PIPE2D-1973): each exposure against the other exposures of its sequence,
-        # minutes apart with the same instrument (pfs.drp.qa.metrics.twilight).
+        # minutes apart (pfs.drp.qa.metrics.twilight).
         MetricSpec(
             "twilightLevelOffset",
             absolute=True,

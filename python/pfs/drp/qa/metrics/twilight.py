@@ -1,13 +1,11 @@
 """Twilight sky flats: is each exposure of a twilight sequence a good flat? Measurement and verdict.
 
 A twilight is the sky flat behind the screen response: each fiber's flux over
-the instrument's response should be the same across the focal plane, but for a
-smooth sky gradient. Whatever else spoils it (passing cloud, moonlight, a
-detector's exposure or readout, faint sources) shows as a difference between
-the exposures of one sequence, which are minutes apart with the same
-instrument. So the reference (rule R1 of ``docs/qa-principles.md``) is the
-sequence's other exposures, and nothing here depends on a calibration
-(PIPE2D-1973).
+its normalisation should be the same across the focal plane, but for a smooth
+sky gradient. The reference (rule R1 of ``docs/qa-principles.md``) is the
+sequence's other exposures, minutes apart, and nothing here depends on a
+calibration (PIPE2D-1973). The check says whether an exposure is a good flat
+and what differs in it; it does not say why.
 
 `fiberFlux` reduces a detector's spectra to one value per fiber: the median of
 flux / norm over the arm's window (`WINDOWS`), with its S/N. Any static
@@ -21,9 +19,9 @@ sky's level changes through twilight), then:
     Each detector's median ratio to the per-fiber median of all the sequence's
     exposures, over the field's median ratio, minus one (%). With at least
     `MIN_EXPOSURES` exposures, the median resists one bad exposure, so a
-    detector that steps in one exposure is named in that exposure alone. Every
-    exposure is judged: the median of a detector's ~600 fibers, spread over the
-    field, is not moved by faint sources.
+    detector whose level differs in one exposure is named in that exposure
+    alone. Every exposure is judged: a detector's ~600 fibers are spread over
+    the field, so its median is not moved by structure in a few of them.
 ``twilightResidRms``
     The robust RMS, beyond photon noise (%), of the ratio of each fiber to the
     per-fiber median of the sequence's bright exposures, this one included,
@@ -33,9 +31,9 @@ sky's level changes through twilight), then:
     would be their mean, and a patch in one would show, mirrored at half its
     depth, in both of the others. It needs `MIN_EXPOSURES` bright exposures.
     Only exposures at or above ``minSnr`` in the brightness arm are judged or
-    used in the reference: below it (``tooFaint``), starlight and airglow in
-    the fibers, shared by the arms, are not yet swamped by the twilight, and the
-    exposure is not a good flat. The noise is simulated: each bright
+    used in the reference: below it (``tooFaint``), exposures carry structure
+    beyond their noise that brighter ones of the same sequence do not, on clear
+    nights too, and are not good flats. The noise is simulated: each bright
     exposure's median per-fiber error (that of a flat spectrum), drawn for
     every exposure of the reference, through the same median. Real spectra have
     structure in the window, so a few tenths of a per cent of noise can remain
@@ -44,21 +42,20 @@ sky's level changes through twilight), then:
     The deepest coherent deviation on the focal plane (%): the largest
     absolute median of that residual over each fiber's `PATCH_NEIGHBOURS`
     nearest fibers. The RMS is robust, so it ignores a patch on a few per cent
-    of the fibers, and the quadratic absorbs much of one spanning the field; a
-    cloud between those is what this sees. Measured on the same exposures as
-    the RMS.
-``twilightShared``, ``twilightDiffering``
-    Diagnostics, for the reason: the robust RMS (%) of the mean and the
-    half-difference of the b and r residuals per fiber. The sky lights a fiber
-    in every arm alike; a detector or spectrograph does not.
+    of the fibers, and the quadratic absorbs much of one spanning the field;
+    this sees what lies between. Measured on the same exposures as the RMS.
+``twilightArmMean``, ``twilightArmHalfDiff``
+    Diagnostics, not judged: the robust RMS (%) of the mean and of the
+    half-difference of each fiber's b and r residuals, telling a difference
+    common to the arms from one that is not.
 
 ``satFraction`` is stored, not judged: saturated pixels are left out of the
 medians, and no saturated twilight has been seen to set a limit by.
 
-Blind spot: anything constant over the sequence (a stationary cloud bank, a
-steady moon gradient beyond a quadratic, the instrument's state that night)
-cancels. Comparing a twilight with good twilights of other nights covers it,
-and is not done here.
+Blind spot: anything the same through the sequence cancels, whether a pattern
+on the focal plane or a change of colour uniform across it. Comparing a
+twilight with good twilights of other nights covers it (PIPE2D-1981), and is
+not done here.
 
 The provisional thresholds (`twilightThresholds`) are from a prototype over 16
 sequences of 2025-03 to 2026-09; the n arm is not judged, its residuals sit
@@ -74,6 +71,7 @@ import pandas as pd
 from scipy.spatial import cKDTree
 
 from pfs.drp.qa.metrics.gate import judge
+from pfs.drp.qa.metrics.lineResiduals import observationType
 
 __all__ = [
     "FIBER_COLUMNS",
@@ -86,6 +84,7 @@ __all__ = [
     "addPositions",
     "fiberFlux",
     "sequenceConsistency",
+    "sequenceReadiness",
     "twilightThresholds",
     "twilightVerdict",
 ]
@@ -107,7 +106,7 @@ PATCH_NEIGHBOURS = 30
 TWILIGHT_METRICS = ("twilightLevelOffset", "twilightResidRms", "twilightPatch")
 
 #: Columns of `twilightVerdict`'s table, one row per (visit, arm).
-VERDICT_COLUMNS = ("visit", "arm", "sequence", "status", "reason", "twilightShared", "twilightDiffering")
+VERDICT_COLUMNS = ("visit", "arm", "sequence", "status", "reason", "twilightArmMean", "twilightArmHalfDiff")
 
 #: Columns of `fiberFlux`'s table, the ``twilightFiberFlux`` dataset with the task's identity columns.
 FIBER_COLUMNS = {
@@ -137,8 +136,8 @@ METRIC_COLUMNS = {
     "twilightLevelOffset": "The detector's level against the sequence's, over the field's (%).",
     "twilightResidRms": "Field RMS beyond photon noise against the sequence's other bright exposures (%).",
     "twilightPatch": "Deepest coherent deviation: largest |median| over a fiber's nearest neighbours (%).",
-    "twilightShared": "RMS of the residual shared by b and r (%): the sky.",
-    "twilightDiffering": "RMS of half the b-r difference of the residuals (%): the instrument.",
+    "twilightArmMean": "RMS of the mean of each fiber's b and r residuals (%).",
+    "twilightArmHalfDiff": "RMS of half the difference of each fiber's b and r residuals (%).",
 }
 
 # The expected error of a median is sqrt(pi/2) that of a mean.
@@ -361,7 +360,7 @@ def sequenceConsistency(
                     }
                 )
     metrics = pd.DataFrame(rows) if rows else pd.DataFrame(columns=list(METRIC_COLUMNS))
-    split = _sharedAndDiffering(residuals)
+    split = _armMeanAndHalfDiff(residuals)
     if not metrics.empty:
         metrics = metrics.merge(split, on="visit", how="left")
     return metrics.reindex(columns=list(METRIC_COLUMNS))
@@ -392,18 +391,63 @@ def _deepestPatch(
     return float(100 * np.nanmax(np.abs(np.median(flat[use][index], axis=1) - 1)))
 
 
-def _sharedAndDiffering(residuals: list[pd.DataFrame]) -> pd.DataFrame:
+def _armMeanAndHalfDiff(residuals: list[pd.DataFrame]) -> pd.DataFrame:
     """Return, per visit, the RMS (%) of the mean and half-difference of its b and r residuals."""
-    columns = ["visit", "twilightShared", "twilightDiffering"]
+    columns = ["visit", "twilightArmMean", "twilightArmHalfDiff"]
     if not residuals:
         return pd.DataFrame(columns=columns)
     wide = pd.concat(residuals).pivot_table(index=["visit", "fiberId"], columns="arm", values="flat")
     if not {"b", "r"} <= set(wide.columns):
         return pd.DataFrame(columns=columns)
     wide = wide[["b", "r"]].dropna()
-    shared = ((wide["b"] + wide["r"]) / 2 - 1).groupby(level="visit").agg(lambda vv: 100 * _robustRms(vv))
-    differing = ((wide["b"] - wide["r"]) / 2).groupby(level="visit").agg(lambda vv: 100 * _robustRms(vv))
-    return pd.DataFrame({"twilightShared": shared, "twilightDiffering": differing}).reset_index()
+    armMean = ((wide["b"] + wide["r"]) / 2 - 1).groupby(level="visit").agg(lambda vv: 100 * _robustRms(vv))
+    halfDiff = ((wide["b"] - wide["r"]) / 2).groupby(level="visit").agg(lambda vv: 100 * _robustRms(vv))
+    return pd.DataFrame({"twilightArmMean": armMean, "twilightArmHalfDiff": halfDiff}).reset_index()
+
+
+def sequenceReadiness(
+    sequence: pd.DataFrame, reduced: dict[int, set[str]], stored: dict[int, set[str]]
+) -> tuple[bool, str]:
+    """Return whether a twilight sequence can be judged: finished, and every visit's tables stored.
+
+    Parameters
+    ----------
+    sequence : `pandas.DataFrame`
+        The sequence's visits, as `pfs.drp.qa.comparison.queries.readSequenceOfVisit`
+        returns them: ``pfs_visit_id``, ``sequence_type``, ``sequence_name``,
+        ``finished_at``.
+    reduced : `dict` [`int`, `set` [`str`]]
+        Per visit, the cameras with a pfsArm.
+    stored : `dict` [`int`, `set` [`str`]]
+        Per visit, the cameras with a ``twilightFiberFlux``.
+
+    Returns
+    -------
+    ready : `bool`
+        True when the sequence is a twilight, has finished, and every visit has
+        a ``twilightFiberFlux`` for every camera it has a pfsArm for. A visit
+        with neither has not been reduced yet, so the sequence is not ready.
+    why : `str`
+        What is ready, or what is missing.
+    """
+    if sequence.empty:
+        return False, "the visit is in no IIC sequence"
+    first = sequence.iloc[0]
+    header = {"W_SEQTYP": first["sequence_type"], "W_SEQNAM": first["sequence_name"]}
+    if observationType(header) != "twilight":
+        return False, f"sequence {first['iic_sequence_id']} ({first['sequence_name']!r}) is not a twilight"
+    if pd.isna(first["finished_at"]):
+        return False, f"sequence {first['iic_sequence_id']} has not finished"
+    missing = []
+    for visit in sequence["pfs_visit_id"]:
+        have = stored.get(int(visit), set())
+        if not have:
+            missing.append(f"{visit} (no tables yet)")
+        elif reduced.get(int(visit), set()) - have:
+            missing.append(f"{visit} ({', '.join(sorted(reduced[int(visit)] - have))})")
+    if missing:
+        return False, f"sequence {first['iic_sequence_id']} is waiting for " + "; ".join(missing)
+    return True, f"sequence {first['iic_sequence_id']}: {len(sequence)} visits, all stored"
 
 
 def twilightThresholds(
@@ -484,7 +528,7 @@ def twilightVerdict(metrics: pd.DataFrame, thresholds: pd.DataFrame | None = Non
     thresholds = twilightThresholds() if thresholds is None else thresholds
     judged = judge(metrics.reset_index(drop=True), thresholds)
     judged = judged.merge(
-        metrics.reset_index(drop=True)[["sequence", "tooFaint", "twilightShared", "twilightDiffering"]],
+        metrics.reset_index(drop=True)[["sequence", "tooFaint", "twilightArmMean", "twilightArmHalfDiff"]],
         left_on="row",
         right_index=True,
     )
@@ -501,8 +545,8 @@ def twilightVerdict(metrics: pd.DataFrame, thresholds: pd.DataFrame | None = Non
                 "sequence": frame["sequence"].iloc[0],
                 "status": "TOO_FAINT" if tooFaint and worst in ("", "PASS") else worst,
                 "reason": "; ".join(reasons),
-                "twilightShared": frame["twilightShared"].iloc[0],
-                "twilightDiffering": frame["twilightDiffering"].iloc[0],
+                "twilightArmMean": frame["twilightArmMean"].iloc[0],
+                "twilightArmHalfDiff": frame["twilightArmHalfDiff"].iloc[0],
             }
         )
     return pd.DataFrame(rows, columns=list(VERDICT_COLUMNS))

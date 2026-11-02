@@ -122,7 +122,8 @@ the pipeline/config glue to run them.
   - `qaComparison.py` — entry point for `pfs.drp.qa.comparison.cli.main` (comparison mode)
   - `agRunReport.py` — entry point for `pfs.drp.qa.guiders.runReport.main` (end-of-run AG report)
   - `twilightQa.py` — judges a collection's twilight sequences (or a parquet export of them) with
-    `pfs.drp.qa.metrics.twilight`: which exposures are good flats
+    `pfs.drp.qa.metrics.twilight`: which exposures are good flats; `--sequence-of-visit` judges one
+    visit's sequence once it is complete (opdb via `comparison.queries.readSequenceOfVisit`)
   - `exportMetrics.py` — per-detector QA tables (`iqQaMetrics`, `dmLineResidualMetrics`, ...) from a
     collection to parquet, with progress, via `metrics.readers.exportMetrics`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),

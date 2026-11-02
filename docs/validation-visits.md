@@ -100,11 +100,11 @@ identified by visit number, with no observer, target or design names.
   exposures are good for every other metric; these entries hold for `pctFlagged` only, so
   today's rates are the baseline for the drp_stella work rather than the threshold.
   Unchecked: `pctFlagged` is not judged (PIPE2D-1929).
-- **Twilight detector steps (Run21, 2025-03-22 and 04-01):** in a twilight sequence, one detector's level moves
+- **Twilight detector levels (Run21, 2025-03-22 and 04-01):** in a twilight sequence, one detector's level differs
   between exposures while every other detector stays within 2 %: b1 at −14 % and −8 % in the first two exposures
-  of 2025-03-22 and +8 % in the last two, b4 at −12 % in 123320 of 2025-04-01. The detector's exposure or readout,
-  not the sky (r is steady); as a flat, the detector is wrong in those exposures. `twilightLevelOffset`
-  (PIPE2D-1973), judged against the sequence's own exposures. Run21 is in the set for these alone.
+  of 2025-03-22 and +8 % in the last two, b4 at −12 % in 123320 of 2025-04-01 (r within 1 %). As flats, those
+  detectors' exposures are not usable. `twilightLevelOffset` (PIPE2D-1973), judged against the sequence's own
+  exposures. Run21 is in the set for these alone.
 - **SM1 defocused (Run27, 2026-03-09/10, spectrograph 1):** the eight arc and trace
   sequences noted "SM1 defocused", with FWHM 3.83–4.86 px across every lamp type;
   `medFwhm`. The same visits are known-bad for the line scatter, `robustRmsDeltaX`, at
@@ -149,8 +149,8 @@ identified by visit number, with no observer, target or design names.
   twilights are listed: a quartz has trace centroids only, and no `medianDeltaY`.
 - **Run29 twilight b-arm patch, 2026-07-08 (unconfirmed):** in the b arm of 145073, the first bright exposure of
   its sequence, a patch at x = −173, y = −28 mm on the focal plane, +10 % against the other bright exposures (which
-  agree within 0.2 %), on SM1 and SM2 fibers alike: light reaching that part of the field, not a detector (r within
-  1.2 %). `twilightPatch` fails it (PIPE2D-1973). Unconfirmed until the cause is known.
+  agree within 0.2 %), on fibers of SM1 and SM2 alike (r within 1.2 %). `twilightPatch` fails it (PIPE2D-1973).
+  Unconfirmed: one exposure, cause not investigated.
 - **"Cloudy" twilight, Run25 2025-11-21 (unconfirmed):** listed as known-bad from the obslog
   note, since a twilight is the screen-response reference and assumes a uniform sky. The
   cloud shows in its spectrum, not across the field (PIPE2D-1973): at the same brightness it

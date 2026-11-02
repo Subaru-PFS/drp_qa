@@ -733,12 +733,12 @@ known_bad:
     unconfirmed: true
     reason: "Obslog: cloudy. 180 s twilight sky; no cloud signature found in the data (PIPE2D-1973)."
 
-  # Run21 twilights with one detector's level stepping between the exposures of the
+  # Run21 twilights with one detector's level differing between the exposures of the
   # sequence (PIPE2D-1973): against the per-fiber median of the sequence, b1 sits at
   # -14 % and -8 % in the first two exposures of 2025-03-22 and +8 % in the last two,
-  # and b4 at -12 % in 123320 of 2025-04-01; r is steady and every other detector within
-  # 2 %. The detector's exposure or readout, not the sky: as a flat, the detector is
-  # wrong in those exposures. The reductions' headers carry no sequence name.
+  # and b4 at -12 % in 123320 of 2025-04-01; r is within 1 % and every other detector
+  # within 2 %. As flats, those detectors' exposures are not usable. The raws carry no
+  # W_SEQTYP, W_SEQNAM or W_SEQID.
   - visitRange: [121949, 121952]
     sequenceType: scienceObject
     cameras: [b1]
@@ -754,9 +754,8 @@ known_bad:
 
   # Run29 twilight, 2026-07-08 (PIPE2D-1973): in the b arm of the first bright exposure,
   # a patch at x=-173, y=-28 mm on the focal plane, +10 % against the sequence's other
-  # bright exposures (which agree with each other within 0.2 %), on SM1 and SM2 fibers
-  # alike: light reaching that part of the field, not a detector. r is within 1.2 %.
-  # Blue light on part of the field, cause unknown: unconfirmed until it is.
+  # bright exposures (which agree with each other within 0.2 %), on fibers of SM1 and
+  # SM2 alike; r is within 1.2 %. Unconfirmed: one exposure, cause not investigated.
   - visit: 145073
     sequenceType: scienceObject
     arms: [b]

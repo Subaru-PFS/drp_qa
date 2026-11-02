@@ -14,6 +14,7 @@ from pfs.drp.qa.metrics.twilight import (
     addPositions,
     fiberFlux,
     sequenceConsistency,
+    sequenceReadiness,
     twilightThresholds,
     twilightVerdict,
 )
@@ -38,7 +39,7 @@ def makeSequence(
 ) -> pd.DataFrame:
     """Return ``twilightFiberFlux`` rows of a synthetic twilight sequence.
 
-    Each fiber has a fixed throughput per arm (the instrument), the sky a smooth gradient that changes
+    Each fiber has a fixed throughput per arm, the sky a smooth gradient that changes
     between exposures (a uniform sky without ``skyGradient``: its change has a cubic term the quadratic
     leaves), and each fiber's median the photon noise of its S/N (b's; r's is twice). ``step``
     is ``(exposure index, arm, spectrograph, factor)``; ``patch`` is ``(exposure index, depth)``: a
@@ -160,12 +161,12 @@ def testDetectorStepIsNamedInItsExposureAlone():
 
 
 def testPassingCloudFailsThePatchAndIsShared():
-    """A 10 % patch in one exposure fails, and shows in both arms: the sky."""
+    """A 10 % patch in one exposure fails, and the arm mean carries it, not the arms' difference."""
     fibers = makeSequence(patch=(2, 0.10))
     metrics = sequenceConsistency(fibers)
     exposure = metrics[metrics["visit"] == 1002].iloc[0]
     assert exposure["twilightPatch"] > 4.0
-    assert exposure["twilightShared"] > 3 * exposure["twilightDiffering"]
+    assert exposure["twilightArmMean"] > 3 * exposure["twilightArmHalfDiff"]
     assert verdictOf(fibers).loc[(1002, "b"), "status"] == "FAIL"
     # The robust RMS ignores a patch on a few per cent of the fibers: that is why the patch is measured.
     assert exposure["twilightResidRms"] < 1.5
@@ -252,6 +253,64 @@ def testThresholdsAgreeWithTheRegistry():
         assert entry["absolute"] == spec.absolute
     judged = thresholds[thresholds["arm"].isna()]
     assert (judged["warn"] < judged["fail"]).all()
+
+
+def opdbSequence(visits=(150840, 150841, 150842), name="Twilight sky", finished="2026-09-16 05:40:51"):
+    """Rows as `readSequenceOfVisit` returns them."""
+    return pd.DataFrame(
+        {
+            "pfs_visit_id": list(visits),
+            "iic_sequence_id": 69251,
+            "sequence_type": "scienceObject",
+            "sequence_name": name,
+            "finished_at": pd.to_datetime(finished),
+            "sequence_status": "complete" if finished else None,
+        }
+    )
+
+
+class TestSequenceReadiness:
+    """Judge a sequence only once it is a finished twilight with every visit's tables stored."""
+
+    CAMERAS = frozenset({"b1", "r1", "b2", "r2"})
+
+    def everything(self, visits=(150840, 150841, 150842)):
+        return {visit: set(self.CAMERAS) for visit in visits}
+
+    def testReadyWhenEveryVisitIsStored(self):
+        ready, why = sequenceReadiness(opdbSequence(), self.everything(), self.everything())
+        assert ready and "3 visits, all stored" in why
+
+    def testWaitsForAVisitNotYetReduced(self):
+        stored = self.everything()
+        del stored[150842]
+        reduced = self.everything()
+        del reduced[150842]  # not reduced either: no pfsArm, no table
+        ready, why = sequenceReadiness(opdbSequence(), reduced, stored)
+        assert not ready and "150842 (no tables yet)" in why
+        # Negative control: counting only the pfsArms present would call it ready.
+        assert all(reduced[visit] <= stored[visit] for visit in reduced)
+
+    def testWaitsForAMissingCamera(self):
+        stored = self.everything()
+        stored[150841] = stored[150841] - {"r2"}
+        ready, why = sequenceReadiness(opdbSequence(), self.everything(), stored)
+        assert not ready and "150841 (r2)" in why
+
+    def testACameraNeverReducedIsNotWaitedFor(self):
+        reduced = self.everything()
+        reduced[150841] = reduced[150841] - {"r2"}  # no pfsArm, so no table is expected
+        stored = {visit: set(cameras) for visit, cameras in reduced.items()}
+        assert sequenceReadiness(opdbSequence(), reduced, stored)[0]
+
+    def testWaitsForTheSequenceToFinish(self):
+        ready, why = sequenceReadiness(opdbSequence(finished=None), self.everything(), self.everything())
+        assert not ready and "has not finished" in why
+
+    def testIgnoresOtherSequences(self):
+        ready, why = sequenceReadiness(opdbSequence(name="Arc: HgCd"), self.everything(), self.everything())
+        assert not ready and "is not a twilight" in why
+        assert not sequenceReadiness(opdbSequence(visits=()), {}, {})[0]
 
 
 class TestStoredMetrics:
