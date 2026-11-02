@@ -153,10 +153,11 @@ identified by visit number, with no observer, target or design names.
   1.2 %). `twilightPatch` fails it (PIPE2D-1973). Unconfirmed until the cause is known.
 - **"Cloudy" twilight, Run25 2025-11-21 (unconfirmed):** listed as known-bad from the obslog
   note, since a twilight is the screen-response reference and assumes a uniform sky. The
-  data don't show cloud (PIPE2D-1973). Against `fiberNorms` it sits within the clear
-  twilights' range. Against other nights' twilights it differs by 2.4–3.1 % rms, at the top
-  of the clear nights' 0.5–2 %, but in opposite ways in b and r, where cloud would dim both
-  alike. Within its own sequence it is as consistent as any clear night (0.4–0.5 % rms). It
+  data show no sign of the cloud (PIPE2D-1973). Within its own sequence it is as consistent
+  as any clear night (0.4–0.5 % rms). Against other nights' twilights it shows no smooth or
+  local structure beyond what clear nights show between themselves, and its overall
+  difference (2.4–3.1 % rms) is within the range clear nights differ by. A cloud uniform over
+  the field only lowers the level, which the check normalises away. It
   keeps the metric it named, `skyFluxUniformity`, not yet written, so that it labels no other metric.
 
 ### Gaps

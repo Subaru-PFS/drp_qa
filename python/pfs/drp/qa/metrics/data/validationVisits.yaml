@@ -712,12 +712,13 @@ known_bad:
 
   # Run25 twilight sky the obslog notes as cloudy. A twilight is the reference
   # for the screen response and assumes a uniform sky, so this was listed as
-  # known bad. The data don't show cloud (PIPE2D-1973): against fiberNorms it is
-  # within the clear twilights' range; against other nights' twilights it
-  # differs by 2.4-3.1 % rms, at the top of the clear nights' 0.5-2 %, but the
-  # difference goes opposite ways in b and r (cloud would dim both arms alike);
-  # and within its own sequence it is as consistent as any clear night
-  # (0.4-0.5 % rms). Unconfirmed until something shows it is not a good flat.
+  # known bad. The data show no sign of the cloud (PIPE2D-1973): within its own
+  # sequence it is as consistent as any clear night (0.4-0.5 % rms); against other
+  # nights' twilights it shows no smooth or local structure beyond what clear
+  # nights show between themselves, and its overall difference (2.4-3.1 % rms) is
+  # within the range clear nights differ by. A cloud uniform over the field only
+  # lowers the level, which the check normalises away. Unconfirmed until something
+  # shows it is not a good flat.
   # The metric keeps the entry to the sky-uniformity check, which isn't written
   # yet; with none, it would label these visits for every metric.
   - visitRange: [134334, 134337]

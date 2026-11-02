@@ -474,10 +474,10 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 ### Changed
 
 - **The "cloudy" Run25 twilight (134334–134337) is an unconfirmed known-bad entry** (PIPE2D-1973) — it was listed
-  from its obslog note, as `skyFluxUniformity` (unchecked). The data show no cloud: within the clear twilights' range
-  against `fiberNorms`, at the top of the clear nights' range against other nights' twilights but in opposite ways in
-  b and r, and as self-consistent within its sequence as any clear night. It keeps the metric so that it labels no
-  other, and no longer counts among the entries coverage must catch.
+  from its obslog note, as `skyFluxUniformity` (unchecked). The data show no sign of the cloud: it is as
+  self-consistent within its sequence as any clear night, and differs from other nights' twilights no more than
+  clear nights differ from each other. It keeps the metric so that it labels no other, and no longer counts among
+  the entries coverage must catch.
 - **`iqQaData` is written only on request** (PIPE2D-1962) — `imageQualityQa` gains `doWriteLineData`, default off.
   The table holds every row of `lines` measured, with its width and centre offset, and nothing reads it back: about
   21 MB per detector for an arc, 2 MB for a quartz and 80 MB for a twilight, mostly unsampled trace centroids
