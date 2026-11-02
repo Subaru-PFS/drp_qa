@@ -79,7 +79,8 @@ See [documentation](https://pipelines.lsst.io/modules/lsst.pipe.base/creating-a-
 
 Also see the example notebook [`examples/QA Pipelines.ipynb`](examples/QA%20Pipelines.ipynb).
 
-`drpQA.yaml` currently wires up `dmLineResiduals`, `extractionQa`, `extractionQaCombined`, and `imageQualityQa`. The
+`drpQA.yaml` currently wires up `dmLineResiduals`, `extractionQa`, `extractionQaCombined`, `imageQualityQa` and
+`twilightFluxQa`. The
 remaining tasks below are implemented and importable
 but are not registered in the pipeline; run them by referencing their task class directly.
 
@@ -439,6 +440,15 @@ Determines the quality of the fiber extraction.
 |----------------------|--------------------------|--------------------------------------------------------------------------------------------------------------------------------|
 | `extQaStatsCombined` | `instrument, visit, arm` | Results of the residual analysis of extraction plotted against fiberId for all spectrographs (left) and PFI positions (right). |
 
+#### `twilightFluxQa`
+
+Per detector of a twilight (`W_SEQNAM` starting "Twilight"), stores `twilightFiberFlux`:
+each lit fiber's median flux / norm over the arm's window, its S/N, good and saturated pixels, and focal-plane
+position, with the sequence id (`W_SEQID`). It judges nothing itself: a twilight is judged against the other
+exposures of its sequence, which one quantum cannot see, by `bin.src/twilightQa.py` afterwards (PIPE2D-1973; see
+[QA thresholds](#qa-thresholds-and-the-validation-visit-set)). Any other visit is skipped from the raw header (the
+pfsConfig's standing in) before its pfsArm is read, so running it on every visit costs a header.
+
 #### `fiberNormsQa`
 
 Plot the fiber normalization for the given detector and visit.
@@ -562,6 +572,21 @@ verdict is known. The decisions behind the current set:
   5 images read with m), so the per-detector scatter tolerances are not split by it. Pooled over runs the two differ,
   because the scatter moves twofold between runs (0.025–0.054 px) and the camera sets are not spread evenly over them:
   compare them within a run. `iqQaMetrics`' `medDxCenter` is superseded by `dmLineResiduals`' `medianDeltaX`.
+- **A twilight is judged against its own sequence, with provisional thresholds** (PIPE2D-1973). A twilight is the
+  sky flat behind the screen response, so the question is whether each exposure is a good flat. Its reference is the
+  sequence's other exposures, minutes apart with the same instrument: no calibration enters, and whatever spoils a
+  flat (passing cloud, moonlight, a detector's exposure or readout) shows as a difference between them
+  (`pfs.drp.qa.metrics.twilight`). Each detector's level is judged on every exposure, at WARN 2 % and FAIL 3 %;
+  the field's RMS beyond noise at 1.5 %/2.5 % and its deepest coherent patch at 2.5 %/4 %, on exposures bright
+  enough to be flats (b-arm S/N ≥ 15 per pixel: below it, starlight and airglow in the fibers, shared by the arms,
+  are not yet swamped). The values are provisional, from 16 sequences of 2025-03 to 2026-09, until the flat
+  precision the screen response needs is known: normal detectors stepped at most 1.34 % against 10–12 % for the
+  Run21 faults (the known-bad entries), and normal exposures reached 1.1 % RMS and a 2.3 % patch. Run29's b arm
+  fails on a patch at x = −173, y = −28 mm that changes between exposures (+11 %, −5 %, −5 %; r within 1.4 %). The
+  n arm is not judged: clear twilights already sit 3–9 % above the noise model there. Anything constant over a
+  sequence (a stationary cloud, a steady moon gradient, the instrument's state that night) cancels; comparing a
+  twilight with good twilights of other nights would cover it, and is the next step. The Run25 2025-11-21 twilight,
+  noted "Cloudy" in the obslog, passes, and its known-bad entry is unconfirmed.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
 - **Every known-bad entry is caught, or says why not** (PIPE2D-1934). `pfs.drp.qa.metrics.coverage` checks each
@@ -834,6 +859,19 @@ python bin.src/<script>.py --help
 ### `qaComparison.py`
 
 Comparison mode; see [Comparison mode](#comparison-mode).
+
+### `twilightQa.py`
+
+Judges the twilight sequences of a collection (PIPE2D-1973): reads the `twilightFiberFlux` tables of a visit range,
+or a parquet export of them, compares each sequence's exposures (`pfs.drp.qa.metrics.twilight`), and writes
+`twilightMetrics.parquet` (per detector image) and `twilightVerdict.csv` (per exposure and arm: `PASS`, `WARN`,
+`FAIL` or `TOO_FAINT`, with the reasons). Reading a Butler requires the stack; a parquet does not.
+
+```bash
+pipetask run -p pipelines/drpQA.yaml#twilightFluxQa -b /work/datastore -i <reductions> -o u/<user>/twilight \
+    -d "visit IN (...)"
+python bin.src/twilightQa.py -c u/<user>/twilight --visits 148039 150896 -o .
+```
 
 ### `judgeScatterThresholds.py`
 

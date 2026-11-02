@@ -101,7 +101,12 @@ version: 1
 # whose Run25 quartz width (3.10 px) is the outlier against a steady 3.22 px since.
 # Run25's trace entries leave those two cameras out, and Run29's trace entries hold
 # them alone.
+#
+# Run21 holds known-bad twilights only (PIPE2D-1973). Its range is not from a
+# calibration summary: it is SpS activity in the opdb (2025-03-19 to 04-04, gaps of
+# days either side), and the drp collections of the period name it run21.
 runs:
+  21: [121084, 123736]
   25: [132657, 135850]
   26: [136166, 139742]
   27: [139870, 140871]
@@ -705,13 +710,16 @@ known_bad:
     reason: "b-arm Krypton (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut."
     unchecked: "pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against."
 
-  # Run25 twilight sky taken through cloud: an observing condition, not an
-  # instrument fault, but a twilight is the reference for the screen response
-  # and assumes a uniform sky. Nothing measured on a twilight sees cloud: FWHM
-  # is not measured there (PIPE2D-1917), cloud need not widen the lines anyway,
-  # and their nLines sit within the clear twilights' (PIPE2D-1934). The metric
-  # named is the check that would: the uniformity of the sky's flux across the
-  # fibers, against fiberNorms. It does not exist yet (PIPE2D-1973).
+  # Run25 twilight sky the obslog notes as cloudy. A twilight is the reference
+  # for the screen response and assumes a uniform sky, so this was listed as
+  # known bad. The data don't show cloud (PIPE2D-1973): against fiberNorms it is
+  # within the clear twilights' range; against other nights' twilights it
+  # differs by 2.4-3.1 % rms, at the top of the clear nights' 0.5-2 %, but the
+  # difference goes opposite ways in b and r (cloud would dim both arms alike);
+  # and within its own sequence it is as consistent as any clear night
+  # (0.4-0.5 % rms). Unconfirmed until something shows it is not a good flat.
+  # The metric keeps the entry to the sky-uniformity check, which isn't written
+  # yet; with none, it would label these visits for every metric.
   - visitRange: [134334, 134337]
     sequenceType: scienceObject
     arms: [b, r, n]
@@ -719,8 +727,41 @@ known_bad:
     seqType: "Twilight sky"
     expect: FAIL
     metric: skyFluxUniformity
-    reason: "Cloudy; 180 s twilight sky taken through cloud."
-    unchecked: "No metric measured on twilights sees cloud; the sky-uniformity check is PIPE2D-1973."
+    unconfirmed: true
+    reason: "Obslog: cloudy. 180 s twilight sky; no cloud signature found in the data (PIPE2D-1973)."
+
+  # Run21 twilights with one detector's level stepping between the exposures of the
+  # sequence (PIPE2D-1973): against the per-fiber median of the sequence, b1 sits at
+  # -14 % and -8 % in the first two exposures of 2025-03-22 and +8 % in the last two,
+  # and b4 at -12 % in 123320 of 2025-04-01; r is steady and every other detector within
+  # 2 %. The detector's exposure or readout, not the sky: as a flat, the detector is
+  # wrong in those exposures. The reductions' headers carry no sequence name.
+  - visitRange: [121949, 121952]
+    sequenceType: scienceObject
+    cameras: [b1]
+    expect: FAIL
+    metric: twilightLevelOffset
+    reason: "Twilight sky, 2025-03-22: b1's level steps by 8-14 % between the sequence's exposures."
+  - visit: 123320
+    sequenceType: scienceObject
+    cameras: [b4]
+    expect: FAIL
+    metric: twilightLevelOffset
+    reason: "Twilight sky, 2025-04-01: b4's level 12 % below the rest of its sequence."
+
+  # Run29 twilight, 2026-07-08 (PIPE2D-1973): in the b arm of the three bright
+  # exposures, a patch at x=-173, y=-28 mm on the focal plane, on SM1 and SM2 fibers
+  # alike (light reaching that part of the field, not a detector), changing between
+  # them: +11 %, -5 % and -5 % against the others. r is within 1.4 %. Blue light on part
+  # of the field, cause unknown: unconfirmed until it is.
+  - visitRange: [145073, 145075]
+    sequenceType: scienceObject
+    arms: [b]
+    seqType: "Twilight sky"
+    expect: FAIL
+    metric: twilightPatch
+    unconfirmed: true
+    reason: "Twilight sky, 2026-07-08: a b-arm patch at x=-173, y=-28 mm changing between exposures; cause unknown."
 
   # Run27, 2026-03-09/10: SM1 defocused, noted on every sequence below.
   # FWHM 3.83-4.86 px across every lamp, independent of species, which rules out

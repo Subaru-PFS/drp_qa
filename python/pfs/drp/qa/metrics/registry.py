@@ -134,6 +134,11 @@ _CALIB = (
     "out-of-date calibration is a calibration problem, not an instrument one."
 )
 
+_TWILIGHT = (
+    "The other exposures of the same twilight sequence, minutes apart with the same instrument: "
+    "each fiber's flux / norm against their median."
+)
+
 _LINE_REFERENCES = (
     "Per the ``reference`` column: detectorMap_calib (``calib``), as above; or the visit's own "
     "detectorMap (``visit``), adjusted to these lines, whose RESERVED lines it was not fitted to."
@@ -247,6 +252,36 @@ METRIC_SPECS = {
             units="pixels",
             reference="The fitDetectorMap solution, per line species, from the reduceExposure log.",
             unitSuffix="px",
+        ),
+        # Twilight sky flats (PIPE2D-1973): each exposure against the other exposures of its sequence,
+        # minutes apart with the same instrument (pfs.drp.qa.metrics.twilight).
+        MetricSpec(
+            "twilightLevelOffset",
+            absolute=True,
+            groupBy=("arm",),
+            units="percent",
+            reference=_TWILIGHT,
+            label="|twilightLevelOffset|",
+            valueFormat=".2f",
+            unitSuffix="%",
+        ),
+        MetricSpec(
+            "twilightResidRms",
+            groupBy=("arm",),
+            units="percent",
+            reference=_TWILIGHT,
+            valueFormat=".2f",
+            unitSuffix="%",
+            notMeasuredWhen=("tooFaint",),
+        ),
+        MetricSpec(
+            "twilightPatch",
+            groupBy=("arm",),
+            units="percent",
+            reference=_TWILIGHT,
+            valueFormat=".2f",
+            unitSuffix="%",
+            notMeasuredWhen=("tooFaint",),
         ),
     )
 }

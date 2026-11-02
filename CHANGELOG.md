@@ -10,6 +10,17 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Twilight sky flats are judged against their own sequence** (PIPE2D-1973) — the new `twilightFluxQa` task, in
+  `drpQA.yaml`, stores each lit fiber's median flux on a twilight as `twilightFiberFlux` (any other visit stops at
+  its header, before the pfsArm is read), and
+  `bin.src/twilightQa.py` compares each sequence's exposures (`pfs.drp.qa.metrics.twilight`): each detector's level
+  (`twilightLevelOffset`, every exposure), and on exposures bright enough to be flats (b-arm S/N ≥ 15) the field's
+  RMS beyond noise (`twilightResidRms`) and its deepest coherent patch (`twilightPatch`), with the residual split
+  into the part b and r share (sky) and the part they don't (instrument). Verdicts per exposure and arm: `PASS`,
+  `WARN`, `FAIL` or `TOO_FAINT`. Thresholds are provisional (level 2/3 %, RMS 1.5/2.5 %, patch 2.5/4 %; the n arm is
+  not judged). The validation set gains Run21 and its two twilight detector faults (b1 through 121949–121952, b4 in
+  123320), checked by known-bad coverage.
+
 - **The end-of-run AG report has a section per camera** (INSTRM-2466, INSTRM-2982) — each camera's flags and a
   figure of its matched stars, FWHM per detector half, focus against the others, presence, clusters of rejected
   matches and position-model error. Two new flags, both direction-free: rejected matches clustered on one side of a
@@ -461,6 +472,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Changed
 
+- **The "cloudy" Run25 twilight (134334–134337) is an unconfirmed known-bad entry** (PIPE2D-1973) — it was listed
+  from its obslog note, as `skyFluxUniformity` (unchecked). The data show no cloud: within the clear twilights' range
+  against `fiberNorms`, at the top of the clear nights' range against other nights' twilights but in opposite ways in
+  b and r, and as self-consistent within its sequence as any clear night. It keeps the metric so that it labels no
+  other, and no longer counts among the entries coverage must catch.
 - **`iqQaData` is written only on request** (PIPE2D-1962) — `imageQualityQa` gains `doWriteLineData`, default off.
   The table holds every row of `lines` measured, with its width and centre offset, and nothing reads it back: about
   21 MB per detector for an arc, 2 MB for a quartz and 80 MB for a twilight, mostly unsampled trace centroids
