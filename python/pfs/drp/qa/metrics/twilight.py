@@ -21,7 +21,11 @@ sky's level changes through twilight), then:
     `MIN_EXPOSURES` exposures, the median resists one bad exposure, so a
     detector whose level differs in one exposure is named in that exposure
     alone. Every exposure is judged: a detector's ~600 fibers are spread over
-    the field, so its median is not moved by structure in a few of them.
+    the field, so its median is not moved by structure in a few of them. No
+    row is dropped: a detector whose fibers read zero is at -100 %, and one
+    with no measured fiber at all is infinite, so both fail; a fiber needs
+    `MIN_EXPOSURES` measured exposures for a reference, and a detector with
+    none is NaN, unjudged.
 ``twilightResidRms``
     The robust RMS, beyond photon noise (%), of the ratio of each fiber to the
     per-fiber median of the sequence's bright exposures, this one included,
@@ -133,7 +137,11 @@ METRIC_COLUMNS = {
     "nReference": "Bright exposures in the reference median, this one included; 0 when the RMS is not measured.",
     "noise": "Photon noise expected in the RMS (%).",
     "satFraction": "Largest saturated fraction of a fiber's window on the detector.",
-    "twilightLevelOffset": "The detector's level against the sequence's, over the field's (%).",
+    "nMeasured": "Fibers of the detector with a measured flux in this exposure.",
+    "twilightLevelOffset": (
+        "The detector's level against the sequence's, over the field's (%); inf with no measured fiber,"
+        " NaN with no reference."
+    ),
     "twilightResidRms": "Field RMS beyond photon noise against the sequence's other bright exposures (%).",
     "twilightPatch": "Deepest coherent deviation: largest |median| over a fiber's nearest neighbours (%).",
     "twilightArmMean": "RMS of the mean of each fiber's b and r residuals (%).",
@@ -289,10 +297,13 @@ def sequenceConsistency(
         `METRIC_COLUMNS`. ``twilightResidRms`` and the diagnostics are NaN for
         an exposure below the floor or with fewer than two bright references.
     """
-    fibers = fibers[np.isfinite(fibers["flux"]) & (fibers["flux"] > 0)].copy()
+    # No row is dropped: a fiber with no measured flux stays NaN, and one reading zero stays zero, so a
+    # detector that failed in an exposure is judged there rather than missing.
+    fibers = fibers.copy()
     if "seqName" not in fibers:
         fibers["seqName"] = ""
-    fibers["rel"] = fibers["flux"] / fibers.groupby(["visit", "arm"])["flux"].transform("median")
+    positive = fibers["flux"].where(np.isfinite(fibers["flux"]) & (fibers["flux"] > 0))
+    fibers["rel"] = fibers["flux"] / positive.groupby([fibers["visit"], fibers["arm"]]).transform("median")
     fibers["err"] = _MEDIAN_ERROR / (fibers["snr"] * np.sqrt(fibers["nGood"].clip(lower=1)))
     armSnr = fibers.groupby(["visit", "arm"])["snr"].median()
     bright = (
@@ -306,8 +317,8 @@ def sequenceConsistency(
         visits = sorted(seq["visit"].unique())
         if len(visits) < minExposures:
             continue
-        wide = seq.pivot_table(index="fiberId", columns="visit", values="rel")
-        reference = wide.median(axis=1)
+        wide = seq.pivot_table(index="fiberId", columns="visit", values="rel", dropna=False)
+        reference = _supportedMedian(wide, visits, minExposures)
         brightness = {
             visit: float(bright[visit])
             if bright is not None and visit in bright.index
@@ -315,7 +326,7 @@ def sequenceConsistency(
             for visit in visits
         }
         brightVisits = [visit for visit in visits if brightness[visit] >= minSnr]
-        brightReference = wide[brightVisits].median(axis=1) if brightVisits else None
+        brightReference = _supportedMedian(wide, brightVisits, minExposures) if brightVisits else None
         noiseOf = _referenceNoise(seq, brightVisits) if len(brightVisits) >= minExposures else {}
         for visit, frame in seq.groupby("visit"):
             frame = frame.reset_index(drop=True)
@@ -323,13 +334,16 @@ def sequenceConsistency(
             spectrograph = frame["spectrograph"].to_numpy()
             ratio = frame["rel"].to_numpy() / reference.reindex(fiberIds).to_numpy()
             levels = pd.Series(ratio).groupby(spectrograph).median() / np.nanmedian(ratio)
+            measuredFibers = pd.Series(np.isfinite(frame["flux"].to_numpy())).groupby(spectrograph).sum()
+            levels[measuredFibers == 0] = np.inf
 
             tooFaint = brightness[visit] < minSnr
             measured = not tooFaint and len(brightVisits) >= minExposures
             residRms = noise = patch = np.nan
             if measured:
                 ratioOut = frame["rel"].to_numpy() / brightReference.reindex(fiberIds).to_numpy()
-                ratioOut = ratioOut / _perDetectorMedian(ratioOut, spectrograph)
+                with np.errstate(divide="ignore", invalid="ignore"):  # a dead detector's 0/0 stays NaN
+                    ratioOut = ratioOut / _perDetectorMedian(ratioOut, spectrograph)
                 flat = _quadraticFlat(frame["x"].to_numpy(), frame["y"].to_numpy(), ratioOut)
                 noise = noiseOf[visit]
                 observed = 100 * _robustRms(flat - 1)
@@ -354,6 +368,7 @@ def sequenceConsistency(
                         "nReference": len(brightVisits) if measured else 0,
                         "noise": noise,
                         "satFraction": float(saturation.get(spec, np.nan)),
+                        "nMeasured": int(measuredFibers.get(spec, 0)),
                         "twilightLevelOffset": 100 * (float(level) - 1),
                         "twilightResidRms": residRms,
                         "twilightPatch": patch,
@@ -377,6 +392,12 @@ def _referenceNoise(seq: pd.DataFrame, visits: list[int]) -> dict[int, float]:
     draws = np.random.default_rng(0).normal(0.0, 1.0, (_NOISE_DRAWS, len(visits))) * errors
     resid = draws - np.median(draws, axis=1, keepdims=True)
     return {visit: 100 * _robustRms(resid[:, ii]) for ii, visit in enumerate(visits)}
+
+
+def _supportedMedian(wide: pd.DataFrame, visits: list[int], minExposures: int) -> pd.Series:
+    """Return the per-fiber median over ``visits``, NaN for a fiber measured in fewer than ``minExposures``."""
+    columns = wide[visits]
+    return columns.median(axis=1).where(columns.notna().sum(axis=1) >= minExposures)
 
 
 def _deepestPatch(
@@ -518,9 +539,9 @@ def twilightVerdict(metrics: pd.DataFrame, thresholds: pd.DataFrame | None = Non
     `pandas.DataFrame`
         One row per (visit, arm), `VERDICT_COLUMNS`: ``status`` is the worst
         of ``PASS``, ``WARN``, ``FAIL`` over the arm's detector levels, RMS and
-        patch; ``TOO_FAINT`` for an exposure below the floor that nothing
-        failed or warned on (its levels are judged, and a step still fails it);
-        empty when nothing is judged. ``reason`` holds the reasons,
+        patch; ``TOO_FAINT`` in place of a ``PASS`` for an exposure below the
+        floor (its levels are judged, and a step still fails it); empty when
+        nothing is judged, as in an arm the thresholds leave out. ``reason`` holds the reasons,
         ``;``-joined. No rows when ``metrics`` has none.
     """
     if metrics.empty:
@@ -543,7 +564,7 @@ def twilightVerdict(metrics: pd.DataFrame, thresholds: pd.DataFrame | None = Non
                 "visit": visit,
                 "arm": arm,
                 "sequence": frame["sequence"].iloc[0],
-                "status": "TOO_FAINT" if tooFaint and worst in ("", "PASS") else worst,
+                "status": "TOO_FAINT" if tooFaint and worst == "PASS" else worst,
                 "reason": "; ".join(reasons),
                 "twilightArmMean": frame["twilightArmMean"].iloc[0],
                 "twilightArmHalfDiff": frame["twilightArmHalfDiff"].iloc[0],

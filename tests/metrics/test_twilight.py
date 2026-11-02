@@ -231,6 +231,41 @@ def testNoiseIsSubtracted():
     assert not (unsubtracted < 0.4 * metrics["noise"]).any()
 
 
+def testDeadDetectorFails():
+    """A detector reading zero, or with no measured fiber, in one exposure fails there rather than vanishing."""
+    for value, expected in ((0.0, -100.0), (np.nan, np.inf)):
+        fibers = makeSequence()
+        dead = (fibers["visit"] == 1002) & (fibers["arm"] == "b") & (fibers["spectrograph"] == 3)
+        fibers.loc[dead, "flux"] = value
+        metrics = sequenceConsistency(fibers).set_index(["visit", "arm", "spectrograph"]).sort_index()
+        # Negative control: the row is there; dropping such fibers would leave the arm judged on b1, b2, b4.
+        assert (1002, "b", 3) in metrics.index
+        assert metrics.loc[(1002, "b", 3), "twilightLevelOffset"] == pytest.approx(expected)
+        if np.isnan(value):
+            assert metrics.loc[(1002, "b", 3), "nMeasured"] == 0
+        assert verdictOf(fibers).loc[(1002, "b"), "status"] == "FAIL"
+
+
+def testCameraWithTooFewExposuresIsUnjudged():
+    """A camera in only one exposure has no reference: its level is NaN, not a pass against itself."""
+    fibers = makeSequence(step=(2, "r", 4, 0.88))
+    alone = (fibers["arm"] == "r") & (fibers["spectrograph"] == 4) & (fibers["visit"] != 1002)
+    fibers = fibers[~alone]
+    metrics = sequenceConsistency(fibers).set_index(["visit", "arm", "spectrograph"]).sort_index()
+    level = metrics.loc[(1002, "r", 4), "twilightLevelOffset"]
+    # Negative control: a median over its one sample would be the exposure itself, 0 %.
+    assert np.isnan(level) and level != pytest.approx(0.0)
+    assert metrics.drop((1002, "r", 4))["twilightLevelOffset"].abs().max() < 1.0
+
+
+def testFaintArmLeftUnjudgedStaysEmpty():
+    """TOO_FAINT replaces a PASS; an arm the thresholds leave out keeps no verdict, faint or not."""
+    verdict = verdictOf(makeSequence(snr=(5.0, 20.0, 30.0, 45.0), arms=("b", "n")))["status"]
+    assert verdict[(1000, "n")] == ""
+    # Negative control: the judged arm of the same faint exposure is TOO_FAINT.
+    assert verdict[(1000, "b")] == "TOO_FAINT"
+
+
 def testShortSequenceIsNotMeasured():
     assert sequenceConsistency(makeSequence(snr=(20.0, 30.0))).empty
     # Nothing measured gives a verdict table with its columns, and no rows.
