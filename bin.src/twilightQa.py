@@ -30,6 +30,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("-c", "--collection", help="collection holding twilightFiberFlux")
     parser.add_argument("--visits", type=int, nargs=2, metavar=("FIRST", "LAST"), help="visit range to read")
     parser.add_argument("--parquet", type=Path, help="read twilightFiberFlux from this file instead")
+    parser.add_argument(
+        "--sequences",
+        type=Path,
+        help="CSV of visit, sequence: for visits whose headers lack W_SEQID (raws before 2025-11)",
+    )
     parser.add_argument("--min-snr", type=float, default=15.0, help="brightness floor, b-arm S/N per pixel")
     parser.add_argument("-o", "--output", type=Path, default=Path("."), help="output directory")
     args = parser.parse_args(argv)
@@ -47,6 +52,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         fibers = readMetrics(
             butler, datasetType="twilightFiberFlux", visitRange=tuple(args.visits), progress=True
         )
+    if args.sequences is not None:
+        known = pd.read_csv(args.sequences).set_index("visit")["sequence"]
+        missing = fibers["sequence"] < 0
+        fibers.loc[missing, "sequence"] = fibers.loc[missing, "visit"].map(known).fillna(-1).astype(int)
     unknown = fibers["sequence"] < 0
     if unknown.any():
         print(f"Skipping visits without W_SEQID: {sorted(fibers.loc[unknown, 'visit'].unique())}", flush=True)
@@ -62,6 +71,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     metrics.to_parquet(args.output / "twilightMetrics.parquet", index=False)
     verdict.to_csv(args.output / "twilightVerdict.csv", index=False)
 
+    if verdict.empty:
+        print("Nothing measured: no sequence has enough exposures in an arm.")
+        return
     counts = verdict.groupby(["sequence", "arm"])["status"].value_counts().unstack(fill_value=0)
     print(counts.to_string())
     bad = verdict[verdict["status"].isin(["WARN", "FAIL"])]

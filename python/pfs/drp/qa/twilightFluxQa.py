@@ -8,14 +8,20 @@ position, with the sequence id. ``bin.src/twilightQa.py`` judges the stored
 tables of a collection (PIPE2D-1973).
 
 It runs in ``drpQA.yaml``, on every visit. A visit that is not a twilight is
-skipped from its header (`pfs.drp.qa.metrics.lineResiduals.frameType`) before
-the pfsArm is read, so it costs a header.
+skipped from its raw header (`pfs.drp.qa.metrics.lineResiduals.frameType`)
+before the pfsArm is read, so it costs the header and the pfsConfig.
+
+Raws from before the IIC wrote ``W_SEQTYP``, ``W_SEQNAM`` and ``W_SEQID``
+(Run21, 2025-03/04, has none) are not recognised: set ``assumeTwilight`` with
+a data query that selects twilights, and give ``bin.src/twilightQa.py`` the
+sequences (``--sequences``).
 """
 
 from typing import Any
 
 import numpy as np
 from lsst.daf.butler import DeferredDatasetHandle
+from lsst.pex.config import Field
 from lsst.pipe.base import (
     InputQuantizedConnection,
     NoWorkFound,
@@ -87,6 +93,15 @@ class TwilightFluxQaConnections(
 class TwilightFluxQaConfig(PipelineTaskConfig, pipelineConnections=TwilightFluxQaConnections):
     """Configuration for TwilightFluxQaTask; the windows are `pfs.drp.qa.metrics.twilight.WINDOWS`."""
 
+    assumeTwilight = Field(
+        dtype=bool,
+        default=False,
+        doc=(
+            "Treat every visit as a twilight, whatever its header says: for raws without W_SEQTYP and W_SEQNAM"
+            " (before 2025-11), with a data query that selects twilights. Never in drpQA's nightly run."
+        ),
+    )
+
 
 class TwilightFluxQaTask(PipelineTask):
     """Store each lit fiber's median flux on a twilight."""
@@ -104,7 +119,7 @@ class TwilightFluxQaTask(PipelineTask):
         inputs = butlerQC.get(inputRefs)
         pfsConfig = inputs.get("pfsConfig")
         obsType = frameType(inputs["rawMetadata"], getattr(pfsConfig, "header", None))
-        if obsType != "twilight":
+        if obsType != "twilight" and not self.config.assumeTwilight:
             raise NoWorkFound(f"{dataId}: not a twilight ({obsType})")
         if pfsConfig is None:
             raise NoWorkFound(f"{dataId}: a twilight without a pfsConfig, so no fiber positions")

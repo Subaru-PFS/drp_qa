@@ -442,12 +442,13 @@ Determines the quality of the fiber extraction.
 
 #### `twilightFluxQa`
 
-Per detector of a twilight (`W_SEQNAM` starting "Twilight"), stores `twilightFiberFlux`:
+Per detector of a twilight (a `scienceObject` whose `W_SEQNAM` starts "Twilight"), stores `twilightFiberFlux`:
 each lit fiber's median flux / norm over the arm's window, its S/N, good and saturated pixels, and focal-plane
 position, with the sequence id (`W_SEQID`). It judges nothing itself: a twilight is judged against the other
 exposures of its sequence, which one quantum cannot see, by `bin.src/twilightQa.py` afterwards (PIPE2D-1973; see
 [QA thresholds](#qa-thresholds-and-the-validation-visit-set)). Any other visit is skipped from the raw header (the
-pfsConfig's standing in) before its pfsArm is read, so running it on every visit costs a header.
+pfsConfig's standing in) before its pfsArm is read, so running it on every visit costs the header and the pfsConfig.
+Raws without those cards (before 2025-11) need `assumeTwilight` and a data query selecting the twilights.
 
 #### `fiberNormsQa`
 
@@ -580,9 +581,13 @@ verdict is known. The decisions behind the current set:
   the field's RMS beyond noise at 1.5 %/2.5 % and its deepest coherent patch at 2.5 %/4 %, on exposures bright
   enough to be flats (b-arm S/N ≥ 15 per pixel: below it, starlight and airglow in the fibers, shared by the arms,
   are not yet swamped). The values are provisional, from 16 sequences of 2025-03 to 2026-09, until the flat
-  precision the screen response needs is known: normal detectors stepped at most 1.34 % against 10–12 % for the
-  Run21 faults (the known-bad entries), and normal exposures reached 1.1 % RMS and a 2.3 % patch. Run29's b arm
-  fails on a patch at x = −173, y = −28 mm that changes between exposures (+11 %, −5 %, −5 %; r within 1.4 %). The
+  precision the screen response needs is known: normal detectors stepped at most 1.02 % against 8–14 % for the
+  Run21 faults (the known-bad entries), and normal exposures reached 1.2 % RMS and a 2.0 % patch. The reference is
+  the per-fiber median of the sequence's bright exposures, the judged one included, so one bad exposure cannot move
+  it. Run29's b arm fails in 145073 on a patch at x = −173, y = −28 mm, +10 % against the rest of its sequence (r
+  within 1.2 %). The task stores twilights from the raw header's `W_SEQTYP`, `W_SEQNAM` and `W_SEQID`; Run21's raws
+  predate them, so it is rerun with `assumeTwilight` and `bin.src/twilightQa.py --sequences`. Saturation is stored,
+  not judged. The
   n arm is not judged: clear twilights already sit 3–9 % above the noise model there. Anything constant over a
   sequence (a stationary cloud, a steady moon gradient, the instrument's state that night) cancels; comparing a
   twilight with good twilights of other nights would cover it, and is the next step. The Run25 2025-11-21 twilight,

@@ -19,7 +19,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   into the part b and r share (sky) and the part they don't (instrument). Verdicts per exposure and arm: `PASS`,
   `WARN`, `FAIL` or `TOO_FAINT`. Thresholds are provisional (level 2/3 %, RMS 1.5/2.5 %, patch 2.5/4 %; the n arm is
   not judged). The validation set gains Run21 and its two twilight detector faults (b1 through 121949–121952, b4 in
-  123320), checked by known-bad coverage.
+  123320), checked by known-bad coverage, and Run29's b-arm patch in 145073 as unconfirmed. Raws from before the
+  `W_SEQTYP`, `W_SEQNAM` and `W_SEQID` cards (Run21) need the task's `assumeTwilight` and the CLI's `--sequences`.
 
 - **The end-of-run AG report has a section per camera** (INSTRM-2466, INSTRM-2982) — each camera's flags and a
   figure of its matched stars, FWHM per detector half, focus against the others, presence, clusters of rejected

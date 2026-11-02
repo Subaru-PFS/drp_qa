@@ -749,19 +749,19 @@ known_bad:
     metric: twilightLevelOffset
     reason: "Twilight sky, 2025-04-01: b4's level 12 % below the rest of its sequence."
 
-  # Run29 twilight, 2026-07-08 (PIPE2D-1973): in the b arm of the three bright
-  # exposures, a patch at x=-173, y=-28 mm on the focal plane, on SM1 and SM2 fibers
-  # alike (light reaching that part of the field, not a detector), changing between
-  # them: +11 %, -5 % and -5 % against the others. r is within 1.4 %. Blue light on part
-  # of the field, cause unknown: unconfirmed until it is.
-  - visitRange: [145073, 145075]
+  # Run29 twilight, 2026-07-08 (PIPE2D-1973): in the b arm of the first bright exposure,
+  # a patch at x=-173, y=-28 mm on the focal plane, +10 % against the sequence's other
+  # bright exposures (which agree with each other within 0.2 %), on SM1 and SM2 fibers
+  # alike: light reaching that part of the field, not a detector. r is within 1.2 %.
+  # Blue light on part of the field, cause unknown: unconfirmed until it is.
+  - visit: 145073
     sequenceType: scienceObject
     arms: [b]
     seqType: "Twilight sky"
     expect: FAIL
     metric: twilightPatch
     unconfirmed: true
-    reason: "Twilight sky, 2026-07-08: a b-arm patch at x=-173, y=-28 mm changing between exposures; cause unknown."
+    reason: "Twilight sky, 2026-07-08: a b-arm patch at x=-173, y=-28 mm, +10 % against its sequence; cause unknown."
 
   # Run27, 2026-03-09/10: SM1 defocused, noted on every sequence below.
   # FWHM 3.83-4.86 px across every lamp, independent of species, which rules out

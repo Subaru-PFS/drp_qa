@@ -26,12 +26,20 @@ sky's level changes through twilight), then:
     field, is not moved by faint sources.
 ``twilightResidRms``
     The robust RMS, beyond photon noise (%), of the ratio of each fiber to the
-    median of the sequence's other bright exposures, after each detector's
-    median and a robust quadratic over the focal plane (the sky's gradient) are
-    divided out. Only exposures at or above ``minSnr`` in the brightness arm are
-    judged or used as references: below it (``tooFaint``), starlight and
-    airglow in the fibers, shared by the arms, are not yet swamped by the
-    twilight, and the exposure is not a good flat.
+    per-fiber median of the sequence's bright exposures, this one included,
+    after each detector's median and a robust quadratic over the focal plane
+    (the sky's gradient) are divided out. Including the judged exposure keeps
+    one bad exposure from moving the reference: with two others, their median
+    would be their mean, and a patch in one would show, mirrored at half its
+    depth, in both of the others. It needs `MIN_EXPOSURES` bright exposures.
+    Only exposures at or above ``minSnr`` in the brightness arm are judged or
+    used in the reference: below it (``tooFaint``), starlight and airglow in
+    the fibers, shared by the arms, are not yet swamped by the twilight, and the
+    exposure is not a good flat. The noise is simulated: each bright
+    exposure's median per-fiber error (that of a flat spectrum), drawn for
+    every exposure of the reference, through the same median. Real spectra have
+    structure in the window, so a few tenths of a per cent of noise can remain
+    in the excess.
 ``twilightPatch``
     The deepest coherent deviation on the focal plane (%): the largest
     absolute median of that residual over each fiber's `PATCH_NEIGHBOURS`
@@ -43,6 +51,9 @@ sky's level changes through twilight), then:
     Diagnostics, for the reason: the robust RMS (%) of the mean and the
     half-difference of the b and r residuals per fiber. The sky lights a fiber
     in every arm alike; a detector or spectrograph does not.
+
+``satFraction`` is stored, not judged: saturated pixels are left out of the
+medians, and no saturated twilight has been seen to set a limit by.
 
 Blind spot: anything constant over the sequence (a stationary cloud bank, a
 steady moon gradient beyond a quadratic, the instrument's state that night)
@@ -56,7 +67,6 @@ sequences of 2025-03 to 2026-09; the n arm is not judged, its residuals sit
 Nothing here imports the LSST stack.
 """
 
-from collections.abc import Mapping
 from typing import Any
 
 import numpy as np
@@ -71,6 +81,7 @@ __all__ = [
     "MIN_EXPOSURES",
     "PATCH_NEIGHBOURS",
     "TWILIGHT_METRICS",
+    "VERDICT_COLUMNS",
     "WINDOWS",
     "addPositions",
     "fiberFlux",
@@ -85,7 +96,7 @@ WINDOWS = {"b": (450.0, 650.0), "r": (650.0, 950.0), "m": (650.0, 950.0), "n": (
 #: Exposures a sequence needs in an arm for its medians to resist one bad exposure.
 MIN_EXPOSURES = 3
 
-#: Provisional patch thresholds (%): normal exposures reached 1.8 % in r and 2.3 % in b; a 6 % patch
+#: Provisional patch thresholds (%): normal exposures reached 1.6 % in r and 2.0 % in b; a 6 % patch
 #: 30-60 mm wide gives 2.5-3.4 %.
 PATCH_WARN, PATCH_FAIL = 2.5, 4.0
 
@@ -94,6 +105,9 @@ PATCH_NEIGHBOURS = 30
 
 #: The judged metrics.
 TWILIGHT_METRICS = ("twilightLevelOffset", "twilightResidRms", "twilightPatch")
+
+#: Columns of `twilightVerdict`'s table, one row per (visit, arm).
+VERDICT_COLUMNS = ("visit", "arm", "sequence", "status", "reason", "twilightShared", "twilightDiffering")
 
 #: Columns of `fiberFlux`'s table, the ``twilightFiberFlux`` dataset with the task's identity columns.
 FIBER_COLUMNS = {
@@ -117,7 +131,7 @@ METRIC_COLUMNS = {
     "snr": "Median S/N per pixel of the exposure in this arm.",
     "brightness": "Median S/N per pixel of the exposure in the brightness arm.",
     "tooFaint": "Below the brightness floor: not a good flat; the RMS is not measured.",
-    "nReference": "Bright exposures the RMS is measured against.",
+    "nReference": "Bright exposures in the reference median, this one included; 0 when the RMS is not measured.",
     "noise": "Photon noise expected in the RMS (%).",
     "satFraction": "Largest saturated fraction of a fiber's window on the detector.",
     "twilightLevelOffset": "The detector's level against the sequence's, over the field's (%).",
@@ -129,6 +143,9 @@ METRIC_COLUMNS = {
 
 # The expected error of a median is sqrt(pi/2) that of a mean.
 _MEDIAN_ERROR = np.sqrt(np.pi / 2)
+
+#: Fibers drawn to simulate the noise of the residual against the reference median.
+_NOISE_DRAWS = 4000
 
 
 def _robustRms(values: Any) -> float:
@@ -299,6 +316,8 @@ def sequenceConsistency(
             for visit in visits
         }
         brightVisits = [visit for visit in visits if brightness[visit] >= minSnr]
+        brightReference = wide[brightVisits].median(axis=1) if brightVisits else None
+        noiseOf = _referenceNoise(seq, brightVisits) if len(brightVisits) >= minExposures else {}
         for visit, frame in seq.groupby("visit"):
             frame = frame.reset_index(drop=True)
             fiberIds = frame["fiberId"].to_numpy()
@@ -307,16 +326,15 @@ def sequenceConsistency(
             levels = pd.Series(ratio).groupby(spectrograph).median() / np.nanmedian(ratio)
 
             tooFaint = brightness[visit] < minSnr
-            others = [vv for vv in brightVisits if vv != visit]
+            measured = not tooFaint and len(brightVisits) >= minExposures
             residRms = noise = patch = np.nan
-            if not tooFaint and len(others) >= 2:
-                leaveOut = wide[others].median(axis=1).reindex(fiberIds).to_numpy()
-                ratioOut = frame["rel"].to_numpy() / leaveOut
+            if measured:
+                ratioOut = frame["rel"].to_numpy() / brightReference.reindex(fiberIds).to_numpy()
                 ratioOut = ratioOut / _perDetectorMedian(ratioOut, spectrograph)
                 flat = _quadraticFlat(frame["x"].to_numpy(), frame["y"].to_numpy(), ratioOut)
-                noise = 100 * float(np.nanmedian(frame["err"])) * np.sqrt(1 + (np.pi / 2) / len(others))
-                measured = 100 * _robustRms(flat - 1)
-                residRms = float(np.sqrt(max(measured**2 - noise**2, 0.0)))
+                noise = noiseOf[visit]
+                observed = 100 * _robustRms(flat - 1)
+                residRms = float(np.sqrt(max(observed**2 - noise**2, 0.0)))
                 patch = _deepestPatch(frame["x"].to_numpy(), frame["y"].to_numpy(), flat)
                 residuals.append(
                     pd.DataFrame({"visit": visit, "arm": arm, "fiberId": fiberIds, "flat": flat})
@@ -334,7 +352,7 @@ def sequenceConsistency(
                         "snr": float(armSnr[(visit, arm)]),
                         "brightness": brightness[visit],
                         "tooFaint": bool(tooFaint),
-                        "nReference": len(others) if not tooFaint else 0,
+                        "nReference": len(brightVisits) if measured else 0,
                         "noise": noise,
                         "satFraction": float(saturation.get(spec, np.nan)),
                         "twilightLevelOffset": 100 * (float(level) - 1),
@@ -347,6 +365,19 @@ def sequenceConsistency(
     if not metrics.empty:
         metrics = metrics.merge(split, on="visit", how="left")
     return metrics.reindex(columns=list(METRIC_COLUMNS))
+
+
+def _referenceNoise(seq: pd.DataFrame, visits: list[int]) -> dict[int, float]:
+    """Return, per exposure, the robust RMS (%) photon noise leaves against the median of ``visits``.
+
+    Each exposure's median per-fiber error is drawn for `_NOISE_DRAWS` fibers, and the residuals against
+    the per-fiber median of all of them measured as the data are. With N odd an exposure is often the
+    median itself, and the errors differ through the sequence, so no closed form fits.
+    """
+    errors = np.array([float(np.nanmedian(seq.loc[seq["visit"] == visit, "err"])) for visit in visits])
+    draws = np.random.default_rng(0).normal(0.0, 1.0, (_NOISE_DRAWS, len(visits))) * errors
+    resid = draws - np.median(draws, axis=1, keepdims=True)
+    return {visit: 100 * _robustRms(resid[:, ii]) for ii, visit in enumerate(visits)}
 
 
 def _deepestPatch(
@@ -385,8 +416,8 @@ def twilightThresholds(
     unjudgedArms: tuple[str, ...] = ("n",),
     source: str = (
         "Provisional (PIPE2D-1973): from a prototype over 16 twilight sequences, 2025-03 to 2026-09."
-        " Normal detectors stepped at most 1.34 % and the Run21 faults 10-12 %; normal bright exposures"
-        " reached 1.1 % RMS, and a patch of 1.8 % (r) and 2.3 % (b). To be replaced by the flat precision"
+        " Normal detectors stepped at most 1.02 % and the Run21 faults 8-14 %; normal bright exposures"
+        " reached 1.2 % RMS, and a patch of 1.6 % (r) and 2.0 % (b). To be replaced by the flat precision"
         " the screen response needs."
     ),
 ) -> pd.DataFrame:
@@ -428,9 +459,7 @@ def twilightThresholds(
     return pd.DataFrame(rows).astype({"arm": object})
 
 
-def twilightVerdict(
-    metrics: pd.DataFrame, thresholds: pd.DataFrame | Mapping[str, Any] | None = None
-) -> pd.DataFrame:
+def twilightVerdict(metrics: pd.DataFrame, thresholds: pd.DataFrame | None = None) -> pd.DataFrame:
     """Return one verdict per exposure and arm: whether it is a good flat.
 
     Parameters
@@ -443,12 +472,15 @@ def twilightVerdict(
     Returns
     -------
     `pandas.DataFrame`
-        One row per (visit, arm): ``visit``, ``arm``, ``sequence``,
-        ``status`` (``TOO_FAINT`` below the floor, else the worst of
-        ``PASS``, ``WARN``, ``FAIL`` over the arm's detectors and its RMS;
-        empty when nothing is judged), ``reason`` (the reasons, ``;``-joined)
-        and the diagnostics ``twilightShared`` and ``twilightDiffering``.
+        One row per (visit, arm), `VERDICT_COLUMNS`: ``status`` is the worst
+        of ``PASS``, ``WARN``, ``FAIL`` over the arm's detector levels, RMS and
+        patch; ``TOO_FAINT`` for an exposure below the floor that nothing
+        failed or warned on (its levels are judged, and a step still fails it);
+        empty when nothing is judged. ``reason`` holds the reasons,
+        ``;``-joined. No rows when ``metrics`` has none.
     """
+    if metrics.empty:
+        return pd.DataFrame(columns=list(VERDICT_COLUMNS))
     thresholds = twilightThresholds() if thresholds is None else thresholds
     judged = judge(metrics.reset_index(drop=True), thresholds)
     judged = judged.merge(
@@ -473,4 +505,4 @@ def twilightVerdict(
                 "twilightDiffering": frame["twilightDiffering"].iloc[0],
             }
         )
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows, columns=list(VERDICT_COLUMNS))

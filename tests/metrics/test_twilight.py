@@ -9,6 +9,7 @@ import pytest
 from pfs.drp.qa.metrics.registry import specFor
 from pfs.drp.qa.metrics.twilight import (
     METRIC_COLUMNS,
+    VERDICT_COLUMNS,
     WINDOWS,
     addPositions,
     fiberFlux,
@@ -21,12 +22,15 @@ from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 DATA = Path(__file__).parent / "data"
 SEQUENCE = 4242
 N_GOOD = 3000
+MEDIAN_ERROR = np.sqrt(np.pi / 2)
 
 
 def makeSequence(
     snr=(20.0, 30.0, 45.0, 70.0),
     arms=("b", "r"),
+    nGood=N_GOOD,
     fibersPerDetector=150,
+    skyGradient=True,
     seed=1,
     step=None,
     patch=None,
@@ -35,7 +39,8 @@ def makeSequence(
     """Return ``twilightFiberFlux`` rows of a synthetic twilight sequence.
 
     Each fiber has a fixed throughput per arm (the instrument), the sky a smooth gradient that changes
-    between exposures, and each fiber's median the photon noise of its S/N (b's; r's is twice). ``step``
+    between exposures (a uniform sky without ``skyGradient``: its change has a cubic term the quadratic
+    leaves), and each fiber's median the photon noise of its S/N (b's; r's is twice). ``step``
     is ``(exposure index, arm, spectrograph, factor)``; ``patch`` is ``(exposure index, depth)``: a
     Gaussian dimming of sigma 45 mm in both arms of that exposure; ``staticPatch`` the same depth in
     every exposure.
@@ -52,6 +57,8 @@ def makeSequence(
     for ii, bSnr in enumerate(snr):
         visit = 1000 + ii
         sky = (1 + 0.002 * ii * x / 100 + 0.001 * y / 100) * (1 + 0.0005 * ii * (x / 100) ** 2)
+        if not skyGradient:
+            sky = np.ones(nFibers)
         if patch is not None and patch[0] == ii:
             sky = sky * (1 - patch[1] * patchShape)
         if staticPatch is not None:
@@ -59,7 +66,7 @@ def makeSequence(
         for arm in arms:
             armSnr = bSnr * (2 if arm == "r" else 1)
             level = 100.0 * (ii + 1)
-            noise = rng.normal(0, 1 / (armSnr * np.sqrt(N_GOOD)), nFibers)
+            noise = rng.normal(0, MEDIAN_ERROR / (armSnr * np.sqrt(nGood)), nFibers)
             flux = level * throughput[arm] * sky * (1 + noise)
             if step is not None and step[0] == ii and step[1] == arm:
                 flux = np.where(spectrograph == step[2], flux * step[3], flux)
@@ -76,7 +83,7 @@ def makeSequence(
                         "y": y,
                         "flux": flux,
                         "snr": armSnr,
-                        "nGood": N_GOOD,
+                        "nGood": nGood,
                         "satFraction": 0.0,
                     }
                 )
@@ -181,12 +188,52 @@ def testFaintExposureIsTooFaintButItsLevelIsJudged():
     verdict = verdictOf(fibers)["status"]
     assert verdict[(1000, "b")] == "FAIL"  # its level step still fails it
     assert verdict[(1000, "r")] == "TOO_FAINT"
-    # A faint exposure is no reference: the brighter three each have two.
-    assert (metrics.loc[metrics["visit"] != 1000, "nReference"] == 2).all()
+    # A faint exposure is no reference: the brighter three's is their own median.
+    assert (metrics.loc[metrics["visit"] != 1000, "nReference"] == 3).all()
+
+
+def testOneBadExposureOfThreeIsNamedAlone():
+    """With three bright exposures, a patch in one fails it, and its neighbours pass.
+
+    The reference includes the judged exposure: against the median of the other two, which is their
+    mean, the patch shows in both neighbours at half its depth.
+    """
+    fibers = makeSequence(snr=(30.0, 45.0, 70.0), patch=(2, 0.10))
+    metrics = sequenceConsistency(fibers).drop_duplicates(["visit", "arm"]).set_index(["visit", "arm"])
+    assert metrics.loc[(1002, "b"), "twilightPatch"] > 4.0
+    assert metrics.drop(1002, level="visit")["twilightPatch"].max() < 1.0
+    verdict = verdictOf(fibers)["status"]
+    assert (verdict.xs(1002, level="visit") == "FAIL").all()
+    assert (verdict.drop(1002, level="visit") == "PASS").all()
+    # Negative control: against the mean of the other two, a clean neighbour shows the patch at half depth.
+    wide = fibers[fibers["arm"] == "b"].pivot_table(index="fiberId", columns="visit", values="flux")
+    wide = wide / wide.median()
+    mirrored = wide[1000] / wide[[1001, 1002]].mean(axis=1)
+    assert mirrored.min() < 0.97 or mirrored.max() > 1.03
+
+
+def testNoiseIsSubtracted():
+    """Fiber noise alone, about 1 % per fiber, leaves little excess RMS though the noise is 0.25-0.9 %.
+
+    A robust RMS of 2400 fibers is good to about 3 %, which subtracting in quadrature turns into an excess
+    of up to about a third of the noise.
+    """
+    for seed in (1, 2, 3):
+        fibers = makeSequence(
+            snr=(16.0, 20.0, 24.0, 30.0), nGood=40, seed=seed, fibersPerDetector=600, skyGradient=False
+        )
+        metrics = sequenceConsistency(fibers)
+        assert (metrics["noise"] > 0.2).all()
+        assert (metrics["twilightResidRms"] < 0.4 * metrics["noise"]).all(), seed
+    # Negative control: the noise is there before subtraction; leaving it in would fail the bound.
+    unsubtracted = np.hypot(metrics["twilightResidRms"], metrics["noise"])
+    assert not (unsubtracted < 0.4 * metrics["noise"]).any()
 
 
 def testShortSequenceIsNotMeasured():
     assert sequenceConsistency(makeSequence(snr=(20.0, 30.0))).empty
+    # Nothing measured gives a verdict table with its columns, and no rows.
+    assert list(twilightVerdict(sequenceConsistency(makeSequence(snr=(20.0, 30.0))))) == list(VERDICT_COLUMNS)
 
 
 def testNArmIsNotJudged():
@@ -228,14 +275,14 @@ class TestStoredMetrics:
         assert offsets[123320] < -10 and offsets.drop(123320).abs().max() < 2
 
     def testOnlyTheKnownFaultsAndTheRun29PatchFail(self, verdict):
-        """Besides the Run21 faults, only Run29's b arm fails.
+        """Besides the Run21 faults, only Run29's 145073 b fails.
 
-        A patch at x=-173, y=-28 mm, on SM1 and SM2 fibers alike: +11 %, -5 % and -5 % against the other
-        exposures (r within 1.4 %).
+        A patch at x=-173, y=-28 mm, on SM1 and SM2 fibers alike, +10 % against the rest of its sequence,
+        whose other two bright exposures agree within 0.2 %.
         """
         failed = set(map(tuple, verdict.loc[verdict["status"] == "FAIL", ["visit", "arm"]].to_numpy()))
         run21 = {(visit, "b") for visit in (121949, 121950, 121951, 121952, 123320)}
-        run29 = {(visit, "b") for visit in (145073, 145074, 145075)}
+        run29 = {(145073, "b")}
         assert failed == run21 | run29
         assert (verdict["status"] == "WARN").sum() <= 2
 

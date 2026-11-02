@@ -147,10 +147,10 @@ identified by visit number, with no observer, target or design names.
   (PIPE2D-1921). The adjustment absorbs it, so they stay known-good, but SM3 reaches the
   1.0 px `medianDeltaY` WARN. Unconfirmed until the cause is known. Only SM3's arcs and
   twilights are listed: a quartz has trace centroids only, and no `medianDeltaY`.
-- **Run29 twilight b-arm patch, 2026-07-08 (unconfirmed):** in the b arm of the three bright exposures
-  (145073–145075), a patch at x = −173, y = −28 mm on the focal plane, on SM1 and SM2 fibers alike, changes between
-  exposures (+11 %, −5 %, −5 % against the others; r within 1.4 %): light reaching that part of the field, not a
-  detector. `twilightPatch` fails it (PIPE2D-1973). Unconfirmed until the cause is known.
+- **Run29 twilight b-arm patch, 2026-07-08 (unconfirmed):** in the b arm of 145073, the first bright exposure of
+  its sequence, a patch at x = −173, y = −28 mm on the focal plane, +10 % against the other bright exposures (which
+  agree within 0.2 %), on SM1 and SM2 fibers alike: light reaching that part of the field, not a detector (r within
+  1.2 %). `twilightPatch` fails it (PIPE2D-1973). Unconfirmed until the cause is known.
 - **"Cloudy" twilight, Run25 2025-11-21 (unconfirmed):** listed as known-bad from the obslog
   note, since a twilight is the screen-response reference and assumes a uniform sky. The
   data don't show cloud (PIPE2D-1973). Against `fiberNorms` it sits within the clear
@@ -320,7 +320,7 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | Visits | Run | Type | Arms | Spectrographs | Sequence | Expect | Metric | Reason |
 |---|---|---|---|---|---|---|---|---|
 | 134334–134337 | 25 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | FAIL | `skyFluxUniformity` | Obslog: cloudy. 180 s twilight sky; no cloud signature found in the data (PIPE2D-1973). |
-| 145073–145075 | 29 | scienceObject | b | all | Twilight sky | FAIL | `twilightPatch` | Twilight sky, 2026-07-08: a b-arm patch at x=-173, y=-28 mm changing between exposures; cause unknown. |
+| 145073 | 29 | scienceObject | b | all | Twilight sky | FAIL | `twilightPatch` | Twilight sky, 2026-07-08: a b-arm patch at x=-173, y=-28 mm, +10 % against its sequence; cause unknown. |
 | 135830–135848 | 25 | scienceArc | all | 3 | any | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
 | 134334–134337 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
 | 134880–134886 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
