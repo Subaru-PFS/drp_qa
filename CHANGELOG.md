@@ -13,7 +13,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 - **The twilight check joins the per-image gate** (INSTRM-3089) — `bin.src/twilightQa.py` stores its verdict per
   detector image in the Butler as `twilightQaMetrics` (`metrics.twilight.twilightImageVerdict`: the detector's level
   offset with its arm's RMS and patch, `UNKNOWN` for the unjudged n arm), in a new RUN prepended to the collection
-  it read (`metrics.store`; `--no-store` skips it), judged with the shipped `twilightThresholds.yaml` and recording
+  it read (`qadb.store`; `--no-store` skips it), judged with the shipped `twilightThresholds.yaml` and recording
   it. The qadb loader treats it as a third task, `twilightQa`: `twilight_qa` mirrors the table and `qa_gate` takes
   the worst of the image's tasks, citing `twilight_thresholds_id` (`spt_qa_database` 0.3.0). `--qadb-host` then
   loads the judged visits itself; a failed store or load prints the verdicts and metrics in full and exits 5, so a

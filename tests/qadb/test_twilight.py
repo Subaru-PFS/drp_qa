@@ -197,7 +197,7 @@ def cli(monkeypatch, metrics, StubButler):
     monkeypatch.setitem(sys.modules, "lsst.daf", daf)
     monkeypatch.setitem(sys.modules, "lsst.daf.butler", butlerModule)
     monkeypatch.setattr("pfs.utils.database.opdb.OpDB", FakeOpDB)
-    monkeypatch.setattr("pfs.drp.qa.metrics.store.storeImageTable", fakeStore)
+    monkeypatch.setattr("pfs.drp.qa.qadb.store.storeImageTable", fakeStore)
     FakeOpDB.made.clear()
 
     cameras = {f"{arm}{sm}" for arm in "brn" for sm in (1, 2, 3, 4)}
@@ -313,7 +313,7 @@ class TestSequenceOfVisit:
         def broken(*args, **kwargs):
             raise RuntimeError("datastore read-only")
 
-        monkeypatch.setattr("pfs.drp.qa.metrics.store.storeImageTable", broken)
+        monkeypatch.setattr("pfs.drp.qa.qadb.store.storeImageTable", broken)
         assert cli() == cli.script.EXIT_NOT_WRITTEN
         out = capsys.readouterr().out
         assert "Storing or loading the judgement failed" in out and "datastore read-only" in out

@@ -15,7 +15,7 @@ from typing import Any
 
 import pandas as pd
 
-from pfs.drp.qa.qadb.tables import IMAGE_KEYS
+from .tables import IMAGE_KEYS
 
 __all__ = ["IMAGE_DIMENSIONS", "runName", "storeImageTable"]
 

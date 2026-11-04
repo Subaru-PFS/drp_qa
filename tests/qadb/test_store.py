@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.store import IMAGE_DIMENSIONS, runName, storeImageTable
+from pfs.drp.qa.qadb.store import IMAGE_DIMENSIONS, runName, storeImageTable
 
 
 class StubButler:

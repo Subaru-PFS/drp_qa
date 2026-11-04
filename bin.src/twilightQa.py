@@ -15,7 +15,7 @@ Example::
 
 prints the verdicts per sequence, one per exposure and arm (``PASS``, ``WARN``, ``FAIL`` or ``TOO_FAINT``, with
 the reasons). Read from a Butler, it also stores the verdict per detector image as ``twilightQaMetrics`` in a new
-RUN prepended to the collection (`pfs.drp.qa.metrics.store`; ``--no-store`` skips it): the Butler is the record,
+RUN prepended to the collection (`pfs.drp.qa.qadb.store`; ``--no-store`` skips it): the Butler is the record,
 and the qadb loader folds the stored verdict into ``qa_gate`` as a third task, ``twilightQa``, on every load. With
 ``--qadb-host`` it then loads the judged visits into qadb itself (``twilight_qa`` and ``qa_gate``,
 `pfs.drp.qa.qadb.loadCollection`; INSTRM-3089). With ``-o`` it writes ``twilightMetrics.parquet`` (one row per
@@ -77,7 +77,7 @@ def storeAndLoad(
     from lsst.daf.butler import Butler
 
     if not args.no_store:
-        from pfs.drp.qa.metrics.store import storeImageTable
+        from pfs.drp.qa.qadb.store import storeImageTable
 
         writer = Butler(args.butler, writeable=True)
         storeImageTable(writer, collection, TWILIGHT_DATASET, images, log=say)

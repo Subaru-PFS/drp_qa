@@ -876,7 +876,7 @@ or a parquet export of them, compares each sequence's exposures (`pfs.drp.qa.met
 `twilightThresholds.yaml`, and prints the verdicts (per exposure and arm: `PASS`, `WARN`, `FAIL` or `TOO_FAINT`,
 with the reasons). Read from a Butler, it stores the verdict per detector image as `twilightQaMetrics`
 (`twilightImageVerdict`: the detector's level offset with its arm's RMS and patch; `UNKNOWN` for the unjudged n
-arm) in a new RUN prepended to the collection (`pfs.drp.qa.metrics.store`; `--no-store` skips it), so the qadb loader
+arm) in a new RUN prepended to the collection (`pfs.drp.qa.qadb.store`; `--no-store` skips it), so the qadb loader
 folds it into `qa_gate` as the task `twilightQa` on every load (INSTRM-3089); with `--qadb-host` it loads the judged
 visits itself. With `-o` it writes `twilightMetrics.parquet` (per detector image) and `twilightVerdict.csv`. Reading
 or storing in a Butler requires the stack; a parquet does not.

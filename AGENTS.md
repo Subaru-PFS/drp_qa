@@ -124,7 +124,7 @@ the pipeline/config glue to run them.
   - `twilightQa.py` — judges a collection's twilight sequences (or a parquet export of them) with
     `pfs.drp.qa.metrics.twilight`: which exposures are good flats; `--sequence-of-visit` judges one
     visit's sequence once it is complete (opdb via `comparison.queries.readSequenceOfVisit`), stores
-    the per-image verdict in the Butler (`twilightQaMetrics`, via `metrics.store`) for the qadb loader's
+    the per-image verdict in the Butler (`twilightQaMetrics`, via `qadb.store`) for the qadb loader's
     gate, and with `--qadb-host` loads the judged visits; its exit status tells ics_qaActor what
     happened (INSTRM-3089)
   - `exportMetrics.py` — per-detector QA tables (`iqQaMetrics`, `dmLineResidualMetrics`, ...) from a
