@@ -88,19 +88,18 @@ CREATE TABLE qa_gate (
     pfs_visit_id INTEGER REFERENCES pfs_visit,
     camera_name VARCHAR(2), qa_status TEXT, decided_by_task TEXT, qa_decided_by TEXT, qa_reason TEXT,
     provisional BOOLEAN, mode TEXT, iq_thresholds_id INTEGER REFERENCES qa_thresholds,
-    dm_thresholds_id INTEGER REFERENCES qa_thresholds, decided_at TIMESTAMP,
+    dm_thresholds_id INTEGER REFERENCES qa_thresholds, twilight_thresholds_id INTEGER REFERENCES qa_thresholds,
+    decided_at TIMESTAMP,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
 CREATE TABLE twilight_qa (
-    pfs_visit_id INTEGER REFERENCES pfs_visit, arm VARCHAR(1), iic_sequence_id INTEGER, qa_status TEXT,
-    qa_reason TEXT, twilight_arm_mean REAL, twilight_arm_half_diff REAL, collection_name TEXT,
-    drp_qa_version TEXT, judged_at TIMESTAMP,
-    PRIMARY KEY (pfs_visit_id, arm));
-CREATE TABLE twilight_qa_metric (
-    pfs_visit_id INTEGER REFERENCES pfs_visit, camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1),
-    iic_sequence_id INTEGER, seq_name TEXT, n_exposures INTEGER, snr REAL, brightness REAL, too_faint BOOLEAN,
-    n_reference INTEGER, noise REAL, sat_fraction REAL, n_measured INTEGER, twilight_level_offset REAL,
-    twilight_resid_rms REAL, twilight_patch REAL, twilight_arm_mean REAL, twilight_arm_half_diff REAL,
-    PRIMARY KEY (pfs_visit_id, camera_name));
+    processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
+    pfs_visit_id INTEGER REFERENCES pfs_visit,
+    camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1), iic_sequence_id INTEGER, seq_name TEXT,
+    n_exposures INTEGER, snr REAL, brightness REAL, too_faint BOOLEAN, n_reference INTEGER, noise REAL,
+    sat_fraction REAL, n_measured INTEGER, twilight_level_offset REAL, twilight_resid_rms REAL,
+    twilight_patch REAL, twilight_arm_mean REAL, twilight_arm_half_diff REAL, qa_status TEXT,
+    qa_decided_by TEXT, qa_reason TEXT,
+    PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
 """
 
 #: The tables `DDL` makes, in dependency order.

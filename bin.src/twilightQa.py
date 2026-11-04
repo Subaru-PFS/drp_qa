@@ -3,7 +3,8 @@ r"""Judge the twilight sequences of a collection: which exposures are good flats
 
 Reads the ``twilightFiberFlux`` tables ``drpQA.yaml#twilightFluxQa`` stored (or a parquet export of
 them, ``bin.src/exportMetrics.py -t twilightFiberFlux``), compares each sequence's exposures with
-`pfs.drp.qa.metrics.twilight.sequenceConsistency`, and judges them against the provisional thresholds.
+`pfs.drp.qa.metrics.twilight.sequenceConsistency`, and judges them against the shipped thresholds
+(``twilightThresholds.yaml``).
 
 Example::
 
@@ -12,11 +13,14 @@ Example::
     python bin.src/twilightQa.py -c qaActor/reductions --sequence-of-visit 150844 --opdb-host pfsa-db \
         --qadb-host pfsa-db
 
-prints the verdicts per sequence. With ``-o`` it writes ``twilightMetrics.parquet`` (one row per detector
-image) and ``twilightVerdict.csv`` (one row per exposure and arm: ``PASS``, ``WARN``, ``FAIL`` or
-``TOO_FAINT``, with the reasons); with ``--qadb-host`` it writes both to qadb's ``twilight_qa`` and
-``twilight_qa_metric`` (`pfs.drp.qa.qadb.twilight`, INSTRM-3089), replacing the judged visits' rows.
-Reading from a Butler requires the LSST stack (``lsst.daf.butler``); a parquet does not.
+prints the verdicts per sequence, one per exposure and arm (``PASS``, ``WARN``, ``FAIL`` or ``TOO_FAINT``, with
+the reasons). Read from a Butler, it also stores the verdict per detector image as ``twilightQaMetrics`` in a new
+RUN prepended to the collection (`pfs.drp.qa.metrics.store`; ``--no-store`` skips it): the Butler is the record,
+and the qadb loader folds the stored verdict into ``qa_gate`` as a third task, ``twilightQa``, on every load. With
+``--qadb-host`` it then loads the judged visits into qadb itself (``twilight_qa`` and ``qa_gate``,
+`pfs.drp.qa.qadb.loadCollection`; INSTRM-3089). With ``-o`` it writes ``twilightMetrics.parquet`` (one row per
+detector image) and ``twilightVerdict.csv`` (one row per exposure and arm). Reading or storing in a Butler
+requires the LSST stack (``lsst.daf.butler``); a parquet does not.
 
 ``--sequence-of-visit`` is for running after every visit (``ics_qaActor``, INSTRM-3089): it looks the
 visit's IIC sequence up in the opdb (read-only user) and judges it only when it is a twilight, it has
@@ -27,11 +31,11 @@ so raws without ``W_SEQID`` need no ``--sequences``. Its files, with ``-o``, are
 
 The exit status says what happened, for the caller's log:
 
-- `EXIT_JUDGED` (0): the sequence was judged, and written to qadb when asked;
+- `EXIT_JUDGED` (0): the sequence was judged, stored, and loaded into qadb when asked;
 - `EXIT_PENDING` (3): not yet: the sequence has not finished, or a visit's tables are missing;
 - `EXIT_NOT_TWILIGHT` (4): the visit is in no IIC sequence, or its sequence is not a twilight;
-- `EXIT_NOT_WRITTEN` (5): judged, but the qadb write failed: the verdicts and metrics are then printed
-  in full, so the caller's log holds them.
+- `EXIT_NOT_WRITTEN` (5): judged, but storing it or loading qadb failed: the verdicts and metrics are then
+  printed in full, so the caller's log holds them.
 
 The other modes exit `EXIT_JUDGED` or `EXIT_NOT_WRITTEN`.
 """
@@ -47,6 +51,7 @@ from pfs.drp.qa.metrics.twilight import (
     isTwilightSequence,
     sequenceConsistency,
     sequenceReadiness,
+    twilightImageVerdict,
     twilightVerdict,
 )
 
@@ -56,30 +61,43 @@ EXIT_PENDING = 3
 EXIT_NOT_TWILIGHT = 4
 EXIT_NOT_WRITTEN = 5
 
+#: The per-image verdict's dataset type.
+TWILIGHT_DATASET = "twilightQaMetrics"
 
-def writeToQadb(
-    args: argparse.Namespace, verdict: pd.DataFrame, metrics: pd.DataFrame, collection, opdb
-) -> int:
-    """Write the judgement to qadb; on any failure print it in full and return `EXIT_NOT_WRITTEN`."""
-    from pfs.drp.qa.qadb.twilight import writeTwilight
-    from pfs.utils.database.qadb import QaDB
 
-    try:
+def say(line: str) -> None:
+    """Print a line, flushed: the caller may be streaming the output into a log."""
+    print(line, flush=True)
+
+
+def storeAndLoad(
+    args: argparse.Namespace, images: pd.DataFrame, visits: list[int], collection: str, opdb
+) -> None:
+    """Store the per-image verdicts in the Butler, then load the judged visits into qadb when asked."""
+    from lsst.daf.butler import Butler
+
+    if not args.no_store:
+        from pfs.drp.qa.metrics.store import storeImageTable
+
+        writer = Butler(args.butler, writeable=True)
+        storeImageTable(writer, collection, TWILIGHT_DATASET, images, log=say)
+    if args.qadb_host is not None:
+        from pfs.drp.qa.qadb.loader import loadCollection
+        from pfs.utils.database.qadb import QaDB
+
         qadb = QaDB(host=args.qadb_host, port=args.qadb_port, user=args.qadb_user, dbname=args.qadb_dbname)
-        writeTwilight(qadb, verdict, metrics, collection, opdb=opdb, log=lambda line: print(line, flush=True))
-    except Exception as error:
-        print(
-            f"qadb write failed ({args.qadb_host}:{args.qadb_port}/{args.qadb_dbname}): {error!r}", flush=True
-        )
-        with pd.option_context(
-            "display.width", 10_000, "display.max_columns", None, "display.max_rows", None
-        ):
-            print("Not written, twilightVerdict:", flush=True)
-            print(verdict.to_string(index=False), flush=True)
-            print("Not written, twilightMetrics:", flush=True)
-            print(metrics.to_string(index=False), flush=True)
-        return EXIT_NOT_WRITTEN
-    return EXIT_JUDGED
+        # A fresh Butler: the one that read the fibers may hold the chain as it was before the store.
+        reader = Butler(args.butler, writeable=False)
+        loadCollection(reader, qadb, collection, visits=visits, opdb=opdb, mode="realtime", log=say)
+
+
+def printInFull(verdict: pd.DataFrame, metrics: pd.DataFrame) -> None:
+    """Print the whole judgement, for a log to keep when it could not be stored."""
+    with pd.option_context("display.width", 10_000, "display.max_columns", None, "display.max_rows", None):
+        say("Not written, twilightVerdict:")
+        say(verdict.to_string(index=False))
+        say("Not written, twilightMetrics:")
+        say(metrics.to_string(index=False))
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -101,7 +119,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--opdb-host", help="opdb host (read-only user): needed by --sequence-of-visit")
     parser.add_argument("--opdb-port", type=int, default=5432, help="opdb port (default 5432)")
-    parser.add_argument("--qadb-host", help="write the verdicts and metrics to the qadb on this host")
+    parser.add_argument(
+        "--no-store", action="store_true", help=f"don't store {TWILIGHT_DATASET} in the Butler collection"
+    )
+    parser.add_argument("--qadb-host", help="load the judged visits into the qadb on this host")
     parser.add_argument("--qadb-port", type=int, default=5436, help="qadb port (default 5436)")
     parser.add_argument(
         "--qadb-user", default="pfs", help="qadb user; must be allowed to write (default pfs)"
@@ -114,7 +135,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     suffix = ""
-    opdb = None
+    opdb = butler = None
     collection = args.collection
     if args.opdb_host is not None:
         from pfs.utils.database.opdb import OpDB
@@ -128,7 +149,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         sequence = readSequenceOfVisit(opdb, args.sequence_of_visit)
         if not isTwilightSequence(sequence):
             _, why = sequenceReadiness(sequence, {}, {})
-            print(f"Visit {args.sequence_of_visit}: {why}", flush=True)
+            say(f"Visit {args.sequence_of_visit}: {why}")
             return EXIT_NOT_TWILIGHT
         from lsst.daf.butler import Butler
 
@@ -139,7 +160,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         reduced = datasetDetectors(butler, "pfsArm", visits)
         stored = datasetDetectors(butler, "twilightFiberFlux", visits)
         ready, why = sequenceReadiness(sequence, reduced, stored)
-        print(f"Visit {args.sequence_of_visit}: {why}", flush=True)
+        say(f"Visit {args.sequence_of_visit}: {why}")
         if not ready:
             return EXIT_PENDING
         fibers = readMetrics(butler, visits=visits, datasetType="twilightFiberFlux", progress=True)
@@ -147,8 +168,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         fibers["sequence"] = sequenceId
         suffix = f"-{sequenceId}"
     elif args.parquet is not None:
+        if args.qadb_host is not None:
+            parser.error("--qadb-host needs a Butler collection, not a parquet")
         fibers = pd.read_parquet(args.parquet)
-        collection = collection or args.parquet.name
     else:
         if args.collection is None or args.visits is None:
             parser.error("give --collection and --visits, or --parquet")
@@ -166,36 +188,40 @@ def main(argv: Sequence[str] | None = None) -> int:
         fibers.loc[missing, "sequence"] = fibers.loc[missing, "visit"].map(known).fillna(-1).astype(int)
     unknown = fibers["sequence"] < 0
     if unknown.any():
-        print(f"Skipping visits without W_SEQID: {sorted(fibers.loc[unknown, 'visit'].unique())}", flush=True)
+        say(f"Skipping visits without W_SEQID: {sorted(fibers.loc[unknown, 'visit'].unique())}")
         fibers = fibers[~unknown]
-    print(
-        f"Judging {fibers['visit'].nunique()} exposures in {fibers['sequence'].nunique()} sequences",
-        flush=True,
-    )
+    say(f"Judging {fibers['visit'].nunique()} exposures in {fibers['sequence'].nunique()} sequences")
 
     metrics = sequenceConsistency(fibers, minSnr=args.min_snr)
     verdict = twilightVerdict(metrics)
+    images = twilightImageVerdict(metrics)
     if args.output is not None:
         args.output.mkdir(parents=True, exist_ok=True)
         metrics.to_parquet(args.output / f"twilightMetrics{suffix}.parquet", index=False)
         verdict.to_csv(args.output / f"twilightVerdict{suffix}.csv", index=False)
-        print(
+        say(
             f"Wrote {args.output / f'twilightMetrics{suffix}.parquet'} and"
-            f" {args.output / f'twilightVerdict{suffix}.csv'}",
-            flush=True,
+            f" {args.output / f'twilightVerdict{suffix}.csv'}"
         )
 
     if verdict.empty:
-        print("Nothing measured: no sequence has enough exposures in an arm.", flush=True)
+        say("Nothing measured: no sequence has enough exposures in an arm.")
     else:
         counts = verdict.groupby(["sequence", "arm"])["status"].value_counts().unstack(fill_value=0)
-        print(counts.to_string(), flush=True)
+        say(counts.to_string())
         bad = verdict[verdict["status"].isin(["WARN", "FAIL"])]
         if len(bad):
-            print(bad[["visit", "arm", "status", "reason"]].to_string(index=False), flush=True)
+            say(bad[["visit", "arm", "status", "reason"]].to_string(index=False))
 
-    if args.qadb_host is not None:
-        return writeToQadb(args, verdict, metrics, collection, opdb)
+    if butler is None or images.empty or (args.no_store and args.qadb_host is None):
+        return EXIT_JUDGED
+    judged = sorted(int(visit) for visit in images["visit"].unique())
+    try:
+        storeAndLoad(args, images, judged, collection, opdb)
+    except Exception as error:
+        say(f"Storing or loading the judgement failed: {error!r}")
+        printInFull(verdict, metrics)
+        return EXIT_NOT_WRITTEN
     return EXIT_JUDGED
 
 

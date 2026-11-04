@@ -123,9 +123,10 @@ the pipeline/config glue to run them.
   - `agRunReport.py` — entry point for `pfs.drp.qa.guiders.runReport.main` (end-of-run AG report)
   - `twilightQa.py` — judges a collection's twilight sequences (or a parquet export of them) with
     `pfs.drp.qa.metrics.twilight`: which exposures are good flats; `--sequence-of-visit` judges one
-    visit's sequence once it is complete (opdb via `comparison.queries.readSequenceOfVisit`), and
-    `--qadb-host` writes the verdicts to qadb (`qadb.twilight`); its exit status tells ics_qaActor
-    what happened (INSTRM-3089)
+    visit's sequence once it is complete (opdb via `comparison.queries.readSequenceOfVisit`), stores
+    the per-image verdict in the Butler (`twilightQaMetrics`, via `metrics.store`) for the qadb loader's
+    gate, and with `--qadb-host` loads the judged visits; its exit status tells ics_qaActor what
+    happened (INSTRM-3089)
   - `exportMetrics.py` — per-detector QA tables (`iqQaMetrics`, `dmLineResidualMetrics`, ...) from a
     collection to parquet, with progress, via `metrics.readers.exportMetrics`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),
@@ -480,14 +481,15 @@ bin.src/plotIqQaTimeSeries.py
     → writes: time-series PNG via pfs.drp.qa.plotting.iqQa.plotIqTimeSeries
 
 bin.src/loadQadb.py / pfs.drp.qa.qadb.loadCollection   (after pipetask, not a task)
-    ← reads: iqQaMetrics, iqQaSpeciesMetrics, dmLineResidualSummary, dmLineResidualMetrics,
+    ← reads: iqQaMetrics, iqQaSpeciesMetrics, dmLineResidualSummary, dmLineResidualMetrics, twilightQaMetrics,
              packages (per RUN); *_config only for tables without thresholdsFiles/thresholdsSha256
-    → writes to qadb: image_quality_qa(_species), dm_line_residual_qa(_metric),
+    → writes to qadb: image_quality_qa(_species), dm_line_residual_qa(_metric), twilight_qa,
              data_processing_pipe2d, qa_thresholds, qa_threshold_entry, qa_gate (idempotent upserts)
 
-bin.src/twilightQa.py --sequence-of-visit / pfs.drp.qa.qadb.writeTwilight   (after pipetask, not a task)
+bin.src/twilightQa.py --sequence-of-visit   (after pipetask, not a task; the sequence must be complete)
     ← reads: opdb visit_set, iic_sequence(_status); twilightFiberFlux of the sequence's visits
-    → writes to qadb: twilight_qa, twilight_qa_metric (the visits' rows replaced in one transaction)
+    → writes: twilightQaMetrics (one per detector image) to a new RUN prepended to the collection
+    → then loadCollection for the sequence's visits: twilight_qa, and qa_gate with twilightQa as a third task
 ```
 
 `reduceExposure` is **not** required between `fitDetectorMap` and `imageQualityQa`. The

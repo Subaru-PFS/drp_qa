@@ -808,13 +808,16 @@ collection; uncommitted changes to the rest are refused. Report the reference
 
 ## Loading QA results into qadb
 
-`pfs.drp.qa.qadb` copies what `imageQualityQa` and `dmLineResiduals` wrote to the Butler into qadb
-(`spt_qa_database` 0.2.0), after the fact: the Butler is the record, and a database outage cannot fail a quantum.
+`pfs.drp.qa.qadb` copies what `imageQualityQa`, `dmLineResiduals` and `bin.src/twilightQa.py` wrote to the Butler
+into qadb (`spt_qa_database` 0.3.0), after the fact: the Butler is the record, and a database outage cannot fail a
+quantum.
 One code path serves qaActor after each visit's pipetask (`loadVisit`; INSTRM-3040), comparison mode after a run,
 and the backfill of whole collections (`bin.src/loadQadb.py`).
 
 - **Tables.** `iqQaMetrics` → `image_quality_qa`, `iqQaSpeciesMetrics` → `image_quality_qa_species`,
-  `dmLineResidualSummary` → `dm_line_residual_qa`, `dmLineResidualMetrics` → `dm_line_residual_qa_metric`: the same
+  `dmLineResidualSummary` → `dm_line_residual_qa`, `dmLineResidualMetrics` → `dm_line_residual_qa_metric`,
+  `twilightQaMetrics` → `twilight_qa` (the twilight sequence check per image, stored after the fact by
+  `twilightQa.py`; INSTRM-3089): the same
   columns in snake_case (`pfs.drp.qa.qadb.tables`), keyed by the processing, the visit and the camera (`b1`). A
   Butler column reaches qadb once both the schema and the table's spec here name it; the fiber arrays and the
   per-flag percentages of `iqQaMetrics` stay in the Butler.
@@ -834,7 +837,9 @@ and the backfill of whole collections (`bin.src/loadQadb.py`).
   `illumination` as `full`.
 - **Gate.** `qa_gate` holds each image's worst verdict across the tasks (`FAIL` > `WARN` > `PASS` > `UNKNOWN`; a task
   that judged nothing never outranks one that did), the task and metric that decided it, every task's reason, the
-  mode (`realtime`, `comparison`, `backfill`) and whether the verdict is provisional. PIPE2D-1930 reads this table.
+  mode (`realtime`, `comparison`, `backfill`), whether the verdict is provisional, and the thresholds each task judged
+  with (`iq_`, `dm_` and `twilight_thresholds_id`). A twilight image's gate is the worst of its image quality, its
+  line residuals and its sequence check, once the sequence is complete and judged. PIPE2D-1930 reads this table.
 - **Idempotent.** Every write is `INSERT ... ON CONFLICT DO UPDATE` on the row's key, and a long table's rows of each
   image are deleted before its reload: load a collection again after a re-judgement, or after a load that stopped,
   and the rows are replaced, not duplicated, and a species or metric the new judgement lacks is gone. Visits qadb's `pfs_visit`
@@ -867,11 +872,14 @@ Comparison mode; see [Comparison mode](#comparison-mode).
 ### `twilightQa.py`
 
 Judges the twilight sequences of a collection (PIPE2D-1973): reads the `twilightFiberFlux` tables of a visit range,
-or a parquet export of them, compares each sequence's exposures (`pfs.drp.qa.metrics.twilight`), and prints the
-verdicts (per exposure and arm: `PASS`, `WARN`, `FAIL` or `TOO_FAINT`, with the reasons). With `-o` it writes
-`twilightMetrics.parquet` (per detector image) and `twilightVerdict.csv`; with `--qadb-host` it writes both to qadb's
-`twilight_qa` and `twilight_qa_metric` (`pfs.drp.qa.qadb.twilight`, `spt_qa_database` 0.3.0; INSTRM-3089), replacing
-the judged visits' rows. Reading a Butler requires the stack; a parquet does not.
+or a parquet export of them, compares each sequence's exposures (`pfs.drp.qa.metrics.twilight`) against the shipped
+`twilightThresholds.yaml`, and prints the verdicts (per exposure and arm: `PASS`, `WARN`, `FAIL` or `TOO_FAINT`,
+with the reasons). Read from a Butler, it stores the verdict per detector image as `twilightQaMetrics`
+(`twilightImageVerdict`: the detector's level offset with its arm's RMS and patch; `UNKNOWN` for the unjudged n
+arm) in a new RUN prepended to the collection (`pfs.drp.qa.metrics.store`; `--no-store` skips it), so the qadb loader
+folds it into `qa_gate` as the task `twilightQa` on every load (INSTRM-3089); with `--qadb-host` it loads the judged
+visits itself. With `-o` it writes `twilightMetrics.parquet` (per detector image) and `twilightVerdict.csv`. Reading
+or storing in a Butler requires the stack; a parquet does not.
 
 ```bash
 pipetask run -p pipelines/drpQA.yaml#twilightFluxQa -b /work/datastore -i <reductions> -o u/<user>/twilight \
@@ -885,9 +893,9 @@ python bin.src/twilightQa.py -c qaActor/reductions --sequence-of-visit 150844 --
 finished (`iic_sequence_status`), and every visit of it has a `twilightFiberFlux` for every camera it has a pfsArm
 for; otherwise it says what it is waiting for. The sequence id comes from the opdb, so it needs no `--sequences` for
 raws without `W_SEQID`, and its files are named by sequence. The exit status says what happened, for ics_qaActor's
-log: 0 judged (and written when asked), 3 pending (the sequence has not finished, or a visit's tables are missing),
-4 not a twilight (or in no sequence), 5 judged but not written to qadb; the verdicts and metrics are then printed in
-full, so the log holds them.
+log: 0 judged (stored, and loaded when asked), 3 pending (the sequence has not finished, or a visit's tables are
+missing), 4 not a twilight (or in no sequence), 5 judged but the store or the load failed; the verdicts and metrics
+are then printed in full, so the log holds them.
 
 ### `judgeScatterThresholds.py`
 

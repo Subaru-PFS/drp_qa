@@ -41,6 +41,7 @@ from pfs.drp.qa.qadb.tables import (
     LINE_RESIDUAL_METRIC,
     QA_GATE,
     TASK_TABLES,
+    TWILIGHT_QA,
     TableSpec,
     gateRows,
     imageRows,
@@ -71,7 +72,8 @@ MODES = ("realtime", "comparison", "backfill")
 
 #: The qadb table of each Butler dataset type loaded.
 SPECS: dict[str, TableSpec] = {
-    spec.source: spec for spec in (IMAGE_QUALITY, IMAGE_QUALITY_SPECIES, LINE_RESIDUAL, LINE_RESIDUAL_METRIC)
+    spec.source: spec
+    for spec in (IMAGE_QUALITY, IMAGE_QUALITY_SPECIES, LINE_RESIDUAL, LINE_RESIDUAL_METRIC, TWILIGHT_QA)
 }
 
 
@@ -427,12 +429,15 @@ def loadCollection(
         log(f"{table}: {counts[table]} rows")
 
     for perImage, longTable in TASK_TABLES.values():
-        spec, longSpec = SPECS[perImage], SPECS[longTable]
+        spec = SPECS[perImage]
         image = tables[perImage]
         if image.empty:
             continue
         imageKeys = imageRows(image, spec, ids)
         write(spec.name, imageKeys, list(spec.keys))
+        if longTable is None:
+            continue
+        longSpec = SPECS[longTable]
         rows = tables[longTable]
         # The long table's rows belong to the image's processing, whatever RUN they were read from.
         keyed = rows.drop(columns=["run"], errors="ignore").merge(
