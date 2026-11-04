@@ -86,9 +86,20 @@ def storeAndLoad(
         from pfs.utils.database.qadb import QaDB
 
         qadb = QaDB(host=args.qadb_host, port=args.qadb_port, user=args.qadb_user, dbname=args.qadb_dbname)
-        # A fresh Butler: the one that read the fibers may hold the chain as it was before the store.
+        # A fresh Butler: the one that read the fibers may hold the chain as it was before the store. The
+        # reduction's versions are not reread from the pfsArm headers: the per-visit loads recorded them,
+        # and the loader keeps a recorded version when a load does not read one.
         reader = Butler(args.butler, writeable=False)
-        loadCollection(reader, qadb, collection, visits=visits, opdb=opdb, mode="realtime", log=say)
+        loadCollection(
+            reader,
+            qadb,
+            collection,
+            visits=visits,
+            opdb=opdb,
+            mode="realtime",
+            pipelineVersions=False,
+            log=say,
+        )
 
 
 def printInFull(verdict: pd.DataFrame, metrics: pd.DataFrame) -> None:
@@ -141,6 +152,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         from pfs.utils.database.opdb import OpDB
 
         opdb = OpDB(host=args.opdb_host, port=args.opdb_port, dbname="opdb", user="public_user")
+    if args.no_store and args.qadb_host is not None:
+        parser.error(
+            "--no-store with --qadb-host would load what the collection already holds, not this judgement"
+        )
     if args.sequence_of_visit is not None:
         if args.collection is None or args.opdb_host is None:
             parser.error("--sequence-of-visit needs --collection and --opdb-host")
@@ -213,7 +228,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if len(bad):
             say(bad[["visit", "arm", "status", "reason"]].to_string(index=False))
 
-    if butler is None or images.empty or (args.no_store and args.qadb_host is None):
+    if butler is None or images.empty or args.no_store:
         return EXIT_JUDGED
     judged = sorted(int(visit) for visit in images["visit"].unique())
     try:

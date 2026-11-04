@@ -224,7 +224,8 @@ class StubButler:
         Per-detector tables by dataset type, split per image on ``visit``,
         ``arm`` and ``spectrograph``.
     runs : `dict` [`tuple`, `str`], optional
-        The RUN of an image's datasets, by ``(visit, arm, spectrograph)``;
+        The RUN of an image's datasets, by ``(visit, arm, spectrograph)``, or of
+        one dataset type's by ``(datasetType, visit, arm, spectrograph)``;
         default one RUN.
     datasets : `dict` [`str`, object], optional
         What ``get(name, collections=...)`` returns for ``packages`` and the
@@ -255,7 +256,9 @@ class StubButler:
                     "arm": a,
                     "spectrograph": int(s),
                 }
-                refs.append(StubRef(datasetType, dataId, self.runs.get((int(v), a, int(s)), StubRef.run)))
+                image = (int(v), a, int(s))
+                run = self.runs.get((datasetType, *image), self.runs.get(image, StubRef.run))
+                refs.append(StubRef(datasetType, dataId, run))
         return refs
 
     def get(self, ref, collections=None):

@@ -455,11 +455,12 @@ def loadCollection(
             deleteRows(qadb, longSpec.name, imageKeys[list(KEYS)], conn=conn)
             write(longSpec.name, longRows, list(longSpec.keys), conn=conn)
 
-    gates = []
-    for run in runs:
-        byRun = {task: table[table["run"] == run] for task, table in images.items() if not table.empty}
-        gates.append(gateRows(byRun, ids[run], mode, now()))
-    gate = pd.concat(gates, ignore_index=True) if gates else gateRows({}, 0, mode, now())
+    # One gate row per image across every task's RUN: the twilight judge stores its verdict in a RUN of
+    # its own beside pipetask's (INSTRM-3089), and the gate is the worst of all the image's tasks. The row
+    # takes the first present task's processing (`gateRows`, in TASK_TABLES order), so a sequence's reload
+    # replaces the row the per-visit load wrote under pipetask's RUN rather than adding one.
+    present = {task: table for task, table in images.items() if not table.empty}
+    gate = gateRows(present, ids, mode, now()) if present else gateRows({}, 0, mode, now())
     write("qa_gate", gate, list(QA_GATE[:3]))
     log(f"loaded {collection} in {time.monotonic() - start:.0f} s")
     return counts

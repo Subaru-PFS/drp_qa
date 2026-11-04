@@ -108,18 +108,42 @@ class TestLoad:
         assert qadb.count("twilight_qa") == first["twilight_qa"]
 
     def testBesideTheOtherTasks(self, StubButler, qadb, images, fixtures):
-        """A twilight image judged by imageQualityQa too gets the worst of both in one gate row."""
+        """A twilight image judged by imageQualityQa too gets the worst of both in one gate row.
+
+        The two verdicts come from different RUNs, as on the server: pipetask's for imageQualityQa and
+        the judge's for twilightQaMetrics. The gate must still be one row per image, under the
+        reduction's processing, so the sequence's reload replaces the per-visit load's row.
+        """
         iq = fixtures["iqQaMetrics"].iloc[:1].copy()
         iq["visit"], iq["arm"], iq["spectrograph"] = VISITS[1], "b", 1
         iq["qaStatus"], iq["qaReason"] = "FAIL", "medFwhm 9 px"
-        butler = StubButler({"twilightQaMetrics": images, "iqQaMetrics": iq}, datasets=PACKAGES)
-        self.load(butler, qadb)
-        row = qadb.query_dataframe(
-            "SELECT * FROM qa_gate WHERE pfs_visit_id = :v AND camera_name = 'b1'", params={"v": VISITS[1]}
-        ).iloc[0]
+        judgeRun = f"{COLLECTION}/twilightQaMetrics/20261104T194826Z"
+        runs = {
+            ("twilightQaMetrics", int(v), a, int(s)): judgeRun
+            for v, a, s in images[["visit", "arm", "spectrograph"]].itertuples(index=False)
+        }
+        butler = StubButler({"twilightQaMetrics": images, "iqQaMetrics": iq}, runs=runs, datasets=PACKAGES)
+        counts = self.load(butler, qadb)
+        assert counts["processings"] == 2
+        # One gate row per image, not one per RUN: 47 images, although the b1 image has rows in two RUNs.
+        assert counts["qa_gate"] == len(images) == qadb.count("qa_gate")
+        rows = qadb.query_dataframe(
+            "SELECT g.*, p.run_name FROM qa_gate g JOIN data_processing_pipe2d p USING (processing_id)"
+            " WHERE pfs_visit_id = :v AND camera_name = 'b1'",
+            params={"v": VISITS[1]},
+        )
+        assert len(rows) == 1
+        row = rows.iloc[0]
         assert row["qa_status"] == "FAIL" and row["decided_by_task"] == "imageQualityQa"
         assert "imageQualityQa: medFwhm 9 px" in row["qa_reason"]
         assert row["twilight_thresholds_id"] is not None and not pd.isna(row["twilight_thresholds_id"])
+        # Keyed by the reduction's processing (the first task's RUN), not the judge's.
+        assert row["run_name"] != judgeRun
+        # Negative control: the twilight rows themselves sit under the judge's processing.
+        twilightRuns = qadb.query_scalars(
+            "SELECT DISTINCT p.run_name FROM twilight_qa t JOIN data_processing_pipe2d p USING (processing_id)"
+        )
+        assert twilightRuns == [judgeRun]
         # Negative control: the other b1 images, judged by the twilight check alone, are not FAIL.
         others = qadb.query_dataframe(
             "SELECT qa_status FROM qa_gate WHERE camera_name = 'b1' AND pfs_visit_id != :v",
@@ -279,6 +303,12 @@ class TestSequenceOfVisit:
 
     def testNoStore(self, cli):
         assert cli("--no-store") == cli.script.EXIT_JUDGED
+        assert not cli.stored
+
+    def testNoStoreWithQadbIsRefused(self, cli):
+        """Loading would copy what the collection already holds, not this judgement."""
+        with pytest.raises(SystemExit):
+            cli("--no-store", "--qadb-host", "qadb-host")
         assert not cli.stored
 
     def testFiles(self, cli, tmp_path):
