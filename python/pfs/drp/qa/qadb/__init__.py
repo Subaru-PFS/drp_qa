@@ -11,8 +11,11 @@ collections, and a Butler outage or a database outage cannot fail a quantum.
 - `pfs.drp.qa.qadb.writer`: idempotent writes (``INSERT ... ON CONFLICT DO UPDATE``)
   through a `pfs.utils.database.qadb.QaDB`.
 - `pfs.drp.qa.qadb.loader`: read a collection from a Butler and write it.
+- `pfs.drp.qa.qadb.twilight`: the twilight sequence verdicts (``bin.src/twilightQa.py``) as
+  ``twilight_qa`` and ``twilight_qa_metric`` rows, and their write (INSTRM-3089).
 """
 
 from .loader import *  # noqa: F403
 from .tables import *  # noqa: F403
+from .twilight import *  # noqa: F403
 from .writer import *  # noqa: F403

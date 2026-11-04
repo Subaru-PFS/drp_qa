@@ -867,22 +867,27 @@ Comparison mode; see [Comparison mode](#comparison-mode).
 ### `twilightQa.py`
 
 Judges the twilight sequences of a collection (PIPE2D-1973): reads the `twilightFiberFlux` tables of a visit range,
-or a parquet export of them, compares each sequence's exposures (`pfs.drp.qa.metrics.twilight`), and writes
-`twilightMetrics.parquet` (per detector image) and `twilightVerdict.csv` (per exposure and arm: `PASS`, `WARN`,
-`FAIL` or `TOO_FAINT`, with the reasons). Reading a Butler requires the stack; a parquet does not.
+or a parquet export of them, compares each sequence's exposures (`pfs.drp.qa.metrics.twilight`), and prints the
+verdicts (per exposure and arm: `PASS`, `WARN`, `FAIL` or `TOO_FAINT`, with the reasons). With `-o` it writes
+`twilightMetrics.parquet` (per detector image) and `twilightVerdict.csv`; with `--qadb-host` it writes both to qadb's
+`twilight_qa` and `twilight_qa_metric` (`pfs.drp.qa.qadb.twilight`, `spt_qa_database` 0.3.0; INSTRM-3089), replacing
+the judged visits' rows. Reading a Butler requires the stack; a parquet does not.
 
 ```bash
 pipetask run -p pipelines/drpQA.yaml#twilightFluxQa -b /work/datastore -i <reductions> -o u/<user>/twilight \
     -d "visit IN (...)"
 python bin.src/twilightQa.py -c u/<user>/twilight --visits 148039 150896 -o .
 # After each visit (ics_qaActor, INSTRM-3089): judge its sequence once it is complete, else do nothing
-python bin.src/twilightQa.py -c qaActor/reductions --sequence-of-visit 150844 --opdb-host pfsa-db -o .
+python bin.src/twilightQa.py -c qaActor/reductions --sequence-of-visit 150844 --opdb-host pfsa-db --qadb-host pfsa-db
 ```
 
 `--sequence-of-visit` looks the visit's IIC sequence up in the opdb and judges it only when it is a twilight, has
 finished (`iic_sequence_status`), and every visit of it has a `twilightFiberFlux` for every camera it has a pfsArm
-for; otherwise it says what it is waiting for and exits 0. The sequence id comes from the opdb, so it needs no
-`--sequences` for raws without `W_SEQID`. Its outputs are named by sequence.
+for; otherwise it says what it is waiting for. The sequence id comes from the opdb, so it needs no `--sequences` for
+raws without `W_SEQID`, and its files are named by sequence. The exit status says what happened, for ics_qaActor's
+log: 0 judged (and written when asked), 3 pending (the sequence has not finished, or a visit's tables are missing),
+4 not a twilight (or in no sequence), 5 judged but not written to qadb; the verdicts and metrics are then printed in
+full, so the log holds them.
 
 ### `judgeScatterThresholds.py`
 

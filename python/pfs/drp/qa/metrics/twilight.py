@@ -87,6 +87,7 @@ __all__ = [
     "WINDOWS",
     "addPositions",
     "fiberFlux",
+    "isTwilightSequence",
     "sequenceConsistency",
     "sequenceReadiness",
     "twilightThresholds",
@@ -426,6 +427,19 @@ def _armMeanAndHalfDiff(residuals: list[pd.DataFrame]) -> pd.DataFrame:
     return pd.DataFrame({"twilightArmMean": armMean, "twilightArmHalfDiff": halfDiff}).reset_index()
 
 
+def isTwilightSequence(sequence: pd.DataFrame) -> bool:
+    """Return whether an IIC sequence, as `pfs.drp.qa.comparison.queries.readSequenceOfVisit` returns it, is a twilight.
+
+    False for no rows (the visit is in no sequence). The test is `observationType`'s, on the
+    sequence's type and name, so the opdb and the raw header agree on what a twilight is.
+    """
+    if sequence.empty:
+        return False
+    first = sequence.iloc[0]
+    header = {"W_SEQTYP": first["sequence_type"], "W_SEQNAM": first["sequence_name"]}
+    return observationType(header) == "twilight"
+
+
 def sequenceReadiness(
     sequence: pd.DataFrame, reduced: dict[int, set[str]], stored: dict[int, set[str]]
 ) -> tuple[bool, str]:
@@ -454,8 +468,7 @@ def sequenceReadiness(
     if sequence.empty:
         return False, "the visit is in no IIC sequence"
     first = sequence.iloc[0]
-    header = {"W_SEQTYP": first["sequence_type"], "W_SEQNAM": first["sequence_name"]}
-    if observationType(header) != "twilight":
+    if not isTwilightSequence(sequence):
         return False, f"sequence {first['iic_sequence_id']} ({first['sequence_name']!r}) is not a twilight"
     if pd.isna(first["finished_at"]):
         return False, f"sequence {first['iic_sequence_id']} has not finished"

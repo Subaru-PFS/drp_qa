@@ -10,6 +10,11 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Added
 
+- **Twilight verdicts go to qadb** (INSTRM-3089) — `bin.src/twilightQa.py --qadb-host` writes each judged
+  sequence's verdicts and measurements to `twilight_qa` and `twilight_qa_metric` (`pfs.drp.qa.qadb.twilight`;
+  `spt_qa_database` 0.3.0), replacing the judged visits' rows; a failed write prints both tables in full and exits
+  5, so a caller's log keeps them. `--sequence-of-visit` reports in its exit status (0 judged, 3 pending, 4 not a
+  twilight, 5 not written), for ics_qaActor to log, and `-o` is optional: nothing goes to disk unless asked.
 - **Twilight sky flats are judged against their own sequence** (PIPE2D-1973) — the new `twilightFluxQa` task, in
   `drpQA.yaml`, stores each lit fiber's median flux on a twilight as `twilightFiberFlux` (any other visit stops at
   its header, before the pfsArm is read), and

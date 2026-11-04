@@ -4,7 +4,7 @@ The database is SQLite in memory through SQLAlchemy, behind the same
 ``commit``/``query_scalar``/``query_dataframe`` surface as
 `pfs.utils.database.db.DB`: the ``INSERT ... ON CONFLICT DO UPDATE ...
 RETURNING`` statements the writer builds run unchanged on both. ``DDL`` below
-mirrors the tables of ``spt_qa_database`` 0.2.0 (migration ``a7c3e5d91b24``);
+mirrors the tables of ``spt_qa_database`` 0.3.0 (migration ``5d2e8f71c0b3``);
 change both together. Set ``PFS_QADB_TEST_DSN`` (``dbname=... user=... host=...
 port=...``) to run the same tests against a scratch PostgreSQL through
 `pfs.utils.database.qadb.QaDB` as well.
@@ -29,7 +29,7 @@ from sqlalchemy.pool import StaticPool
 
 DATA = Path(__file__).parent / "data"
 
-#: The qadb tables the loader writes, as ``spt_qa_database`` 0.2.0 defines them.
+#: The qadb tables the loader writes, as ``spt_qa_database`` 0.3.0 defines them.
 DDL = """
 CREATE TABLE pfs_visit (
     pfs_visit_id INTEGER PRIMARY KEY, pfs_visit_description TEXT, pfs_design_id BIGINT, issued_at TIMESTAMP);
@@ -90,6 +90,17 @@ CREATE TABLE qa_gate (
     provisional BOOLEAN, mode TEXT, iq_thresholds_id INTEGER REFERENCES qa_thresholds,
     dm_thresholds_id INTEGER REFERENCES qa_thresholds, decided_at TIMESTAMP,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
+CREATE TABLE twilight_qa (
+    pfs_visit_id INTEGER REFERENCES pfs_visit, arm VARCHAR(1), iic_sequence_id INTEGER, qa_status TEXT,
+    qa_reason TEXT, twilight_arm_mean REAL, twilight_arm_half_diff REAL, collection_name TEXT,
+    drp_qa_version TEXT, judged_at TIMESTAMP,
+    PRIMARY KEY (pfs_visit_id, arm));
+CREATE TABLE twilight_qa_metric (
+    pfs_visit_id INTEGER REFERENCES pfs_visit, camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1),
+    iic_sequence_id INTEGER, seq_name TEXT, n_exposures INTEGER, snr REAL, brightness REAL, too_faint BOOLEAN,
+    n_reference INTEGER, noise REAL, sat_fraction REAL, n_measured INTEGER, twilight_level_offset REAL,
+    twilight_resid_rms REAL, twilight_patch REAL, twilight_arm_mean REAL, twilight_arm_half_diff REAL,
+    PRIMARY KEY (pfs_visit_id, camera_name));
 """
 
 #: The tables `DDL` makes, in dependency order.
