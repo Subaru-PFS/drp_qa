@@ -21,15 +21,24 @@ class StubButler:
         self.chains = []
         self.dimensions = SimpleNamespace(conform=lambda names: tuple(names))
         self.registry = SimpleNamespace(
-            registerDatasetType=self.datasetTypes.append, registerRun=self.runs.append
+            registerDatasetType=self.datasetTypes.append, registerRun=self.register
         )
+        self.taken = set()
         self.collections = SimpleNamespace(
             get_info=lambda name: SimpleNamespace(type=SimpleNamespace(name=collectionType)),
             prepend_chain=lambda parent, children: self.chains.append((parent, list(children))),
         )
 
+    def register(self, run):
+        """Say whether the RUN was new, as `Registry.registerRun` does."""
+        self.runs.append(run)
+        if run in self.taken:
+            return False
+        self.taken.add(run)
+        return True
+
     def put(self, obj, datasetType, dataId=None, run=None):
-        self.puts.append((datasetType, dict(dataId), run, obj))
+        self.puts.append((datasetType, dict(dataId or {}), run, obj))
 
 
 @pytest.fixture(autouse=True)
@@ -42,9 +51,19 @@ def stackStub(monkeypatch):
             self.name, self.dimensions, self.storageClass = name, dimensions, storageClass
 
     module.DatasetType = DatasetType
+    packages = types.ModuleType("lsst.utils.packages")
+
+    class Packages(dict):
+        @classmethod
+        def fromSystem(cls):
+            return cls({"drp_qa": "w.test", "drp_stella": "w.test"})
+
+    packages.Packages = Packages
     monkeypatch.setitem(sys.modules, "lsst", types.ModuleType("lsst"))
     monkeypatch.setitem(sys.modules, "lsst.daf", types.ModuleType("lsst.daf"))
     monkeypatch.setitem(sys.modules, "lsst.daf.butler", module)
+    monkeypatch.setitem(sys.modules, "lsst.utils", types.ModuleType("lsst.utils"))
+    monkeypatch.setitem(sys.modules, "lsst.utils.packages", packages)
 
 
 def table():
@@ -72,14 +91,19 @@ def testOnePutPerImageInANewRunPrependedToTheChain():
     )
     assert run == "c/t/run1"
     assert butler.runs == ["c/t/run1"]
-    (registered,) = butler.datasetTypes
+    registered, packages = butler.datasetTypes
     assert registered.name == "twilightQaMetrics" and registered.storageClass == "DataFrame"
     assert registered.dimensions == IMAGE_DIMENSIONS
-    assert len(butler.puts) == 6
-    dataIds = [dataId for _, dataId, _, _ in butler.puts]
+    assert packages.name == "packages" and packages.storageClass == "Packages"
+    images = [put for put in butler.puts if put[0] == "twilightQaMetrics"]
+    assert len(images) == 6
+    dataIds = [dataId for _, dataId, _, _ in images]
     assert dataIds[0] == {"instrument": "PFS", "visit": 1001, "arm": "b", "spectrograph": 1}
-    assert all(run == "c/t/run1" and name == "twilightQaMetrics" for name, _, run, _ in butler.puts)
-    assert all(len(obj) == 1 and obj.index[0] == 0 for *_, obj in butler.puts)  # one row, reindexed
+    assert all(run == "c/t/run1" for _, _, run, _ in butler.puts)
+    assert all(len(obj) == 1 and obj.index[0] == 0 for *_, obj in images)  # one row, reindexed
+    # The judging software's versions go in the RUN too, for the loader's drpQaVersionOf.
+    (versions,) = [put for put in butler.puts if put[0] == "packages"]
+    assert versions[3]["drp_qa"] == "w.test"
     assert butler.chains == [("qaActor/reductions", ["c/t/run1"])]
 
 
@@ -87,6 +111,42 @@ def testDefaultRunIsNamedForTheCollectionAndType():
     butler = StubButler()
     run = storeImageTable(butler, "c", "twilightQaMetrics", table(), log=lambda _: None)
     assert run.startswith("c/twilightQaMetrics/") and run.endswith("Z")
+
+
+def testAGeneratedRunNameTakenInTheSameSecondGetsASuffix():
+    """Two judges of one sequence in one second must not put the same images into one RUN."""
+    butler = StubButler()
+    first = storeImageTable(butler, "c", "twilightQaMetrics", table(), run=None, log=lambda _: None)
+    butler.taken.add(first)  # as a concurrent store that took the same timestamp would
+    second = storeImageTable(butler, "c", "twilightQaMetrics", table(), log=lambda _: None)
+    if second == first:  # the clock moved on between the two: force the collision instead
+        butler = StubButler()
+        butler.taken.add("c/t/run1")
+        second = storeImageTable(butler, "c", "twilightQaMetrics", table(), run=None, log=lambda _: None)
+    assert second != first or second.endswith("-1")
+    # Negative control: an explicit RUN that exists is refused, not renamed.
+    butler = StubButler()
+    butler.taken.add("c/t/run1")
+    with pytest.raises(ValueError, match="already exists"):
+        storeImageTable(butler, "c", "twilightQaMetrics", table(), run="c/t/run1", log=lambda _: None)
+
+
+def testPackagesFailureIsLoggedNotRaised(monkeypatch):
+    butler = StubButler()
+    lines = []
+    monkeypatch.delitem(sys.modules, "lsst.utils.packages")
+    run = storeImageTable(butler, "c", "twilightQaMetrics", table(), run="c/t/run1", log=lines.append)
+    assert run == "c/t/run1" and butler.chains == [("c", ["c/t/run1"])]
+    assert any("packages: not recorded" in line for line in lines)
+    assert not [put for put in butler.puts if put[0] == "packages"]
+
+
+def testPackagesCanBeSkipped():
+    butler = StubButler()
+    storeImageTable(
+        butler, "c", "twilightQaMetrics", table(), run="c/t/run1", packages=False, log=lambda _: None
+    )
+    assert not [put for put in butler.puts if put[0] == "packages"]
 
 
 def testARunCollectionIsRefused():

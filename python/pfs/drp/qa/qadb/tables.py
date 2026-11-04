@@ -539,7 +539,12 @@ def gateRows(
             merged[label] if label in merged.columns else pd.Series([None] * len(merged), index=merged.index)
         )
 
+    # One lookup per task and column, not one per image: a missing column (a task without
+    # qaProvisional, say) would otherwise build a full-length Series for every image.
     statuses = {task: column(task, "qaStatus") for task in tasks}
+    decidedByOf = {task: column(task, "qaDecidedBy") for task in tasks}
+    reasonOf = {task: column(task, "qaReason") for task in tasks}
+    provisionalOf = {task: column(task, "qaProvisional") for task in tasks}
     present = {task: merged[f"present_{task}"].fillna(False).astype(bool) for task in tasks}
     worst, decidedByTask, decidedBy, reasons, provisional = [], [], [], [], []
     for index in merged.index:
@@ -553,14 +558,14 @@ def gateRows(
         decider = next((task for task in tasks if rowStatuses.get(task) == status), None)
         worst.append(status)
         decidedByTask.append(decider)
-        decidedBy.append(_scalar(column(decider, "qaDecidedBy")[index], "str") if decider else None)
+        decidedBy.append(_scalar(decidedByOf[decider][index], "str") if decider else None)
         parts = []
         for task in tasks:
-            reason = _scalar(column(task, "qaReason")[index], "str")
+            reason = _scalar(reasonOf[task][index], "str")
             if reason:
                 parts.append(f"{task}: {reason}")
         reasons.append("; ".join(parts))
-        flags = [_scalar(column(task, "qaProvisional")[index], "bool") for task in tasks]
+        flags = [_scalar(provisionalOf[task][index], "bool") for task in tasks]
         flags = [flag for flag in flags if flag is not None]
         provisional.append(any(flags) if flags else None)
 

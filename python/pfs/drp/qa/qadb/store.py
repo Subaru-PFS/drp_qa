@@ -37,6 +37,7 @@ def storeImageTable(
     *,
     instrument: str = "PFS",
     run: str | None = None,
+    packages: bool = True,
     log: Callable[[str], None] = print,
 ) -> str:
     """Store a table as one ``DataFrame`` dataset per detector image, in a new RUN of a CHAINED collection.
@@ -57,7 +58,13 @@ def storeImageTable(
     instrument : `str`, optional
         Instrument name. Default is ``PFS``.
     run : `str`, optional
-        The RUN to make; `runName` by default.
+        The RUN to make, which must not exist; by default `runName`, with a
+        numeric suffix if a store in the same second took that name.
+    packages : `bool`, optional
+        Also store the running software's versions in the RUN as the
+        ``packages`` dataset pipetask writes, so the qadb loader records which
+        drp_qa judged (`pfs.drp.qa.qadb.loader.drpQaVersionOf`). A failure to
+        record them is logged, not raised: provenance, not the verdict.
     log : callable, optional
         Where progress goes.
 
@@ -70,7 +77,8 @@ def storeImageTable(
     ------
     ValueError
         If ``collection`` is not a CHAINED collection: a RUN has no chain to
-        prepend to, and the tables would be invisible to the collection's readers.
+        prepend to, and the tables would be invisible to the collection's readers;
+        or if a ``run`` given explicitly already exists.
     """
     from lsst.daf.butler import DatasetType
 
@@ -79,12 +87,11 @@ def storeImageTable(
         raise ValueError(
             f"{collection!r} is a {info.type} collection, not CHAINED: nothing to prepend a RUN to"
         )
-    run = run or runName(collection, datasetType)
+    run = _newRun(butler, run or runName(collection, datasetType), explicit=run is not None)
     dimensions = butler.dimensions.conform(IMAGE_DIMENSIONS)
     butler.registry.registerDatasetType(
         DatasetType(datasetType, dimensions, "DataFrame", universe=butler.dimensions)
     )
-    butler.registry.registerRun(run)
     images = list(table.groupby(list(IMAGE_KEYS), sort=True))
     log(f"{datasetType}: storing {len(images)} images in {run}")
     for (visit, arm, spectrograph), rows in images:
@@ -95,6 +102,38 @@ def storeImageTable(
             "spectrograph": int(spectrograph),
         }
         butler.put(rows.reset_index(drop=True), datasetType, dataId=dataId, run=run)
+    if packages:
+        _storePackages(butler, run, log)
     butler.collections.prepend_chain(collection, [run])
     log(f"{datasetType}: {run} prepended to {collection}")
     return run
+
+
+def _newRun(butler: Any, run: str, explicit: bool) -> str:
+    """Register a RUN that did not exist: ``run``, or for a generated name the first free ``run-N``.
+
+    ``registerRun`` says whether it inserted the RUN; two stores in the same
+    second (two judges of one sequence) would otherwise put the same images
+    into one RUN and fail on the duplicate.
+    """
+    candidate, attempt = run, 0
+    while butler.registry.registerRun(candidate) is False:
+        if explicit:
+            raise ValueError(f"RUN {run!r} already exists")
+        attempt += 1
+        candidate = f"{run}-{attempt}"
+    return candidate
+
+
+def _storePackages(butler: Any, run: str, log: Callable[[str], None]) -> None:
+    """Store the running software's versions in ``run`` as the ``packages`` dataset, as pipetask does."""
+    try:
+        from lsst.daf.butler import DatasetType
+        from lsst.utils.packages import Packages
+
+        butler.registry.registerDatasetType(
+            DatasetType("packages", butler.dimensions.conform(()), "Packages", universe=butler.dimensions)
+        )
+        butler.put(Packages.fromSystem(), "packages", run=run)
+    except Exception as error:
+        log(f"packages: not recorded in {run} ({error!r}); the processing's drp_qa version will be null")

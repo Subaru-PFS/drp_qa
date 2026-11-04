@@ -469,3 +469,16 @@ class TestImageVerdict:
     def testOwnThresholdsRecordNothing(self, metrics):
         images = twilightImageVerdict(metrics.iloc[:12], twilightThresholds())
         assert set(images["thresholdsFiles"]) == {""} and set(images["thresholdsSha256"]) == {""}
+
+    def testAFileGivenByPathIsRecorded(self, metrics, tmp_path):
+        """The shipped file by its path records as the default does; another file by its path."""
+        default = twilightImageVerdict(metrics.iloc[:12])
+        explicit = twilightImageVerdict(metrics.iloc[:12], thresholdsPath(TWILIGHT_THRESHOLDS_FILE))
+        for column in THRESHOLDS_COLUMNS:
+            assert set(explicit[column]) == set(default[column]) == {default[column].iloc[0]}
+        assert default["thresholdsFiles"].iloc[0] == TWILIGHT_THRESHOLDS_FILE
+        copy = tmp_path / "myThresholds.yaml"
+        copy.write_bytes(thresholdsPath(TWILIGHT_THRESHOLDS_FILE).read_bytes())
+        other = twilightImageVerdict(metrics.iloc[:12], copy)
+        assert set(other["thresholdsFiles"]) == {str(copy)}
+        assert set(other["thresholdsSha256"]) == set(default["thresholdsSha256"])  # same content

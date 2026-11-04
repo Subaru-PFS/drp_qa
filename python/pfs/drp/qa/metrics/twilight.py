@@ -598,6 +598,15 @@ def twilightVerdict(metrics: pd.DataFrame, thresholds: pd.DataFrame | None = Non
     return pd.DataFrame(rows, columns=list(VERDICT_COLUMNS))
 
 
+def _thresholdsName(path: Path | str) -> str:
+    """Return how a thresholds file is recorded: its name when shipped with the package, else its path."""
+    path = Path(path)
+    try:
+        return str(path.resolve().relative_to(thresholdsPath("").resolve()))
+    except ValueError:
+        return str(path)
+
+
 def twilightImageVerdict(
     metrics: pd.DataFrame, thresholds: pd.DataFrame | Path | str | None = None
 ) -> pd.DataFrame:
@@ -608,9 +617,10 @@ def twilightImageVerdict(
     metrics : `pandas.DataFrame`
         `sequenceConsistency` rows.
     thresholds : `pandas.DataFrame` or path, optional
-        A `gate` table or thresholds file; `TWILIGHT_THRESHOLDS_FILE` by default,
-        which is then recorded in `pfs.drp.qa.metrics.gate.THRESHOLDS_COLUMNS` so
-        the qadb loader can cite it in ``qa_gate``.
+        A `gate` table or thresholds file; `TWILIGHT_THRESHOLDS_FILE` by default.
+        A file is recorded in `pfs.drp.qa.metrics.gate.THRESHOLDS_COLUMNS` (by
+        its name when it is a shipped file, else by its path) so the qadb loader
+        can cite it in ``qa_gate``; a table has no file and records none.
 
     Returns
     -------
@@ -633,7 +643,8 @@ def twilightImageVerdict(
         return pd.DataFrame(columns=list(IMAGE_VERDICT_COLUMNS))
     if thresholds is None:
         thresholds = thresholdsPath(TWILIGHT_THRESHOLDS_FILE)
-        record = thresholdsRecord([TWILIGHT_THRESHOLDS_FILE])
+    if isinstance(thresholds, str | Path):
+        record = thresholdsRecord([_thresholdsName(thresholds)])
     else:
         record = dict.fromkeys(THRESHOLDS_COLUMNS, "")
     rows = metrics.reset_index(drop=True)
