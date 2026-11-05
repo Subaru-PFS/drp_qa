@@ -8,6 +8,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ## [Unreleased]
 
+## [w.2026.45] - 2026-11-05
+
 ### Added
 
 - **The twilight check joins the per-image gate** (INSTRM-3089) — `bin.src/twilightQa.py` stores its verdict per
@@ -19,6 +21,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   loads the judged visits itself; a failed store or load prints the verdicts and metrics in full and exits 5, so a
   caller's log keeps them. `--sequence-of-visit` reports in its exit status (0 judged, 6 judged with a `WARN` or `FAIL`,
   3 pending, 4 not a twilight, 5 not written), for ics_qaActor to log, and `-o` is optional: nothing goes to disk unless asked.
+
 - **Twilight sky flats are judged against their own sequence** (PIPE2D-1973) — the new `twilightFluxQa` task, in
   `drpQA.yaml`, stores each lit fiber's median flux on a twilight as `twilightFiberFlux` (any other visit stops at
   its header, before the pfsArm is read), and
@@ -33,6 +36,18 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `twilightQa.py --sequence-of-visit VISIT` judges a visit's sequence only once it is a finished twilight with every
   visit's tables stored (the opdb's `iic_sequence_status` and `visit_set`), and otherwise does nothing: for running
   after every visit.
+
+### Changed
+
+- **The "cloudy" Run25 twilight (134334–134337) is an unconfirmed known-bad entry** (PIPE2D-1973) — it was listed
+  from its obslog note, as `skyFluxUniformity` (unchecked). The cloud shows in its spectrum (bluer in b, redder in
+  r than the clear nights' at the same brightness) but not across the field: it is as uniform as any clear night,
+  within its sequence and against other nights. It keeps the metric so that it labels no other, and no longer counts
+  among the entries coverage must catch.
+
+## [w.2026.43] - 2026-10-29
+
+### Added
 
 - **The end-of-run AG report has a section per camera** (INSTRM-2466, INSTRM-2982) — each camera's flags and a
   figure of its matched stars, FWHM per detector half, focus against the others, presence, clusters of rejected
@@ -92,6 +107,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   goes by (`engineeringLit`: the spectrograph's engineering fibers all `GOOD`), since 7 n-arm calexps of Run30
   lack the lamp headers. `addSpecies` reads the lamp of an IIS sequence from its parentheses ("ImageQuality
   (Ne)" gives `Ne`), so IIS populations split by lamp like the PFI arcs.
+
 - **IIS thresholds** (PIPE2D-1954) — `iqQaThresholds-iis-run30.yaml`, the default of the new `extraThresholdsFiles`
   config field (further files judged after `thresholdsFile`), derived and adopted by `makeIisThresholds.py` from
   Run30's nightly IIS frames (the IIS Ne and Kr arcs and halogen quartz, 15 nights) reduced afresh on one pipeline
@@ -106,6 +122,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   for which Ne and Kr pooled are no reference. The two files record different pipelines (obs_pfs w.2026.40 and
   w.2026.43), so comparison mode marks an image provisional against the pipeline of the layer that judged it
   (`gate.layerPipelineMismatch`, `findings.taskPipelines`); `taskPipeline` keeps returning the first file's.
+
 - **`readAgcData` reads `camera_enabled`** (INSTRM-3057) — `agc_match.camera_enabled`, a nullable boolean: False for a
   spot from a camera that ics_agActor left out of its fit (INSTRM-2919), NA for rows written before the column.
   `selectEnabledCameras` selects the rest, taking NA (or no column) as enabled, and `selectFittedMatches` the valid
@@ -119,6 +136,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   medians, `plotFocusByAG`'s reference and zero point) leave it out, and the title says so.
   `docs/guider-plots.ipynb` has a sample. Needs the opdb migration `f3a8d61c2b57` (spt_operational_database) on the
   database read.
+
 - **Known-bad coverage** (PIPE2D-1934) — `pfs.drp.qa.metrics.coverage.knownBadCoverage` reports, for each
   known-bad validation entry, whether every image it covers with its metric measured is judged and reaches its
   verdict under the thresholds the gate uses, per image (a `dmLineResiduals` table's rows per species count as one
@@ -268,23 +286,21 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   metric, arm and setup, those the validation set expects folded away), with the detail collapsed. An image with
   nothing judged is `NOT JUDGED`, with the reason (no method for the type, IIS lamp, FWHM from `fiberProfiles`, no
   FLUXSTD FWHM, twilight), and `UNKNOWN` only when a measured metric has no threshold for its population.
+
 - **GitHub Actions CI** — `.github/workflows/tests.yml` runs the stack-free test suite on Python 3.12 and
   3.13; `.github/workflows/lint.yml` runs `ruff check .` and `ruff format --check .` over the whole tree.
   Both are blocking.
+
 - **Repository is now Ruff-clean** — `ruff check .` and `ruff format --check .` both pass, and CI gates
   on them. `examples/` is excluded (out-of-order imports and cross-cell names are inherent to notebooks);
   `E501` is ignored because `ruff format` already enforces `line-length` for code and what remains are
   long regexes and report strings the formatter will not split; `RUF001`–`RUF003` are ignored because
   Greek letters and typographic dashes are intentional in a scientific package.
+
 - **`tests/conftest.py`** — skips test modules that import the LSST/PFS stack at module scope when the
   stack is unavailable, so the stack-free suite can be collected and run in CI. Add new stack-dependent
   modules to `_STACK_MODULES`.
-- Added a new `imageQualityQa` workflow that writes `iqQaData`/`iqQaMetrics` with per-quantum status and supports
-  post-hoc time-series plotting via `iqQaPlots` and `bin.src/plotIqQaTimeSeries.py`.
-- Added stack-free log QA/report tools (`bin.src/fitDetectorMapLogQa.py`, `bin.src/imageQualityLogQa.py`) and associated
-  tests/documentation for the image-quality pipeline.
-- **`AGENTS.md`** — single source of instructions for AI coding assistants, with
-  `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md` as symlinks to it.
+
 - **Validation visit set and threshold derivation** (PIPE2D-1914) — `pfs.drp.qa.metrics.validationVisits`
   loads `data/validationVisits.yaml`, visits with known verdicts, each assigned to an observing run;
   `metrics.calibration.calibrate` derives WARN/FAIL from the reference run (Run25) per population (arm and `obsType`; flag rates per species) from the known-good `iqQaMetrics`,
@@ -295,16 +311,19 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   procedure, from reducing the visits (`pipelines/qaThresholds.yaml`, with `drpActor`'s per-sequence-type
   config) to review; `docs/validation-visits.md` describes the set, and `docs/qa-principles.md` holds rules
   R1–R7 and the metric checklist. `pyyaml` is now a dependency.
+
 - **Known-good validation visits are Run25 only** (PIPE2D-1933) — the loader rejects a `known_good` entry
   outside `referenceRuns`; other runs give `known_bad` entries only, as fault examples, and are compared
   with Run25 by comparison mode (PIPE2D-1929). `summarizeGood` describes the known-good values of a metric
   with no derived thresholds, per population.
+
 - **One gating path for `imageQualityQa`** (PIPE2D-1915) — `pfs.drp.qa.metrics.gate.gate` judges `iqQaMetrics`
   rows against layered threshold tables: a `writeThresholds` file first, then the config. Each image gets
   `qaStatus` with the metric that decided it (`qaDecidedBy`, new column) and the reasons (`qaReason`, new
   column). A NaN value gets no verdict; an infinite one is judged. New config field `thresholdsFile`. `pfs.drp.qa.metrics.registry` declares each metric's direction, units,
   reference and populations once, for derivation and gating; `MetricSpec` and `METRIC_SPECS` moved there from
   `calibration`, which re-exports them.
+
 - **`imageQualityQa` can fail a quartz, and says when it judged nothing** (PIPE2D-1917) — `qaStatus` is
   `UNKNOWN`, not `PASS`, when no metric was judged. A quartz whose calexp measurement is unusable falls back to
   the `fiberProfiles` widths, as one without a calexp did; such a FWHM (`traceOnly`) is not a measurement, so
@@ -313,39 +332,50 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `obsType=trace` entries. `nLines` now counts the rows of `lines` on every path. New `obsType` values
   `twilight` and `dark` (were `science`), neither measured. `imageQualityLogQa.py` tells `UNKNOWN` from a
   missing result (`NOT_RUN`).
+
 - **Run25 thresholds adopted** (PIPE2D-1917) — `thresholdsFile` defaults to `iqQaThresholds-run25.yaml`, shipped in
   `pfs/drp/qa/metrics/data` with the script that makes it from the PIPE2D-1914 derivation: `medFwhm` (arcs) and
   `nLines`, quartz `nLines` set by hand, twilight `nLines` not judged. A relative
   `thresholdsFile` is looked up there (`gate.thresholdsPath`). Changes verdicts.
+
 - **`pfs.drp.qa.crossDispersion`** (PIPE2D-1918) — trace width on a calexp, each fiber fitted jointly with its
   neighbours (`measureImageWidths`), and `profileFwhm`, the half-maximum width of an oversampled fiber profile.
   FWHM includes the pixel response, as `SdssShape` and `fiberProfiles` widths do. `docs/trace-widths.ipynb`
   is the comparison behind the choice.
+
 - **`pfs.drp.qa.utils.provenance`** (PIPE2D-1918) — the calibrations a dataset was made with, read from its
   Butler provenance rather than looked up again.
+
 - **Quartz `medFwhm` is judged** (PIPE2D-1918) — `iqQaThresholds-run25.yaml` gains b, r and n quartz entries,
   derived from the Run25 validation visits rerun with the calexp width (`u/wtg/qa-thresholds/004`); m-arm quartz
   `medFwhm` is not judged, its derivation being below the sample floor. The gate fixtures now come from that run, and the
   config regression check keeps the `003` run (`iqQaMetrics-config.parquet`). Changes verdicts.
+
 - **`medFwhm` is judged per detector and lamp** (PIPE2D-1942) — WARN 3 % and FAIL 5 % above the Run25 known-good
   median of each arm, spectrograph, `obsType` and lamp (`MetricSpec.tolerance`, `thresholds.deriveTolerance`); the
   per-arm percentiles judge only an image with no such median. `calibrate` adds these rows (`method` `tolerance`),
   thresholds files record each entry's `method` (schema version 2; version 1 still reads), and `plotting.plotTolerances` draws them. m-arm quartz is now
   judged. No Run25 known-good arc or quartz fails. Changes verdicts.
+
 - **Obstructed Run30 frames are known-bad for `nLines`** (PIPE2D-1942) — 150115, 150116, 150641 and 150642
   named `pctFlagged`, which is no longer judged; `nLines` is what fails them, and now its known-bad check covers them.
+
 - **`pctFlagged` is no longer judged** (PIPE2D-1929) — the shipped thresholds file has one entry for it with
   neither WARN nor FAIL, which overrides the `flagRate*Threshold` config fields: their n-arm 15/20 % sits below
   the known-good n-arm Neon sets of Run25 and Run30. Changes verdicts.
+
 - **`iqQaSpeciesMetrics`** (PIPE2D-1915) — the per-species `fitDetectorMap` statistics, in long format
   (`pfs.drp.qa.metrics.longFormat`), replacing the `fitSpeciesXRms_<species>`/`fitSpeciesYRms_<species>`
   columns of `iqQaMetrics`, which are gone. `imageQualityLogQa.py` reads it.
+
 - **`pfs.drp.qa.guiders`** — empty `coordinates`, `queries`, `analysis` and `plotting` modules for the
   guider tools moving from `pfs.drp.stella.utils.guiders`, and a `guiders` CI job that runs
   `tests/guiders/` with pfs-utils (installed `--no-deps`).
   `tests/guiders/conftest.py` provides a `makeAgcData` fixture for synthetic AG data (PIPE2D-1895).
+
 - **`opaqueColorbar`** in `pfs.drp.qa.utils.plotting`, from `pfs.drp.stella.utils.quality`. Unlike the
   original, it restores an alpha of 0 or `None` (PIPE2D-1895).
+
 - **`pfs.drp.qa.guiders.coordinates`** — the guider tools' frame, sign and unit conventions. Positions are
   in hardware coordinates, converted from the opdb once by `opdbToHardware`; offsets are center minus a
   named reference (`addOffsets`, columns `dx_<reference>_um`); columns carry their units; and unit
@@ -353,6 +383,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   (`pfiToZenith`, `zenithToPfi`) from drp_stella's `ag_to_zenith_offset`, which take hardware
   coordinates rather than negated y. Constants are renamed with their units (`agcCameraCenters` is
   `AGC_CAMERA_CENTERS_MM`, ...) (PIPE2D-1896).
+
 - **`pfs.drp.qa.guiders.queries`** — the guider tools' opdb and butler readers. Each takes a
   `pfs.utils.database.opdb.OpDB` and binds its parameters. `readAgcData` replaces drp_stella's four AG
   readers: one query for all the visits, one row per matched spot (every match flag; `agc_match_flags`
@@ -366,10 +397,12 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `agc_data` flags get RIGHT from the centroid, as ics_agActor reads them; and
   `find_W_M2OFF3` names the right visit in its error
   (PIPE2D-1897).
+
 - **`pfs.drp.qa.guiders.compat`** — drp_stella's `readAGCPositionsForVisitByAgcExposureId`,
   `readAgcDataFromOpdb`, `readAGCStarsForVisitByPfsVisitId` and `readAGCStarsForVisitSetByPfsVisitId`,
   as wrappers of `readAgcData` that keep their arguments and columns and raise a `DeprecationWarning`
   (PIPE2D-1897).
+
 - **`pfs.drp.qa.guiders.analysis`** — the guider tools' fits and statistics, taken out of drp_stella's
   plotting routines. They take DataFrames, return their results, and modify neither their inputs nor
   shared state: `fitGuiderModel` (`showGuiderErrors`'s boresight and per-camera fits, configured by
@@ -388,13 +421,16 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   in hardware coordinates); focus positions round correctly; the INSTRM-2501 correction applies to
   each visit before 122129 whatever the others; and the zenith fits no longer append to
   `pandas.DataFrame._metadata` (PIPE2D-1898).
+
 - **`boresight` and `model` references** in `pfs.drp.qa.guiders.coordinates`: `boresight` is
   `estimateGuideErrors`'s `nominal0` moved by each visit's shift, from the stars seen most often in
   that visit; `model` is where a fit in `analysis` puts each star (PIPE2D-1898).
+
 - **Guider regression tests on real AG data** — `tests/guiders/test_realData.py` runs the guider
   analysis on engineering visits of Run 30 (a focus sweep, a raster scan, an all-sky exposure), read
   through the `realAgcData` and `realAgcStars` fixtures from `tests/guiders/data/` (0.63 MB of parquet,
   made by `makeGuiderFixtures.py` there) (PIPE2D-1900).
+
 - **`pfs.drp.qa.guiders.plotting`** — drp_stella's guider plots: `showAgcErrorsForVisits`,
   `showAgcErrorsForVisitsByCamera`, `showGuiderErrors` and `showGuiderErrorsByParams` (drawing a `GuiderFit`, with
   the plotting options of `GuiderConfig` in `GuiderPlotConfig`), `showTelescopeErrors`, `plotDriftRate` (a
@@ -418,6 +454,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   an annotated sample drawn from the tests' AG data; with `USE_OPDB = True` it runs on the opdb and checks the
   readers and fits the plots don't use. `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its
   drp_qa replacement, on a real opdb (PIPE2D-1899).
+
 - **`pfs.drp.qa.plotting`** — the QA plots, moved unchanged out of `dmResiduals`, `dmCombinedResiduals`,
   `iqQaPlots` and `utils.plotting` (into `plotting.dmResiduals`, `.dmCombined`, `.iqQa` and `.palettes`), which
   re-export them. The subpackage imports no Butler, stack or task module, so the plots can be drawn from stored
@@ -426,70 +463,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   generator `plotting.dmCombined.reportFigures`. `FitStat`/`FitStats` move to `pfs.drp.qa.metrics.fitStats`.
   Rendered output is unchanged (PIPE2D-1916).
 
-### Removed
-
-- **`dmResiduals` and `dmCombinedResiduals`** (PIPE2D-1956) — replaced by `dmLineResiduals`, which measures the same
-  lines against the calibration and the visit's detectorMap without re-selecting or clipping them. Retired after a
-  comparison on Run30's fresh reductions: medians agree to under 0.002 px, robust RMS to 5–14 %, and the two tasks
-  measure the same RMS on every image `dmLineResiduals` flagged. Their plots (`plotting.dmResiduals`,
-  `plotting.dmCombined`) and `metrics.fitStats` go with them; `dmLineResidualData` is plotted after the fact.
-
-### Fixed
-
-- **`loadQadb.py` names a missing collection** (PIPE2D-1385) — `pfs.drp.qa.qadb.collectionExists` is checked before
-  anything is read, so a mistyped collection is one line, not daf_butler's traceback from the first query.
-
-- **`showTelescopeErrors` plots the azimuth offset on-sky** (PIPE2D-1971) — `agc_guide_offset.guide_delta_az` is a
-  coordinate offset, the difference of two azimuths, where `guide_delta_el` is on-sky (likewise `guide_delta_ra`
-  and `guide_delta_dec`, INSTRM-2923). Plotted as read against δalt with equal aspect, as drp_stella did, the δaz
-  axis was stretched by 1/cos(alt), 1.3-2.6 at Run30's altitudes. The panels now show δaz·cos(alt), and the plot's
-  `data` carries it as `daz_cosalt_arcsec` beside `daz_arcsec` as read; `readAgcData`'s columns are unchanged, and
-  `queries.AGC_DATA_COLUMNS` describes both conventions. On the real-data fixtures hypot(δaz·cos(alt), δalt) matches
-  hypot(δRA·cos(dec), δdec) per AG exposure to 0.1%.
-
-- **Task logs at INFO** (PIPE2D-1938) — `docs/qa-thresholds.ipynb` and comparison mode's fresh reductions ran
-  `pipetask --log-level PFS=INFO`, but the tasks log as `pfs.<task>`, lowercase, so their INFO lines (the fit
-  statistics `imageQualityQa` parses among them) were missing from the stored logs; a bare `INFO` sets only
-  `lsst`. They now run with `--log-level pfs=INFO`, as drpActor sets it.
-
-- **`imageQualityQa` measures quartz from the calexp** (PIPE2D-1918) — the calexp trace width used a
-  `profileHalfWidth` 7 aperture, wider than the 6.17 px fiber pitch, so it took neighbouring traces as
-  background, flagged nearly every sample, and every Run25 quartz fell back to `fiberProfiles`. Each fiber is
-  now fitted jointly with its neighbours (`crossDispersion.measureImageWidths`), on every calexp path (trace,
-  arc fallback, FLUXSTD). Changes `medFwhm` on quartz and on those paths.
-
-- **`dmResiduals` import** — `getDescriptionCounts` is now imported from
-  `pfs.drp.stella.fitDetectorMap`. The former `pfs.drp.stella.fitDistortedDetectorMap` module no longer
-  exists in `drp_stella`, so `DetectorMapResidualsTask` failed to import and the `dmResiduals` pipeline
-  task could not run.
-- **`drpQA.yaml` builds as a whole** — `imageQualityQa` declared `pfsConfig` as a plain input while
-  `extractionQa` and `extractionQaCombined` declare it as a prerequisite, so `pipetask build` of the whole
-  pipeline failed with `ConnectionTypeConsistencyError`; running one task at a time with `#label` hid it. It
-  is now a prerequisite there too, still optional (`minimum=0`), and in `skyArmSubtractionQa`, so a pipeline
-  combining it with `extractionQa` or `fluxCalQa` builds as well. `tests/test_connections.py` reads every
-  task's connections from source, without the stack, and checks that no dataset type is declared both
-  ways (PIPE2D-1913).
-- **`fluxCalQa` import** — `FilterCurve` and `TransmissionCurve` are imported from
-  `pfs.drp.stella.fitFluxReference`; `pfs.drp.stella.fitReference` no longer exists (PIPE2D-1913).
-- **`plot_residual` with pandas 3** — the binned wavelength panel called `.agg("median", robustRms)`.
-  Older pandas took `robustRms` as `numeric_only` and computed the median; pandas 3 raises, which left both
-  residual-by-wavelength panels of `plot_detectormap_residuals` empty. It now calls `.agg("median")`. Its
-  per-fiber `groupby().apply()` no longer warns about operating on the grouping columns (PIPE2D-1916).
-- **`get_fit_stats` at zero dof** — with zero degrees of freedom and zero residuals, the softening solve
-  raised from `scipy.optimize.bisect` and `dmResiduals` wrote nothing for the quantum. `softenFit` is now NaN
-  there, as it already was at zero dof with nonzero residuals (PIPE2D-1916).
-- **`plot_detector_summary_per_desc` on matplotlib ≥ 3.10** — seaborn 0.13 passes `vert` to `Axes.bxp`,
-  which matplotlib 3.10 pending-deprecates and 3.11 deprecates for removal in 3.13. The plot now passes
-  `vert=None`, so matplotlib uses `orientation`, whose default is vertical. The output is pixel-identical.
-  This needs matplotlib 3.10, now the minimum in `pyproject.toml` (PIPE2D-1916).
-
 ### Changed
 
-- **The "cloudy" Run25 twilight (134334–134337) is an unconfirmed known-bad entry** (PIPE2D-1973) — it was listed
-  from its obslog note, as `skyFluxUniformity` (unchecked). The cloud shows in its spectrum (bluer in b, redder in
-  r than the clear nights' at the same brightness) but not across the field: it is as uniform as any clear night,
-  within its sequence and against other nights. It keeps the metric so that it labels no other, and no longer counts
-  among the entries coverage must catch.
 - **`iqQaData` is written only on request** (PIPE2D-1962) — `imageQualityQa` gains `doWriteLineData`, default off.
   The table holds every row of `lines` measured, with its width and centre offset, and nothing reads it back: about
   21 MB per detector for an arc, 2 MB for a quartz and 80 MB for a twilight, mostly unsampled trace centroids
@@ -497,6 +472,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `iqQaMetrics`. The connection stays, so the `imageQualityQa_config` of earlier RUNs, which names it, can still be
   read (the qadb loader and `qaComparison report --version` read it). `run` returns the table as `lineData` (was
   `iqQaData`). Collections written before keep their `iqQaData`.
+
 - **Validation set** (PIPE2D-1934) — the Run27 SM1 defocus is known-bad for the line scatter, `robustRmsDeltaX`,
   as well as `medFwhm`: the trace sets and the Ar, Ne, Kr and r/n Xe arcs, which fail at 1.7–4× each detector's
   Run25 median (not HgCd, whose scatter is not judged, nor b-arm Xenon, the one noisy population). Removed: the
@@ -531,6 +507,7 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   them again; it no longer reduces them a second time. A comparison's own verdicts are read, counted and skipped from
   the runs it wrote (`butlerQueries.ownRuns`), not from its output chain, which also holds those earlier
   collections: their verdicts were counted as judged, read into the report and skipped by `pipetask`.
+
 - **`imageQualityQa` calexp and fallback widths** (PIPE2D-1918) — `iqQaData` gains `fwhmIntrinsic` (without the
   pixel response) and `snr`, and `fluxErr` is the fit's error, no longer 1. The `fiberProfiles` fallback reads
   each profile at half maximum, not drp_stella's second moment, which varied 2.3-3.7 px across detectors
@@ -538,25 +515,24 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   `profileHalfWidth` is deprecated and ignored; `minPeakSN` is now the significance of the fitted trace flux. The joint
   fit computes each pixel edge's Gaussian integral once, searches only near its first pass's width on the second,
   and on a science frame fits only the flux standards: about 1.7x faster on a quartz, ~10x on a science frame.
-- **Build and packaging** — `pyproject.toml` is now the single source of build, lint, and test configuration. Ruff
-  replaces Black, isort, and Flake8. EUPS `setup -r .` still works via
-  `ups/drp_qa.table`, but there is no longer a build step.
-- **Lint and format sweep** — every pre-existing QA module reformatted under Ruff (`line-length = 110`,
-  `target-version = "py312"`), including `typing.Union`/`Optional`
-  → PEP 604 unions and `typing.Iterable` → `collections.abc.Iterable`. No behaviour changes. LSST camelCase naming is
-  preserved; the corresponding pep8-naming rules are in the ignore list.
+
 - **`pfs` and `pfs.drp` are PEP 420 namespace packages** — the `pkgutil`-style `python/pfs/__init__.py` and
   `python/pfs/drp/__init__.py` are removed (and no longer ship in the wheel), matching `drp_stella`, `pfs_utils` and
   `datamodel`. Module names are unchanged (PIPE2D-1904).
+
 - **`FluxCalQA` takes the databases** — `FluxCalQA(butler, opdb, qadb, ...)` now requires a
   `pfs.utils.database` `OpDB` and `QaDB` and queries them with bound parameters, replacing its own
   `psycopg2.connect` calls. Needs `pfs_utils` 7.4.18 or later. `main()` still reads the opdb on `pfsa-db`
   (PIPE2D-1893).
+
 - **`scipy` is a declared dependency** in `pyproject.toml`, for the guider fits (PIPE2D-1895).
+
 - **matplotlib 3.10 or later is required** (`pyproject.toml`), for `Axes.bxp`'s `orientation` (PIPE2D-1916).
+
 - **CI's `guiders` job is now `deps`** and runs every stack-free test, not only `tests/guiders/`. A test
   needing packages beyond the standard library goes in a `tests/` subdirectory listed in `_OPTIONAL_DIRS`
   (PIPE2D-1913).
+
 - **`comparePfsUtilsPositions` uses the AG actor's model** — pfs_utils's positions of the guide stars
   come from the chain ics_agActor uses for its nominal positions (the new `agActorPositions`: pfs_utils's
   `Subaru_POPT2_PFS` with each AG exposure's field center, PA, ADC and M2 positions and detector half),
@@ -579,18 +555,107 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ### Removed
 
+- **`dmResiduals` and `dmCombinedResiduals`** (PIPE2D-1956) — replaced by `dmLineResiduals`, which measures the same
+  lines against the calibration and the visit's detectorMap without re-selecting or clipping them. Retired after a
+  comparison on Run30's fresh reductions: medians agree to under 0.002 px, robust RMS to 5–14 %, and the two tasks
+  measure the same RMS on every image `dmLineResiduals` flagged. Their plots (`plotting.dmResiduals`,
+  `plotting.dmCombined`) and `metrics.fitStats` go with them; `dmLineResidualData` is plotted after the fact.
+
 - **`uv.lock`** — it had gone stale (`uv lock --check` failed) and nothing used it: CI installs its packages
   without it, and the code runs in the LSST stack. It is now in `.gitignore`; `uv sync` still works and writes a
   local lockfile (PIPE2D-1906).
+
 - **Log-artifact tests** — the `TestRealLogs` class in `tests/test_fitDetectorMapLogQa.py` depended on
   `run28-dm-02.log` / `run28-dm-03.log`, which are not in the repository, so all eight tests always
   skipped and provided no coverage.
 
-- **SCons build** — `SConstruct`, `bin.src/SConscript`, `tests/SConscript` and `ups/drp_qa.cfg`. The `bin/`
-  directory is no longer generated; scripts are run as `python bin.src/<name>.py` (`tests/SConscript`:
-  PIPE2D-1913).
-- **`setup.cfg`** and **`mypy.ini`** — superseded by `pyproject.toml`. No static type checker is configured for this
-  repository.
 - **Unused `database` pytest marker** — the marker declaration and the `-m 'not database'` filter in
   `addopts` are removed from `pyproject.toml`. No test in the repository was ever marked with it, so the
   filter was a no-op.
+
+### Fixed
+
+- **`loadQadb.py` names a missing collection** (PIPE2D-1385) — `pfs.drp.qa.qadb.collectionExists` is checked before
+  anything is read, so a mistyped collection is one line, not daf_butler's traceback from the first query.
+
+- **`showTelescopeErrors` plots the azimuth offset on-sky** (PIPE2D-1971) — `agc_guide_offset.guide_delta_az` is a
+  coordinate offset, the difference of two azimuths, where `guide_delta_el` is on-sky (likewise `guide_delta_ra`
+  and `guide_delta_dec`, INSTRM-2923). Plotted as read against δalt with equal aspect, as drp_stella did, the δaz
+  axis was stretched by 1/cos(alt), 1.3-2.6 at Run30's altitudes. The panels now show δaz·cos(alt), and the plot's
+  `data` carries it as `daz_cosalt_arcsec` beside `daz_arcsec` as read; `readAgcData`'s columns are unchanged, and
+  `queries.AGC_DATA_COLUMNS` describes both conventions. On the real-data fixtures hypot(δaz·cos(alt), δalt) matches
+  hypot(δRA·cos(dec), δdec) per AG exposure to 0.1%.
+
+- **Task logs at INFO** (PIPE2D-1938) — `docs/qa-thresholds.ipynb` and comparison mode's fresh reductions ran
+  `pipetask --log-level PFS=INFO`, but the tasks log as `pfs.<task>`, lowercase, so their INFO lines (the fit
+  statistics `imageQualityQa` parses among them) were missing from the stored logs; a bare `INFO` sets only
+  `lsst`. They now run with `--log-level pfs=INFO`, as drpActor sets it.
+
+- **`imageQualityQa` measures quartz from the calexp** (PIPE2D-1918) — the calexp trace width used a
+  `profileHalfWidth` 7 aperture, wider than the 6.17 px fiber pitch, so it took neighbouring traces as
+  background, flagged nearly every sample, and every Run25 quartz fell back to `fiberProfiles`. Each fiber is
+  now fitted jointly with its neighbours (`crossDispersion.measureImageWidths`), on every calexp path (trace,
+  arc fallback, FLUXSTD). Changes `medFwhm` on quartz and on those paths.
+
+- **`dmResiduals` import** — `getDescriptionCounts` is now imported from
+  `pfs.drp.stella.fitDetectorMap`. The former `pfs.drp.stella.fitDistortedDetectorMap` module no longer
+  exists in `drp_stella`, so `DetectorMapResidualsTask` failed to import and the `dmResiduals` pipeline
+  task could not run.
+
+- **`drpQA.yaml` builds as a whole** — `imageQualityQa` declared `pfsConfig` as a plain input while
+  `extractionQa` and `extractionQaCombined` declare it as a prerequisite, so `pipetask build` of the whole
+  pipeline failed with `ConnectionTypeConsistencyError`; running one task at a time with `#label` hid it. It
+  is now a prerequisite there too, still optional (`minimum=0`), and in `skyArmSubtractionQa`, so a pipeline
+  combining it with `extractionQa` or `fluxCalQa` builds as well. `tests/test_connections.py` reads every
+  task's connections from source, without the stack, and checks that no dataset type is declared both
+  ways (PIPE2D-1913).
+
+- **`fluxCalQa` import** — `FilterCurve` and `TransmissionCurve` are imported from
+  `pfs.drp.stella.fitFluxReference`; `pfs.drp.stella.fitReference` no longer exists (PIPE2D-1913).
+
+- **`plot_residual` with pandas 3** — the binned wavelength panel called `.agg("median", robustRms)`.
+  Older pandas took `robustRms` as `numeric_only` and computed the median; pandas 3 raises, which left both
+  residual-by-wavelength panels of `plot_detectormap_residuals` empty. It now calls `.agg("median")`. Its
+  per-fiber `groupby().apply()` no longer warns about operating on the grouping columns (PIPE2D-1916).
+
+- **`get_fit_stats` at zero dof** — with zero degrees of freedom and zero residuals, the softening solve
+  raised from `scipy.optimize.bisect` and `dmResiduals` wrote nothing for the quantum. `softenFit` is now NaN
+  there, as it already was at zero dof with nonzero residuals (PIPE2D-1916).
+
+- **`plot_detector_summary_per_desc` on matplotlib ≥ 3.10** — seaborn 0.13 passes `vert` to `Axes.bxp`,
+  which matplotlib 3.10 pending-deprecates and 3.11 deprecates for removal in 3.13. The plot now passes
+  `vert=None`, so matplotlib uses `orientation`, whose default is vertical. The output is pixel-identical.
+  This needs matplotlib 3.10, now the minimum in `pyproject.toml` (PIPE2D-1916).
+
+## [w.2026.35] - 2026-08-31
+
+### Added
+
+- Added a new `imageQualityQa` workflow that writes `iqQaData`/`iqQaMetrics` with per-quantum status and supports
+  post-hoc time-series plotting via `iqQaPlots` and `bin.src/plotIqQaTimeSeries.py`.
+
+- Added stack-free log QA/report tools (`bin.src/fitDetectorMapLogQa.py`, `bin.src/imageQualityLogQa.py`) and associated
+  tests/documentation for the image-quality pipeline.
+
+- **`AGENTS.md`** — single source of instructions for AI coding assistants, with
+  `CLAUDE.md`, `GEMINI.md`, and `.github/copilot-instructions.md` as symlinks to it.
+
+### Changed
+
+- **Build and packaging** — `pyproject.toml` is now the single source of build, lint, and test configuration. Ruff
+  replaces Black, isort, and Flake8. EUPS `setup -r .` still works via
+  `ups/drp_qa.table`, but there is no longer a build step.
+
+- **Lint and format sweep** — every pre-existing QA module reformatted under Ruff (`line-length = 110`,
+  `target-version = "py312"`), including `typing.Union`/`Optional`
+  → PEP 604 unions and `typing.Iterable` → `collections.abc.Iterable`. No behaviour changes. LSST camelCase naming is
+  preserved; the corresponding pep8-naming rules are in the ignore list.
+
+### Removed
+
+- **SCons build** — `SConstruct`, `bin.src/SConscript`, `tests/SConscript` and `ups/drp_qa.cfg`. The `bin/`
+  directory is no longer generated; scripts are run as `python bin.src/<name>.py` (`tests/SConscript`:
+  PIPE2D-1913).
+
+- **`setup.cfg`** and **`mypy.ini`** — superseded by `pyproject.toml`. No static type checker is configured for this
+  repository.
