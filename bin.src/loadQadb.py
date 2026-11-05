@@ -41,10 +41,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--user", default="pfs", help="qadb user; must be allowed to write (default pfs)")
     parser.add_argument("--dbname", default="qadb", help="database name (default qadb)")
     parser.add_argument(
-        "--opdb-host",
-        default=None,
-        help="copy visit descriptions from the opdb on this host (read-only user)",
+        "--opdb-host", default=None, help="copy visit descriptions from the opdb on this host"
     )
+    parser.add_argument("--opdb-port", type=int, default=5432, help="opdb port (default 5432)")
+    parser.add_argument(
+        "--opdb-user", default="public_user", help="opdb user; reading suffices (default public_user)"
+    )
+    parser.add_argument("--opdb-dbname", default="opdb", help="opdb database name (default opdb)")
     parser.add_argument("--mode", choices=MODES, default="backfill", help="recorded in qa_gate.mode")
     parser.add_argument(
         "--no-pipeline-versions",
@@ -67,7 +70,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.opdb_host and args.dry_run is None:
         from pfs.utils.database.opdb import OpDB
 
-        opdb = OpDB(host=args.opdb_host, user="public_user")
+        opdb = OpDB(host=args.opdb_host, port=args.opdb_port, dbname=args.opdb_dbname, user=args.opdb_user)
 
     counts = loadCollection(
         butler,

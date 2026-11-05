@@ -8,6 +8,12 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ## [Unreleased]
 
+### Changed
+
+- **The opdb account is an option** (INSTRM-3089) — `loadQadb.py` and `twilightQa.py` take `--opdb-port`,
+  `--opdb-user` and `--opdb-dbname` beside `--opdb-host` (defaults 5432, `public_user`, `opdb`: what they used to
+  hardwire), so ics_qaActor can pass its `db.opdb` block through.
+
 ## [w.2026.45] - 2026-11-05
 
 ### Added

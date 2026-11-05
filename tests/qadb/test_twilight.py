@@ -315,6 +315,10 @@ class TestSequenceOfVisit:
         }
         assert len(statuses) == 5 and cli.script.EXIT_JUDGED == 0
 
+    def testTheOpdbAccountFollowsTheOptions(self, cli):
+        cli("--opdb-port", "5433", "--opdb-user", "pfs", "--opdb-dbname", "opdb_copy")
+        assert FakeOpDB.made == [{"host": "opdb-host", "port": 5433, "dbname": "opdb_copy", "user": "pfs"}]
+
     def testStoredRowsAreThePerImageVerdict(self, cli, metrics):
         cli()
         table = cli.shared["twilightQaMetrics"]

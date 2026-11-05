@@ -23,7 +23,7 @@ detector image) and ``twilightVerdict.csv`` (one row per exposure and arm). Read
 requires the LSST stack (``lsst.daf.butler``); a parquet does not.
 
 ``--sequence-of-visit`` is for running after every visit (``ics_qaActor``, INSTRM-3089): it looks the
-visit's IIC sequence up in the opdb (read-only user) and judges it only when it is a twilight, it has
+visit's IIC sequence up in the opdb (``--opdb-host``; the account, ``--opdb-user``, only reads) and judges it only when it is a twilight, it has
 finished (``iic_sequence_status``), and every visit of it has a ``twilightFiberFlux`` for every camera it
 has a pfsArm for; otherwise it says what is missing and does nothing. The sequence id comes from the opdb,
 so raws without ``W_SEQID`` need no ``--sequences``. Its files, with ``-o``, are named by sequence:
@@ -132,8 +132,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         metavar="VISIT",
         help="judge VISIT's sequence if it is a finished twilight with every visit's tables stored",
     )
-    parser.add_argument("--opdb-host", help="opdb host (read-only user): needed by --sequence-of-visit")
+    parser.add_argument("--opdb-host", help="opdb host: needed by --sequence-of-visit")
     parser.add_argument("--opdb-port", type=int, default=5432, help="opdb port (default 5432)")
+    parser.add_argument(
+        "--opdb-user", default="public_user", help="opdb user; reading suffices (default public_user)"
+    )
+    parser.add_argument("--opdb-dbname", default="opdb", help="opdb database name (default opdb)")
     parser.add_argument(
         "--no-store", action="store_true", help=f"don't store {TWILIGHT_DATASET} in the Butler collection"
     )
@@ -155,7 +159,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.opdb_host is not None:
         from pfs.utils.database.opdb import OpDB
 
-        opdb = OpDB(host=args.opdb_host, port=args.opdb_port, dbname="opdb", user="public_user")
+        opdb = OpDB(host=args.opdb_host, port=args.opdb_port, dbname=args.opdb_dbname, user=args.opdb_user)
     if args.no_store and args.qadb_host is not None:
         parser.error(
             "--no-store with --qadb-host would load what the collection already holds, not this judgement"
