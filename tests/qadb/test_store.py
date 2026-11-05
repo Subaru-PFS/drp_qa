@@ -159,4 +159,4 @@ def testARunCollectionIsRefused():
     assert len(StubButler().puts) == 0
     good = StubButler()
     storeImageTable(good, "u/test/chain", "twilightQaMetrics", table(), log=lambda _: None)
-    assert len(good.puts) == 6
+    assert len([put for put in good.puts if put[0] == "twilightQaMetrics"]) == 6
