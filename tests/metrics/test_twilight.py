@@ -6,15 +6,21 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from pfs.drp.qa.metrics.calibration import readThresholds
+from pfs.drp.qa.metrics.gate import THRESHOLDS_COLUMNS, thresholdsPath
 from pfs.drp.qa.metrics.registry import specFor
 from pfs.drp.qa.metrics.twilight import (
+    IMAGE_VERDICT_COLUMNS,
     METRIC_COLUMNS,
+    TWILIGHT_THRESHOLDS_FILE,
     VERDICT_COLUMNS,
     WINDOWS,
     addPositions,
     fiberFlux,
+    isTwilightSequence,
     sequenceConsistency,
     sequenceReadiness,
+    twilightImageVerdict,
     twilightThresholds,
     twilightVerdict,
 )
@@ -390,3 +396,89 @@ class TestStoredMetrics:
         """The obslog's cloudy twilight is a good flat by this check (its entry is unconfirmed)."""
         cloudy = verdict[verdict["visit"].between(134334, 134337) & verdict["arm"].isin(["b", "r"])]
         assert set(cloudy["status"]) <= {"PASS", "TOO_FAINT"}
+
+
+def testShippedThresholdsAreTheFunctions():
+    """``twilightThresholds.yaml`` (what the judge records) holds `twilightThresholds` (what it means)."""
+    _, shipped = readThresholds(thresholdsPath(TWILIGHT_THRESHOLDS_FILE))
+    table = twilightThresholds()
+    assert len(shipped) == len(table)
+    for column in ("metric", "warn", "fail", "higherIsWorse", "absolute"):
+        assert list(shipped[column].fillna(-1)) == list(table[column].fillna(-1)), column
+    assert [None if pd.isna(a) else a for a in shipped["arm"]] == [
+        None if pd.isna(a) else a for a in table["arm"]
+    ]
+    # Negative control: a changed threshold would be caught.
+    assert list(shipped["warn"].fillna(-1)) != list(twilightThresholds(levelWarn=9.0)["warn"].fillna(-1))
+
+
+def testIsTwilightSequence():
+    assert isTwilightSequence(opdbSequence())
+    assert not isTwilightSequence(opdbSequence(name="Arc: HgCd"))
+    assert not isTwilightSequence(opdbSequence(visits=()))
+
+
+class TestImageVerdict:
+    """One verdict per detector image, for the gate: the sequence verdict seen from each image."""
+
+    @pytest.fixture(scope="class")
+    def metrics(self):
+        return pd.read_parquet(DATA / "twilightMetrics.parquet")
+
+    @pytest.fixture(scope="class")
+    def images(self, metrics):
+        return twilightImageVerdict(metrics)
+
+    def testColumnsAndRecord(self, images, metrics):
+        assert list(images.columns) == list(IMAGE_VERDICT_COLUMNS)
+        assert len(images) == len(metrics)
+        assert set(images["thresholdsFiles"]) == {TWILIGHT_THRESHOLDS_FILE}
+        assert images["thresholdsSha256"].str.len().eq(64).all()
+        assert set(THRESHOLDS_COLUMNS) <= set(images.columns)
+
+    def testTheNArmIsUnknown(self, images):
+        assert set(images.loc[images["arm"] == "n", "qaStatus"]) == {"UNKNOWN"}
+        assert set(images.loc[images["arm"] != "n", "qaStatus"]) <= {"PASS", "WARN", "FAIL"}
+
+    def testWorstImageIsTheArmVerdict(self, images, metrics):
+        """An arm's verdict is the worst of its images', TOO_FAINT read as PASS."""
+        arm = twilightVerdict(metrics).set_index(["visit", "arm"])["status"]
+        order = {"UNKNOWN": -1, "PASS": 0, "WARN": 1, "FAIL": 2}
+        worst = images.groupby(["visit", "arm"])["qaStatus"].agg(lambda s: max(s, key=order.get))
+        judged = arm[arm != ""]
+        assert len(judged) and (arm == "TOO_FAINT").any()  # the mapping is exercised
+        assert (worst[judged.index] == judged.replace("TOO_FAINT", "PASS")).all()
+
+    def testRun21StepsFailTheSteppedDetectorAlone(self, images):
+        """b1's level step (121949-121952) and b4's (123320) fail those detectors, not their arm's others."""
+        run21 = images[
+            images["visit"].isin([121949, 121950, 121951, 121952, 123320]) & (images["arm"] == "b")
+        ]
+        failed = run21[run21["qaStatus"] == "FAIL"]
+        assert set(failed["qaDecidedBy"]) == {"twilightLevelOffset"}
+        assert set(zip(failed["visit"], failed["spectrograph"], strict=True)) == {
+            (121949, 1), (121950, 1), (121951, 1), (121952, 1), (123320, 4)
+        }  # fmt: skip
+        # Negative control: the other detectors of those arms are not failed.
+        assert (run21.loc[~run21.index.isin(failed.index), "qaStatus"] != "FAIL").all()
+
+    def testEmpty(self):
+        empty = twilightImageVerdict(pd.DataFrame(columns=list(METRIC_COLUMNS)))
+        assert empty.empty and list(empty.columns) == list(IMAGE_VERDICT_COLUMNS)
+
+    def testOwnThresholdsRecordNothing(self, metrics):
+        images = twilightImageVerdict(metrics.iloc[:12], twilightThresholds())
+        assert set(images["thresholdsFiles"]) == {""} and set(images["thresholdsSha256"]) == {""}
+
+    def testAFileGivenByPathIsRecorded(self, metrics, tmp_path):
+        """The shipped file by its path records as the default does; another file by its path."""
+        default = twilightImageVerdict(metrics.iloc[:12])
+        explicit = twilightImageVerdict(metrics.iloc[:12], thresholdsPath(TWILIGHT_THRESHOLDS_FILE))
+        for column in THRESHOLDS_COLUMNS:
+            assert set(explicit[column]) == set(default[column]) == {default[column].iloc[0]}
+        assert default["thresholdsFiles"].iloc[0] == TWILIGHT_THRESHOLDS_FILE
+        copy = tmp_path / "myThresholds.yaml"
+        copy.write_bytes(thresholdsPath(TWILIGHT_THRESHOLDS_FILE).read_bytes())
+        other = twilightImageVerdict(metrics.iloc[:12], copy)
+        assert set(other["thresholdsFiles"]) == {str(copy)}
+        assert set(other["thresholdsSha256"]) == set(default["thresholdsSha256"])  # same content

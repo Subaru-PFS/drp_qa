@@ -1,0 +1,64 @@
+# Made by makeTwilightThresholds.py from pfs.drp.qa.metrics.twilight.twilightThresholds; see its docstring.
+version: 2
+derivedOn: '2026-11-04'
+collection: prototype over 16 twilight sequences, 2025-03 to 2026-09 (PIPE2D-1973)
+referenceRuns: []
+drpQaVersion: w.2026.43-8-g540ec5f-dirty
+thresholds:
+- metric: twilightLevelOffset
+  population: {}
+  higherIsWorse: true
+  absolute: true
+  method: fixed
+  warn: 2.0
+  fail: 3.0
+  provenance: 'Provisional (PIPE2D-1973): from a prototype over 16 twilight sequences, 2025-03 to 2026-09. Normal
+    detectors stepped at most 1.02 % and the Run21 faults 8-14 %; normal bright exposures reached 1.2 % RMS, and
+    a patch of 1.6 % (r) and 2.0 % (b). To be replaced by the flat precision the screen response needs.'
+- metric: twilightLevelOffset
+  population:
+    arm: n
+  higherIsWorse: true
+  absolute: true
+  method: fixed
+  warn: null
+  fail: null
+  provenance: 'n arm not judged: its residuals exceed the noise model on clear nights.'
+- metric: twilightResidRms
+  population: {}
+  higherIsWorse: true
+  absolute: false
+  method: fixed
+  warn: 1.5
+  fail: 2.5
+  provenance: 'Provisional (PIPE2D-1973): from a prototype over 16 twilight sequences, 2025-03 to 2026-09. Normal
+    detectors stepped at most 1.02 % and the Run21 faults 8-14 %; normal bright exposures reached 1.2 % RMS, and
+    a patch of 1.6 % (r) and 2.0 % (b). To be replaced by the flat precision the screen response needs.'
+- metric: twilightResidRms
+  population:
+    arm: n
+  higherIsWorse: true
+  absolute: false
+  method: fixed
+  warn: null
+  fail: null
+  provenance: 'n arm not judged: its residuals exceed the noise model on clear nights.'
+- metric: twilightPatch
+  population: {}
+  higherIsWorse: true
+  absolute: false
+  method: fixed
+  warn: 2.5
+  fail: 4.0
+  provenance: 'Provisional (PIPE2D-1973): from a prototype over 16 twilight sequences, 2025-03 to 2026-09. Normal
+    detectors stepped at most 1.02 % and the Run21 faults 8-14 %; normal bright exposures reached 1.2 % RMS, and
+    a patch of 1.6 % (r) and 2.0 % (b). To be replaced by the flat precision the screen response needs.'
+- metric: twilightPatch
+  population:
+    arm: n
+  higherIsWorse: true
+  absolute: false
+  method: fixed
+  warn: null
+  fail: null
+  provenance: 'n arm not judged: its residuals exceed the noise model on clear nights.'

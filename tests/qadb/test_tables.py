@@ -19,6 +19,7 @@ from pfs.drp.qa.qadb.tables import (
     QA_THRESHOLD_ENTRY,
     QA_THRESHOLDS,
     TASK_TABLES,
+    TWILIGHT_QA,
     cameraName,
     gateRows,
     imageRows,
@@ -59,7 +60,7 @@ def testCameraName():
 
 def testSpecsMatchTheSchema(ddlColumns):
     """Every spec's columns are exactly its qadb table's, in order (the DDL mirrors spt_qa_database)."""
-    for spec in (IMAGE_QUALITY, IMAGE_QUALITY_SPECIES, LINE_RESIDUAL, LINE_RESIDUAL_METRIC):
+    for spec in (IMAGE_QUALITY, IMAGE_QUALITY_SPECIES, LINE_RESIDUAL, LINE_RESIDUAL_METRIC, TWILIGHT_QA):
         assert list(spec.qadbColumns) == ddlColumns[spec.name], spec.name
         assert spec.keys[:3] == KEYS
     assert list(QA_THRESHOLDS) == ddlColumns["qa_thresholds"]
@@ -76,8 +77,10 @@ def testTaskTablesNameTheSpecs():
         IMAGE_QUALITY_SPECIES.source,
         LINE_RESIDUAL.source,
         LINE_RESIDUAL_METRIC.source,
+        TWILIGHT_QA.source,
     }
-    assert {table for pair in TASK_TABLES.values() for table in pair} == sources
+    # A task may have no long table (None): the twilight check writes its per-image verdict alone.
+    assert {table for pair in TASK_TABLES.values() for table in pair if table is not None} == sources
 
 
 class TestImageRows:
