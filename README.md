@@ -893,9 +893,10 @@ python bin.src/twilightQa.py -c qaActor/reductions --sequence-of-visit 150844 --
 finished (`iic_sequence_status`), and every visit of it has a `twilightFiberFlux` for every camera it has a pfsArm
 for; otherwise it says what it is waiting for. The sequence id comes from the opdb, so it needs no `--sequences` for
 raws without `W_SEQID`, and its files are named by sequence. The exit status says what happened, for ics_qaActor's
-log: 0 judged (stored, and loaded when asked), 3 pending (the sequence has not finished, or a visit's tables are
-missing), 4 not a twilight (or in no sequence), 5 judged but the store or the load failed; the verdicts and metrics
-are then printed in full, so the log holds them.
+log: 0 judged (stored, and loaded when asked, every exposure `PASS` or `TOO_FAINT`), 6 judged likewise but with a
+`WARN` or `FAIL` exposure (for the caller to raise in its log), 3 pending (the sequence has not finished, or a
+visit's tables are missing), 4 not a twilight (or in no sequence), 5 judged but the store or the load failed; the
+verdicts and metrics are then printed in full, so the log holds them.
 
 ### `judgeScatterThresholds.py`
 

@@ -31,13 +31,16 @@ so raws without ``W_SEQID`` need no ``--sequences``. Its files, with ``-o``, are
 
 The exit status says what happened, for the caller's log:
 
-- `EXIT_JUDGED` (0): the sequence was judged, stored, and loaded into qadb when asked;
+- `EXIT_JUDGED` (0): the sequence was judged, stored, and loaded into qadb when asked, and every exposure is
+  ``PASS`` or ``TOO_FAINT``;
+- `EXIT_JUDGED_BAD` (6): as `EXIT_JUDGED`, but some exposure is ``WARN`` or ``FAIL``: the caller may want to raise
+  it in its log;
 - `EXIT_PENDING` (3): not yet: the sequence has not finished, or a visit's tables are missing;
 - `EXIT_NOT_TWILIGHT` (4): the visit is in no IIC sequence, or its sequence is not a twilight;
 - `EXIT_NOT_WRITTEN` (5): judged, but storing it or loading qadb failed: the verdicts and metrics are then
   printed in full, so the caller's log holds them.
 
-The other modes exit `EXIT_JUDGED` or `EXIT_NOT_WRITTEN`.
+The other modes exit `EXIT_JUDGED`, `EXIT_JUDGED_BAD` or `EXIT_NOT_WRITTEN`.
 """
 
 import argparse
@@ -60,6 +63,7 @@ EXIT_JUDGED = 0
 EXIT_PENDING = 3
 EXIT_NOT_TWILIGHT = 4
 EXIT_NOT_WRITTEN = 5
+EXIT_JUDGED_BAD = 6
 
 #: The per-image verdict's dataset type.
 TWILIGHT_DATASET = "twilightQaMetrics"
@@ -219,17 +223,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             f" {args.output / f'twilightVerdict{suffix}.csv'}"
         )
 
+    bad = verdict[verdict["status"].isin(["WARN", "FAIL"])] if not verdict.empty else verdict
     if verdict.empty:
         say("Nothing measured: no sequence has enough exposures in an arm.")
     else:
         counts = verdict.groupby(["sequence", "arm"])["status"].value_counts().unstack(fill_value=0)
         say(counts.to_string())
-        bad = verdict[verdict["status"].isin(["WARN", "FAIL"])]
         if len(bad):
             say(bad[["visit", "arm", "status", "reason"]].to_string(index=False))
+    outcome = EXIT_JUDGED_BAD if len(bad) else EXIT_JUDGED
 
     if butler is None or images.empty or args.no_store:
-        return EXIT_JUDGED
+        return outcome
     judged = sorted(int(visit) for visit in images["visit"].unique())
     try:
         storeAndLoad(args, images, judged, collection, opdb)
@@ -237,7 +242,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         say(f"Storing or loading the judgement failed: {error!r}")
         printInFull(verdict, metrics)
         return EXIT_NOT_WRITTEN
-    return EXIT_JUDGED
+    return outcome
 
 
 if __name__ == "__main__":

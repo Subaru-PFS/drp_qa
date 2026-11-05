@@ -17,8 +17,8 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   it. The qadb loader treats it as a third task, `twilightQa`: `twilight_qa` mirrors the table and `qa_gate` takes
   the worst of the image's tasks, citing `twilight_thresholds_id` (`spt_qa_database` 0.3.0). `--qadb-host` then
   loads the judged visits itself; a failed store or load prints the verdicts and metrics in full and exits 5, so a
-  caller's log keeps them. `--sequence-of-visit` reports in its exit status (0 judged, 3 pending, 4 not a twilight,
-  5 not written), for ics_qaActor to log, and `-o` is optional: nothing goes to disk unless asked.
+  caller's log keeps them. `--sequence-of-visit` reports in its exit status (0 judged, 6 judged with a `WARN` or `FAIL`,
+  3 pending, 4 not a twilight, 5 not written), for ics_qaActor to log, and `-o` is optional: nothing goes to disk unless asked.
 - **Twilight sky flats are judged against their own sequence** (PIPE2D-1973) — the new `twilightFluxQa` task, in
   `drpQA.yaml`, stores each lit fiber's median flux on a twilight as `twilightFiberFlux` (any other visit stops at
   its header, before the pfsArm is read), and

@@ -294,6 +294,27 @@ class TestSequenceOfVisit:
         assert any(kwargs.get("writeable") is True for _, kwargs in cli.butlers)
         assert FakeOpDB.made == [{"host": "opdb-host", "port": 5432, "dbname": "opdb", "user": "public_user"}]
 
+    def testAWarnOrFailExitsJudgedBad(self, cli, capsys, monkeypatch, metrics):
+        table = pd.read_parquet(METRICS)
+        failing = table[table["sequence"] == 44625].reset_index(drop=True)
+        monkeypatch.setattr(cli.script, "sequenceConsistency", lambda fibers, minSnr: failing)
+        assert cli() == cli.script.EXIT_JUDGED_BAD
+        assert "FAIL" in capsys.readouterr().out
+        assert cli.stored == [(COLLECTION, "twilightQaMetrics", len(failing))]  # stored all the same
+        # Negative control: the fixture's own sequence has no WARN or FAIL, and exits judged.
+        monkeypatch.setattr(cli.script, "sequenceConsistency", lambda fibers, minSnr: metrics)
+        assert cli("--no-store") == cli.script.EXIT_JUDGED
+
+    def testTheExitStatusesAreDistinct(self, cli):
+        statuses = {
+            cli.script.EXIT_JUDGED,
+            cli.script.EXIT_PENDING,
+            cli.script.EXIT_NOT_TWILIGHT,
+            cli.script.EXIT_NOT_WRITTEN,
+            cli.script.EXIT_JUDGED_BAD,
+        }
+        assert len(statuses) == 5 and cli.script.EXIT_JUDGED == 0
+
     def testStoredRowsAreThePerImageVerdict(self, cli, metrics):
         cli()
         table = cli.shared["twilightQaMetrics"]
