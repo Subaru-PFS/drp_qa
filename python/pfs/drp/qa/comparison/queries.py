@@ -13,9 +13,11 @@ import pandas as pd
 
 __all__ = [
     "LISTING_COLUMNS",
+    "SEQUENCE_COLUMNS",
     "proposalCategory",
     "readDesignCategories",
     "readNotes",
+    "readSequenceOfVisit",
     "readTelStatus",
     "readVisitListing",
     "readVisitTimes",
@@ -117,6 +119,57 @@ GROUP BY pfs_design_id, proposal_id
 """
 
 _PROPOSAL_RE = re.compile(r"^S\d\d[AB]-([A-Z]*)\d*([A-Z]*)")
+
+
+# Every visit of the sequence a visit belongs to, with whether and when the sequence finished:
+# the IIC writes iic_sequence_status when a sequence ends, so a missing row is a sequence still
+# running (or one the IIC never closed).
+_SEQUENCE_OF_VISIT_SQL = """
+SELECT
+    member.pfs_visit_id,
+    iic_sequence.iic_sequence_id,
+    iic_sequence.sequence_type,
+    iic_sequence.name AS sequence_name,
+    iic_sequence_status.finished_at,
+    iic_sequence_status.cmd_output AS sequence_status
+FROM visit_set AS given
+JOIN iic_sequence ON iic_sequence.iic_sequence_id = given.iic_sequence_id
+JOIN visit_set AS member ON member.iic_sequence_id = iic_sequence.iic_sequence_id
+LEFT JOIN iic_sequence_status ON iic_sequence_status.iic_sequence_id = iic_sequence.iic_sequence_id
+WHERE given.pfs_visit_id = :visit
+"""
+
+#: The columns of `readSequenceOfVisit`.
+SEQUENCE_COLUMNS = {
+    "pfs_visit_id": "a visit of the sequence",
+    "iic_sequence_id": "the sequence",
+    "sequence_type": "iic_sequence.sequence_type",
+    "sequence_name": "iic_sequence.name",
+    "finished_at": "iic_sequence_status.finished_at (HST); NaT while the sequence runs",
+    "sequence_status": "iic_sequence_status.cmd_output: complete, ...; NA while the sequence runs",
+}
+
+
+def readSequenceOfVisit(opdb, visit: int) -> pd.DataFrame:
+    """Read every visit of the IIC sequence ``visit`` belongs to.
+
+    Parameters
+    ----------
+    opdb : `pfs.utils.database.opdb.OpDB`
+        The opdb, read-only.
+    visit : `int`
+        Any visit of the sequence.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        One row per visit of the sequence, with the `SEQUENCE_COLUMNS`, sorted
+        by visit; no rows when the visit is in no sequence.
+    """
+    sequence = opdb.query_dataframe(_SEQUENCE_OF_VISIT_SQL, params={"visit": int(visit)})
+    sequence = sequence.reindex(columns=list(SEQUENCE_COLUMNS))
+    sequence["finished_at"] = pd.to_datetime(sequence["finished_at"])
+    return sequence.sort_values("pfs_visit_id").reset_index(drop=True)
 
 
 def readVisitListing(opdb, start, end) -> pd.DataFrame:

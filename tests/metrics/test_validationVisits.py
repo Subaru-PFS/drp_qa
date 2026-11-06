@@ -80,7 +80,7 @@ class TestCheckedInSet:
         assert visitSet.expectationFor(140640, arm="b", spectrograph=1) is None
 
     def testOtherRunsGiveFaultsOnly(self):
-        """Run27 and Run30 are fault examples: known-bad entries, no known-good ones."""
+        """Run21, Run27 and Run30 are fault examples: known-bad entries, no known-good ones."""
         visitSet = loadValidationVisits()
         faults = [
             entry
@@ -89,7 +89,8 @@ class TestCheckedInSet:
             and any(text in entry.reason for text in ("SM1 defocused", "No light", "didn't turn on"))
         ]
         assert len(faults) == 22 and {entry.run for entry in faults} == {27}
-        assert {entry.run for entry in visitSet.confirmedBad} == {25, 27, 30}
+        # Run21 gives the twilight detector faults (PIPE2D-1973).
+        assert {entry.run for entry in visitSet.confirmedBad} == {21, 25, 27, 30}
         # Run29 holds the b2 and n4 quartz references only (PIPE2D-1938); Run30 the IIS frames' (PIPE2D-1954).
         assert {entry.run for entry in visitSet.knownGood} == {25, 29, 30}
         run30 = [entry for entry in visitSet.knownGood if entry.run == 30]
@@ -232,13 +233,15 @@ class TestUnconfirmedVerdicts:
         # calibration block, named visit by visit (an entry's visits are reduced, so a range here
         # would sweep in every visit between them). Not its traces, which measure no y (PIPE2D-1934).
         sm3 = {135830, 134334, 134880, 135275}
-        assert suspect == sm3
+        # The Run25 "cloudy" twilight (134334, also above) and Run29's b-arm twilight patch (PIPE2D-1973).
+        twilights = {134334, 145073}
+        assert suspect == sm3 | twilights
         assert len(visitSet.visits) < 200  # negative control: no entry spans a run
 
     def testConfirmedBadExcludesThem(self):
         """A guess must not decide whether a threshold separates the bad data."""
         visitSet = loadValidationVisits()
-        assert len(visitSet.confirmedBad) == len(visitSet.knownBad) - 4
+        assert len(visitSet.confirmedBad) == len(visitSet.knownBad) - 6
         assert all(not entry.unconfirmed for entry in visitSet.confirmedBad)
 
     def testTheyStillCarryAVerdictAndAReason(self):
@@ -478,7 +481,8 @@ class TestVisitExpression:
 
     def testCommandLine(self, capsys):
         main(["expression"])
-        assert capsys.readouterr().out.startswith("visit IN (133025..")
+        # The visits in order: Run21's twilight faults (PIPE2D-1973) come first.
+        assert capsys.readouterr().out.startswith("visit IN (121949..")
 
 
 class TestTables:

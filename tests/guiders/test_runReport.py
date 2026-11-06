@@ -12,11 +12,18 @@ from matplotlib.figure import Figure
 from pfs.drp.qa.comparison.runs import Period
 from pfs.drp.qa.guiders import runPlotting
 from pfs.drp.qa.guiders.queries import AG_RUN_TABLES, readAgRun
-from pfs.drp.qa.guiders.runAnalysis import nightPosition, prepareRun, settledJitter
+from pfs.drp.qa.guiders.runAnalysis import (
+    findRejectionClusters,
+    fitModelErrors,
+    nightPosition,
+    prepareRun,
+    settledJitter,
+)
 from pfs.drp.qa.guiders.runReport import fetchRun, loadRun, main
 
 # The table behind each readAgRun query, as FakeOpDB looks them up.
 RUN_QUERIES = {
+    "grid": r"AS dx_um",  # before cameras: both join agc_data
     "cameras": r"JOIN agc_data ON",
     "exposures": r"LEFT JOIN agc_guide_offset",
     "visits": r"SELECT DISTINCT ON \(pfs_visit\.pfs_visit_id\)",
@@ -50,22 +57,20 @@ def testReadAgRunNeedsOpdb():
 
 
 def testPlots(makeAgRunTables):
-    run = prepareRun(makeAgRunTables(deadFrom={0: 200}))
+    run = prepareRun(makeAgRunTables(deadFrom={0: 200}, modelError={2: [[0.0, 0.0], [0.0, 0.013]]}))
     jitter = settledJitter(run)
+    clusters, modelErrors = findRejectionClusters(run), fitModelErrors(run)
     figures = {
         "presence": runPlotting.plotCameraPresence(run),
-        "perCamera": runPlotting.plotPerCamera(run),
         "guiding": runPlotting.plotGuiding(run, jitter),
         "focus": runPlotting.plotFocus(run),
         "acquisition": runPlotting.plotAcquisition(run),
+        **{f"AG{cid + 1}": runPlotting.plotCamera(run, cid, clusters, modelErrors) for cid in range(6)},
     }
     assert all(isinstance(fig, Figure) for fig in figures.values())
-    assert len(figures["perCamera"].axes) == 12
-    assert len(figures["focus"].axes) == 8
-    # The per-camera panels go AG1, AG3, AG5, then AG2, AG4, AG6.
-    axes = figures["perCamera"].axes  # four rows of three: stars, FWHM, stars, FWHM
-    titles = [ax.get_title(loc="left") for ax in axes[0:3] + axes[6:9]]
-    assert [t.split(":")[0] for t in titles] == ["AG1", "AG3", "AG5", "AG2", "AG4", "AG6"]
+    assert len(figures["focus"].axes) == 2
+    assert all(len(figures[f"AG{cid + 1}"].axes) == 6 for cid in range(6))
+    assert figures["AG3"]._suptitle.get_text() == "AG3 (AG1/3/5)"
     presence = figures["presence"].axes[0]
     assert [t.get_text() for t in presence.get_yticklabels()] == ["AG1", "AG3", "AG5", "AG2", "AG4", "AG6"]
 
@@ -151,14 +156,44 @@ def testReportCommand(opdb, tmp_path):
     assert report.startswith("# runX: AG run report")
     assert "**AG1: no detections at all in 120 consecutive AG exposures**" in report
     assert "### AG1/3/5 against AG2/4/6" in report
+    # One section per camera, in their groups, each with its own flags and figure.
+    sections = re.findall(r"^### (AG\d)$", report, re.MULTILINE)
+    assert sections == ["AG1", "AG3", "AG5", "AG2", "AG4", "AG6"]
+    ag1 = report.split("### AG1\n")[1].split("###")[0]
+    assert "no detections at all" in ag1 and "(camera-AG1.png)" in ag1
+    assert "- No flags." in report.split("### AG2\n")[1].split("###")[0]
     assert report.rstrip().endswith("AG1 was unplugged.")
-    for name in ("cameraPresence", "perCamera", "guiding", "focus", "acquisition"):
+    for name in (
+        "cameraPresence",
+        "guiding",
+        "focus",
+        "acquisition",
+        *(f"camera-AG{n}" for n in range(1, 7)),
+    ):
         assert (out / f"{name}.png").stat().st_size > 0
     metrics = json.loads((out / "metrics.json").read_text())
     assert metrics["dropouts"][0]["agc_camera_id"] == 0
     assert set(metrics["groups"]) == {"AG1/3/5", "AG2/4/6"}
+    assert set(metrics["cameras"]) == {f"AG{n}" for n in range(1, 7)}
 
 
 def testUnknownPeriod(tmp_path):
     with pytest.raises(SystemExit, match="Unknown period"):
         main(["report", "--period", "run99", "--data-dir", str(tmp_path)])
+
+
+def testReportFromAnOlderFetch(opdb, tmp_path):
+    """A fetch made before the grid table existed still reports, and says what it left out."""
+    runs = tmp_path / "runs.yaml"
+    runs.write_text('runs:\n  - name: runX\n    nights: ["2026-09-01", "2026-09-02"]\n')
+    fetchRun(opdb, PERIOD, tmp_path, now=datetime.datetime(2026, 10, 1))
+    (tmp_path / "opdb" / "agRun-runX-grid.parquet").unlink()
+    tables, stamp = loadRun(PERIOD, tmp_path)
+
+    assert "grid" not in tables and stamp["missing"] == ["grid"]
+    assert main(["report", "--period", "runX", "--runs", str(runs), "--data-dir", str(tmp_path)]) == 0
+    assert "**No `grid` table was read**" in (tmp_path / "runX" / "report.md").read_text()
+    # Negative control: any other table is required.
+    (tmp_path / "opdb" / "agRun-runX-exposures.parquet").unlink()
+    with pytest.raises(FileNotFoundError, match="run fetch again"):
+        loadRun(PERIOD, tmp_path)

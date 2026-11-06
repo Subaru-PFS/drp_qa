@@ -25,16 +25,18 @@ from pfs.drp.qa.guiders.runAnalysis import (
     CAMERA_GROUPS,
     AgRun,
     CameraState,
+    _meanAngle,
     nightPosition,
     onSkyRa,
+    summariseModelErrors,
 )
 
 __all__ = [
     "plotAcquisition",
+    "plotCamera",
     "plotCameraPresence",
     "plotFocus",
     "plotGuiding",
-    "plotPerCamera",
 ]
 
 #: The cameras in the order of the per-camera panels: AG1/3/5, then AG2/4/6.
@@ -158,92 +160,152 @@ def plotCameraPresence(run: AgRun) -> Figure:
     return fig
 
 
-def plotPerCamera(run: AgRun) -> Figure:
-    """Plot each camera's matched stars per visit and its FWHM per night and detector half.
+def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.DataFrame) -> Figure:
+    """Plot one camera over the run: stars, image size, focus, presence, rejected matches and its position model.
 
     Parameters
     ----------
     run : `AgRun`
         The run.
+    cid : `int`
+        The camera, ``agc_camera_id`` (AG1 is 0).
+    clusters : `pandas.DataFrame`
+        From `runAnalysis.findRejectionClusters`.
+    modelErrors : `pandas.DataFrame`
+        From `runAnalysis.fitModelErrors`.
 
     Returns
     -------
     fig : `matplotlib.figure.Figure`
-        Four rows of three: stars and FWHM of AG1/3/5, then of AG2/4/6.
+        Six panels against the nights: matched stars per visit; FWHM per
+        detector half; focus minus the six cameras' median; the share of
+        judged AG exposures in which it matched a star; AG exposures with its
+        rejected matches clustered on one side of the detector; and its
+        position-model error.
     """
     nights = run.plottedNights
+    position = {night: i + 0.5 for i, night in enumerate(nights)}
     frames = run.frames[run.frames.night.isin(nights)].assign(x=lambda df: nightPosition(df.taken_at, nights))
+    fig = _figure(11, 6.2)
+    axes = fig.subplots(2, 3)
+
+    ax = axes[0, 0]
     visits = frames.groupby(["pfs_visit_id", "population"]).agg(
-        x=("x", "median"), **{f"good{cid}": (f"n_good{cid}", "median") for cid in range(6)}
+        x=("x", "median"), good=(f"n_good{cid}", "median")
     )
     visits = visits.reset_index()
-    goodColumns = [f"good{cid}" for cid in range(6)]
-    yMax = max(1.0, np.nanpercentile(visits[goodColumns].to_numpy(), 98) * 1.1) if len(visits) else 1.0
+    science = visits.population.eq("science")
+    ax.scatter(visits.x[~science], visits.good[~science], s=7, color=QUIET, lw=0, label="other visits")
+    ax.scatter(visits.x[science], visits.good[science], s=7, color="C0", lw=0, label="science visits")
+    ax.set_ylim(bottom=-0.5)
+    ax.set_title("Matched stars per AG exposure (visit median)", loc="left", fontsize=8.5)
+    _legend(ax, loc="upper right", markerscale=2)
+
+    ax = axes[0, 1]
     cameras = run.cameras[run.cameras.night.isin(nights)]
-    nightFwhm = cameras.groupby(["night", "agc_camera_id", "right_half"]).fwhm.median()
-    allFwhm = cameras.groupby("night").fwhm.median()
-    fMax = np.nanpercentile(cameras.fwhm, 99) if cameras.fwhm.notna().any() else 1.0
-    position = {night: i + 0.5 for i, night in enumerate(nights)}
-
-    fig = _figure(11, 9)
-    axes = fig.subplots(4, 3)
-    for k, cid in enumerate(CAMERA_ORDER):
-        row, col = divmod(k, 3)
-        ax = axes[2 * row, col]
-        science = visits.population.eq("science")
-        ax.scatter(
-            visits.x[~science], visits[f"good{cid}"][~science], s=7, color=QUIET, lw=0, label="other visits"
+    for half, color, name in ((0, "C0", "glass half"), (1, "C1", "no-glass half")):
+        values = (
+            cameras[(cameras.agc_camera_id == cid) & (cameras.right_half == half)]
+            .groupby("night")
+            .fwhm.median()
         )
-        ax.scatter(
-            visits.x[science], visits[f"good{cid}"][science], s=7, color="C0", lw=0, label="science visits"
-        )
-        ax.set_ylim(-0.5, yMax)
-        ax.set_title(f"AG{cid + 1}: matched stars per exposure", loc="left", fontsize=8.5)
-        _nightAxis(ax, nights, label=False)
-
-        ax = axes[2 * row + 1, col]
-        for half, color, name in ((0, "C0", "glass half"), (1, "C1", "no-glass half")):
-            key = (cid, half)
-            values = (
-                nightFwhm.xs(key, level=("agc_camera_id", "right_half"))
-                if key in _cameraHalves(nightFwhm)
-                else None
-            )
-            if values is not None:
-                ax.plot(
-                    [position[n] for n in values.index],
-                    values.to_numpy(),
-                    "-o",
-                    ms=3.5,
-                    lw=1.5,
-                    color=color,
-                    label=name,
-                )
         ax.plot(
-            [position[n] for n in allFwhm.index],
-            allFwhm.to_numpy(),
-            ":",
-            color=INK,
-            lw=1,
-            label="all cameras",
+            [position[n] for n in values.index],
+            values.to_numpy(),
+            "-o",
+            ms=3.5,
+            lw=1.5,
+            color=color,
+            label=name,
         )
-        ax.set_ylim(0, fMax)
-        ax.set_title(f"AG{cid + 1}: FWHM, nightly median (″)", loc="left", fontsize=8.5)
-        _nightAxis(ax, nights, label=(2 * row + 1 == 3), rotate=True)
-    _legend(axes[0, 0], loc="upper right", markerscale=2)
-    _legend(axes[1, 0], loc="lower left", ncol=3)
-    fig.suptitle(
-        "Per camera.  Rows 1–2: AG1/3/5; rows 3–4: AG2/4/6.  Stars: visit medians.  "
-        "FWHM: matched stars, by detector half.",
-        x=0.01,
-        ha="left",
-        fontsize=9,
+    allCameras = cameras.groupby("night").fwhm.median()
+    ax.plot(
+        [position[n] for n in allCameras.index],
+        allCameras.to_numpy(),
+        ":",
+        color=INK,
+        lw=1,
+        label="all cameras",
     )
+    ax.set_ylim(0, max(1.0, np.nanpercentile(cameras.fwhm, 99)) if cameras.fwhm.notna().any() else 1.0)
+    ax.set_title("FWHM of matched stars, nightly median (″)", loc="left", fontsize=8.5)
+    _legend(ax, loc="lower left", ncol=3)
+
+    ax = axes[0, 2]
+    zColumns = [f"guide_delta_z{c + 1}" for c in range(6)]
+    allSix = frames[zColumns].notna().all(axis=1)
+    z = frames.loc[allSix, zColumns].to_numpy() * 1e3
+    if len(z):
+        byNight = (
+            pd.Series(z[:, cid] - np.median(z, axis=1)).groupby(frames.night[allSix].to_numpy()).median()
+        )
+        ax.plot([position[n] for n in byNight.index], byNight.to_numpy(), "-o", ms=3.5, lw=1.5, color="C0")
+    ax.axhline(0, color=QUIET, lw=0.8)
+    ax.set_ylim(-60, 60)
+    ax.set_title("Focus minus the 6 cameras' median (µm), nightly", loc="left", fontsize=8.5)
+
+    ax = axes[1, 0]
+    states = frames.groupby("night")[f"state{cid}"]
+    judged = [CameraState.OK, CameraState.UNMATCHED, CameraState.DARK]
+    share = states.apply(
+        lambda st: 100 * (st[st.isin(judged)] == CameraState.OK).mean() if st.isin(judged).any() else np.nan
+    )
+    x = np.array([position[n] for n in share.index])
+    ax.bar(x, share.fillna(0), width=0.6, color=np.where(share < 90, BAD, INK))
+    ax.set_ylim(0, 105)
+    ax.set_ylabel("%")
+    ax.set_title("AG exposures in which it matched a star (red: under 90%)", loc="left", fontsize=8.5)
+
+    ax = axes[1, 1]
+    mine = clusters[(clusters.agc_camera_id == cid) & clusters.night.isin(nights)]
+    for dx, chosen, color, label in (
+        (-0.15, mine.alone.astype(bool), BAD, "on it alone"),
+        (0.15, ~mine.alone.astype(bool), WARN, "with other cameras"),
+    ):
+        counts = mine[chosen].groupby("night").size().reindex(nights, fill_value=0)
+        ax.bar(np.arange(len(nights)) + 0.5 + dx, counts.to_numpy(), width=0.28, color=color, label=label)
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.set_ylim(0, max(5, ax.get_ylim()[1]))
+    alone = mine[mine.alone.astype(bool)]
+    direction = f" (alone: toward {_meanAngle(alone.angle_deg):.0f}°)" if len(alone) else ""
+    ax.set_title(f"Rejected matches clustered{direction}", loc="left", fontsize=8.5)
+    _legend(ax, loc="upper left")
+
+    ax = axes[1, 2]
+    errors = modelErrors[(modelErrors.agc_camera_id == cid) & modelErrors.night.isin(nights)]
+    ax.plot(
+        [position[n] for n in errors.night],
+        errors.error_um,
+        "-o",
+        ms=3.5,
+        lw=1.5,
+        color="C0",
+        label="this camera",
+    )
+    if len(modelErrors):
+        typical = modelErrors.groupby("agc_camera_id").error_um.median().median()
+        ax.axhline(typical, color=QUIET, lw=0.8, ls="--", label="all cameras' median")
+    ax.set_ylim(0, max(12, np.nanmax(errors.error_um.to_numpy(float), initial=0) * 1.1))
+    if len(errors):
+        angle = summariseModelErrors(run, errors).angle_deg.iloc[0]
+        ax.text(
+            0.98,
+            0.04,
+            f"growing toward {angle:.0f}° (mod 180)" if np.isfinite(angle) else "no one direction",
+            transform=ax.transAxes,
+            ha="right",
+            fontsize=7,
+        )
+    radius = run.config.modelErrorRadiusPix
+    ax.set_title(f"Model error {radius:g} px from centre (µm)", loc="left", fontsize=8.5)
+    _legend(ax, loc="upper left")
+
+    for row in range(2):
+        for col in range(3):
+            _nightAxis(axes[row, col], nights, label=(row == 1), rotate=True)
+    group = next(name for name, cids in CAMERA_GROUPS.items() if cid in cids)
+    fig.suptitle(f"AG{cid + 1} ({group})", x=0.01, ha="left", fontsize=10, fontweight="bold")
     return fig
-
-
-def _cameraHalves(series: pd.Series) -> set:
-    return set(series.index.droplevel(0))
 
 
 def _scatterByCameras(ax: Axes, x, y, full) -> None:
@@ -318,10 +380,9 @@ def plotGuiding(run: AgRun, jitter: pd.DataFrame) -> Figure:
 
 
 def plotFocus(run: AgRun) -> Figure:
-    """Plot each camera's focus against the others', the guider's dZ and the telescope's focus offset.
+    """Plot the guider's focus error and the telescope's focus offset over the run.
 
-    The per-camera panels use only AG exposures with all six focus values:
-    with fewer, the median is itself one of the cameras.
+    Each camera's focus against the others' is in `plotCamera`.
 
     Parameters
     ----------
@@ -331,29 +392,14 @@ def plotFocus(run: AgRun) -> Figure:
     Returns
     -------
     fig : `matplotlib.figure.Figure`
-        Six per-camera panels, dZ per science visit, and ``m2_off3``.
+        dZ per science visit, and ``m2_off3``.
     """
     nights = run.plottedNights
     frames = run.frames[run.frames.night.isin(nights)]
-    zColumns = [f"guide_delta_z{cid + 1}" for cid in range(6)]
-    allSix = frames[zColumns].notna().all(axis=1)
-    z = frames.loc[allSix, zColumns].to_numpy() * 1e3
-    zMedian = np.median(z, axis=1) if len(z) else np.array([])
-    position = {night: i + 0.5 for i, night in enumerate(nights)}
+    fig = _figure(11, 4.6)
+    grid = fig.add_gridspec(2, 1)
 
-    fig = _figure(11, 8.5)
-    grid = fig.add_gridspec(4, 3, height_ratios=[1, 1, 1.1, 1.1])
-    for k, cid in enumerate(CAMERA_ORDER):
-        row, col = divmod(k, 3)
-        ax = fig.add_subplot(grid[row, col])
-        byNight = pd.Series(z[:, cid] - zMedian).groupby(frames.night[allSix].to_numpy()).median()
-        ax.axhline(0, color=QUIET, lw=0.8)
-        ax.plot([position[n] for n in byNight.index], byNight.to_numpy(), "-o", ms=3.5, lw=1.5, color="C0")
-        ax.set_ylim(-60, 60)
-        ax.set_title(f"AG{cid + 1}: focus minus 6-camera median (µm)", loc="left", fontsize=8.5)
-        _nightAxis(ax, nights, label=(row == 1), rotate=True)
-
-    ax = fig.add_subplot(grid[2, :])
+    ax = fig.add_subplot(grid[0])
     visits = (
         frames[frames.population.eq("science")]
         .groupby("pfs_visit_id")
@@ -378,7 +424,7 @@ def plotFocus(run: AgRun) -> Figure:
     _legend(ax, above=True, ncol=2)
     _nightAxis(ax, nights, label=False)
 
-    ax = fig.add_subplot(grid[3, :])
+    ax = fig.add_subplot(grid[1])
     focus = run.focus[run.focus.night.isin(nights) & (run.focus.m2_off3 > 0)]
     ax.step(nightPosition(focus.created_at, nights), focus.m2_off3, where="post", color="C2", lw=1.2)
     ax.set_ylabel("mm")

@@ -118,3 +118,37 @@ def testDesignCategoriesDropProposalIds(FakeOpDB):
         {"pfs_design_id": 7, "category": "none", "n_fibers": 5},
         {"pfs_design_id": 8, "category": "QF", "n_fibers": 400},
     ]
+
+
+def testSequenceOfVisitBindsTheVisit(FakeOpDB):
+    answer = pd.DataFrame(
+        {
+            "pfs_visit_id": [150842, 150840, 150841],
+            "iic_sequence_id": 69251,
+            "sequence_type": "scienceObject",
+            "sequence_name": "Twilight sky",
+            "finished_at": ["2026-09-16 05:40:51"] * 3,
+            "sequence_status": "complete",
+        }
+    )
+    opdb = FakeOpDB({r"FROM visit_set AS given": answer})
+    sequence = queries.readSequenceOfVisit(opdb, 150841)
+    assert opdb.calls[0].params == {"visit": 150841}
+    assert list(sequence.columns) == list(queries.SEQUENCE_COLUMNS)
+    assert sequence["pfs_visit_id"].tolist() == [150840, 150841, 150842]
+    assert pd.api.types.is_datetime64_any_dtype(sequence["finished_at"])
+
+
+def testSequenceStillRunningHasNoFinish(FakeOpDB):
+    answer = pd.DataFrame(
+        {
+            "pfs_visit_id": [150840],
+            "iic_sequence_id": 69251,
+            "sequence_type": "scienceObject",
+            "sequence_name": "Twilight sky",
+            "finished_at": [None],
+            "sequence_status": [None],
+        }
+    )
+    sequence = queries.readSequenceOfVisit(FakeOpDB({r"FROM visit_set AS given": answer}), 150840)
+    assert sequence["finished_at"].isna().all()

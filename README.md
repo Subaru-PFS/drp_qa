@@ -79,7 +79,8 @@ See [documentation](https://pipelines.lsst.io/modules/lsst.pipe.base/creating-a-
 
 Also see the example notebook [`examples/QA Pipelines.ipynb`](examples/QA%20Pipelines.ipynb).
 
-`drpQA.yaml` currently wires up `dmLineResiduals`, `extractionQa`, `extractionQaCombined`, and `imageQualityQa`. The
+`drpQA.yaml` currently wires up `dmLineResiduals`, `extractionQa`, `extractionQaCombined`, `imageQualityQa` and
+`twilightFluxQa`. The
 remaining tasks below are implemented and importable
 but are not registered in the pipeline; run them by referencing their task class directly.
 
@@ -439,6 +440,16 @@ Determines the quality of the fiber extraction.
 |----------------------|--------------------------|--------------------------------------------------------------------------------------------------------------------------------|
 | `extQaStatsCombined` | `instrument, visit, arm` | Results of the residual analysis of extraction plotted against fiberId for all spectrographs (left) and PFI positions (right). |
 
+#### `twilightFluxQa`
+
+Per detector of a twilight (a `scienceObject` whose `W_SEQNAM` starts "Twilight"), stores `twilightFiberFlux`:
+each lit fiber's median flux / norm over the arm's window, its S/N, good and saturated pixels, and focal-plane
+position, with the sequence id (`W_SEQID`). It judges nothing itself: a twilight is judged against the other
+exposures of its sequence, which one quantum cannot see, by `bin.src/twilightQa.py` afterwards (PIPE2D-1973; see
+[QA thresholds](#qa-thresholds-and-the-validation-visit-set)). Any other visit is skipped from the raw header (the
+pfsConfig's standing in) before its pfsArm is read, so running it on every visit costs the header and the pfsConfig.
+Raws without those cards (before 2025-11) need `assumeTwilight` and a data query selecting the twilights.
+
 #### `fiberNormsQa`
 
 Plot the fiber normalization for the given detector and visit.
@@ -562,6 +573,24 @@ verdict is known. The decisions behind the current set:
   5 images read with m), so the per-detector scatter tolerances are not split by it. Pooled over runs the two differ,
   because the scatter moves twofold between runs (0.025–0.054 px) and the camera sets are not spread evenly over them:
   compare them within a run. `iqQaMetrics`' `medDxCenter` is superseded by `dmLineResiduals`' `medianDeltaX`.
+- **A twilight is judged against its own sequence, with provisional thresholds** (PIPE2D-1973). A twilight is the
+  sky flat behind the screen response, so the question is whether each exposure is a good flat. Its reference is the
+  sequence's other exposures, minutes apart: no calibration enters (`pfs.drp.qa.metrics.twilight`). It says whether
+  an exposure is a good flat and what differs in it, not why. Each detector's level is judged on every exposure, at WARN 2 % and FAIL 3 %;
+  the field's RMS beyond noise at 1.5 %/2.5 % and its deepest coherent patch at 2.5 %/4 %, on exposures bright
+  enough to be flats (b-arm S/N ≥ 15 per pixel: below it, exposures carry structure beyond their noise that brighter
+  ones of the same sequence do not, on clear nights too). The values are provisional, from 16 sequences of 2025-03 to 2026-09, until the flat
+  precision the screen response needs is known: normal detectors' levels differed by at most 1.02 % against 8–14 %
+  in the Run21 known-bad entries, and normal exposures reached 1.2 % RMS and a 2.0 % patch. The reference is
+  the per-fiber median of the sequence's bright exposures, the judged one included, so one bad exposure cannot move
+  it. Run29's b arm fails in 145073 on a patch at x = −173, y = −28 mm, +10 % against the rest of its sequence (r
+  within 1.2 %). The task stores twilights from the raw header's `W_SEQTYP`, `W_SEQNAM` and `W_SEQID`; Run21's raws
+  predate them, so it is rerun with `assumeTwilight` and `bin.src/twilightQa.py --sequences`. Saturation is stored,
+  not judged. The
+  n arm is not judged: clear twilights already sit 3–9 % above the noise model there. Anything the same through a
+  sequence cancels, whether a pattern on the focal plane or a colour change uniform across it; comparing a twilight
+  with good twilights of other nights would cover it (PIPE2D-1981). The Run25 2025-11-21 twilight,
+  noted "Cloudy" in the obslog, passes, and its known-bad entry is unconfirmed.
 - **Nothing measured is `UNKNOWN`, not `PASS`.** A FWHM read from the `fiberProfiles` calibration is not a
   measurement and is never judged.
 - **Every known-bad entry is caught, or says why not** (PIPE2D-1934). `pfs.drp.qa.metrics.coverage` checks each
@@ -656,10 +685,11 @@ python bin.src/agRunReport.py fetch --period run30     # the opdb, once: ~10 MB,
 python bin.src/agRunReport.py report --period run30 --title "Run 30" [--notes notes.md]
 ```
 
-`fetch` reads five aggregated tables (`queries.readAgRun`) into `~/.cache/drp_qa/agRun/opdb/`; `report` writes
+`fetch` reads six aggregated tables (`queries.readAgRun`, the matches on a 4×4 grid over each detector among them) into `~/.cache/drp_qa/agRun/opdb/`; `report` writes
 `<period>/report.md`, its figures and `metrics.json` from them, without the database. The report opens with its
-flags, then a camera-presence map, stars and FWHM (per detector half) per camera, AG1/3/5 against AG2/4/6, the
-settled guiding of each science visit, focus and acquisition. Cameras are shown and compared by group, AG1/3/5 and
+flags, then a camera-presence map, AG1/3/5 against AG2/4/6, the settled guiding of each science visit, focus and
+acquisition, and a section per camera: its flags, and its matched stars, FWHM per detector half, focus against the
+others, presence, clusters of rejected matches and position-model error, night by night. Cameras are shown and compared by group, AG1/3/5 and
 AG2/4/6: they are wired and placed separately, and can fail together (Run 30 lost AG1/3/5 after 2026-09-08).
 
 What it flags (`runAnalysis.RunConfig` holds the numbers):
@@ -669,6 +699,16 @@ What it flags (`runAnalysis.RunConfig` holds the numbers):
   undetected), and whether it detected anything at all.
 - Guide frames rejected (INVALID_OFFSET), frames with no guide offset, and **offsets accepted from fewer than 3
   matched stars**, which the guider sends to the telescope while they are under `max_correction`.
+- **Rejected matches clustered on one side of a detector**: detections paired with guide stars but not counted as
+  good matches, whose mean position is far from the good ones', on that camera alone in its AG exposure. When a
+  camera's position model is off, the matches far from where it fits best go first, always on the same side: AG3's
+  top half in Run 29 visit 147728 (INSTRM-2982), a corner of AG4 in the same visit. Flagged at 2.5× the other
+  cameras' median, with the clusters' mean direction and how consistent it is (Runs 29 and 30: AG3 toward ~115°,
+  consistency 0.9; AG1 in Run 30).
+- **A camera position model that is off**: a 2×2 fit, per night, of the good matches' residuals (measured minus
+  expected position, less the camera's mean in each AG exposure, so the pointing drops out) against their position
+  on the detector; quoted as the error 500 px from the centre and the direction it grows in. The residual is the guide fit's own: the detection through pfs_utils' `coordinates.det2dp` against the guide star through `Subaru_POPT2_PFS`, not the `CoordTransp` (`sky_pfi_ag`, `ag_pfimm_to_pixel`) chain that places guide stars in pfsDesign and pfsConfig. Flagged over 4 µm and
+  1.5× the cameras' median (Runs 29 and 30: AG3 8 µm toward ~113°, the others 3–6 µm).
 - Science visits whose settled jitter (frame-to-frame, after the first 5 frames) is over 3× the run's median, and
   cameras whose FWHM is 15% from the others'. The two detector halves focus differently by design, so their FWHM
   difference is plotted, not flagged.
@@ -768,13 +808,16 @@ collection; uncommitted changes to the rest are refused. Report the reference
 
 ## Loading QA results into qadb
 
-`pfs.drp.qa.qadb` copies what `imageQualityQa` and `dmLineResiduals` wrote to the Butler into qadb
-(`spt_qa_database` 0.2.0), after the fact: the Butler is the record, and a database outage cannot fail a quantum.
+`pfs.drp.qa.qadb` copies what `imageQualityQa`, `dmLineResiduals` and `bin.src/twilightQa.py` wrote to the Butler
+into qadb (`spt_qa_database` 0.3.0), after the fact: the Butler is the record, and a database outage cannot fail a
+quantum.
 One code path serves qaActor after each visit's pipetask (`loadVisit`; INSTRM-3040), comparison mode after a run,
 and the backfill of whole collections (`bin.src/loadQadb.py`).
 
 - **Tables.** `iqQaMetrics` → `image_quality_qa`, `iqQaSpeciesMetrics` → `image_quality_qa_species`,
-  `dmLineResidualSummary` → `dm_line_residual_qa`, `dmLineResidualMetrics` → `dm_line_residual_qa_metric`: the same
+  `dmLineResidualSummary` → `dm_line_residual_qa`, `dmLineResidualMetrics` → `dm_line_residual_qa_metric`,
+  `twilightQaMetrics` → `twilight_qa` (the twilight sequence check per image, stored after the fact by
+  `twilightQa.py`; INSTRM-3089): the same
   columns in snake_case (`pfs.drp.qa.qadb.tables`), keyed by the processing, the visit and the camera (`b1`). A
   Butler column reaches qadb once both the schema and the table's spec here name it; the fiber arrays and the
   per-flag percentages of `iqQaMetrics` stay in the Butler.
@@ -794,7 +837,9 @@ and the backfill of whole collections (`bin.src/loadQadb.py`).
   `illumination` as `full`.
 - **Gate.** `qa_gate` holds each image's worst verdict across the tasks (`FAIL` > `WARN` > `PASS` > `UNKNOWN`; a task
   that judged nothing never outranks one that did), the task and metric that decided it, every task's reason, the
-  mode (`realtime`, `comparison`, `backfill`) and whether the verdict is provisional. PIPE2D-1930 reads this table.
+  mode (`realtime`, `comparison`, `backfill`), whether the verdict is provisional, and the thresholds each task judged
+  with (`iq_`, `dm_` and `twilight_thresholds_id`). A twilight image's gate is the worst of its image quality, its
+  line residuals and its sequence check, once the sequence is complete and judged. PIPE2D-1930 reads this table.
 - **Idempotent.** Every write is `INSERT ... ON CONFLICT DO UPDATE` on the row's key, and a long table's rows of each
   image are deleted before its reload: load a collection again after a re-judgement, or after a load that stopped,
   and the rows are replaced, not duplicated, and a species or metric the new judgement lacks is gone. Visits qadb's `pfs_visit`
@@ -864,6 +909,35 @@ python bin.src/<script>.py --help
 ### `qaComparison.py`
 
 Comparison mode; see [Comparison mode](#comparison-mode).
+
+### `twilightQa.py`
+
+Judges the twilight sequences of a collection (PIPE2D-1973): reads the `twilightFiberFlux` tables of a visit range,
+or a parquet export of them, compares each sequence's exposures (`pfs.drp.qa.metrics.twilight`) against the shipped
+`twilightThresholds.yaml`, and prints the verdicts (per exposure and arm: `PASS`, `WARN`, `FAIL` or `TOO_FAINT`,
+with the reasons). Read from a Butler, it stores the verdict per detector image as `twilightQaMetrics`
+(`twilightImageVerdict`: the detector's level offset with its arm's RMS and patch; `UNKNOWN` for the unjudged n
+arm) in a new RUN prepended to the collection (`pfs.drp.qa.qadb.store`; `--no-store` skips it), so the qadb loader
+folds it into `qa_gate` as the task `twilightQa` on every load (INSTRM-3089); with `--qadb-host` it loads the judged
+visits itself. With `-o` it writes `twilightMetrics.parquet` (per detector image) and `twilightVerdict.csv`. Reading
+or storing in a Butler requires the stack; a parquet does not.
+
+```bash
+pipetask run -p pipelines/drpQA.yaml#twilightFluxQa -b /work/datastore -i <reductions> -o u/<user>/twilight \
+    -d "visit IN (...)"
+python bin.src/twilightQa.py -c u/<user>/twilight --visits 148039 150896 -o .
+# After each visit (ics_qaActor, INSTRM-3089): judge its sequence once it is complete, else do nothing
+python bin.src/twilightQa.py -c qaActor/reductions --sequence-of-visit 150844 --opdb-host pfsa-db --qadb-host pfsa-db
+```
+
+`--sequence-of-visit` looks the visit's IIC sequence up in the opdb and judges it only when it is a twilight, has
+finished (`iic_sequence_status`), and every visit of it has a `twilightFiberFlux` for every camera it has a pfsArm
+for; otherwise it says what it is waiting for. The sequence id comes from the opdb, so it needs no `--sequences` for
+raws without `W_SEQID`, and its files are named by sequence. The exit status says what happened, for ics_qaActor's
+log: 0 judged (stored, and loaded when asked, every exposure `PASS` or `TOO_FAINT`), 6 judged likewise but with a
+`WARN` or `FAIL` exposure (for the caller to raise in its log), 3 pending (the sequence has not finished, or a
+visit's tables are missing), 4 not a twilight (or in no sequence), 5 judged but the store or the load failed; the
+verdicts and metrics are then printed in full, so the log holds them.
 
 ### `judgeScatterThresholds.py`
 

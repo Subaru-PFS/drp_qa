@@ -34,8 +34,9 @@ the pipeline/config glue to run them.
 ### Key components
 
 - **QA pipeline (`pipelines/drpQA.yaml`)** — defines the sequence of QA tasks. It
-  currently registers **four** task labels, and only these run under `pipetask`:
-  `extractionQa`, `extractionQaCombined`, `imageQualityQa`, `dmLineResiduals`.
+  currently registers **five** task labels, and only these run under `pipetask`:
+  `extractionQa`, `extractionQaCombined`, `imageQualityQa`, `dmLineResiduals`,
+  `twilightFluxQa`.
 - **Threshold pipeline (`pipelines/qaThresholds.yaml`)** — drp_stella's `reduceExposure`
   (less `mergeArms`) plus `imageQualityQa`, so `docs/qa-thresholds.ipynb` reduces the
   validation visits from raw data. The notebook applies `drpActor`'s per-sequence-type config.
@@ -46,6 +47,10 @@ the pipeline/config glue to run them.
   - `dmLineResiduals.py` — per-species residuals of `lines` against `detectorMap_calib`
     (drift) and the visit's `detectorMap` (scatter on `RESERVED` lines); the measurement
     and verdict are stack-free in `metrics/lineResiduals.py`
+  - `twilightFluxQa.py` — stores each lit fiber's median flux on a twilight
+    (`twilightFiberFlux`; other visits stop at the header, before the pfsArm is read);
+    `bin.src/twilightQa.py` judges each sequence's exposures against each other afterwards,
+    stack-free in `metrics/twilight.py` (PIPE2D-1973)
 - **QA modules *not* wired into `drpQA.yaml`** — these exist as `PipelineTask`s or CLIs
   but must be run via their own pipeline/entry point:
   - `skySubtractionQa.py` — sky subtraction accuracy (`SkyArmSubtractionTask`,
@@ -75,7 +80,7 @@ the pipeline/config glue to run them.
   (needs the opdb; committed without outputs): keep it in step with renamed arguments.
   The end-of-run report (INSTRM-2466) adds `queries.readAgRun` (aggregates over a period's AG
   exposures), `runAnalysis` (stack-free: per-exposure camera states, dropouts, settled jitter,
-  flags), `runPlotting` (figures from an `AgRun`) and `runReport` (fetch to parquet, then the
+  clusters of rejected matches, position-model errors, flags), `runPlotting` (figures from an `AgRun`) and `runReport` (fetch to parquet, then the
   Markdown report), driven by `bin.src/agRunReport.py` with comparison mode's runs; tested in
   `tests/guiders/test_runAnalysis.py` and `test_runReport.py` on a synthetic run (`makeAgRunTables`). Its plots are not in `docs/guider-plots.ipynb`: a run
   holds science visits, which can't be committed, so each run's `report.md` is their description.
@@ -92,7 +97,8 @@ the pipeline/config glue to run them.
   suggestions, and `readers` reads them from a
   Butler it is given. `registry` declares each metric once (direction, units, reference,
   populations); `gate` is the only gating path, judging metrics rows against a thresholds
-  file layered over the task config; `longFormat` holds `iqQaSpeciesMetrics`. Read [`docs/qa-principles.md`](docs/qa-principles.md) (rules R1–R7,
+  file layered over the task config; `longFormat` holds `iqQaSpeciesMetrics`; `twilight`
+  measures and judges twilight sequences, each exposure against the sequence's others. Read [`docs/qa-principles.md`](docs/qa-principles.md) (rules R1–R7,
   the metric checklist) before adding a metric or a threshold. The procedure is the
   notebook [`docs/qa-thresholds.ipynb`](docs/qa-thresholds.ipynb), from `pipetask` to
   review (committed with outputs); the set is described in
@@ -115,6 +121,12 @@ the pipeline/config glue to run them.
   - `fiberNormsQa.py` — entry point for `fiberNormsQa.main`
   - `qaComparison.py` — entry point for `pfs.drp.qa.comparison.cli.main` (comparison mode)
   - `agRunReport.py` — entry point for `pfs.drp.qa.guiders.runReport.main` (end-of-run AG report)
+  - `twilightQa.py` — judges a collection's twilight sequences (or a parquet export of them) with
+    `pfs.drp.qa.metrics.twilight`: which exposures are good flats; `--sequence-of-visit` judges one
+    visit's sequence once it is complete (opdb via `comparison.queries.readSequenceOfVisit`), stores
+    the per-image verdict in the Butler (`twilightQaMetrics`, via `qadb.store`) for the qadb loader's
+    gate, and with `--qadb-host` loads the judged visits; its exit status tells ics_qaActor what
+    happened (INSTRM-3089)
   - `exportMetrics.py` — per-detector QA tables (`iqQaMetrics`, `dmLineResidualMetrics`, ...) from a
     collection to parquet, with progress, via `metrics.readers.exportMetrics`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),
@@ -469,10 +481,15 @@ bin.src/plotIqQaTimeSeries.py
     → writes: time-series PNG via pfs.drp.qa.plotting.iqQa.plotIqTimeSeries
 
 bin.src/loadQadb.py / pfs.drp.qa.qadb.loadCollection   (after pipetask, not a task)
-    ← reads: iqQaMetrics, iqQaSpeciesMetrics, dmLineResidualSummary, dmLineResidualMetrics,
+    ← reads: iqQaMetrics, iqQaSpeciesMetrics, dmLineResidualSummary, dmLineResidualMetrics, twilightQaMetrics,
              packages (per RUN); *_config only for tables without thresholdsFiles/thresholdsSha256
-    → writes to qadb: image_quality_qa(_species), dm_line_residual_qa(_metric),
+    → writes to qadb: image_quality_qa(_species), dm_line_residual_qa(_metric), twilight_qa,
              data_processing_pipe2d, qa_thresholds, qa_threshold_entry, qa_gate (idempotent upserts)
+
+bin.src/twilightQa.py --sequence-of-visit   (after pipetask, not a task; the sequence must be complete)
+    ← reads: opdb visit_set, iic_sequence(_status); twilightFiberFlux of the sequence's visits
+    → writes: twilightQaMetrics (one per detector image) to a new RUN prepended to the collection
+    → then loadCollection for the sequence's visits: twilight_qa, and qa_gate with twilightQa as a third task
 ```
 
 `reduceExposure` is **not** required between `fitDetectorMap` and `imageQualityQa`. The

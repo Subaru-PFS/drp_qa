@@ -28,6 +28,7 @@ import pandas as pd
 from pfs.drp.qa.metrics.gate import STATUS_ORDER, ThresholdsLike, judge
 from pfs.drp.qa.metrics.lineResiduals import RESIDUAL_METRICS
 from pfs.drp.qa.metrics.registry import specFor
+from pfs.drp.qa.metrics.twilight import TWILIGHT_METRICS as _TWILIGHT_METRICS
 from pfs.drp.qa.metrics.validationVisits import (
     ValidationVisit,
     ValidationVisitSet,
@@ -41,6 +42,7 @@ __all__ = [
     "CAUGHT",
     "IMAGE_QUALITY_METRICS",
     "LINE_RESIDUAL_METRICS",
+    "TWILIGHT_METRICS",
     "UNCHECKABLE",
     "CoverageSource",
     "knownBadCoverage",
@@ -64,6 +66,9 @@ IMAGE_QUALITY_METRICS = ("medFwhm", "medDxCenter", "dxCenterRms", "pctFlagged", 
 
 #: The metrics of the ``dmLineResiduals`` tables that the gate can judge.
 LINE_RESIDUAL_METRICS = tuple(RESIDUAL_METRICS)
+
+#: The metrics of ``twilightMetrics`` (`pfs.drp.qa.metrics.twilight`) that the gate can judge.
+TWILIGHT_METRICS = _TWILIGHT_METRICS
 
 #: Columns identifying an image.
 _IMAGE = ["visit", "arm", "spectrograph"]

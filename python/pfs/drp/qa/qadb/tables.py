@@ -34,6 +34,7 @@ __all__ = [
     "QA_THRESHOLDS",
     "QA_THRESHOLD_ENTRY",
     "TASK_TABLES",
+    "TWILIGHT_QA",
     "TableSpec",
     "cameraName",
     "gateRows",
@@ -55,10 +56,13 @@ IMAGE_KEYS = ("visit", "arm", "spectrograph")
 GATE_ORDER = ("UNKNOWN", "PASS", "WARN", "FAIL")
 
 #: The tasks, with the Butler tables each writes: the per-image table first,
-#: then the long table whose rows take the image's processing.
-TASK_TABLES = {
+#: then the long table whose rows take the image's processing (`None` for a
+#: task with none). ``twilightQa`` is ``bin.src/twilightQa.py``, not a pipeline
+#: task: it stores its verdict once the sequence is complete (INSTRM-3089).
+TASK_TABLES: dict[str, tuple[str, str | None]] = {
     "imageQualityQa": ("iqQaMetrics", "iqQaSpeciesMetrics"),
     "dmLineResiduals": ("dmLineResidualSummary", "dmLineResidualMetrics"),
+    "twilightQa": ("twilightQaMetrics", None),
 }
 
 _ACRONYM = re.compile(r"([A-Z]+)([A-Z][a-z])")
@@ -98,22 +102,30 @@ class TableSpec:
     extraKeys : `tuple` [`str`, ...], optional
         Butler columns that, with `KEYS`, identify a row of a long table;
         stored as strings.
+    renames : `tuple` [`tuple` [`str`, `str`], ...], optional
+        Butler columns whose qadb column is not their `snakeCase`, as
+        ``(butlerColumn, qadbColumn)`` pairs.
     """
 
     name: str
     source: str
     columns: Mapping[str, str]
     extraKeys: tuple[str, ...] = ()
+    renames: tuple[tuple[str, str], ...] = ()
+
+    def qadbColumn(self, column: str) -> str:
+        """Return the qadb column of a Butler column."""
+        return dict(self.renames).get(column) or snakeCase(column)
 
     @property
     def keys(self) -> tuple[str, ...]:
         """The qadb key columns."""
-        return (*KEYS, *(snakeCase(key) for key in self.extraKeys))
+        return (*KEYS, *(self.qadbColumn(key) for key in self.extraKeys))
 
     @property
     def qadbColumns(self) -> tuple[str, ...]:
         """Every qadb column, keys first."""
-        return (*self.keys, *(snakeCase(column) for column in self.columns))
+        return (*self.keys, *(self.qadbColumn(column) for column in self.columns))
 
 
 IMAGE_QUALITY = TableSpec(
@@ -198,6 +210,34 @@ LINE_RESIDUAL_METRIC = TableSpec(
     extraKeys=("reference", "description", "statusType", "metric"),
 )
 
+TWILIGHT_QA = TableSpec(
+    "twilight_qa",
+    "twilightQaMetrics",
+    {
+        "spectrograph": "int",
+        "arm": "str",
+        "sequence": "int",
+        "seqName": "str",
+        "nExposures": "int",
+        "snr": "float",
+        "brightness": "float",
+        "tooFaint": "bool",
+        "nReference": "int",
+        "noise": "float",
+        "satFraction": "float",
+        "nMeasured": "int",
+        "twilightLevelOffset": "float",
+        "twilightResidRms": "float",
+        "twilightPatch": "float",
+        "twilightArmMean": "float",
+        "twilightArmHalfDiff": "float",
+        "qaStatus": "str",
+        "qaDecidedBy": "str",
+        "qaReason": "str",
+    },
+    renames=(("sequence", "iic_sequence_id"),),
+)
+
 #: ``qa_thresholds``: one row per thresholds file, identified by its content.
 QA_THRESHOLDS = (
     "thresholds_id",
@@ -271,6 +311,7 @@ QA_GATE = (
     "mode",
     "iq_thresholds_id",
     "dm_thresholds_id",
+    "twilight_thresholds_id",
     "decided_at",
 )
 
@@ -343,9 +384,9 @@ def imageRows(frame: pd.DataFrame, spec: TableSpec, processingId: int | Mapping[
         ],
     }
     for key in spec.extraKeys:
-        rows[snakeCase(key)] = _column(frame, key, "str")
+        rows[spec.qadbColumn(key)] = _column(frame, key, "str")
     for column, dtype in spec.columns.items():
-        rows[snakeCase(column)] = _column(frame, column, dtype)
+        rows[spec.qadbColumn(column)] = _column(frame, column, dtype)
     return pd.DataFrame(rows, columns=list(spec.qadbColumns), dtype=object)
 
 
@@ -498,7 +539,12 @@ def gateRows(
             merged[label] if label in merged.columns else pd.Series([None] * len(merged), index=merged.index)
         )
 
+    # One lookup per task and column, not one per image: a missing column (a task without
+    # qaProvisional, say) would otherwise build a full-length Series for every image.
     statuses = {task: column(task, "qaStatus") for task in tasks}
+    decidedByOf = {task: column(task, "qaDecidedBy") for task in tasks}
+    reasonOf = {task: column(task, "qaReason") for task in tasks}
+    provisionalOf = {task: column(task, "qaProvisional") for task in tasks}
     present = {task: merged[f"present_{task}"].fillna(False).astype(bool) for task in tasks}
     worst, decidedByTask, decidedBy, reasons, provisional = [], [], [], [], []
     for index in merged.index:
@@ -512,14 +558,14 @@ def gateRows(
         decider = next((task for task in tasks if rowStatuses.get(task) == status), None)
         worst.append(status)
         decidedByTask.append(decider)
-        decidedBy.append(_scalar(column(decider, "qaDecidedBy")[index], "str") if decider else None)
+        decidedBy.append(_scalar(decidedByOf[decider][index], "str") if decider else None)
         parts = []
         for task in tasks:
-            reason = _scalar(column(task, "qaReason")[index], "str")
+            reason = _scalar(reasonOf[task][index], "str")
             if reason:
                 parts.append(f"{task}: {reason}")
         reasons.append("; ".join(parts))
-        flags = [_scalar(column(task, "qaProvisional")[index], "bool") for task in tasks]
+        flags = [_scalar(provisionalOf[task][index], "bool") for task in tasks]
         flags = [flag for flag in flags if flag is not None]
         provisional.append(any(flags) if flags else None)
 
@@ -549,6 +595,7 @@ def gateRows(
             "mode": [mode] * len(merged),
             "iq_thresholds_id": thresholdsId("imageQualityQa"),
             "dm_thresholds_id": thresholdsId("dmLineResiduals"),
+            "twilight_thresholds_id": thresholdsId("twilightQa"),
             "decided_at": [decidedAt] * len(merged),
         },
         columns=list(QA_GATE),

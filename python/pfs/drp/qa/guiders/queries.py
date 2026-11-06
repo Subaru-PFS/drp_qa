@@ -22,6 +22,7 @@ from pfs.drp.qa.guiders.coordinates import opdbToHardware
 
 __all__ = [
     "AGC_DATA_COLUMNS",
+    "AG_GRID_CELL_PIX",
     "AG_RUN_TABLES",
     "find_W_M2OFF3",
     "readAGCStars",
@@ -696,6 +697,31 @@ _AG_RUN_SQL = {
     WHERE agc_exposure.taken_at >= :start AND agc_exposure.taken_at < :end
     GROUP BY 1, 2, 3
     """,
+    # The detections paired with a guide star, in each (AG exposure, camera, cell of a 4x4 grid over the
+    # detector): how many, how many good matches, the mean pixel position of the good and of the rejected ones,
+    # and the good ones' mean position residual (measured minus expected, µm, in the opdb's frame). Where on a
+    # detector matches are rejected, and how its residual changes across it, show a camera position model off.
+    "grid": """
+    SELECT
+        agc_data.agc_exposure_id,
+        agc_data.agc_camera_id,
+        LEAST(CAST(floor(agc_data.centroid_y_pix / :rowCell) AS INTEGER), 3) AS row_cell,
+        LEAST(CAST(floor(agc_data.centroid_x_pix / :columnCell) AS INTEGER), 3) AS column_cell,
+        count(*) AS n_paired,
+        count(*) FILTER (WHERE agc_match.flags = 1) AS n_good,
+        avg(agc_data.centroid_x_pix) FILTER (WHERE agc_match.flags = 1) AS x_good_pix,
+        avg(agc_data.centroid_y_pix) FILTER (WHERE agc_match.flags = 1) AS y_good_pix,
+        avg(agc_data.centroid_x_pix) FILTER (WHERE agc_match.flags <> 1) AS x_rejected_pix,
+        avg(agc_data.centroid_y_pix) FILTER (WHERE agc_match.flags <> 1) AS y_rejected_pix,
+        1000 * avg(agc_match.agc_center_x_mm - agc_match.agc_nominal_x_mm) FILTER (WHERE agc_match.flags = 1) AS dx_um,
+        1000 * avg(agc_match.agc_center_y_mm - agc_match.agc_nominal_y_mm) FILTER (WHERE agc_match.flags = 1) AS dy_um
+    FROM agc_exposure
+    JOIN agc_data ON agc_data.agc_exposure_id = agc_exposure.agc_exposure_id
+    JOIN agc_match ON agc_match.agc_exposure_id = agc_data.agc_exposure_id
+        AND agc_match.agc_camera_id = agc_data.agc_camera_id AND agc_match.spot_id = agc_data.spot_id
+    WHERE agc_exposure.taken_at >= :start AND agc_exposure.taken_at < :end
+    GROUP BY 1, 2, 3, 4
+    """,
     # Every AG exposure, with its guide offset if the guider wrote one.
     "exposures": """
     SELECT
@@ -750,15 +776,18 @@ _AG_RUN_SQL = {
 #: The tables `readAgRun` returns.
 AG_RUN_TABLES = tuple(_AG_RUN_SQL)
 
+#: The size (pixels) of the cells of `readAgRun`'s ``grid``, 4 x 4 over an AG detector (1072 x 1041 pixels).
+AG_GRID_CELL_PIX = {"rowCell": 260, "columnCell": 268}
+
 
 def readAgRun(
     opdb, start: datetime.datetime, end: datetime.datetime, magLimit: float = 20.0
 ) -> dict[str, pd.DataFrame]:
     """Read what an end-of-run AG report needs about every AG exposure in a period.
 
-    Five queries, aggregated in the database (a run of about 20,000 AG
-    exposures comes back as ~300,000 rows in a few seconds), rather than one
-    row per spot as `readAgcData` returns.
+    Six queries, aggregated in the database (a run of about 20,000 AG
+    exposures comes back as ~1,000,000 rows in a few seconds), rather than
+    one row per spot as `readAgcData` returns.
 
     Parameters
     ----------
@@ -782,6 +811,15 @@ def readAgRun(
             (from the second moments) of the good matches and median
             ``background`` of the detections. ``right_half`` is 1 on the
             no-glass half.
+        ``grid``
+            One row per (``agc_exposure_id``, ``agc_camera_id``,
+            ``row_cell``, ``column_cell``), cells of `AG_GRID_CELL_PIX`
+            numbered 0-3 from the detector's origin, with a detection paired
+            with a guide star: ``n_paired`` and ``n_good``; the mean pixel
+            position of the good (``x_good_pix``, ``y_good_pix``) and the
+            rejected (``x_rejected_pix``, ``y_rejected_pix``) ones; and the
+            good ones' mean ``dx_um``, ``dy_um``, measured minus expected
+            position (µm, in the opdb's frame).
         ``exposures``
             One row per AG exposure, time-ordered, with its
             ``agc_guide_offset`` columns (NaN where there's none):
@@ -799,6 +837,9 @@ def readAgRun(
     params = {"start": start, "end": end}
     tables = {}
     for name, sql in _AG_RUN_SQL.items():
-        bound = {**params, "magLimit": float(magLimit)} if name == "designStars" else params
+        bound = {
+            "designStars": {**params, "magLimit": float(magLimit)},
+            "grid": {**params, **AG_GRID_CELL_PIX},
+        }.get(name, params)
         tables[name] = opdb.query_dataframe(sql, params=bound).reset_index(drop=True)
     return tables
