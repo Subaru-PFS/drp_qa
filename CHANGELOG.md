@@ -10,6 +10,14 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Added
+
+- **Reading qadb back** (PIPE2D-1924) — `pfs.drp.qa.qadb.reader.readQadb` returns what the loader wrote for a
+  collection as the Butler tables (`iqQaMetrics`, `dmLineResidualSummary`, `dmLineResidualMetrics`, latest RUN per
+  image, one read-only query per table), optionally only the images loaded since a time, and qadb's visit times.
+  `comparison.queries.readVisitTimes` reads visits' SpS start times and IIC sequences by visit. The QA dashboard
+  that uses both is `pfs_qa_dashboard`.
+
 ## [0.1.2] - 2026-11-06
 
 ### Changed

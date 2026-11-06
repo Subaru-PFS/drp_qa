@@ -72,8 +72,27 @@ def testNotesFromVisitsAndSequences(FakeOpDB):
     assert notes["iic_sequence_id"].isna().tolist() == [True, True, False]
 
 
+def testVisitTimesByVisit(FakeOpDB):
+    answer = pd.DataFrame(
+        {
+            "pfs_visit_id": [141578, 141577],
+            "time_exp_start": ["2026-05-04 22:10:47", "2026-05-04 22:08:25"],
+            "iic_sequence_id": [61288, None],
+        }
+    )
+    opdb = FakeOpDB({"FROM sps_exposure": answer})
+    times = queries.readVisitTimes(opdb, [141578, 141577, 141578])
+
+    assert opdb.calls[0].params == {"visits": [141577, 141578]}
+    assert ":visits" in opdb.calls[0].sql and "141577" not in opdb.calls[0].sql
+    assert list(times["pfs_visit_id"]) == [141577, 141578]
+    assert times["iic_sequence_id"].tolist()[1] == 61288 and times["iic_sequence_id"].isna().tolist()[0]
+    assert pd.api.types.is_datetime64_any_dtype(times["time_exp_start"])
+
+
 def testNothingToReadMakesNoQuery(FakeOpDB):
     opdb = FakeOpDB({})
+    assert queries.readVisitTimes(opdb, []).empty
     assert queries.readNotes(opdb, [], []).empty
     assert queries.readTelStatus(opdb, []).empty
     assert queries.readDesignCategories(opdb, []).empty

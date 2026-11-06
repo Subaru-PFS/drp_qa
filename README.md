@@ -916,6 +916,15 @@ The tests (`tests/qadb/`) run the writer's statements on SQLite through SQLAlche
 schema the tests create (`tests/qadb/conftest.py`) mirrors `spt_qa_database`'s migration `a7c3e5d91b24`: change both
 together.
 
+## Reading qadb back
+
+`pfs.drp.qa.qadb.reader.readQadb(qadb, collection, first, last, since=None)` returns what the loader
+wrote for a collection as the Butler tables it came from (`iqQaMetrics`, `dmLineResidualSummary`,
+`dmLineResidualMetrics`) and qadb's visit listing, read-only with one query per table. An image judged in more than
+one RUN of the collection is read as the latest; with `since`, only images loaded at or after it are read (the
+bound is inclusive). The QA dashboard (`pfs_qa_dashboard`) is built on it, with the opdb's IIC sequences, times and
+notes from `comparison.queries.readVisitTimes` and `readNotes`.
+
 ## Command-line tools
 
 Scripts live in `bin.src/` and are run directly — there is no SCons step to copy them into a `bin/` directory on `PATH`:
