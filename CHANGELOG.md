@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-06
+
 ### Changed
 
 - **Twilight judge and loader wording** (PIPE2D-1987) — `twilightQa.py --sequence-of-visit` says `not reduced` for a
