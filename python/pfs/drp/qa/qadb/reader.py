@@ -1,4 +1,4 @@
-"""Read the QA tables qadb holds back in the Butler tables' shapes (PIPE2D-1924).
+"""Read the QA tables qadb holds back in the Butler tables' shapes.
 
 The inverse of `pfs.drp.qa.qadb.tables`: what `pfs.drp.qa.qadb.loader` wrote for a
 collection (by qaActor after each visit, or ``bin.src/loadQadb.py`` after a run)

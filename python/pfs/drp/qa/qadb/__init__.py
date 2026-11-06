@@ -18,7 +18,6 @@ collections, and a Butler outage or a database outage cannot fail a quantum.
 """
 
 from .loader import *  # noqa: F403
-from .reader import *  # noqa: F403
 from .store import *  # noqa: F403
 from .tables import *  # noqa: F403
 from .writer import *  # noqa: F403
