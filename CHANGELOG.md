@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-06
+
 ### Added
 
 - **Reading qadb back** (PIPE2D-1924) — `pfs.drp.qa.qadb.reader.readQadb` returns what the loader wrote for a
