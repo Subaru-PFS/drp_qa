@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Judge the twilight sequences of a collection: which exposures are good flats (PIPE2D-1973).
+r"""Judge the twilight sequences of a collection: which exposures are good flats.
 
 Reads the ``twilightFiberFlux`` tables ``drpQA.yaml#twilightFluxQa`` stored (or a parquet export of
 them, ``bin.src/exportMetrics.py -t twilightFiberFlux``), compares each sequence's exposures with
@@ -19,11 +19,11 @@ the reasons). Read from a Butler, it also stores the verdict per detector image 
 RUN prepended to the collection (`pfs.drp.qa.qadb.store`; ``--no-store`` skips it): the Butler is the record,
 and the qadb loader folds the stored verdict into ``qa_gate`` as a third task, ``twilightQa``, on every load. With
 ``--qadb-host`` it then loads the judged visits into qadb itself (``twilight_qa`` and ``qa_gate``,
-`pfs.drp.qa.qadb.loader.loadCollection`; INSTRM-3089). With ``-o`` it writes ``twilightMetrics.parquet`` (one row per
+`pfs.drp.qa.qadb.loader.loadCollection`). With ``-o`` it writes ``twilightMetrics.parquet`` (one row per
 detector image) and ``twilightVerdict.csv`` (one row per exposure and arm). Reading or storing in a Butler
 requires the LSST stack (``lsst.daf.butler``); a parquet does not.
 
-``--sequence-of-visit`` is for running after every visit (``ics_qaActor``, INSTRM-3089): it looks the
+``--sequence-of-visit`` is for running after every visit (``ics_qaActor``): it looks the
 visit's IIC sequence up in the opdb (``--opdb-host``; the account, ``--opdb-user``, only reads) and judges it only when it is a twilight, it has
 finished (``iic_sequence_status``), and every visit of it has a ``twilightFiberFlux`` for every camera it
 has a pfsArm for; otherwise it says what is missing (``not reduced``: no pfsArm either, so the drpActor is the one

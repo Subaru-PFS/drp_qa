@@ -149,9 +149,9 @@ _LINE_REFERENCES = (
 #: ``nLines`` and ``linesPerFiber`` by sequence because the line count is a
 #: property of the lamp. ``linesPerFiber`` is the one judged: per lit fiber, so a
 #: design lighting one fiber group is judged like a full slit, and without the
-#: trace centroids an arc also records (PIPE2D-1935).
-#: ``medFwhm`` is judged against each detector's own width per lamp
-#: (PIPE2D-1942): the spectrographs of one arm differ from each other by more
+#: trace centroids an arc also records.
+#: ``medFwhm`` is judged against each detector's own width per lamp:
+#: the spectrographs of one arm differ from each other by more
 #: than any one of them varies, and the lamps of one arm differ even more (b:
 #: Argon 2.5 px, Krypton 2.85 px), so a per-arm percentile sits at the tail of
 #: the widest spectrograph or lamp. Run25's known-good values
@@ -211,9 +211,9 @@ METRIC_SPECS = {
             ),
             valueFormat=".1f",
         ),
-        # dmLineResidualMetrics (PIPE2D-1921, PIPE2D-1956): per line species and line set, against
+        # dmLineResidualMetrics: per line species and line set, against
         # each reference (the ``reference`` column). x from every species, y from lamp lines; b-arm
-        # offsets from the calibration depend on the camera set (PIPE2D-1927), and trace centroids
+        # offsets from the calibration depend on the camera set, and trace centroids
         # scatter two to three times more on an arc's faint continuum than on a quartz (obsType).
         # The scatter also gets a tolerance per detector, species and frame type: a detector's
         # quartz trace scatter repeats to about 1 % within a run and differs 20 % between
@@ -253,7 +253,7 @@ METRIC_SPECS = {
             reference="The fitDetectorMap solution, per line species, from the reduceExposure log.",
             unitSuffix="px",
         ),
-        # Twilight sky flats (PIPE2D-1973): each exposure against the other exposures of its sequence,
+        # Twilight sky flats: each exposure against the other exposures of its sequence,
         # minutes apart (pfs.drp.qa.metrics.twilight).
         MetricSpec(
             "twilightLevelOffset",

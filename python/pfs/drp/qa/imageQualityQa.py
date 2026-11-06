@@ -91,11 +91,11 @@ def litFibers(
     ``UNASSIGNED``, not ``BLACKSPOT``). drp_stella measures lines and traces only on
     ``GOOD`` fibers, so ``lines`` has rows for those alone. A ``GOOD`` fiber without a
     nominal position (an unassigned cobra) is lit too, and counts: leaving it out would
-    let an obstructed frame on such a design pass (PIPE2D-1935).
+    let an obstructed frame on such a design pass.
 
     An IIS frame lights the 16 engineering fibers of each spectrograph instead, and
     drp_stella's reduceExposure then measures lines and traces on those alone, whatever
-    the science fibers' status (PIPE2D-1954): with ``engineering`` the lit fibers are
+    the science fibers' status: with ``engineering`` the lit fibers are
     the ``GOOD`` engineering fibers.
 
     Parameters
@@ -151,7 +151,7 @@ class ImageQualityQaConnections(
         dimensions=("instrument", "visit", "arm", "spectrograph"),
     )
 
-    # Written only with doWriteLineData (PIPE2D-1962). The connection stays even when off: every
+    # Written only with doWriteLineData. The connection stays even when off: every
     # stored imageQualityQa_config sets config.connections.iqQaData, and a config with no such
     # field can't be read back.
     iqQaData = OutputConnection(
@@ -306,7 +306,7 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
         doc=(
             "Write the per-line measurements (``iqQaData``)? About 21 MB per detector for an arc and"
             " 80 MB for a twilight, mostly unsampled trace centroids, and nothing reads them back;"
-            " gating and threshold derivation read ``iqQaMetrics`` (PIPE2D-1962)."
+            " gating and threshold derivation read ``iqQaMetrics``."
         ),
     )
 
@@ -315,8 +315,7 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
         default=7,
         doc="Unused: the calexp trace width is fitted with its neighbours, with no aperture.",
         deprecated=(
-            "The calexp trace width no longer uses an aperture (PIPE2D-1918); this field is ignored and"
-            " will be removed."
+            "The calexp trace width no longer uses an aperture; this field is ignored and will be removed."
         ),
     )
     profileYStride = Field(
@@ -336,8 +335,7 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " required to trust the arc-line path.  When fewer good lines are found"
             " the task falls back to the calexp-based width measurement (or fiber"
             " profile calibration if no calexp is available).  An IIS arc's lines"
-            " are on its 16 engineering fibers per spectrograph, and count"
-            " (PIPE2D-1954)."
+            " are on its 16 engineering fibers per spectrograph, and count."
         ),
     )
     minPeakSN = Field(
@@ -360,8 +358,8 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " before the calexp path is considered unreliable and discarded."
             " Continuum/quartz frames illuminate all fibers uniformly so the"
             " post-S/N-filter flag rate is low (< 10 %), and only the lit fibers"
-            " are sampled (`litFibers`: the 16 engineering fibers on an IIS quartz,"
-            " PIPE2D-1954).  Arc-illuminated frames light the fibers only at"
+            " are sampled (`litFibers`: the 16 engineering fibers on an IIS quartz)."
+            "  Arc-illuminated frames light the fibers only at"
             " discrete wavelengths; scattered light from those"
             " bright fibers can pass the S/N gate at many neighbouring"
             " positions and produce a large spurious FWHM (~7 px).  The"
@@ -465,11 +463,11 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " to the files shipped in ``pfs/drp/qa/metrics/data``; empty for the fields alone."
             " The default holds the thresholds derived 2026-10-19 from the validation visits"
             " reduced afresh (collection u/wtg/qa-thresholds/010; the file records the pipeline),"
-            " as adopted in PIPE2D-1917, PIPE2D-1918, PIPE2D-1942 and PIPE2D-1938 by"
+            " as adopted by"
             " ``makeRun25Thresholds.py`` beside it: medFwhm 3/5 % above each detector and lamp's"
             " reference median (Run25; Run29 for b2 and n4 quartz; b-arm Argon not judged),"
             " per-arm medFwhm where there is none, linesPerFiber 25/50 % (arcs) and 2.5/5 % (quartz)"
-            " below each arm and sequence's Run25 median (PIPE2D-1935), and no pctFlagged; each entry carries"
+            " below each arm and sequence's Run25 median, and no pctFlagged; each entry carries"
             " its provenance."
         ),
     )
@@ -478,7 +476,7 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
         default=["iqQaThresholds-iis-run30.yaml"],
         doc=(
             "Further thresholds files, judged after ``thresholdsFile`` and before the config fields, named as"
-            " it is. The default is the IIS frames' file (PIPE2D-1954): every entry names"
+            " it is. The default is the IIS frames' file: every entry names"
             " ``illumination: iis``, so it judges IIS frames alone, and an entry of any file that doesn't name"
             " the column is for full-slit frames (`pfs.drp.qa.metrics.gate.DEFAULT_POPULATION`). Derived by"
             " ``makeIisThresholds.py`` beside it from Run30's nightly IIS frames reduced afresh"
@@ -527,7 +525,7 @@ class ImageQualityQaTask(PipelineTask):
             *loadThresholds([thresholdsPath(name) for name in names]),
             configThresholds(self.config),
         ]
-        # Which files judged, by content, for qadb: the loader's drp_qa may ship others (PIPE2D-1976).
+        # Which files judged, by content, for qadb: the loader's drp_qa may ship others.
         self.thresholdsRecord = thresholdsRecord(names)
 
     def runQuantum(
@@ -549,7 +547,7 @@ class ImageQualityQaTask(PipelineTask):
             self.log.error("ImageQualityQaTask failed for %s: %s", dataId, e)
         else:
             # The RUN of the calexp judged: its pfsArm, written beside it, records the pipeline
-            # that reduced it, which the gate checks against the thresholds' (PIPE2D-1938).
+            # that reduced it, which the gate checks against the thresholds'.
             calexpRef = getattr(inputRefs, "calexp", None)
             outputs.iqQaMetrics["calexpRun"] = calexpRef.run if calexpRef is not None else None
             if self.config.doWriteLineData:
@@ -581,7 +579,7 @@ class ImageQualityQaTask(PipelineTask):
           a calexp cross-dispersion fallback is attempted.
         * **IIS arc** (``scienceArc``, the IIS lamps): as a regular arc, on the
           16 engineering fibers per spectrograph that reduceExposure measures
-          lines on (PIPE2D-1954); the pfsConfig says whether it did
+          lines on; the pfsConfig says whether it did
           (`engineeringLit`), the lamp headers without one. ``illumination`` is
           ``iis``, and only a threshold naming it judges the frame
           (`pfs.drp.qa.metrics.gate`).
@@ -632,8 +630,7 @@ class ImageQualityQaTask(PipelineTask):
         lineData : `pandas.DataFrame`
             Per-line (or per-trace-sample) image quality data including
             ``dxCenter`` (spatial offset from static calibration detectorMap,
-            in pixels).  Stored as ``iqQaData`` only with ``doWriteLineData``
-            (PIPE2D-1962).
+            in pixels).  Stored as ``iqQaData`` only with ``doWriteLineData``.
         iqQaMetrics : `pandas.DataFrame`
             Single-row summary with ``medFwhm``, ``medDxCenter``,
             ``dxCenterRms``, ``pctFlagged``, ``nLines``, ``linesPerFiber``,
@@ -661,7 +658,7 @@ class ImageQualityQaTask(PipelineTask):
         data["peakRatio"] = np.nan
 
         # Flexure diagnostic: offset from static calibration detectorMap.
-        # Measured minus calibration, as drp_stella's residuals (PIPE2D-1921): positive
+        # Measured minus calibration, as drp_stella's residuals: positive
         # dxCenter means the fiber sits to the right of the calibration's prediction.
         if detectorMapCalib is not None and "x" in data.columns:
             calibX = detectorMapCalib.getXCenter(
@@ -679,14 +676,14 @@ class ImageQualityQaTask(PipelineTask):
         n_good_arc = int(good_arc.sum())
         # nLines counts the rows of ``lines`` (lines and trace centroids found by
         # fitDetectorMap), whichever path measures the FWHM. linesPerFiber is the
-        # judged count (PIPE2D-1935): the measurements per lit fiber of what the
+        # judged count: the measurements per lit fiber of what the
         # frame is for, lamp lines on an arc and trace centroids on a quartz. Per
         # lit fiber, so that a design lighting one fiber group is judged like a full
         # slit; without the trace centroids an arc also records, whose number
         # follows the illumination and the pipeline rather than the lamp.
         n_lines = len(data)
         # On an IIS frame the lit fibers are the engineering fibers: reduceExposure
-        # measures lines and traces on those alone (PIPE2D-1954).
+        # measures lines and traces on those alone.
         lit_fibers, n_fibers = litFibers(pfsConfig, detectorMap.fiberId, engineering=is_iis)
         illumination = "iis" if is_iis else "full"
         n_lit_fibers = len(lit_fibers) if lit_fibers is not None else None
@@ -1076,7 +1073,7 @@ class ImageQualityQaTask(PipelineTask):
             # On the arc-line path, the lamp lines on lit fibers: the trace centroids
             # an arc also records are almost never flagged, and how many there are
             # follows the illumination, so counting them made pctFlagged depend on
-            # the fibers lit rather than on the lines (PIPE2D-1935). The calexp
+            # the fibers lit rather than on the lines. The calexp
             # samples are of lit fibers already.
             flagData = data if dense_data else data[lamp_line_rows]
             nTotal = max(len(flagData), 1)
@@ -1425,7 +1422,7 @@ class ImageQualityQaTask(PipelineTask):
             pass  # obs_pfs unavailable or headers missing; assume regular
         # The pfsConfig is the witness reduceExposure goes by, so it decides which fibers
         # ``lines`` holds and which are lit; the headers decide only without one. Some n-arm
-        # raws record the IIS lamp off (PIPE2D-1954).
+        # raws record the IIS lamp off.
         if pfsConfig is not None:
             byConfig = engineeringLit(pfsConfig, spectrograph)
             if byConfig != is_iis:

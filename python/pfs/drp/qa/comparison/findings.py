@@ -46,7 +46,7 @@ __all__ = [
 FLUX_METRICS = ("nLines", "linesPerFiber", "pctFlagged")
 
 #: Metrics not judged on daily arcs and traces when measured before they allowed for the
-#: fibers lit (PIPE2D-1935): rows without ``nLitFibers``.
+#: fibers lit: rows without ``nLitFibers``.
 DAILY_UNJUDGED = ("nLines", "pctFlagged")
 
 # The ways an IIC command names a lamp: head='sps iis on=neon ...', iisNeon=30, argon=10.
@@ -217,7 +217,7 @@ def judgeImages(metrics: pd.DataFrame, visits: pd.DataFrame, thresholds) -> pd.D
         entry on a daily arc or trace measured without the fibers lit (no
         ``nLitFibers``).
     """
-    # A metric the thresholds name that these images predate (linesPerFiber, PIPE2D-1935) is
+    # A metric the thresholds name that these images predate (linesPerFiber) is
     # unmeasured, not missing: judged as NaN, it gets no verdict rather than stopping the report.
     tables = loadThresholds(thresholds)
     names = {name for table in tables for name in table["metric"]}

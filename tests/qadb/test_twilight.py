@@ -1,4 +1,4 @@
-"""Tests for the twilight verdict in qadb (INSTRM-3089): ``twilight_qa``, its place in the gate, and the CLI.
+"""Tests for the twilight verdict in qadb: ``twilight_qa``, its place in the gate, and the CLI.
 
 The metrics are real ones, ``tests/metrics/data/twilightMetrics.parquet`` (engineering twilights, by visit
 id), cut to one sequence; the Butler and the opdb are stubbed, the database is the ``qadb`` fixture.

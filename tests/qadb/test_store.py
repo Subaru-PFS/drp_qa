@@ -1,4 +1,4 @@
-"""Tests for storing a per-image table in a Butler after the fact (INSTRM-3089), against a stub Butler."""
+"""Tests for storing a per-image table in a Butler after the fact, against a stub Butler."""
 
 import sys
 import types

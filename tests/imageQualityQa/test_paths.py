@@ -204,7 +204,7 @@ def testDefaultConfigJudgesByTheShippedFile(iqqa):
     assert len(flags) == 1 and flags[["warn", "fail"]].isna().all(axis=None)  # not judged
     fwhm = shipped[shipped["metric"] == "medFwhm"]
     assert set(fwhm["obsType"]) == {"arc", "trace"}
-    # Each detector's quartz is judged against its own Run25 median (PIPE2D-1942).
+    # Each detector's quartz is judged against its own Run25 median.
     tolerance = fwhm[(fwhm["method"] == "tolerance") & (fwhm["obsType"] == "trace")]
     assert set(zip(tolerance["arm"], tolerance["spectrograph"], strict=True)) == {
         (arm, spectrograph) for arm in "brnm" for spectrograph in (1, 2, 3, 4)
@@ -219,7 +219,7 @@ def testDefaultConfigJudgesByTheShippedFile(iqqa):
 
 
 def testMetricsRecordTheThresholdsFilesJudgedWith(iqqa, runTask, fakes):
-    """Each image's row names the files the task loaded, by content then (PIPE2D-1976)."""
+    """Each image's row names the files the task loaded, by content then."""
     detectorMap = fakes.DetectorMap()
     calexp = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*ARC))
     lines = fakes.arcLines(detectorMap, numPerFiber=30)
@@ -259,7 +259,7 @@ def testRunQuantumRecordsTheCalexpRun(iqqa, monkeypatch):
     )
     task.runQuantum(butlerQC, withCalexp, outputRefs)
     assert put["metrics"]["calexpRun"].tolist() == ["PFS/r/1"]
-    # The per-line data is not stored by default (PIPE2D-1962).
+    # The per-line data is not stored by default.
     assert set(put) == {"metrics", "species"}
     task.runQuantum(
         butlerQC, SimpleNamespace(arcLines=SimpleNamespace(dataId=dataId), calexp=None), outputRefs
@@ -268,7 +268,7 @@ def testRunQuantumRecordsTheCalexpRun(iqqa, monkeypatch):
 
 
 def testLineDataIsWrittenOnlyWhenAskedFor(iqqa, monkeypatch):
-    """``iqQaData`` is an output, and is written, only with ``doWriteLineData`` (PIPE2D-1962).
+    """``iqQaData`` is an output, and is written, only with ``doWriteLineData``.
 
     The connection itself stays: stored configs set ``config.connections.iqQaData``.
     """

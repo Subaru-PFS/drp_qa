@@ -4,8 +4,7 @@ Per detector: has the instrument moved away from the calibration the visit is
 reduced against, and how well does the visit's adjusted detectorMap predict
 the lines it was not fitted to? The measurement and the verdict are
 stack-free, in `pfs.drp.qa.metrics.lineResiduals`; this module binds them to
-the Butler. It replaces ``dmResiduals`` and ``dmCombinedResiduals``
-(PIPE2D-1956).
+the Butler. It replaces ``dmResiduals`` and ``dmCombinedResiduals``.
 """
 
 from contextlib import suppress
@@ -192,7 +191,7 @@ class DmLineResidualsConfig(PipelineTaskConfig, pipelineConnections=DmLineResidu
             " ``spectrograph``, ``description``, ``cameraSet`` and ``obsType``; an entry that leaves"
             " ``reference`` null applies to both references. The default holds the robust RMS of RESERVED"
             " lines against the visit's detectorMap, derived from the validation visits reduced afresh"
-            " (u/wtg/qa-thresholds/010, PIPE2D-1938) and adopted in PIPE2D-1956 by"
+            " (u/wtg/qa-thresholds/010) and adopted by"
             " ``makeLineResidualThresholds.py`` beside it: trace centroids on quartz frames (obsType"
             " ``trace``) and the Ar, Kr, Ne and Xe lines judged in x per detector, WARN 20 % and FAIL 50 %"
             " above the detector's known-good median, and the lamp lines in y at WARN 50 % and FAIL 150 %."
@@ -209,7 +208,7 @@ class DmLineResidualsConfig(PipelineTaskConfig, pipelineConnections=DmLineResidu
             "|medianDeltaX| (pixels) of trace centroids against detectorMap_calib at or above which it is"
             " WARN (APPLY_SHIFT): the calibration no longer matches, though the visit's adjustment absorbs a"
             " shift. A third of the 3 px capture radius (FAIL); above Run25's known-good offsets, which"
-            " reach 0.57 px (b read with m) and 0.33 px otherwise (PIPE2D-1921, u/wtg/qa-thresholds/006)."
+            " reach 0.57 px (b read with m) and 0.33 px otherwise (u/wtg/qa-thresholds/006)."
             " Lamp lines' x offset is not judged by it. NaN to disable."
         ),
     )
@@ -230,7 +229,7 @@ class DmLineResidualsConfig(PipelineTaskConfig, pipelineConnections=DmLineResidu
             "|medianDeltaY| (pixels) of a lamp species against detectorMap_calib at or above which it is"
             " WARN (APPLY_SHIFT); as xWarnThreshold. Run25 after its calibration block sits up to 1.5 px"
             " off in y on SM3, so those visits WARN; the validation set records them as unconfirmed"
-            " (PIPE2D-1921). NaN to disable."
+            " NaN to disable."
         ),
     )
     yFailThreshold = Field(
@@ -244,7 +243,7 @@ class DmLineResidualsConfig(PipelineTaskConfig, pipelineConnections=DmLineResidu
         doc=(
             "robustRmsDeltaX (pixels) of a species' RESERVED lines against the visit's detectorMap at or"
             " above which it is WARN (RECALIBRATE): scatter the adjustment leaves on lines it was not"
-            " fitted to. NaN, not judged, until derived from the validation set (PIPE2D-1956)."
+            " fitted to. NaN, not judged, until derived from the validation set."
         ),
     )
     xRmsFailThreshold = Field(
@@ -274,7 +273,7 @@ class DmLineResidualsTask(PipelineTask):
         super().__init__(**kwargs)
         # Highest priority first; see pfs.drp.qa.metrics.gate.
         self.thresholds = residualTaskThresholds(self.config)
-        # Which file judged, by content, for qadb: the loader's drp_qa may ship another (PIPE2D-1976).
+        # Which file judged, by content, for qadb: the loader's drp_qa may ship another.
         self.thresholdsRecord = thresholdsRecord(thresholdsNames(self.config))
 
     def runQuantum(

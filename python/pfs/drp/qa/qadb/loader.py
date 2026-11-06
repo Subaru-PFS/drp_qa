@@ -10,7 +10,7 @@ each image was judged with are registered, and its gate verdict is written to
 ``qa_gate``.
 
 The tasks record those files with each image, by name and SHA-256 as they were
-at judgement time (`pfs.drp.qa.metrics.gate.thresholdsRecord`, PIPE2D-1976), so
+at judgement time (`pfs.drp.qa.metrics.gate.thresholdsRecord`), so
 what the gate cites does not depend on the drp_qa that loads. A table written
 before then records none, and its RUN's stored task config is read instead:
 through today's config class, and with today's files under those names.
@@ -458,7 +458,7 @@ def loadCollection(
             write(longSpec.name, longRows, list(longSpec.keys), conn=conn)
 
     # One gate row per image across every task's RUN: the twilight judge stores its verdict in a RUN of
-    # its own beside pipetask's (INSTRM-3089), and the gate is the worst of all the image's tasks. The row
+    # its own beside pipetask's, and the gate is the worst of all the image's tasks. The row
     # takes the first present task's processing (`gateRows`, in TASK_TABLES order), so a sequence's reload
     # replaces the row the per-visit load wrote under pipetask's RUN rather than adding one.
     present = {task: table for task, table in images.items() if not table.empty}

@@ -1,4 +1,4 @@
-"""Compare candidate calibrations on the same visits: the verdict after a build (PIPE2D-1941).
+"""Compare candidate calibrations on the same visits: the verdict after a build.
 
 Each candidate is a collection holding ``detectorMap_calib`` (a certified calibration, or a
 rebuild from the go/no-go pick). The same visits are reduced against each (`bin.src/calibValidate.py

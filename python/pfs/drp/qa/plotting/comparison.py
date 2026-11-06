@@ -516,7 +516,7 @@ def plotDriftTimeline(
     `matplotlib.figure.Figure`
         The arms in a 2x2 grid, b and r above m and n so that b sits over m, the arm it is read
         with, each with x above y; a b image read with m is hollow, since it sits about 0.5 px
-        from the b calibration whatever the detector does (PIPE2D-1927); every x panel shares one
+        from the b calibration whatever the detector does; every x panel shares one
         scale and every y panel another. The spectrograph is the marker, the arm the colour; a
         dashed line at zero; nights separated and named along the top; a dashed vertical line,
         named, at the first visit measured against each new calibration, so a change of reference

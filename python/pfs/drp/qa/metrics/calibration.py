@@ -75,7 +75,7 @@ _THRESHOLD_FIELDS = (
 #: ``medDxCenter`` is gated by ``imageQualityQa`` but not derived: an offset
 #: from ``detectorMap_calib`` is near zero in the run the calibrations were made
 #: from, so its percentiles say nothing about the drift to tolerate. Its
-#: thresholds are a tolerance (PIPE2D-1921); `summarizeGood` reports it.
+#: thresholds are a tolerance; `summarizeGood` reports it.
 DEFAULT_METRICS = ("medFwhm", "pctFlagged")
 
 #: Values of the ``validation`` column added by `labelRows`: known good
@@ -89,7 +89,7 @@ def addSpecies(metrics: pd.DataFrame) -> pd.DataFrame:
     The species is what ``imageQualityQa`` keys flag-rate thresholds on: the
     part of ``W_SEQNAM`` after the colon (``"Arc: HgCd"`` gives ``"HgCd"``),
     else the part in trailing parentheses (the IIS sequences: ``"ImageQuality
-    (Ne)"`` gives ``"Ne"``; PIPE2D-1954), or an empty string.
+    (Ne)"`` gives ``"Ne"``), or an empty string.
 
     Parameters
     ----------

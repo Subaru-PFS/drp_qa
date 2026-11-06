@@ -8,7 +8,7 @@ Butler storage class is the task's job.
 
 The old locations (``pfs.drp.qa.iqQaPlots`` and ``pfs.drp.qa.utils.plotting``)
 re-export these names. The ``dmResiduals`` and ``dmCombined`` plots went with
-their tasks (PIPE2D-1956): ``dmLineResidualData`` is plotted after the fact.
+their tasks: ``dmLineResidualData`` is plotted after the fact.
 """
 
 from pfs.drp.qa.plotting.iqQa import plotIqTimeSeries

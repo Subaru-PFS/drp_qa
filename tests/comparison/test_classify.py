@@ -88,7 +88,7 @@ def testClassifyVisits(periods, visit, listing):
     assert result["reason"].to_dict() == {
         1: "gated",
         2: "gated",
-        3: "unvalidated",  # science frames: judged as arcs on their sky lines (PIPE2D-1984)
+        3: "unvalidated",  # science frames: judged as arcs on their sky lines
         4: "unvalidated",
         5: "unvalidated",
         6: "unvalidated",

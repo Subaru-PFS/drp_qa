@@ -1,4 +1,4 @@
-"""Tests for the twilight sequence check (PIPE2D-1973): synthetic sequences, then the stored metrics."""
+"""Tests for the twilight sequence check: synthetic sequences, then the stored metrics."""
 
 from pathlib import Path
 

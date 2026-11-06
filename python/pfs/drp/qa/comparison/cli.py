@@ -455,7 +455,7 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     config = butler.get("imageQualityQa_config", collections=[output])
     judged = judgeImages(metrics, visits, taskThresholds(config))
     # Provisional against the pipeline of the layer that judged each image: the Run25 and IIS
-    # thresholds files record different ones (PIPE2D-1954).
+    # thresholds files record different ones.
     mismatch = layerPipelineMismatch(metrics, judged, taskPipelines(config))
     for column in mismatch.columns:
         metrics[column] = mismatch[column].to_numpy()
@@ -468,7 +468,7 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     if residualSummary is not None:
         from pfs.drp.qa.metrics.lineResiduals import addObsType
 
-        # Tables stored before obsType was a column (PIPE2D-1956) take it from imageQualityQa's.
+        # Tables stored before obsType was a column take it from imageQualityQa's.
         residualMetrics = addObsType(residualMetrics, metrics)
         residualSummary = addObsType(residualSummary, metrics)
         residualSummary.to_parquet(workDir / f"dmLineResidualSummary-{period.name}.parquet")
@@ -531,7 +531,7 @@ def _readResiduals(butler, visits, collections: Sequence[str]):
     """Return the ``dmLineResidualSummary`` and ``dmLineResidualMetrics`` rows of some visits.
 
     `None` for both when the collections hold none: a collection judged
-    before ``dmLineResiduals`` joined the thresholds pipeline (PIPE2D-1956).
+    before ``dmLineResiduals`` joined the thresholds pipeline.
     """
     from pfs.drp.qa.metrics.readers import readMetrics
 
@@ -539,7 +539,7 @@ def _readResiduals(butler, visits, collections: Sequence[str]):
         summary = readMetrics(butler, visits, "dmLineResidualSummary", collections=collections)
     except LookupError:
         print(
-            "no dmLineResiduals output: judged before the task joined the pipeline (PIPE2D-1956)",
+            "no dmLineResiduals output: judged before the task joined the pipeline",
             file=sys.stderr,
         )
         return None, None
@@ -730,7 +730,7 @@ def unexpectedPipeline(
 
     Reductions are reused only under the same label, so a shell with another
     stack set up plans the whole reduction again, silently, where a judge pass
-    was meant (PIPE2D-1938).
+    was meant.
 
     Parameters
     ----------

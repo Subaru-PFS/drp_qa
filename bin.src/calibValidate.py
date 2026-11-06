@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Validate candidate detectorMap calibrations against each other on the same visits (PIPE2D-1941).
+r"""Validate candidate detectorMap calibrations against each other on the same visits.
 
 ``run`` reduces the chosen visits once per candidate, with the candidate's collection first in the
 inputs so its ``detectorMap_calib`` is the one used, through ``pipelines/qaThresholds.yaml``
