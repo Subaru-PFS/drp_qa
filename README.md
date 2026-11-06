@@ -940,7 +940,7 @@ Candidate calibrations compared on the same visits; see [Validating a built cali
 
 Judges the twilight sequences of a collection (PIPE2D-1973): reads the `twilightFiberFlux` tables of a visit range,
 or a parquet export of them, compares each sequence's exposures (`pfs.drp.qa.metrics.twilight`) against the shipped
-`twilightThresholds.yaml`, and prints the verdicts (per exposure and arm: `PASS`, `WARN`, `FAIL` or `TOO_FAINT`,
+`twilightThresholds.yaml`, and prints the verdicts (per exposure and arm: `PASS`, `WARN`, `FAIL` or `TOO_FAINT`, `UNKNOWN` for an arm without thresholds,
 with the reasons). Read from a Butler, it stores the verdict per detector image as `twilightQaMetrics`
 (`twilightImageVerdict`: the detector's level offset with its arm's RMS and patch; `UNKNOWN` for the unjudged n
 arm) in a new RUN prepended to the collection (`pfs.drp.qa.qadb.store`; `--no-store` skips it), so the qadb loader

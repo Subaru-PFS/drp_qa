@@ -131,7 +131,9 @@ def readTables(
                 log=log,
             )
         except LookupError:
-            log(f"{datasetType}: none in {collection}")
+            # Not a problem by itself: a task that did not run on these visits (twilightFluxQa on a science
+            # visit, say) leaves none.
+            log(f"{datasetType}: none for these visits in {collection}")
             tables[datasetType] = pd.DataFrame(columns=[*IMAGE_KEYS, "run"])
     return tables
 
