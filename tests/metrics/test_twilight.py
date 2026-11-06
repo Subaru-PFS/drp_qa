@@ -265,7 +265,7 @@ def testCameraWithTooFewExposuresIsUnjudged():
 
 
 def testFaintArmLeftUnjudgedIsUnknown():
-    """TOO_FAINT replaces a PASS; an arm the thresholds leave out is UNKNOWN, faint or not (PIPE2D-1987)."""
+    """TOO_FAINT replaces a PASS; an arm the thresholds leave out is UNKNOWN, faint or not."""
     verdict = verdictOf(makeSequence(snr=(5.0, 20.0, 30.0, 45.0), arms=("b", "n")))["status"]
     assert verdict[(1000, "n")] == "UNKNOWN"
     # Negative control: the judged arm of the same faint exposure is TOO_FAINT.
