@@ -74,8 +74,8 @@ def testFetchSummary(tmp_path, periods, visit, listing, FakeOpDB):
     text = fetchSummary(frames, stamp, periods["run1"], periods)
     assert "3 visits in 3 sequences, on 2 nights" in text
     assert (
-        "2 gated" in text
-        and "0 unvalidated" in text
+        "1 gated" in text
+        and "1 unvalidated" in text
         and "1  calibration  scienceArc single" in text
         and "1  science      scienceObject" in text
     )
@@ -170,3 +170,12 @@ def testUnexpectedPipeline():
     assert unexpectedPipeline("pfs-w.2026.39", [], ["other"], 0) is None
     assert unexpectedPipeline("pfs-w.2026.39", [], [], 2152) is None
     assert unexpectedPipeline("", [], ["other"], 2152) is None
+
+
+def testPassOption():
+    """--pass names a pass to run, repeatable; without it every pass runs."""
+    from pfs.drp.qa.comparison.cli import _parser
+
+    args = _parser().parse_args(["run", "--period", "run25", "--pass", "calibration", "--pass", "sky-judge"])
+    assert args.passes == ["calibration", "sky-judge"]
+    assert _parser().parse_args(["run", "--period", "run25"]).passes == []

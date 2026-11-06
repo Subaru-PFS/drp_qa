@@ -323,6 +323,10 @@ def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
     toReduce = set(detectors.loc[detectors["status"] == "to reduce", "visit"])
     reduceSequences = set(todo.loc[todo["pfs_visit_id"].isin(toReduce), "iic_sequence_id"].dropna())
     whole = judged[judged["iic_sequence_id"].isin(reduceSequences)]
+    # A visit with raw but no pfsConfig can't be in a pass: pipetask's graph builder refuses the
+    # whole pass over the missing prerequisite rather than skipping its quanta (Run31, 152678).
+    noPfsConfig = set(detectors.loc[detectors["status"] == "no pfsConfig", "visit"])
+    whole = whole[~whole["pfs_visit_id"].isin(noPfsConfig)]
     todo = pd.concat([todo, whole]).drop_duplicates("pfs_visit_id")
     groups = cosmicrayGroups(judged[judged["iic_sequence_id"].isin(set(todo["iic_sequence_id"].dropna()))])
     todo = todo.assign(

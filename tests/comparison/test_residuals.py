@@ -6,6 +6,7 @@ from pfs.drp.qa.comparison.classify import classifyVisits
 from pfs.drp.qa.comparison.residuals import (
     bReadWith,
     describeCrossing,
+    driftByImage,
     residualFindings,
     residualProblems,
     scatterTable,
@@ -174,3 +175,27 @@ def testScatterTableByCamera():
     # Negative control: a reference without cameraSet keeps the b arm pooled.
     pooled = scatterTable(run, reference.drop(columns="cameraSet"), labels=("run2", "run1"))
     assert "bReadWith" not in pooled.columns and list(pooled["images run2"]) == [4, 2]
+
+
+def testDriftByImage():
+    """One row per image: x from the traces, y from the arc lines, signed, on BOTH or UNFITTED calib lines."""
+    columns = ["visit", "arm", "spectrograph", "reference", "description", "statusType", "metric", "value"]
+    rows = [
+        (1, "b", 1, "calib", "NeI", "BOTH", "medianDeltaX", -0.21),  # the species disagree in x...
+        (1, "b", 1, "calib", "HgI", "BOTH", "medianDeltaX", 0.26),
+        (1, "b", 1, "calib", "Trace", "BOTH", "medianDeltaX", 0.26),  # ...the traces decide
+        (1, "b", 1, "calib", "NeI", "BOTH", "medianDeltaY", 0.05),
+        (1, "b", 1, "calib", "HgI", "BOTH", "medianDeltaY", 0.07),
+        (1, "b", 1, "calib", "NeI", "USED", "medianDeltaX", 9.0),  # not the drift's line set
+        (1, "b", 1, "visit", "Trace", "RESERVED", "medianDeltaX", 9.0),  # against the visit's own map
+        (2, "b", 1, "calib", "Trace", "UNFITTED", "medianDeltaX", -0.40),  # a fit that marked no lines
+        (2, "b", 1, "calib", "Trace", "BOTH", "robustRmsDeltaX", 9.0),  # scatter, not drift
+    ]
+    drift = driftByImage(pd.DataFrame(rows, columns=columns)).set_index("visit")
+    assert drift.loc[1, "medianDeltaX"] == 0.26 and abs(drift.loc[1, "medianDeltaY"] - 0.06) < 1e-9
+    assert drift.loc[2, "medianDeltaX"] == -0.40 and pd.isna(drift.loc[2, "medianDeltaY"])
+    assert drift.loc[2, "medianDeltaX"] < 0  # the sign is kept: a drift is a direction
+    # Negative control: without traces there is no x, whatever the lamp species say.
+    noTraces = pd.DataFrame(rows, columns=columns).query("description != 'Trace'")
+    assert driftByImage(noTraces)["medianDeltaX"].isna().all()
+    assert driftByImage(pd.DataFrame(columns=columns)).empty

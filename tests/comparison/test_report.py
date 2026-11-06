@@ -83,15 +83,15 @@ def testBuildReport(periods, visit, listing):
         )
     )
     assert page.startswith("<!doctype html>")
-    assert "32 gated images" in page
+    assert "16 gated images" in page  # the 16 science images are unvalidated (PIPE2D-1984)
     assert "Incomplete" not in page
-    assert "32 gated images · 2 problem images" in page
+    assert "16 gated images · 2 problem images" in page
     assert "SM1" in page  # visit 21: b1 and r1 together, one problem
     assert "Arc: Neon" in page  # a calibration's name
     assert "field" not in page  # a science sequence's name never is
     assert "run 'run' first" not in page
     assert page.count("<svg") >= 3
-    assert "<h2>n-arm darks</h2>" not in page  # no section without lastLit
+    assert "<summary>n-arm darks</summary>" not in page  # no section without lastLit
     assert "Provisional</b>" not in page  # no pipeline check, no provisional verdicts
 
 
@@ -133,7 +133,15 @@ def testLineResidualSection(periods, visit, listing):
             **common, residualSummary=summary, residualMetrics=residualMetrics, residualFindings=found
         )
     )
-    assert "<h2>Line residuals</h2>" in page and "Line residuals: worst verdict per night" in page
+    assert "<h2>Line residuals</h2>" in page and "Line residuals: worst verdict per night" not in page
+    assert "<h2>Daily drift against the current calibration</h2>" in page
+    assert "nightly arcs and traces, per visit" in page  # the measured drift, not a verdict grid
+    assert "<h2>Calibration set against run25</h2>" in page  # the two questions, in order
+    assert (
+        page.index("Calibration set against")
+        < page.index("Daily drift against")
+        < page.index("<h2>Problems</h2>")
+    )
     assert "calib Trace medianDeltaX" in page and "APPLY_SHIFT" in page
     assert "Scatter of the lines held back" in page and "median run1" in page
     # The heading names the groups the table has: the b arm's camera, and no observation type here.
@@ -165,6 +173,8 @@ def testProvisionalVerdictsAreCounted(periods, visit, listing):
     assert summary["qaPipeline"].tolist() == ["drp_stella d (thresholds c)"]
     assert summary["arms"].tolist() == ["r"]
     assert summary["images"].sum() == len(judgedR) > 0
+    gated = set(visits.loc[visits["validated"].astype(bool), "pfs_visit_id"])
+    gatedR = judgedR[judgedR["visit"].isin(gated)]  # the page's line counts gated images only
     page = buildReport(
         ReportInputs(
             period="run1",
@@ -179,7 +189,7 @@ def testProvisionalVerdictsAreCounted(periods, visit, listing):
             reference=None,
         )
     )
-    assert f"<b>Provisional</b>: {len(judgedR)} of" in page
+    assert f"<b>Provisional</b>: {len(gatedR)} of" in page and len(gatedR) < len(judgedR)
     assert "drp_stella d (thresholds c)" in page
     # Every image reduced with the thresholds' pipeline: nothing provisional.
     agreed = metrics.assign(versionDrpStella="c")
@@ -248,7 +258,7 @@ def testDarksSection(periods, visit, listing):
             lastLit=lastLitBefore(darks),
         )
     )
-    assert "<h2>n-arm darks</h2>" in page
+    assert "<summary>n-arm darks</summary>" in page
     assert "Darks by gap after the last lit exposure" in page
 
 

@@ -21,7 +21,7 @@ from pfs.drp.qa.comparison.queries import LISTING_COLUMNS, proposalCategory
         ("N/A", "none"),
         ("", "none"),
         (None, "none"),
-        ("S25A-123", "other"),  # semester and number only
+        ("S25A-123", "uncoded"),  # semester and number only: a science program (S26B-047 in Run31)
         ("engineering", "other"),
     ],
 )

@@ -88,10 +88,10 @@ def testClassifyVisits(periods, visit, listing):
     assert result["reason"].to_dict() == {
         1: "gated",
         2: "gated",
-        3: "gated",
-        4: "gated",
+        3: "unvalidated",  # science frames: judged as arcs on their sky lines (PIPE2D-1984)
+        4: "unvalidated",
         5: "unvalidated",
-        6: "gated",
+        6: "unvalidated",
         7: "no method for darks",
         8: "test exposure",
         9: "test exposure",
@@ -109,7 +109,7 @@ def testClassifyVisits(periods, visit, listing):
     assert (
         result["judged"].sum() == 14
     )  # the windowed sky frame and the engineering sequences are measured...
-    assert result["validated"].sum() == 8  # ...but aren't gated
+    assert result["validated"].sum() == 5  # ...but aren't gated, nor are the three science frames
     assert result.loc[12, "period"] == "run2-pre"
     assert pd.isna(result.loc[11, "period"])
 
@@ -190,3 +190,27 @@ def testUnnamedVisitsAreNotASweep():
     assert not focusSweeps(_sweepVisits(offsets, name=None)).any()
     assert not focusSweeps(_sweepVisits(offsets, name="  ")).any()
     assert focusSweeps(_sweepVisits(offsets, name="M39")).all()  # negative control: named, it is one
+
+
+def testArcInAFiberProfilesGroupIsEngineering(periods, visit, listing):
+    """An arc inside a fiberProfiles group is exposed with most cobras hidden: judged, not gated."""
+    from pfs.drp.qa.comparison.classify import engineeringGroups
+
+    rows = listing(
+        visit(1, "2026-01-03 17:00", "scienceArc", name="Arc: Neon", group=1),
+        visit(2, "2026-01-03 17:10", "scienceArc", name="Arc: Neon", group=2),
+        visit(3, "2026-01-03 17:20", "scienceTrace", name="Trace", group=3),
+    )
+    rows["group_name"] = rows["group_id"].map(
+        {1: "fiberProfiles_dark_group1", 2: "detectorMap", 3: "fiberProfiles_bright_group1"}
+    )
+    visits = classifyVisits(rows, periods.values()).set_index("pfs_visit_id")
+    assert visits.loc[1, "reason"] == "unvalidated" and visits.loc[3, "reason"] == "unvalidated"
+    assert (
+        visits.loc[2, "reason"] == "gated"
+    )  # Negative control: the same arc in a detectorMap group is gated
+    assert engineeringGroups(pd.Series(["fiberProfiles_dark_group1", "detectorMap", None])).tolist() == [
+        True,
+        False,
+        False,
+    ]

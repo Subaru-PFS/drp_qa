@@ -122,3 +122,82 @@ def testFreshPipelines():
         "pfs-w.2026.39": ["u/me/comparison/run25/v1/pfs-w.2026.39"],
     }
     assert freshPipelines(butler, "u/me/comparison", "run27") == {}
+
+
+def testEarlierRunsAreTheChainsOwnRuns():
+    """A new comparison takes the earlier chains' own runs, never a chain, and never its own runs back."""
+    from pfs.drp.qa.comparison.butlerQueries import earlierRuns
+
+    def info(name, kind):
+        return SimpleNamespace(name=name, type=SimpleNamespace(name=kind))
+
+    infos = [
+        info("u/me/comparison/run31/v259", "CHAINED"),
+        info("u/me/comparison/run31/v259/20261031T200143Z", "RUN"),
+        info("u/me/comparison/run31/v271", "CHAINED"),  # the newer version chained v259's runs as inputs
+        info("u/me/comparison/run31/v271/20261102T175232Z", "RUN"),
+        info("u/me/comparison/run31/v271/20261102T182929Z", "RUN"),
+    ]
+    butler = SimpleNamespace(
+        collections=SimpleNamespace(
+            query=lambda pattern: [i.name for i in infos if fnmatch(i.name, pattern)],
+            query_info=lambda pattern: [i for i in infos if fnmatch(i.name, pattern)],
+        )
+    )
+    # Writing to v259 again: v271's own runs are the inputs, not the v271 chain (which holds v259's runs).
+    assert earlierRuns(butler, "u/me/comparison", "run31", "", "u/me/comparison/run31/v259") == [
+        "u/me/comparison/run31/v271/20261102T182929Z",
+        "u/me/comparison/run31/v271/20261102T175232Z",
+    ]
+    # Negative control: the chain itself is never among the inputs.
+    assert "u/me/comparison/run31/v271" not in earlierRuns(
+        butler, "u/me/comparison", "run31", "", "u/me/comparison/run31/v259"
+    )
+    assert earlierRuns(butler, "u/me/comparison", "run31", "", "u/me/comparison/run31/v271") == [
+        "u/me/comparison/run31/v259/20261031T200143Z"
+    ]
+
+
+def testRebaseOutputChain():
+    """The chain becomes its own runs, then the inputs flattened, without repeating its own runs."""
+    from pfs.drp.qa.comparison.butlerQueries import rebaseOutputChain
+
+    def info(name, kind):
+        return SimpleNamespace(name=name, type=SimpleNamespace(name=kind))
+
+    infos = [
+        info("u/me/comparison/run31/v1/20261031T200143Z", "RUN"),
+        info("u/me/comparison/run31/v1/20261031T224529Z", "RUN"),
+    ]
+    flat = {
+        "drpActor/reductions": [
+            "drpActor/reductions/20261104T000000Z",
+            "drpActor/reductions/20261030T000000Z",
+        ],
+        "PFS/defaults": ["PFS/raw/sps", "PFS/calib/x"],
+        "u/me/comparison/run31/v1/20261031T200143Z": ["u/me/comparison/run31/v1/20261031T200143Z"],
+    }
+    redefined = {}
+    butler = SimpleNamespace(
+        collections=SimpleNamespace(
+            query_info=lambda pattern: [i for i in infos if fnmatch(i.name, pattern)],
+            query=lambda names, flatten_chains=False: [c for n in names for c in flat[n]],
+            redefine_chain=lambda parent, children: redefined.setdefault(parent, list(children)),
+        )
+    )
+    children = rebaseOutputChain(
+        butler,
+        "u/me/comparison/run31/v1",
+        ["u/me/comparison/run31/v1/20261031T200143Z", "drpActor/reductions", "PFS/defaults"],
+    )
+    assert children == [
+        "u/me/comparison/run31/v1/20261031T224529Z",
+        "u/me/comparison/run31/v1/20261031T200143Z",
+        "drpActor/reductions/20261104T000000Z",
+        "drpActor/reductions/20261030T000000Z",
+        "PFS/raw/sps",
+        "PFS/calib/x",
+    ]
+    assert redefined == {"u/me/comparison/run31/v1": children}
+    # Negative control: a chain among the inputs is never a child itself.
+    assert "drpActor/reductions" not in children and "PFS/defaults" not in children

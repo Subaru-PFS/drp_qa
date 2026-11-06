@@ -298,12 +298,15 @@ def proposalCategory(proposalId: str | None) -> str:
     -------
     `str`
         The letters of the ID without semester and number (``EN``, ``QF``),
-        ``none`` for a fiber with no proposal (``N/A``, empty or NULL), or
-        ``other`` for an ID that doesn't follow the pattern.
+        ``none`` for a fiber with no proposal (``N/A``, empty or NULL),
+        ``uncoded`` for a proposal with a semester and a number but no
+        category letters (``S26B-047``: a science program whose category
+        isn't in its ID), or ``other`` for an ID that doesn't follow the
+        pattern.
     """
     if proposalId is None or pd.isna(proposalId) or str(proposalId).strip() in ("", "N/A"):
         return "none"
     match = _PROPOSAL_RE.match(str(proposalId).strip())
-    if not match or not "".join(match.groups()):
+    if not match:
         return "other"
-    return "".join(match.groups())
+    return "".join(match.groups()) or "uncoded"

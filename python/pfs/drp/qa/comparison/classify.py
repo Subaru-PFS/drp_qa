@@ -8,8 +8,8 @@ calibrations.
 
 ``imageQualityQa`` measures and judges every exposure it can, but only the sequence types in
 `VALIDATED_TYPES` are *gated*: their thresholds were derived from, and checked against, visits of
-those types. The others (engineering arcs, flats, fiber profiles, focus sweeps, windowed readouts,
-any new type) are *unvalidated*: judged the same way so their results can be seen, but often
+those types. The others (science frames, judged as arcs on their sky lines until PIPE2D-1984;
+engineering arcs, flats, fiber profiles, focus sweeps, windowed readouts, any new type) are *unvalidated*: judged the same way so their results can be seen, but often
 off-nominal on purpose, so a FAIL there may be what the test expected. So are the engineering
 sequences taken as those types (`ENGINEERING_SEQUENCES`, by sequence name): a bootstrap, an IIS
 ``ImageQuality`` frame or a health check lights a handful of fibers, and its trace centroids scatter
@@ -41,6 +41,7 @@ __all__ = [
     "CADENCE_TYPES",
     "DAILY_MIN_NIGHTS",
     "ENGINEERING_CATEGORIES",
+    "ENGINEERING_GROUPS",
     "ENGINEERING_SEQUENCES",
     "FOCUS_SWEEP_MIN_RANGE",
     "FOCUS_SWEEP_MIN_STEPS",
@@ -50,12 +51,18 @@ __all__ = [
     "cadences",
     "classifyVisits",
     "designKinds",
+    "engineeringGroups",
     "engineeringSequences",
     "focusSweeps",
 ]
 
 #: Sequence types the thresholds are validated for: the gate.
-VALIDATED_TYPES = ("scienceArc", "scienceTrace", "scienceObject")
+#: Not ``scienceObject`` until PIPE2D-1984: science frames are judged with the arc thresholds (their lines
+#: are sky lines, so imageQualityQa calls them arcs), a population those thresholds were not derived from.
+VALIDATED_TYPES = ("scienceArc", "scienceTrace")
+
+#: Starts of sequence group names (case-insensitive) whose arcs and traces are engineering exposures.
+ENGINEERING_GROUPS = ("fiberprofiles",)
 
 #: Starts of sequence names (case-insensitive) that are engineering sequences whatever their type:
 #: bootstraps, IIS image-quality frames and health checks light a handful of fibers, line checks and
@@ -83,7 +90,7 @@ DAILY_MIN_NIGHTS = 4
 
 #: Proposal categories that don't make a design science: engineering (``EN``), a fiber with no
 #: proposal, or an ID that doesn't follow Subaru's pattern.
-ENGINEERING_CATEGORIES = frozenset({"EN", "none", "other"})
+ENGINEERING_CATEGORIES = frozenset({"EN", "none", "other"})  # not "uncoded": S26B-047 is a science program
 
 #: A telescope focus sweep: at least this many distinct focus offsets on one field in one night...
 FOCUS_SWEEP_MIN_STEPS = 10
@@ -151,6 +158,17 @@ def engineeringSequences(names: pd.Series) -> pd.Series:
     """Return whether each sequence name is an engineering sequence (`ENGINEERING_SEQUENCES`)."""
     lowered = names.fillna("").astype(str).str.strip().str.lower()
     return lowered.str.startswith(ENGINEERING_SEQUENCES)
+
+
+def engineeringGroups(groups: pd.Series) -> pd.Series:
+    """Return whether each sequence group is an engineering group (`ENGINEERING_GROUPS`).
+
+    An arc or trace taken inside a fiberProfiles group is exposed with most cobras hidden and the
+    rest dithered across pixels: a scienceArc by type, but not the slit the thresholds were derived
+    on (Run31's 153004 had 65 Neon lines on a b detector against 9,900 on a nightly arc).
+    """
+    lowered = groups.fillna("").astype(str).str.strip().str.lower()
+    return lowered.str.startswith(ENGINEERING_GROUPS)
 
 
 def cadences(visits: pd.DataFrame) -> pd.Series:
@@ -280,6 +298,8 @@ def classifyVisits(
     reason = pd.Series("gated", index=visits.index, dtype=object)
     reason[~sequenceType.isin(VALIDATED_TYPES)] = "unvalidated"
     reason[engineeringSequences(visits["sequence_name"]).to_numpy()] = "unvalidated"
+    if "group_name" in visits:
+        reason[engineeringGroups(visits["group_name"]).to_numpy()] = "unvalidated"
     notMeasured = sequenceType.isin(NOT_MEASURED_TYPES)
     reason[notMeasured] = "no method for " + sequenceType[notMeasured].astype(str)
     reason[sequenceType.isna()] = "no sequence"
