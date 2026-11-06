@@ -13,7 +13,8 @@ Example::
     python bin.src/twilightQa.py -c qaActor/reductions --sequence-of-visit 150844 --opdb-host pfsa-db \
         --qadb-host pfsa-db
 
-prints the verdicts per sequence, one per exposure and arm (``PASS``, ``WARN``, ``FAIL`` or ``TOO_FAINT``, with
+prints the verdicts per sequence, one per exposure and arm (``PASS``, ``WARN``, ``FAIL`` or ``TOO_FAINT``, ``UNKNOWN`` for an
+arm without thresholds, with
 the reasons). Read from a Butler, it also stores the verdict per detector image as ``twilightQaMetrics`` in a new
 RUN prepended to the collection (`pfs.drp.qa.qadb.store`; ``--no-store`` skips it): the Butler is the record,
 and the qadb loader folds the stored verdict into ``qa_gate`` as a third task, ``twilightQa``, on every load. With
@@ -25,7 +26,8 @@ requires the LSST stack (``lsst.daf.butler``); a parquet does not.
 ``--sequence-of-visit`` is for running after every visit (``ics_qaActor``, INSTRM-3089): it looks the
 visit's IIC sequence up in the opdb (``--opdb-host``; the account, ``--opdb-user``, only reads) and judges it only when it is a twilight, it has
 finished (``iic_sequence_status``), and every visit of it has a ``twilightFiberFlux`` for every camera it
-has a pfsArm for; otherwise it says what is missing and does nothing. The sequence id comes from the opdb,
+has a pfsArm for; otherwise it says what is missing (``not reduced``: no pfsArm either, so the drpActor is the one
+to wait for; ``no tables yet``: reduced, QA not run) and does nothing. The sequence id comes from the opdb,
 so raws without ``W_SEQID`` need no ``--sequences``. Its files, with ``-o``, are named by sequence:
 ``twilightMetrics-<sequence>.parquet`` and ``twilightVerdict-<sequence>.csv``.
 

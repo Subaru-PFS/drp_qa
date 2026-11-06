@@ -3,10 +3,19 @@
 All notable changes to `drp_qa` are recorded here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-This package does not use semantic versioning. Released versions correspond to the LSST-style weekly tags applied to the
-repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those tags rather than to `MAJOR.MINOR.PATCH`.
+Releases are tagged two ways. The LSST-style weekly tag (`w.2026.45`, `w.2026.43`, …) is what the pfs_pipe2d build sets
+up. Since 0.1.0 (2026-11-05) each release also gets a semantic version (`0.1.1`), for EUPS and pip installs that cannot
+set up by weekly tag (ics_qaActor's); sections from 0.1.0 on are keyed to it, with the weekly tag beside it when one was
+made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
+
+### Changed
+
+- **Twilight judge and loader wording** (PIPE2D-1987) — `twilightQa.py --sequence-of-visit` says `not reduced` for a
+  visit with no pfsArm (the drpActor is the one to wait for) and `no tables yet` only when it is reduced; an arm without
+  thresholds is `UNKNOWN` per exposure as it is per image, not blank; the loader says `none for these visits in …`,
+  since a task that did not run on them leaves none.
 
 ### Added
 
@@ -48,13 +57,16 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   after the first, and leaves visits without a pfsConfig out of a whole-sequence pass; `observingRuns.yaml` has
   `run31`.
 
+## [0.1.1] - 2026-11-05
+
 ### Changed
 
 - **The opdb account is an option** (INSTRM-3089) — `loadQadb.py` and `twilightQa.py` take `--opdb-port`,
   `--opdb-user` and `--opdb-dbname` beside `--opdb-host` (defaults 5432, `public_user`, `opdb`: what they used to
   hardwire), so ics_qaActor can pass its `db.opdb` block through.
 
-## [w.2026.45] - 2026-11-05
+
+## [0.1.0] - 2026-11-05 (w.2026.45)
 
 ### Added
 

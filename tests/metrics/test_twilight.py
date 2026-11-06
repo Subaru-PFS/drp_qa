@@ -264,10 +264,10 @@ def testCameraWithTooFewExposuresIsUnjudged():
     assert metrics.drop((1002, "r", 4))["twilightLevelOffset"].abs().max() < 1.0
 
 
-def testFaintArmLeftUnjudgedStaysEmpty():
-    """TOO_FAINT replaces a PASS; an arm the thresholds leave out keeps no verdict, faint or not."""
+def testFaintArmLeftUnjudgedIsUnknown():
+    """TOO_FAINT replaces a PASS; an arm the thresholds leave out is UNKNOWN, faint or not."""
     verdict = verdictOf(makeSequence(snr=(5.0, 20.0, 30.0, 45.0), arms=("b", "n")))["status"]
-    assert verdict[(1000, "n")] == ""
+    assert verdict[(1000, "n")] == "UNKNOWN"
     # Negative control: the judged arm of the same faint exposure is TOO_FAINT.
     assert verdict[(1000, "b")] == "TOO_FAINT"
 
@@ -281,7 +281,7 @@ def testShortSequenceIsNotMeasured():
 def testNArmIsNotJudged():
     fibers = makeSequence(arms=("b", "n"), step=(1, "n", 2, 0.8))
     verdict = verdictOf(fibers)["status"]
-    assert (verdict.xs("n", level="arm") == "").all()
+    assert (verdict.xs("n", level="arm") == "UNKNOWN").all()
     # Negative control: the same step in b fails.
     assert verdictOf(makeSequence(arms=("b", "n"), step=(1, "b", 2, 0.8)))["status"][(1001, "b")] == "FAIL"
 
@@ -328,9 +328,16 @@ class TestSequenceReadiness:
         reduced = self.everything()
         del reduced[150842]  # not reduced either: no pfsArm, no table
         ready, why = sequenceReadiness(opdbSequence(), reduced, stored)
-        assert not ready and "150842 (no tables yet)" in why
+        assert not ready and "150842 (not reduced)" in why
         # Negative control: counting only the pfsArms present would call it ready.
         assert all(reduced[visit] <= stored[visit] for visit in reduced)
+
+    def testWaitsForAReducedVisitWithoutTables(self):
+        # pfsArm there, no twilightFiberFlux: the QA pipeline has not run on it yet.
+        stored = self.everything()
+        del stored[150842]
+        ready, why = sequenceReadiness(opdbSequence(), self.everything(), stored)
+        assert not ready and "150842 (no tables yet)" in why and "not reduced" not in why
 
     def testWaitsForAMissingCamera(self):
         stored = self.everything()
@@ -416,6 +423,18 @@ def testIsTwilightSequence():
     assert isTwilightSequence(opdbSequence())
     assert not isTwilightSequence(opdbSequence(name="Arc: HgCd"))
     assert not isTwilightSequence(opdbSequence(visits=()))
+
+
+class TestExposureVerdictUnknown:
+    """An arm without thresholds (n) is UNKNOWN per exposure, as it is per image, never blank."""
+
+    def testTheNArmIsUnknown(self):
+        metrics = pd.read_parquet(DATA / "twilightMetrics.parquet")
+        verdict = twilightVerdict(metrics[metrics["sequence"] == 54787])
+        assert set(verdict.loc[verdict["arm"] == "n", "status"]) == {"UNKNOWN"}
+        assert "" not in set(verdict["status"])
+        # Negative control: the judged arms are not UNKNOWN.
+        assert "UNKNOWN" not in set(verdict.loc[verdict["arm"].isin(["b", "r"]), "status"])
 
 
 class TestImageVerdict:

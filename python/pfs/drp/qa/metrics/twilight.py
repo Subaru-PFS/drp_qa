@@ -488,7 +488,8 @@ def sequenceReadiness(
     for visit in sequence["pfs_visit_id"]:
         have = stored.get(int(visit), set())
         if not have:
-            missing.append(f"{visit} (no tables yet)")
+            # No pfsArm either: the drpActor has not reduced it, so the QA pipeline is not the one waiting.
+            missing.append(f"{visit} ({'no tables yet' if reduced.get(int(visit)) else 'not reduced'})")
         elif reduced.get(int(visit), set()) - have:
             missing.append(f"{visit} ({', '.join(sorted(reduced[int(visit)] - have))})")
     if missing:
@@ -565,7 +566,7 @@ def twilightVerdict(metrics: pd.DataFrame, thresholds: pd.DataFrame | None = Non
         One row per (visit, arm), `VERDICT_COLUMNS`: ``status`` is the worst
         of ``PASS``, ``WARN``, ``FAIL`` over the arm's detector levels, RMS and
         patch; ``TOO_FAINT`` in place of a ``PASS`` for an exposure below the
-        floor (its levels are judged, and a step still fails it); empty when
+        floor (its levels are judged, and a step still fails it); ``UNKNOWN`` when
         nothing is judged, as in an arm the thresholds leave out. ``reason`` holds the reasons,
         ``;``-joined. No rows when ``metrics`` has none.
     """
@@ -589,7 +590,7 @@ def twilightVerdict(metrics: pd.DataFrame, thresholds: pd.DataFrame | None = Non
                 "visit": visit,
                 "arm": arm,
                 "sequence": frame["sequence"].iloc[0],
-                "status": "TOO_FAINT" if tooFaint and worst == "PASS" else worst,
+                "status": "TOO_FAINT" if tooFaint and worst == "PASS" else (worst or "UNKNOWN"),
                 "reason": "; ".join(reasons),
                 "twilightArmMean": frame["twilightArmMean"].iloc[0],
                 "twilightArmHalfDiff": frame["twilightArmHalfDiff"].iloc[0],
