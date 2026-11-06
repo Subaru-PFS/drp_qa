@@ -1,4 +1,4 @@
-r"""Make ``dmDriftMetrics-validation.parquet``, the line-residual test fixture (PIPE2D-1921, PIPE2D-1956).
+r"""Make ``dmDriftMetrics-validation.parquet``, the line-residual test fixture.
 
 The judged rows of ``dmLineResidualMetrics`` for the validation visits, one row per detector,
 reference and species: against the calibration (``statusType`` ``BOTH`` or ``UNFITTED``), the

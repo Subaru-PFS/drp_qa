@@ -41,7 +41,7 @@ __all__ = [
 STATUS_ORDER = ("judged", "to judge", "to reduce", "failed", "no pfsConfig", "no raw", "raw not in opdb")
 
 #: The QA tasks of the pipeline, which a judge-only pass runs on reductions that exist: the gate,
-#: and the line residuals against the calibration and the visit's detectorMap (PIPE2D-1956).
+#: and the line residuals against the calibration and the visit's detectorMap.
 JUDGE_TASKS = ("imageQualityQa", "dmLineResiduals")
 
 #: A failed quantum in a ``pipetask`` log.
@@ -441,7 +441,7 @@ def pipetaskCommand(
     """
     # The tasks log as pfs.<task>, lowercase, as drpActor sets them (CliLog.setLogLevels): PFS=INFO
     # misses them, and a bare INFO sets only lsst. The fit statistics imageQualityQa reads from
-    # the stored reduceExposure_log are INFO lines (PIPE2D-1938).
+    # the stored reduceExposure_log are INFO lines.
     command = ["pipetask", "--long-log", "--log-level", "pfs=INFO", "run", "-j", str(jobs)]
     # A judge-only pass runs the QA tasks alone, so the reduction's overrides would name labels it lacks.
     subset = f"{pipeline}#{','.join(JUDGE_TASKS)}" if item.judgeOnly else pipeline

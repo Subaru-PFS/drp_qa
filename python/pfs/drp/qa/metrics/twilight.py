@@ -4,7 +4,7 @@ A twilight is the sky flat behind the screen response: each fiber's flux over
 its normalisation should be the same across the focal plane, but for a smooth
 sky gradient. The reference (rule R1 of ``docs/qa-principles.md``) is the
 sequence's other exposures, minutes apart, and nothing here depends on a
-calibration (PIPE2D-1973). The check says whether an exposure is a good flat
+calibration. The check says whether an exposure is a good flat
 and what differs in it; it does not say why.
 
 `fiberFlux` reduces a detector's spectra to one value per fiber: the median of

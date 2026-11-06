@@ -25,8 +25,8 @@ whatever the lamp.
 Residuals are measured minus reference, the sign of drp_stella's. Per
 reference, species (``description``, R7) and ``statusType``, the median and
 robust RMS of ``dx`` and ``dy``, ``nLines`` and ``linesPerFiber`` (per lit
-fiber, so a design lighting one fiber group is not read as sparse,
-PIPE2D-1935). A species with fewer than ``minLines`` lines gets NaN
+fiber, so a design lighting one fiber group is not read as sparse).
+A species with fewer than ``minLines`` lines gets NaN
 statistics: not measured. The components are kept apart, never combined.
 
 ``statusType`` is ``BOTH`` (``USED`` and ``RESERVED`` together), ``USED`` or
@@ -230,8 +230,8 @@ def cameraSet(pfsConfig: Any, arm: str | None = None) -> str | None:
 
     b-arm offsets from the calibration depend on it: in Runs 25 and 28–30 the b
     cameras sit −0.45 to −0.47 px from ``detectorMap_calib`` when read with m,
-    about 0 when read with r and n, and up to +0.11 px when read with r alone
-    (PIPE2D-1927). It is a population column, nothing more.
+    about 0 when read with r and n, and up to +0.11 px when read with r alone.
+    It is a population column, nothing more.
 
     Parameters
     ----------
@@ -326,7 +326,7 @@ def frameType(rawHeader: Any, pfsConfigHeader: Any) -> str | None:
 def addObsType(metrics: pd.DataFrame, kinds: pd.DataFrame | None) -> pd.DataFrame:
     """Return ``metrics`` with ``obsType`` filled from ``kinds`` where it is missing, null or ``unknown``.
 
-    Tables stored before ``obsType`` was a column (PIPE2D-1956), or by a task
+    Tables stored before ``obsType`` was a column, or by a task
     whose header lacked ``W_SEQTYP`` (Run25 and Run26 pfsConfigs, before the
     raw header was read), have it from ``iqQaMetrics``, which classifies the
     same frame from the calexp's header.

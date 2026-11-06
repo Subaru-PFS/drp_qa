@@ -1,8 +1,8 @@
-"""Make ``iqQaThresholds-iis-run30.yaml``: the thresholds for IIS frames (PIPE2D-1954).
+"""Make ``iqQaThresholds-iis-run30.yaml``: the thresholds for IIS frames.
 
 An IIS frame lights the 16 engineering fibers of each spectrograph with the IIS
 lamps, and ``imageQualityQa`` measures it on those fibers, with
-``illumination: iis`` (PIPE2D-1954). Its widths (about 1.8 px) are not the
+``illumination: iis``. Its widths (about 1.8 px) are not the
 science fibers' (2.5-3.3 px), so it has thresholds of its own, which judge IIS
 frames alone: every entry here names ``illumination: iis``, and an entry without
 it is for full-slit frames (`pfs.drp.qa.metrics.gate.DEFAULT_POPULATION`).
@@ -17,7 +17,7 @@ off, so it was reduced against the sky line list; known bad) and the night of
 file beside them and `adopt` turns it into the shipped one:
 
 - **medFwhm is judged per detector and lamp**, WARN 3 % and FAIL 5 % above the
-  known-good median (as the PFI arcs, PIPE2D-1942): the 14 nights sit within
+  known-good median (as the PFI arcs): the 14 nights sit within
   1.5 % of their medians on b and r and on the n-arm Kr arc and quartz.
   Not judged: the n-arm Ne arc, whose 15 faint IIS lines per fiber give a
   median width that scatters 2-4 % night to night and crossed WARN on 1-3 of 14
@@ -27,7 +27,7 @@ file beside them and `adopt` turns it into the shipped one:
   (an Ar, HgAr, He or H IIS arc), for which Ne and Kr pooled are no reference,
   and their FAIL sits 0.01 px above WARN. Such a lamp is UNKNOWN until derived.
 - **linesPerFiber** is a tolerance below each arm and sequence's known-good median:
-  arcs 25 %/50 %, quartz 2.5 %/5 % (as PIPE2D-1935). The m arm is not judged.
+  arcs 25 %/50 %, quartz 2.5 %/5 % (as the PFI frames). The m arm is not judged.
 - **medDxCenter** keeps the task config's physical limits, WARN 1 px and FAIL 2 px:
   a flexure limit is not a population property. The derived percentiles (0.1 px)
   are far too tight. The known-bad 148829 n4 sits at 1.98 px.

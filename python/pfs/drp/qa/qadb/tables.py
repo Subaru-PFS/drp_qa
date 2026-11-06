@@ -58,7 +58,7 @@ GATE_ORDER = ("UNKNOWN", "PASS", "WARN", "FAIL")
 #: The tasks, with the Butler tables each writes: the per-image table first,
 #: then the long table whose rows take the image's processing (`None` for a
 #: task with none). ``twilightQa`` is ``bin.src/twilightQa.py``, not a pipeline
-#: task: it stores its verdict once the sequence is complete (INSTRM-3089).
+#: task: it stores its verdict once the sequence is complete.
 TASK_TABLES: dict[str, tuple[str, str | None]] = {
     "imageQualityQa": ("iqQaMetrics", "iqQaSpeciesMetrics"),
     "dmLineResiduals": ("dmLineResidualSummary", "dmLineResidualMetrics"),

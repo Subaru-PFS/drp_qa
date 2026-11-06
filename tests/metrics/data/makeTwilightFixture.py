@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Make ``twilightMetrics.parquet``: the twilight metrics of 16 sequences, 2025-03 to 2026-09 (PIPE2D-1973).
+"""Make ``twilightMetrics.parquet``: the twilight metrics of 16 sequences, 2025-03 to 2026-09.
 
 The inputs are per-fiber tables extracted from drpActor's and the validation run's pfsArms (one row per
 visit, arm, spectrograph and fiber, with the median flux / norm over the arm's window, its S/N, the

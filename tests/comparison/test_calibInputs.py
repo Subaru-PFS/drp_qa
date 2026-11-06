@@ -1,4 +1,4 @@
-"""Tests for `pfs.drp.qa.comparison.calibInputs` on a synthetic calibration set (PIPE2D-1941)."""
+"""Tests for `pfs.drp.qa.comparison.calibInputs` on a synthetic calibration set."""
 
 import pandas as pd
 import pytest

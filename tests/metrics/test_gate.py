@@ -352,7 +352,7 @@ def iisStored() -> pd.DataFrame:
 
 
 def testShippedIisFileIsTheAdoptedRun30(iisStored, tmp_path):
-    """The IIS file is what its script derives from the Run30 IIS frames and adopts (PIPE2D-1954)."""
+    """The IIS file is what its script derives from the Run30 IIS frames and adopts."""
     module = loadScript("makeIisThresholds")
     derived = module.derive(iisStored, tmp_path / "derived.yaml")
     assert yaml.safe_load(derived.read_text()) == yaml.safe_load(IIS.read_text())
@@ -404,7 +404,7 @@ def testShippedIisFileVerdicts(iisStored):
 def testShippedFileVerdicts(stored):
     """The adopted file: obstructed frames and defocused quartz fail, no known-good fails; flags aren't judged.
 
-    The fixture is ``u/wtg/qa-thresholds/010`` (PIPE2D-1938): the validation visits reduced afresh,
+    The fixture is ``u/wtg/qa-thresholds/010``: the validation visits reduced afresh,
     Run29's b2 and n4 quartz among them. The one-group Run30 arcs that PIPE2D-1935 checked are no
     longer validation visits; comparison mode judges them with every other daily arc.
     """
@@ -414,8 +414,8 @@ def testShippedFileVerdicts(stored):
 
     obstructed = stored["visit"].isin([150115, 150116, 150641, 150642])
     assert (verdicts.loc[obstructed, "qaStatus"] == "FAIL").all()
-    # The validation set records them as known-bad for linesPerFiber, the metric that fails them
-    # (PIPE2D-1935): each lit fiber measures fewer lines.
+    # The validation set records them as known-bad for linesPerFiber, the metric that fails them:
+    # each lit fiber measures fewer lines.
     lines = labelRows(stored, loadValidationVisits(), "linesPerFiber")
     perFiber = judged[judged["metric"] == "linesPerFiber"].set_index("row")
     obstructedLines = lines[lines["visit"].isin([150115, 150116, 150641, 150642])]
@@ -430,9 +430,9 @@ def testShippedFileVerdicts(stored):
     assert (goodLines.loc[~argon, "status"] == "PASS").all() and (goodLines.loc[argon, "status"] == "").all()
     run25Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(133040, 135850)
     assert (perFiber.loc[np.flatnonzero(run25Quartz), "status"] == "PASS").all()
-    # medFwhm (PIPE2D-1942): every known-good arc and quartz is judged against its own detector and
+    # medFwhm: every known-good arc and quartz is judged against its own detector and
     # lamp's reference median, and none fails; every known-bad one with a value fails. b-arm Argon
-    # is not judged (PIPE2D-1938): under a line per fiber, its width rests on a handful of lines.
+    # is not judged: under a line per fiber, its width rests on a handful of lines.
     labelled = labelRows(stored, loadValidationVisits(), "medFwhm")
     fwhm = judged[judged["metric"] == "medFwhm"].set_index("row")
     bArgon = (stored["arm"] == "b") & (stored["seqName"] == "Arc: Argon")
@@ -450,7 +450,7 @@ def testShippedFileVerdicts(stored):
     bad = bad[bad["value"].notna()]
     assert len(bad) == 82 and (bad["status"] == "FAIL").all()
     assert not bArgon[bad.index].any()  # the set asserts nothing about b-arm Argon widths
-    # The b2 and n4 quartz reference is Run29's set (PIPE2D-1938): its traces pass on those two cameras,
+    # The b2 and n4 quartz reference is Run29's set: its traces pass on those two cameras,
     # and Run25's own, narrower, pass as well.
     camera = stored["arm"].add(stored["spectrograph"].astype(str))
     run29Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(144587, 147830)
@@ -479,7 +479,7 @@ def testShippedFileVerdicts(stored):
     derived = gate(stored, [RUN25, configThresholds(configDefaults())])
     assert (derived.loc[run25Quartz, "qaStatus"] == "FAIL").any()
 
-    # nLines is no longer judged (PIPE2D-1935), nor is a twilight frame's count.
+    # nLines is no longer judged, nor is a twilight frame's count.
     assert "nLines" not in set(judged["metric"])
     twilight = perFiber.loc[np.flatnonzero(stored["seqName"] == "Twilight sky")]
     assert len(twilight) and (twilight["status"] == "").all()
@@ -534,7 +534,7 @@ def testPipelineMismatchWithoutAReference():
 
 
 def testLayerPipelineMismatch():
-    """Each image is provisional against the pipeline of the layer that judged it (PIPE2D-1954)."""
+    """Each image is provisional against the pipeline of the layer that judged it."""
     run25 = table({"metric": "medFwhm", "warn": 3.0, "fail": 4.0})
     iis = table({"metric": "medFwhm", "illumination": "iis", "warn": 2.0, "fail": 2.5})
     iisPipeline = PIPELINE | {"obs_pfs": "w.2026.43"}
@@ -601,7 +601,7 @@ def testGateKeepsOneRowPerImageWithDuplicateLabels():
 
 
 class TestThresholdsRecord:
-    """A task records the files it judged with by name and content, in the order judged (PIPE2D-1976)."""
+    """A task records the files it judged with by name and content, in the order judged."""
 
     def testNamesInTheOrderJudged(self):
         config = SimpleNamespace(thresholdsFile="a.yaml", extraThresholdsFiles=["b.yaml", ""])

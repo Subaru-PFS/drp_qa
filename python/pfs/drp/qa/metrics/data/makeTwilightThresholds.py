@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 """Make ``twilightThresholds.yaml``, the thresholds ``bin.src/twilightQa.py`` judges twilight sequences with.
 
-The values are `pfs.drp.qa.metrics.twilight.twilightThresholds`'s provisional ones (PIPE2D-1973): a
+The values are `pfs.drp.qa.metrics.twilight.twilightThresholds`'s provisional ones: a
 detector's level against its sequence's (``twilightLevelOffset``, on its absolute value), the field's RMS
 beyond photon noise (``twilightResidRms``) and its deepest coherent patch (``twilightPatch``), with the n
 arm deliberately unjudged. They are written as a thresholds file so that the judge records what it judged
 with (`pfs.drp.qa.metrics.gate.thresholdsRecord`) and the qadb loader cites it in ``qa_gate``
-(``twilight_thresholds_id``), as it does for the other tasks' files (INSTRM-3089).
+(``twilight_thresholds_id``), as it does for the other tasks' files.
 
     python makeTwilightThresholds.py
 """

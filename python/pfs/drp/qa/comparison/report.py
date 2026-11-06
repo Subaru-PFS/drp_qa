@@ -103,7 +103,7 @@ class ReportInputs:
         From `failedSummary`.
     residualSummary, residualMetrics : `pandas.DataFrame`, optional
         ``dmLineResidualSummary`` and ``dmLineResidualMetrics`` rows of the
-        period's judged images (PIPE2D-1956); `None` when the collection has
+        period's judged images; `None` when the collection has
         none.
     residualFindings : `pandas.DataFrame`, optional
         From `pfs.drp.qa.comparison.residuals.residualFindings`.
@@ -276,7 +276,7 @@ def whyNotJudged(image: pd.Series) -> str:
         measured``.
     """
     obsType = image.get("obsType")
-    # Only metrics measured without the fibers lit (no nLitFibers) skip them (PIPE2D-1935).
+    # Only metrics measured without the fibers lit (no nLitFibers) skip them.
     unlitDaily = image.get("cadence") == "daily" and pd.isna(image.get("nLitFibers"))
     daily = "; nLines not judged on daily" if unlitDaily else ""
     if obsType == "unknown":
@@ -745,7 +745,7 @@ every spectrograph, a whole spectrograph (<i>SMn</i>), <i>most of the visit</i>,
 visit of the sequence shares it. Problems the validation set records as known-bad are folded away as expected.</li>
 <li>Not judged: flux-dependent metrics on telescope focus sweeps. Daily arcs and traces, often taken with one fiber
 group lit, are judged on the fibers lit (<code>linesPerFiber</code>); measured before that was possible (no
-<code>nLitFibers</code>), their <code>nLines</code> and <code>pctFlagged</code> aren't judged (PIPE2D-1935). A verdict
+<code>nLitFibers</code>), their <code>nLines</code> and <code>pctFlagged</code> aren't judged. A verdict
 here can therefore be milder than the stored one.</li>
 <li><b>Nights</b> are named by their evening: a night runs from noon to noon HST, so an exposure taken after
 midnight carries the previous day's date.</li>
@@ -755,7 +755,7 @@ one-off single, judged like a set.</li>
 <li><b>Against the reference</b>: arcs and traces lamp by lamp, daily ones and singles against the reference's
 sets.</li>
 <li><code>medDxCenter</code> is the offset from the calibration detectorMap: drift, shown, not gated.</li>
-<li><b>Line residuals</b>: <code>dmLineResiduals</code>' verdicts on the same images (PIPE2D-1956). The median offset of
+<li><b>Line residuals</b>: <code>dmLineResiduals</code>' verdicts on the same images. The median offset of
 each line species from <code>detectorMap_calib</code> is drift: at WARN the visit's adjustment absorbs it
 (<code>APPLY_SHIFT</code>), at FAIL it does not (<code>RECALIBRATE</code>). The robust RMS of the lines the fit held
 back, against the visit's own detectorMap, is the scatter left on lines it was not fitted to; stored, and judged once
@@ -773,7 +773,7 @@ def _residualSection(inputs: ReportInputs, judgedImages: pd.DataFrame) -> list[s
         return [
             *parts,
             "<p class='caption'>No <code>dmLineResiduals</code> output in this collection: judged before the task"
-            " joined the pipeline (PIPE2D-1956).</p>",
+            " joined the pipeline.</p>",
         ]
     parts.append(
         "<p class='caption'><code>dmLineResiduals</code>: each line species' median offset from"
@@ -949,7 +949,7 @@ def _driftFigures(
     if referenceResiduals is not None and not referenceResiduals.empty:
         referenceDrift = driftByImage(referenceResiduals)
         if "cameraSet" in referenceResiduals:
-            # b read with m sits 0.5 px from the b calibration (PIPE2D-1927): not the band's business.
+            # b read with m sits 0.5 px from the b calibration: not the band's business.
             sets = referenceResiduals[[*keys, "cameraSet"]].drop_duplicates(keys)
             referenceDrift = referenceDrift.merge(sets, on=keys, how="left")
             withM = referenceDrift["cameraSet"].fillna("").astype(str).str.contains("m")
@@ -964,8 +964,7 @@ def _driftFigures(
         " lamp species cancels where the species disagree), in y the median over the arc lines' species. The"
         " visit's detectorMap adjustment absorbs a shift; a trend says when a recalibration is due. A dashed"
         " vertical line marks the first visit measured against a new calibration: what changes there is the"
-        " reference, not the detector. Hollow: b read with m, which sits about 0.5 px from the b calibration"
-        " (PIPE2D-1927)."
+        " reference, not the detector. Hollow: b read with m, which sits about 0.5 px from the b calibration."
         + (
             f" Shaded: {_e(name)}'s calibration arcs and traces against its own calibration, 5-95 %"
             " (b read with r only)."

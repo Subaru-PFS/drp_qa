@@ -438,7 +438,7 @@ class TestLoadCollection:
 
 
 class TestRecordedThresholds:
-    """The gate cites the files each image records judging with, by content (PIPE2D-1976)."""
+    """The gate cites the files each image records judging with, by content."""
 
     #: Today's imageQualityQa config: a layer added after the tables below were judged.
     TODAY = SimpleNamespace(

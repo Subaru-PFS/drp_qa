@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""Report which exposures of a calibration set to build the calibrations from, per detector (PIPE2D-1941).
+r"""Report which exposures of a calibration set to build the calibrations from, per detector.
 
 Reads comparison mode's visit listing for the period (``fetch``), takes the set's arcs and traces
 (cadence ``set``, or ``--visits``), reads what comparison mode measured on them (``iqQaMetrics``,

@@ -83,7 +83,7 @@ def testBuildReport(periods, visit, listing):
         )
     )
     assert page.startswith("<!doctype html>")
-    assert "16 gated images" in page  # the 16 science images are unvalidated (PIPE2D-1984)
+    assert "16 gated images" in page  # the 16 science images are unvalidated
     assert "Incomplete" not in page
     assert "16 gated images · 2 problem images" in page
     assert "SM1" in page  # visit 21: b1 and r1 together, one problem
@@ -406,7 +406,7 @@ def testNotJudgedIsToldFromUnknown():
 
 
 def testDailyNoteOnlyWithoutLitFibers():
-    """A daily image measured on its lit fibers (PIPE2D-1935) has its line count judged."""
+    """A daily image measured on its lit fibers has its line count judged."""
     image = pd.Series({"obsType": "trace", "traceOnly": True, "cadence": "daily", "lamps": "halogen"})
     assert whyNotJudged(pd.Series({**image, "nLitFibers": 150.0})) == "FWHM from fiberProfiles"
     # Negative control: measured before the fibers lit were counted, it isn't.

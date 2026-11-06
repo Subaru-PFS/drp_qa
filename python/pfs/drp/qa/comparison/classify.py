@@ -14,7 +14,7 @@ off-nominal on purpose, so a FAIL there may be what the test expected. So are th
 sequences taken as those types (`ENGINEERING_SEQUENCES`, by sequence name): a bootstrap, an IIS
 ``ImageQuality`` frame or a health check lights a handful of fibers, and its trace centroids scatter
 twice a trace set's; a ``LineCheck`` or ``DetectorMap test`` arc is taken off the calibration recipe,
-and its lamp lines scatter like a fault's (PIPE2D-1956). `NOT_MEASURED_TYPES` have
+and its lamp lines scatter like a fault's. `NOT_MEASURED_TYPES` have
 nothing to measure. Every visit is listed, so a run's coverage is complete and a new sequence
 type shows up rather than disappearing.
 

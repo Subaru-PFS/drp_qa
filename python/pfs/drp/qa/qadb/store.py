@@ -1,4 +1,4 @@
-"""Store a per-image QA table in a Butler after the fact (INSTRM-3089).
+"""Store a per-image QA table in a Butler after the fact.
 
 A judgement made outside ``pipetask``, such as the twilight sequence check that
 needs every exposure of a sequence, still belongs in the Butler: it is the

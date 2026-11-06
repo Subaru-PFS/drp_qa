@@ -50,7 +50,7 @@ the pipeline/config glue to run them.
   - `twilightFluxQa.py` — stores each lit fiber's median flux on a twilight
     (`twilightFiberFlux`; other visits stop at the header, before the pfsArm is read);
     `bin.src/twilightQa.py` judges each sequence's exposures against each other afterwards,
-    stack-free in `metrics/twilight.py` (PIPE2D-1973)
+    stack-free in `metrics/twilight.py`
 - **QA modules *not* wired into `drpQA.yaml`** — these exist as `PipelineTask`s or CLIs
   but must be run via their own pipeline/entry point:
   - `skySubtractionQa.py` — sky subtraction accuracy (`SkyArmSubtractionTask`,
@@ -78,7 +78,7 @@ the pipeline/config glue to run them.
   update its section and rerun it (`jupyter nbconvert --to notebook --execute --inplace`).
   `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its replacement
   (needs the opdb; committed without outputs): keep it in step with renamed arguments.
-  The end-of-run report (INSTRM-2466) adds `queries.readAgRun` (aggregates over a period's AG
+  The end-of-run report adds `queries.readAgRun` (aggregates over a period's AG
   exposures), `runAnalysis` (stack-free: per-exposure camera states, dropouts, settled jitter,
   clusters of rejected matches, position-model errors, flags), `runPlotting` (figures from an `AgRun`) and `runReport` (fetch to parquet, then the
   Markdown report), driven by `bin.src/agRunReport.py` with comparison mode's runs; tested in
@@ -126,7 +126,7 @@ the pipeline/config glue to run them.
     visit's sequence once it is complete (opdb via `comparison.queries.readSequenceOfVisit`), stores
     the per-image verdict in the Butler (`twilightQaMetrics`, via `qadb.store`) for the qadb loader's
     gate, and with `--qadb-host` loads the judged visits; its exit status tells ics_qaActor what
-    happened (INSTRM-3089)
+    happened
   - `exportMetrics.py` — per-detector QA tables (`iqQaMetrics`, `dmLineResidualMetrics`, ...) from a
     collection to parquet, with progress, via `metrics.readers.exportMetrics`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),
@@ -519,8 +519,8 @@ against a CSV without a Butler.
   - `addTraceLambdaToArclines()` — enriches ArcLineSet with wavelength column
 - **`obs_pfs`**: `getLamps(metadata)` returns active lamp names; names ending in
   `"_eng"` indicate IIS illumination (the pfsConfig is the second witness: its engineering
-  fibers all GOOD, `engineeringLit`; PIPE2D-1954). Import is guarded so the task gracefully
+  fibers all GOOD, `engineeringLit`). Import is guarded so the task gracefully
   degrades if `obs_pfs` is unavailable.
 - Line lists live in `obs_pfs/pfs/lineLists/`: `{Ar,Xe,Kr,Ne,HgAr,HgCd}.txt` for the PFI lamps and
-  `{Ar,Kr,Ne,HgAr,He,H}_IIS.txt` for the IIS lamps (PIPE2D-1958, PIPE2D-1959); columns
+  `{Ar,Kr,Ne,HgAr,He,H}_IIS.txt` for the IIS lamps; columns
   `wavelength intensity species status transition source intensityErr`.

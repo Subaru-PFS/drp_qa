@@ -63,7 +63,7 @@ def sources() -> list[CoverageSource]:
     iq = configDefaults("imageQualityQa.py", "ImageQualityQaConfig")
     dm = configDefaults("dmLineResiduals.py", "DmLineResidualsConfig")
     lines = pd.read_parquet(DATA / "dmDriftMetrics-validation.parquet")
-    # Run30's nightly IIS frames (PIPE2D-1954) join the validation visits' metrics: the IIS
+    # Run30's nightly IIS frames join the validation visits' metrics: the IIS
     # thresholds file judges them, and one table answers for each metric.
     imageQuality = pd.concat(
         [
@@ -76,7 +76,7 @@ def sources() -> list[CoverageSource]:
         CoverageSource(imageQuality, taskThresholds(iq), IMAGE_QUALITY_METRICS),
         # A species with fewer than minLines lines is stored as NaN: not measured.
         CoverageSource(judgedRows(lines), residualTaskThresholds(dm), LINE_RESIDUAL_METRICS),
-        # Twilight sequences, 2025-03 to 2026-09 (PIPE2D-1973): the Run21 detector steps.
+        # Twilight sequences, 2025-03 to 2026-09: the Run21 detector steps.
         CoverageSource(
             pd.read_parquet(DATA / "twilightMetrics.parquet"), twilightThresholds(), TWILIGHT_METRICS
         ),
@@ -86,8 +86,8 @@ def sources() -> list[CoverageSource]:
 def testEveryKnownBadEntryIsCaughtOrUnchecked(sources):
     """The validation set's promise: a known-bad entry's check runs and gives its verdict, or it says why not.
 
-    An entry naming a metric that stopped being judged (nLines, pctFlagged; PIPE2D-1935, 1929)
-    went unnoticed until PIPE2D-1934 because nothing checked this.
+    An entry naming a metric that stopped being judged (nLines, pctFlagged)
+    went unnoticed because nothing checked this.
     """
     visitSet = loadValidationVisits()
     coverage = knownBadCoverage(visitSet, sources)

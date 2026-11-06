@@ -6,7 +6,7 @@ thresholds the gate uses, and reaches the expected verdict: a ``WARN`` entry is 
 ``WARN`` or ``FAIL``. An entry that cannot be checked says why in its ``unchecked`` field,
 and is held to that: its metric must judge none of its images, or not be measured on them.
 One that is neither is a check that silently does not run, which is how entries naming a
-metric that stopped being judged went unnoticed (PIPE2D-1934); an ``unchecked`` entry that
+metric that stopped being judged went unnoticed; an ``unchecked`` entry that
 is caught, or now judged and missed, or that matches no data, has outlived its reason.
 `knownBadCoverage` reports each.
 

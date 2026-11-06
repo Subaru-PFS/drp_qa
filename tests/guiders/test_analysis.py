@@ -939,7 +939,7 @@ def testAverageByFocusPosition():
     assert np.isnan(medians).any()
 
 
-# Disabled cameras (INSTRM-3057)
+# Disabled cameras
 
 
 def disableCamera(agcData, cid=2, shift_mm=0.1):

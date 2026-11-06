@@ -21,7 +21,7 @@ deliberately not judged in that population.
 
 One population column has a default, `DEFAULT_POPULATION`: ``illumination``,
 ``full`` for the science fibers and ``iis`` for the 16 engineering fibers lit
-by the IIS lamps (PIPE2D-1954). An entry that doesn't name it applies to
+by the IIS lamps. An entry that doesn't name it applies to
 ``full`` images only, since every threshold derived before the column existed
 was from full-slit frames; an IIS image is judged only by an entry naming
 ``illumination: iis``. An image without the column has the default.
@@ -103,7 +103,7 @@ VERDICT_COLUMNS = ("qaStatus", "qaDecidedBy", "qaReason")
 PROVISIONAL_COLUMNS = ("qaProvisional", "qaPipeline")
 
 #: Columns a task adds to each image's row: the thresholds files it judged with, in the order judged,
-#: comma-separated, and the SHA-256 of each as it was then (`thresholdsRecord`, PIPE2D-1976).
+#: comma-separated, and the SHA-256 of each as it was then (`thresholdsRecord`).
 THRESHOLDS_COLUMNS = ("thresholdsFiles", "thresholdsSha256")
 
 #: Columns identifying an image, copied to `judge`'s output when present.
@@ -442,8 +442,8 @@ def layerPipelineMismatch(
     """Say which images were reduced with another pipeline than the thresholds that judged them.
 
     Thresholds files derived from different collections record different
-    pipelines (the Run25 file obs_pfs w.2026.40, the IIS file w.2026.43;
-    PIPE2D-1954), and each image is judged by some of the layers: it is
+    pipelines (the Run25 file obs_pfs w.2026.40, the IIS file w.2026.43),
+    and each image is judged by some of the layers: it is
     provisional when its reduction differs from the pipeline of any layer that
     gave it a verdict. An image no layer judged is compared with the first
     pipeline recorded, as `pipelineMismatch` would.

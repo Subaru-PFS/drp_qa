@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 r"""Judge comparison mode's exported line scatter with a thresholds file, run by run.
 
-The acceptance check for adopting scatter thresholds (PIPE2D-1956): the reserved-line robust
+The acceptance check for adopting scatter thresholds: the reserved-line robust
 RMS of every lamp arc and quartz of the runs compared must not fail in bulk, or the thresholds
 describe the reference visits' night rather than the instrument. Reads the
 ``dmLineResidualMetrics-<period>.parquet`` and ``dmLineResidualSummary-<period>.parquet`` that

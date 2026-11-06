@@ -58,7 +58,7 @@ class TestCheckedInSet:
         byMetric = {metric: [e for e in sm1 if e.metric == metric] for metric in {e.metric for e in sm1}}
         assert {metric: len(entries) for metric, entries in byMetric.items()} == {
             "medFwhm": 9,
-            "robustRmsDeltaX": 8,  # not HgCd, whose scatter is not judged (PIPE2D-1934)
+            "robustRmsDeltaX": 8,  # not HgCd, whose scatter is not judged
         }
         visits = {visit for entry in sm1 for visit in entry.visits}
         assert visits >= {140005, 140032, 140035, 140138, 140139, 140148}
@@ -70,7 +70,7 @@ class TestCheckedInSet:
         assert not any(e.seqType == "Arc: HgCd" for e in byMetric["robustRmsDeltaX"])
         assert visitSet.expectationFor(140130, arm="b", spectrograph=1, seqType="Arc: Neon") == "FAIL"
         assert visitSet.expectationFor(140130, arm="b", spectrograph=4, seqType="Arc: Neon") is None
-        # SM2 has a verdict of its own: drift against a later calibration (PIPE2D-1921).
+        # SM2 has a verdict of its own: drift against a later calibration.
         assert visitSet.expectationFor(140130, arm="b", spectrograph=2, seqType="Arc: Neon") == "FAIL"
         assert visitSet.expectationFor(140075) is None, "unlogged visits in the range carry no verdict"
 
@@ -89,29 +89,29 @@ class TestCheckedInSet:
             and any(text in entry.reason for text in ("SM1 defocused", "No light", "didn't turn on"))
         ]
         assert len(faults) == 22 and {entry.run for entry in faults} == {27}
-        # Run21 gives the twilight detector faults (PIPE2D-1973).
+        # Run21 gives the twilight detector faults.
         assert {entry.run for entry in visitSet.confirmedBad} == {21, 25, 27, 30}
-        # Run29 holds the b2 and n4 quartz references only (PIPE2D-1938); Run30 the IIS frames' (PIPE2D-1954).
+        # Run29 holds the b2 and n4 quartz references only; Run30 the IIS frames'.
         assert {entry.run for entry in visitSet.knownGood} == {25, 29, 30}
         run30 = [entry for entry in visitSet.knownGood if entry.run == 30]
         assert len(run30) == 42 and all(entry.seqType.startswith("ImageQuality (") for entry in run30)
         run29 = [entry for entry in visitSet.knownGood if entry.run == 29]
         traces = [entry for entry in run29 if entry.sequenceType == "scienceTrace"]
         assert traces and set().union(*(entry.cameras for entry in traces)) == {"b2", "n4"}
-        assert run29 == traces  # no Run29 arcs: the scatter reference is Run25's (PIPE2D-1956)
+        assert run29 == traces  # no Run29 arcs: the scatter reference is Run25's
 
     def testKnownGoodIsPopulated(self):
         """The Run25 stable set; thresholds cannot be derived without it."""
         visitSet = loadValidationVisits()
         assert visitSet.knownGood, "no usable known_good entries"
         assert visitSet.goodVisits[0] == 133025
-        assert visitSet.goodVisits[-1] == 150721  # Run30's last nightly IIS quartz (PIPE2D-1954)
+        assert visitSet.goodVisits[-1] == 150721  # Run30's last nightly IIS quartz
 
     def testQuartzReferenceOfB2AndN4IsRun29(self):
-        """Run25's trace entries leave b2 and n4 out; Run29's hold them alone (PIPE2D-1938).
+        """Run25's trace entries leave b2 and n4 out; Run29's hold them alone.
 
-        For the line scatter alone, Run25 stays b2 and n4's reference and Run29 is nobody's
-        (PIPE2D-1956): the entries covering them are scoped by metric.
+        For the line scatter alone, Run25 stays b2 and n4's reference and Run29 is nobody's:
+        the entries covering them are scoped by metric.
         """
         visitSet = loadValidationVisits()
         scatter = ("robustRmsDeltaX", "robustRmsDeltaY")
@@ -204,19 +204,19 @@ class TestRun30KnownBad:
         assert visitSet.expectationFor(150641, arm="b", spectrograph=1) == "FAIL"
 
     def testObstructedFramesFailOnLinesPerFiber(self):
-        """Each lit fiber measures fewer lines (PIPE2D-1935)."""
+        """Each lit fiber measures fewer lines."""
         visitSet = loadValidationVisits()
         entries = [e for e in visitSet.knownBad if set(e.visits) & {150115, 150116, 150641, 150642}]
         assert len(entries) == 4 and all(entry.metric == "linesPerFiber" for entry in entries)
 
     def testPartialIlluminationIsNotKnownBad(self):
-        """One fiber group lit is judged on its lit fibers, which pass (PIPE2D-1935)."""
+        """One fiber group lit is judged on its lit fibers, which pass."""
         visitSet = loadValidationVisits()
         for visit in (149217, 149398, 149881, 150367, 150413):
             assert visitSet.expectationFor(visit, arm="b", spectrograph=1) is None
 
     def testHeliumFlexureTestsCarryNoVerdict(self):
-        """Removed (PIPE2D-1921): their offsets from detectorMap_calib are well under the drift WARN."""
+        """Removed: their offsets from detectorMap_calib are well under the drift WARN."""
         visitSet = loadValidationVisits()
         for visit in (150779, 150782):
             assert visitSet.expectationFor(visit, arm="b", spectrograph=1) is None
@@ -229,11 +229,11 @@ class TestUnconfirmedVerdicts:
         """They are real visits; hiding them defeats the point of recording them."""
         visitSet = loadValidationVisits()
         suspect = {entry.visits[0] for entry in visitSet.knownBad if entry.unconfirmed}
-        # Run25 SM3's y offset from its calibration (PIPE2D-1921): its arcs and twilights after the
+        # Run25 SM3's y offset from its calibration: its arcs and twilights after the
         # calibration block, named visit by visit (an entry's visits are reduced, so a range here
-        # would sweep in every visit between them). Not its traces, which measure no y (PIPE2D-1934).
+        # would sweep in every visit between them). Not its traces, which measure no y.
         sm3 = {135830, 134334, 134880, 135275}
-        # The Run25 "cloudy" twilight (134334, also above) and Run29's b-arm twilight patch (PIPE2D-1973).
+        # The Run25 "cloudy" twilight (134334, also above) and Run29's b-arm twilight patch.
         twilights = {134334, 145073}
         assert suspect == sm3 | twilights
         assert len(visitSet.visits) < 200  # negative control: no entry spans a run
@@ -481,7 +481,7 @@ class TestVisitExpression:
 
     def testCommandLine(self, capsys):
         main(["expression"])
-        # The visits in order: Run21's twilight faults (PIPE2D-1973) come first.
+        # The visits in order: Run21's twilight faults come first.
         assert capsys.readouterr().out.startswith("visit IN (121949..")
 
 

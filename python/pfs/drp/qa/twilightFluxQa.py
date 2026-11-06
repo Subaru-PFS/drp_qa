@@ -5,7 +5,7 @@ A twilight is judged against the other exposures of its sequence
 this task stores what the judgement needs, per detector: each lit fiber's
 median flux / norm over the arm's window, its S/N and its focal-plane
 position, with the sequence id. ``bin.src/twilightQa.py`` judges the stored
-tables of a collection (PIPE2D-1973).
+tables of a collection.
 
 It runs in ``drpQA.yaml``, on every visit. A visit that is not a twilight is
 skipped from its raw header (`pfs.drp.qa.metrics.lineResiduals.frameType`)

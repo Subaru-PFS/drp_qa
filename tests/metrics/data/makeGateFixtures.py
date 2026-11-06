@@ -6,7 +6,7 @@ All are engineering and calibration visits.
 
 - ``iqQaMetrics-validation.parquet``, ``iqQaThresholds-run25.yaml`` and
   ``dmLineResidualThresholds-run25.yaml``, from
-  ``u/wtg/qa-thresholds/010`` (PIPE2D-1938): every validation visit reduced
+  ``u/wtg/qa-thresholds/010``: every validation visit reduced
   afresh with datamodel w.2026.40, obs_pfs w.2026.40 and drp_stella
   w.2026.41-6-ge56938d2, the pipeline of the Run25-30 comparison, with
   ``imageQualityQa`` and ``dmLineResiduals``; the validation set with Run29's
@@ -49,7 +49,7 @@ COLUMNS = [
 
 source = Path(sys.argv[1] if len(sys.argv) > 1 else "~/Projects/Subaru/PFS/reports/PIPE2D-1938").expanduser()
 here = Path(__file__).parent
-#: The lit-fiber columns (PIPE2D-1935), beside COLUMNS.
+#: The lit-fiber columns, beside COLUMNS.
 LIT_FIBER_COLUMNS = ["linesPerFiber", "nLitFibers", "nFibers"]
 
 for stem, name, columns in (

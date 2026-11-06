@@ -1,4 +1,4 @@
-"""Judge a calibration set's exposures per detector, for whoever builds the calibrations (PIPE2D-1941).
+"""Judge a calibration set's exposures per detector, for whoever builds the calibrations.
 
 A run's calibration set is a few sequences of arc and quartz exposures (three per arc lamp, ten
 traces), taken within an hour. ``detectorMap_calib`` and the fiber profiles are built per detector
@@ -15,7 +15,7 @@ exposures of the same sequence on the same detector:
   over the sequence, which catches a detector that goes wrong mid-sequence without knowing what
   "right" looks like;
 * the lamp: each species' line count relative to the detector's best exposure of the sequence, which
-  shows warm-up and fading (PIPE2D-1929) and marks weak exposures, usable but with fewer lines.
+  shows warm-up and fading and marks weak exposures, usable but with fewer lines.
 
 Stack-free: DataFrames in, a Markdown report out. `bin.src/calibInputsReport.py` reads the tables
 from a Butler or from `bin.src/exportMetrics.py` exports and the visit listing from comparison mode's
