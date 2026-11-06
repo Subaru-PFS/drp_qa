@@ -18,7 +18,7 @@ the reasons). Read from a Butler, it also stores the verdict per detector image 
 RUN prepended to the collection (`pfs.drp.qa.qadb.store`; ``--no-store`` skips it): the Butler is the record,
 and the qadb loader folds the stored verdict into ``qa_gate`` as a third task, ``twilightQa``, on every load. With
 ``--qadb-host`` it then loads the judged visits into qadb itself (``twilight_qa`` and ``qa_gate``,
-`pfs.drp.qa.qadb.loadCollection`; INSTRM-3089). With ``-o`` it writes ``twilightMetrics.parquet`` (one row per
+`pfs.drp.qa.qadb.loader.loadCollection`; INSTRM-3089). With ``-o`` it writes ``twilightMetrics.parquet`` (one row per
 detector image) and ``twilightVerdict.csv`` (one row per exposure and arm). Reading or storing in a Butler
 requires the LSST stack (``lsst.daf.butler``); a parquet does not.
 
