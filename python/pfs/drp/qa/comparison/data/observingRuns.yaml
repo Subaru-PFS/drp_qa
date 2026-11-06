@@ -31,3 +31,10 @@ runs:
   - name: run30
     nights: ["2026-08-24", "2026-09-15"]
     preRun: ["2026-08-17", "2026-08-18"]
+
+  - name: run31
+    # Under way (PIPE2D-1941). First science night 2026-10-30; the last night is provisional until the
+    # run ends (a period still under way is read up to now). preRun from the first master bias (152323,
+    # 2026-10-21 14:08 HST) through the bootstrap and IIS checks of 2026-10-29.
+    nights: ["2026-10-30", "2026-11-30"]
+    preRun: ["2026-10-21", "2026-10-29"]

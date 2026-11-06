@@ -16,6 +16,7 @@ __all__ = [
     "datasetVisits",
     "detectorHoldings",
     "earlierReductions",
+    "earlierRuns",
     "freshPipelines",
 ]
 
@@ -79,6 +80,61 @@ def earlierReductions(butler, prefix: str, period: str, reductions: str, exclude
     pattern = re.compile(rf"{re.escape(base)}/[^/]+{suffix}")
     names = butler.collections.query(f"{base}/*")
     return sorted((name for name in names if pattern.fullmatch(name) and name != exclude), reverse=True)
+
+
+def earlierRuns(butler, prefix: str, period: str, reductions: str, exclude: str) -> list[str]:
+    """Return the RUN collections of a period's earlier comparisons, for a new one's inputs.
+
+    `earlierReductions` names the chains; their *own* runs are what hold the reductions to
+    reuse. Passing the chains themselves would chain each one's inputs again, among them the
+    runs of the collection now being written to, when it is an older version name that a newer
+    one has since taken as input: pipetask then refuses the output chain. Runs of ``exclude``
+    are left out.
+
+    Parameters
+    ----------
+    butler, prefix, period, reductions, exclude
+        As `earlierReductions`.
+
+    Returns
+    -------
+    `list` [`str`]
+        The earlier chains' own runs (`ownRuns`), newest chain first.
+    """
+    runs = []
+    for chain in earlierReductions(butler, prefix, period, reductions, exclude):
+        runs += [run for run in ownRuns(butler, chain) if not run.startswith(exclude.rstrip("/") + "/")]
+    return runs
+
+
+def rebaseOutputChain(butler, output: str, inputs: Sequence[str]) -> list[str]:
+    """Redefine an existing output chain as its own runs followed by ``inputs``, flattened.
+
+    pipetask builds a quantum graph by searching an existing output chain as the registry
+    holds it, and ``--rebase`` rewrites the chain only when it comes to write. A chain defined
+    days ago lacks the reduction RUNs drpActor has made since, so the graph is empty for new
+    visits. Redefining the chain first, with the inputs as they are now, makes the graph see
+    them and keeps ``--rebase``'s consistency check satisfied.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        A writeable Butler.
+    output : `str`
+        The output CHAINED collection; must exist.
+    inputs : sequence of `str`
+        The pass's input collections, in order; chains among them are flattened.
+
+    Returns
+    -------
+    `list` [`str`]
+        The chain's new children.
+    """
+    own = ownRuns(butler, output)
+    flattened = list(butler.collections.query(list(inputs), flatten_chains=True))
+    children = own + [name for name in flattened if name not in own]
+    butler.collections.redefine_chain(output, children)
+    return children
 
 
 def freshPipelines(butler, prefix: str, period: str) -> dict[str, list[str]]:

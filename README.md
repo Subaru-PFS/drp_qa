@@ -729,10 +729,11 @@ the reference thresholds, and writes a report comparing the run with Run25 (`pfs
   `scienceObject` and `scienceObject_windowed` is a calibration, and those are science when their design has a
   science proposal. Twilight frames, dithers and telescope focus sweeps are on engineering designs, so they are
   calibrations.
-- **Everything measurable is judged; only validated types are gated.** `scienceArc`, `scienceTrace` and
-  `scienceObject` are *gated*: their thresholds were derived from and checked against such visits. Every other type
-  `imageQualityQa` can measure (engineering arcs, flats, fiber profiles, focus sweeps, windowed readouts, new
-  types, and the engineering sequences taken as a validated type: bootstraps, IIS `ImageQuality` frames, health
+- **Everything measurable is judged; only validated types are gated.** `scienceArc` and `scienceTrace` are
+  *gated*: their thresholds were derived from and checked against such visits. Every other type
+  `imageQualityQa` can measure (science frames, which it judges as arcs on their sky lines against thresholds
+  derived from arc lamps, until a sky population exists (PIPE2D-1984); engineering arcs, flats, fiber profiles,
+  focus sweeps, windowed readouts, new types, and the engineering sequences taken as a validated type: bootstraps, IIS `ImageQuality` frames, health
   checks, line checks and detectorMap tests, by sequence name) is judged the same way but labelled *unvalidated*, in its own pass and its own report section: a `FAIL`
   there may be what an engineering test expected. Biases and darks have no method yet; test exposures are listed
   only.
@@ -806,6 +807,64 @@ the pipeline writes (not the comparison driver, its report, tests or docs), so a
 collection; uncommitted changes to the rest are refused. Report the reference
 (`--period run25`) first: its stored metrics are what each other run is compared with.
 
+### Calibration inputs
+
+`bin.src/calibInputsReport.py` judges a run's calibration set exposure by exposure and detector by detector, for
+whoever builds `detectorMap_calib` and the fiber profiles from it (PIPE2D-1941): which visits to use per detector,
+which to leave out and why. It reads the set's arcs and traces (cadence `set`, or `--visits`) from the period's
+listing (`fetch`) and what comparison mode measured on them (`iqQaMetrics`, `dmLineResidualMetrics`,
+`dmLineResidualSummary`) from its output collection, or from `exportMetrics.py` exports with `--exports`, and writes a
+Markdown report with its tables beside it as CSV. It is blind: no calibration built from the set is used.
+
+```bash
+python bin.src/qaComparison.py run --period run31 --cadence set --data-dir ~/qa-comparison   # measure the set
+python bin.src/calibInputsReport.py --period run31 --data-dir ~/qa-comparison \
+    --collection u/wtg/comparison/run31/<version> -o calibInputs-run31.md
+```
+
+Each detector image is judged on its own detector against the other exposures of its sequence, with no outside
+reference (`pfs.drp.qa.comparison.calibInputs`, stack-free):
+
+- **out**: the gate or the line residuals FAILed it; or its reserved-line RMS is more than 2x the detector's median
+  over the sequence; or its FWHM is more than 1.25x (either way) from that median *and* the RMS is also off (1.5x). A
+  detector gone wrong mid-sequence shows in both (Run31: n4 from 152673); FWHM alone can be the measurement on a faint
+  lamp's few lines, so it only says *check*.
+- **check**: a WARN, or FWHM or RMS beyond 1.1x / 1.5x the detector's sequence median. Look before deciding.
+- **weak**: a species with fewer than 0.8 of the lines of the detector's best exposure of the sequence: usable, with
+  fewer lines. Kr and Xe fade through a set and Cd and Hg warm up (PIPE2D-1929); the *Lamps through their sequences*
+  section shows it per arm. Line counts don't see the Cd warm-up (the same lines are matched); its flux does
+  (PIPE2D-1922).
+
+The report is a go/no-go: the no-go detector images in one line, species a detector has no go exposure of, visits
+with no data, the go/no-go grid (detectors down, the set's visits across, sequences named), and a per-detector table
+of go and no-go visits; the same grid is written as CSV for the build. *Out* is no-go; every other
+measured image is go. `--detail` adds the reasons for every no-go and check, the weak exposures, the lamp trends and
+three more figures (every verdict, each detector's FWHM and reserved RMS through the set, the lamps through their
+sequences); the per-image tables are always beside the report as CSV. The thresholds are `Thresholds` and the
+`--fwhm-*`, `--rms-*` and `--weak-lines` options. Judging per arm would hide a single bad detector (the medians over
+spectrographs looked normal on Run31's n arm), so nothing aggregates over detectors except the lamp trends.
+
+### Validating a built calibration
+
+`bin.src/calibValidate.py` is the verdict after the build (PIPE2D-1941): it compares candidate calibrations on the same
+visits. `run` reduces the period's set-cadence and daily arcs and traces (or `--visits`) once per candidate through
+`pipelines/qaThresholds.yaml` with drpActor's arc configuration, the candidate's collection first in the inputs so its
+`detectorMap_calib` is the one used (an empty collection means the inputs as they are, e.g. the certified
+calibration in `PFS/defaults`), into `<prefix>/<label>`. `report` lays the candidates' `dmLineResidualMetrics` side by
+side per detector: the offsets and RMS of every line against the calibration (the drift it leaves) and the
+reserved-line RMS against the visit's own map, medians over the set's images and over the nights after it, with a
+figure per detector (`pfs.drp.qa.comparison.calibValidate`, `plotting.calibInputs.plotCalibrationComparison`).
+
+```bash
+python bin.src/calibValidate.py run --period run31 --data-dir ~/qa-comparison --detectors b1 r2 \
+    --candidate asis= --candidate pick=u/wtg/pipe2d-1941/detectorMaps-pick --prefix u/wtg/pipe2d-1941/validate
+python bin.src/calibValidate.py report ... -o validate-run31.md
+```
+
+The set's own images read near zero against a calibration built from them, so the later nights are the fair
+comparison. A candidate built from the go/no-go pick is made with the certified build's own task configurations,
+stack and inputs (read from its collection) and only the visit list changed.
+
 ## Loading QA results into qadb
 
 `pfs.drp.qa.qadb` copies what `imageQualityQa`, `dmLineResiduals` and `bin.src/twilightQa.py` wrote to the Butler
@@ -868,6 +927,14 @@ python bin.src/<script>.py --help
 ### `qaComparison.py`
 
 Comparison mode; see [Comparison mode](#comparison-mode).
+
+### `calibInputsReport.py`
+
+Which exposures of a calibration set to build from, per detector; see [Calibration inputs](#calibration-inputs).
+
+### `calibValidate.py`
+
+Candidate calibrations compared on the same visits; see [Validating a built calibration](#validating-a-built-calibration).
 
 ### `twilightQa.py`
 

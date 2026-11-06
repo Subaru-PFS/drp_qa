@@ -18,14 +18,16 @@ import pandas as pd
 
 from pfs.drp.qa.comparison.findings import lampsOf
 from pfs.drp.qa.comparison.persistence import darkSequences, gapSummary
-from pfs.drp.qa.comparison.residuals import residualProblems, scatterTable
+from pfs.drp.qa.comparison.residuals import driftByImage, residualProblems, scatterTable
 from pfs.drp.qa.metrics.gate import STATUS_ORDER
 from pfs.drp.qa.plotting.comparison import (
     plotArmTimeline,
     plotCoverage,
+    plotDriftTimeline,
     plotMetricComparison,
     plotNightlySeries,
-    plotVerdictGrid,
+    plotSetAgainstReference,
+    plotVerdictTimeline,
 )
 
 __all__ = [
@@ -574,7 +576,7 @@ def buildReport(inputs: ReportInputs) -> str:
     ]
     rows = coverageRows(inputs.summary)
     if not rows.empty:
-        parts.append(_figure(plotCoverage(rows)))
+        parts.append(_details("Coverage by sequence type", _figure(plotCoverage(rows))))
     notMeasured = inputs.summary[~inputs.summary["reason"].isin(["gated", "unvalidated"])]
     if not notMeasured.empty:
         byReason = []
@@ -597,12 +599,9 @@ def buildReport(inputs: ReportInputs) -> str:
     parts.append(_details("Coverage table", _table(inputs.summary)))
 
     parts.append("<h2>Verdicts</h2>")
-    for category in ("calibration", "science"):
-        subset = verdicts[verdicts["category"] == category]
-        if not subset.empty:
-            parts.append(
-                _figure(plotVerdictGrid(subset, title=f"{category.capitalize()}: worst verdict per night"))
-            )
+    calibration = verdicts[verdicts["category"] == "calibration"]
+    if not calibration.empty:
+        parts.append(_figure(plotVerdictTimeline(calibration, title="Calibration images: verdict per visit")))
     if not verdicts.empty:
         parts.append(_details("Counts by type and arm", _table(verdictCounts(verdicts))))
     provisionalImages = provisionalSummary(verdicts)
@@ -622,6 +621,9 @@ def buildReport(inputs: ReportInputs) -> str:
             "<b>UNKNOWN</b>: a metric was measured but no threshold covers its population.</p>"
         )
         parts.append(_table(unjudged))
+
+    parts += _setSection(metrics, reference, inputs.judged, inputs.period, inputs.referenceName)
+    parts += _dailySection(inputs, metrics, reference)
 
     parts.append("<h2>Problems</h2>")
     provisional = ", ".join(f"{arm} ({ticket})" for arm, ticket in PROVISIONAL_ARMS.items())
@@ -651,16 +653,15 @@ def buildReport(inputs: ReportInputs) -> str:
 
     parts += _residualSection(inputs, verdicts)
 
+    start = len(parts)
     if not unvalidated.empty:
         parts += [
-            "<h2 id='unvalidated'>Unvalidated</h2>",
+            "<h3>Unvalidated</h3>",
             "<p class='caption unvalidated'>Judged without validated thresholds: a FAIL may be what the test expected.</p>",
         ]
         judgedUnvalidated = unvalidated[unvalidated["status"].isin(STATUS_ORDER)]
         if judgedUnvalidated.empty:
             parts.append(f"<p>None of the {len(unvalidated)} unvalidated images is judged:</p>")
-        else:
-            parts.append(_figure(plotVerdictGrid(unvalidated, title="Unvalidated: worst verdict per night")))
         unjudgedUnvalidated = notJudgedSummary(unvalidated)
         if not unjudgedUnvalidated.empty:
             parts.append(_table(unjudgedUnvalidated))
@@ -671,7 +672,17 @@ def buildReport(inputs: ReportInputs) -> str:
                 )
             )
 
-    parts.append(f"<h2>Against {_e(inputs.referenceName)}</h2>")
+    if len(parts) > start:
+        parts[start:] = [
+            _details(
+                f"Unvalidated: {len(unvalidated)} images judged without validated thresholds",
+                "".join(parts[start:]),
+                anchor="unvalidated",
+            )
+        ]
+
+    start = len(parts)
+    parts.append(f"<h3>Against {_e(inputs.referenceName)}</h3>")
     if reference is None or reference.empty:
         parts.append(f"<p class='caption'>No {_e(inputs.referenceName)} metrics: report it first.</p>")
     for sequenceType, category, cadence in (
@@ -715,34 +726,12 @@ def buildReport(inputs: ReportInputs) -> str:
             )
             parts.append(_details(summary, "".join(figures)))
 
-    recurring = recurringSequences(inputs.visits)
-    if not recurring.empty:
-        parts += [
-            "<h2>Daily calibrations</h2>",
-            "<p class='caption'>Median per detector and night; shaded: the reference sets' 5-95 %.</p>",
-        ]
-        for index, row in recurring.iterrows():
-            subset = metrics[
-                (metrics["sequence_type"] == row["sequence_type"])
-                & (metrics["sequence_name"].fillna("") == row["sequence_name"])
-                & (metrics["group_name"].fillna("") == row["group_name"])
-            ]
-            label = f"{row['sequence_type']} {row['sequence_name']!r}"
-            previous = None
-            if reference is not None:
-                previous = _select(reference, row["sequence_type"], "calibration", "set")
-                previous = previous[previous["lamps"].isin(subset["lamps"].unique())]
-            figures = [
-                _figure(plotNightlySeries(subset, metric, reference=previous, title=f"{metric}: {label}"))
-                for metric in ("medFwhm", "medDxCenter")
-                if metric in subset and not subset[metric].dropna().empty
-            ]
-            if figures:
-                parts.append(
-                    _details(f"{label}: {row['nights']} nights", "".join(figures), opened=index == 0)
-                )
+    parts[start:] = [_details(f"Against {inputs.referenceName}", "".join(parts[start:]))]
+
     if inputs.lastLit is not None:
-        parts += _persistenceSection(inputs.lastLit, inputs.timeline)
+        parts.append(
+            _details("n-arm darks", "".join(_persistenceSection(inputs.lastLit, inputs.timeline)[1:]))
+        )
     parts.append(_details("How to read this", _HOW_TO_READ))
     return _page(f"{inputs.period} QA comparison", "\n".join(parts))
 
@@ -801,7 +790,6 @@ def _residualSection(inputs: ReportInputs, judgedImages: pd.DataFrame) -> list[s
     if missing:
         parts.append(f"<p class='caption'>{missing} gated images have no line residuals.</p>")
     if not gated.empty:
-        parts.append(_figure(plotVerdictGrid(gated, title="Line residuals: worst verdict per night")))
         parts.append(_details("Counts by type and arm", _table(verdictCounts(gated))))
         actions = gated.pivot_table(
             index="arm", columns="recommendedAction", values="visit", aggfunc="size", fill_value=0
@@ -841,6 +829,164 @@ def _residualSection(inputs: ReportInputs, judgedImages: pd.DataFrame) -> list[s
                     _table(table),
                 )
             )
+    return parts
+
+
+def _setSection(
+    metrics: pd.DataFrame,
+    reference: pd.DataFrame | None,
+    judged: pd.DataFrame,
+    period: str,
+    referenceName: str,
+) -> list[str]:
+    """Return the section that asks whether the calibration set was as good as the reference run's."""
+    parts = [f"<h2>Calibration set against {_e(referenceName)}</h2>"]
+    current = {
+        kind: _select(metrics, sequenceType, "calibration", "set")
+        for kind, sequenceType in (("arcs", "scienceArc"), ("traces", "scienceTrace"))
+    }
+    if all(frame.empty for frame in current.values()):
+        parts.append("<p class='caption'>No calibration set in the period yet.</p>")
+        return parts
+    parts.append(
+        f"<p class='caption'>The set's images against {_e(referenceName)}'s set, the one the thresholds come from:"
+        " each detector's median over its images (filled: this run; hollow: the reference) with a bar over the"
+        " middle two thirds of them, and the WARN and FAIL lines where one pair serves the arm. Which exposures"
+        " to build from is the go/no-go report's business; this says whether the set as a whole stands up.</p>"
+    )
+    for kind, sequenceType in (("arcs", "scienceArc"), ("traces", "scienceTrace")):
+        frame = current[kind]
+        if frame.empty:
+            continue
+        previous = _select(reference, sequenceType, "calibration", "set") if reference is not None else None
+        for metric in ("medFwhm", "pctFlagged"):
+            if metric in frame and frame[metric].notna().any():
+                fig = plotSetAgainstReference(
+                    frame,
+                    previous,
+                    metric,
+                    labels=(period, referenceName),
+                    thresholds=armThresholds(judged[judged["row"].isin(frame.index)], metric),
+                    title=f"{metric}: the set's {kind}",
+                )
+                parts.append(_figure(fig))
+        if "linesPerFiber" not in frame:
+            continue
+        groups = frame.groupby("lamps", sort=True) if kind == "arcs" else [("", frame)]
+        for lamps, byLamp in groups:
+            if byLamp["linesPerFiber"].dropna().empty:
+                continue
+            prev = previous if previous is None or not lamps else previous[previous["lamps"] == lamps]
+            fig = plotSetAgainstReference(
+                byLamp,
+                prev,
+                "linesPerFiber",
+                labels=(period, referenceName),
+                thresholds=armThresholds(judged[judged["row"].isin(byLamp.index)], "linesPerFiber"),
+                title=f"linesPerFiber: the set's {kind}" + (f", {lamps}" if lamps else ""),
+            )
+            parts.append(_figure(fig))
+    return parts
+
+
+def _dailySection(inputs: ReportInputs, metrics: pd.DataFrame, reference: pd.DataFrame | None) -> list[str]:
+    """Return the section that asks whether the nightly arcs and traces drift from the calibration in use."""
+    parts = ["<h2>Daily drift against the current calibration</h2>"]
+    gated = None
+    if inputs.residualSummary is not None and not inputs.residualSummary.empty:
+        residualVerdicts = populations(inputs.residualSummary.reset_index(drop=True), inputs.visits)
+        gated = residualVerdicts[residualVerdicts["validated"].astype(bool)]
+    drift = _driftFigures(inputs.residualMetrics, gated, inputs.referenceResiduals, inputs.referenceName)
+    if drift:
+        parts += drift
+    else:
+        parts.append("<p class='caption'>No nightly arc or trace measured against the calibration yet.</p>")
+    recurring = recurringSequences(inputs.visits)
+    if not recurring.empty:
+        parts.append(
+            "<p class='caption'>Image quality of the nightly sequences: median per detector and night; shaded:"
+            f" {_e(inputs.referenceName)}'s sets' 5-95 %.</p>"
+        )
+        for index, row in recurring.iterrows():
+            subset = metrics[
+                (metrics["sequence_type"] == row["sequence_type"])
+                & (metrics["sequence_name"].fillna("") == row["sequence_name"])
+                & (metrics["group_name"].fillna("") == row["group_name"])
+            ]
+            label = f"{row['sequence_type']} {row['sequence_name']!r}"
+            previous = None
+            if reference is not None:
+                previous = _select(reference, row["sequence_type"], "calibration", "set")
+                previous = previous[previous["lamps"].isin(subset["lamps"].unique())]
+            figures = [
+                _figure(plotNightlySeries(subset, metric, reference=previous, title=f"{metric}: {label}"))
+                for metric in ("medFwhm", "medDxCenter")
+                if metric in subset and not subset[metric].dropna().empty
+            ]
+            if figures:
+                parts.append(
+                    _details(f"{label}: {row['nights']} nights", "".join(figures), opened=index == 0)
+                )
+    return parts
+
+
+def _driftFigures(
+    metrics: pd.DataFrame | None,
+    gated: pd.DataFrame | None,
+    referenceResiduals: pd.DataFrame | None = None,
+    referenceName: str | None = None,
+) -> list[str]:
+    """Return the drift figure: the nightly arcs' and traces' offsets from ``detectorMap_calib``, visit by visit."""
+    if metrics is None or metrics.empty or gated is None or gated.empty:
+        return []
+    keys = ["visit", "arm", "spectrograph"]
+    nightly = gated[gated["cadence"] == "daily"] if "cadence" in gated else gated
+    columns = [*keys, "night", *(c for c in ("calibRun", "cameraSet") if c in nightly)]
+    drift = driftByImage(metrics).merge(nightly[columns].drop_duplicates(keys), on=keys)
+    if drift.empty:
+        return []
+    referenceDrift = None
+    if referenceResiduals is not None and not referenceResiduals.empty:
+        referenceDrift = driftByImage(referenceResiduals)
+        if "cameraSet" in referenceResiduals:
+            # b read with m sits 0.5 px from the b calibration (PIPE2D-1927): not the band's business.
+            sets = referenceResiduals[[*keys, "cameraSet"]].drop_duplicates(keys)
+            referenceDrift = referenceDrift.merge(sets, on=keys, how="left")
+            withM = referenceDrift["cameraSet"].fillna("").astype(str).str.contains("m")
+            referenceDrift = referenceDrift[~(withM & (referenceDrift["arm"] == "b"))]
+        if referenceDrift.empty:
+            referenceDrift = None
+    calibrations = sorted(drift["calibRun"].dropna().unique()) if "calibRun" in drift else []
+    name = referenceName or "reference"
+    parts = [
+        "<p class='caption'>Drift from <code>detectorMap_calib</code> on the nightly arcs and traces, one mark per"
+        " image: in x the traces' median offset (every arc and trace has traces, whatever the lamp; a median over"
+        " lamp species cancels where the species disagree), in y the median over the arc lines' species. The"
+        " visit's detectorMap adjustment absorbs a shift; a trend says when a recalibration is due. A dashed"
+        " vertical line marks the first visit measured against a new calibration: what changes there is the"
+        " reference, not the detector. Hollow: b read with m, which sits about 0.5 px from the b calibration"
+        " (PIPE2D-1927)."
+        + (
+            f" Shaded: {_e(name)}'s calibration arcs and traces against its own calibration, 5-95 %"
+            " (b read with r only)."
+            if referenceDrift is not None
+            else ""
+        )
+        + (
+            f" Calibrations: {', '.join(f'<code>{_e(c)}</code>' for c in calibrations)}."
+            if calibrations
+            else ""
+        )
+        + "</p>",
+        _figure(
+            plotDriftTimeline(
+                drift,
+                title="Drift from detectorMap_calib: nightly arcs and traces, per visit",
+                reference=referenceDrift,
+                referenceLabel=name,
+            )
+        ),
+    ]
     return parts
 
 
@@ -891,9 +1037,10 @@ def _ordered(findings: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _details(summary: str, body: str, opened: bool = False) -> str:
+def _details(summary: str, body: str, opened: bool = False, anchor: str = "") -> str:
     """Return a collapsible block."""
-    return f"<details{' open' if opened else ''}><summary>{_e(summary)}</summary>{body}</details>"
+    attrs = (" open" if opened else "") + (f" id='{anchor}'" if anchor else "")
+    return f"<details{attrs}><summary>{_e(summary)}</summary>{body}</details>"
 
 
 def _date(value) -> str:
