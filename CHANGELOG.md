@@ -8,6 +8,46 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ## [Unreleased]
 
+### Added
+
+- **The comparison report answers two questions in order** (PIPE2D-1941) — *Calibration set against run25*:
+  each detector's FWHM, flag rate and lines per fiber over the set's arcs and traces beside the reference set's,
+  lamp by lamp, with the thresholds (`plotSetAgainstReference`); *Daily drift against the current calibration*:
+  the nightly arcs' and traces' drift from `detectorMap_calib` per visit, shaded with the reference run's
+  calibration images against its own calibration, and the nightly image-quality series. Then the problems and
+  the folded detail.
+
+- **Arcs and traces inside a fiberProfiles group are engineering exposures** (PIPE2D-1941) — most cobras hidden,
+  the rest dithered: judged, not gated (`classify.ENGINEERING_GROUPS`). The drift figure shows the nightly arcs and
+  traces only, with b read with m hollow (PIPE2D-1927).
+
+- **The report shows the drift, not a verdict grid** (PIPE2D-1941) — the Line residuals section plots every
+  gated image's offset from `detectorMap_calib`, visit by visit (`plotDriftTimeline`): x from the traces, y from
+  the arc lines (`residuals.driftByImage`; a median over lamp species cancels where the species disagree, as the
+  b arm's did against the Run30 map), one scale per row, nights named along the top and a dashed line at the first
+  visit measured against each new calibration. It replaces the worst-verdict-per-night grid; the Unvalidated
+  section's grid is gone too. Those grids took the worst of a night's images and coloured nearly every cell.
+
+- **Science frames are unvalidated** (PIPE2D-1941) — `scienceObject` leaves comparison mode's validated types: its
+  images are judged as arcs on their sky lines against thresholds derived from arc lamps, so their verdicts are
+  reported with the unvalidated ones until a sky population exists (PIPE2D-1984).
+
+- **A proposal without a category code is a science program** (PIPE2D-1941) — `S26B-047`-style IDs were
+  `other`, hence engineering, so comparison mode classed their visits as calibration and the report printed their
+  sequence names. `proposalCategory` returns `uncoded` for them, outside `ENGINEERING_CATEGORIES`.
+
+- **Calibration inputs report** (PIPE2D-1941) — `bin.src/calibInputsReport.py --period runNN --collection ...`
+  judges a run's calibration set per exposure and detector from comparison mode's measurements, with no calibration
+  built from it: the gate and line-residual verdicts, FWHM and reserved-line RMS against the detector's own sequence,
+  and each species' line count against the detector's best exposure (lamp warm-up and fading). Reports a go/no-go
+  per detector and visit (a grid, a table, a CSV) for whoever builds the calibrations, with the reasons and lamp
+  trends behind `--detail`, and a figure of each no-go image's line residuals (the first drawing of
+  `dmLineResidualData`). `bin.src/calibValidate.py` then compares candidate calibrations (certified, or rebuilt from
+  the pick) on the same visits: offsets and RMS against each, reserved RMS against the visit's map, per detector.
+  New stack-free `pfs.drp.qa.comparison.calibInputs`, `comparison.calibValidate` and `plotting.calibInputs`. Comparison mode also now rebases the output chain on every pass
+  after the first, and leaves visits without a pfsConfig out of a whole-sequence pass; `observingRuns.yaml` has
+  `run31`.
+
 ### Changed
 
 - **The opdb account is an option** (INSTRM-3089) — `loadQadb.py` and `twilightQa.py` take `--opdb-port`,
