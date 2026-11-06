@@ -480,7 +480,7 @@ bin.src/plotIqQaTimeSeries.py
     ← reads: iqQaMetrics (all quanta in a collection)
     → writes: time-series PNG via pfs.drp.qa.plotting.iqQa.plotIqTimeSeries
 
-bin.src/loadQadb.py / pfs.drp.qa.qadb.loadCollection   (after pipetask, not a task)
+bin.src/loadQadb.py / pfs.drp.qa.qadb.loader.loadCollection   (after pipetask, not a task)
     ← reads: iqQaMetrics, iqQaSpeciesMetrics, dmLineResidualSummary, dmLineResidualMetrics, twilightQaMetrics,
              packages (per RUN); *_config only for tables without thresholdsFiles/thresholdsSha256
     → writes to qadb: image_quality_qa(_species), dm_line_residual_qa(_metric), twilight_qa,
