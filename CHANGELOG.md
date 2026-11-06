@@ -8,6 +8,14 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
 
 ## [Unreleased]
 
+### Added
+
+- **Reading qadb back** (PIPE2D-1924) — `pfs.drp.qa.qadb.reader.readQadb` returns what the loader wrote for a
+  collection as the Butler tables (`iqQaMetrics`, `dmLineResidualSummary`, `dmLineResidualMetrics`, latest RUN per
+  image, one read-only query per table), optionally only the images loaded since a time, and qadb's visit times.
+  `comparison.queries.readVisitTimes` reads visits' SpS start times and IIC sequences by visit. The QA dashboard
+  that uses both is `pfs_qa_dashboard`.
+
 ### Changed
 
 - **The opdb account is an option** (INSTRM-3089) — `loadQadb.py` and `twilightQa.py` take `--opdb-port`,
@@ -191,22 +199,6 @@ repository (`w.2026.29`, `w.2026.09`, …), so sections below are keyed to those
   frame, a health check, a `LineCheck` or a `DetectorMap test` (`ENGINEERING_SEQUENCES`, by sequence name) taken as a
   `scienceTrace` or `scienceArc` lights a handful of fibers or takes lamps off the calibration recipe, and its lines
   scatter like a fault's; they are judged and reported in the *Unvalidated* section, not gated.
-
-- **QA dashboard prototype** (PIPE2D-1924) — `pfs.drp.qa.dashboard`. `qadbSource` reads a collection's QA
-  results back from qadb (read-only, one query per table); `serving` builds them into one long-format metrics table:
-  `iqQaMetrics` and `dmLineResidualMetrics` with each row's verdict and the WARN/FAIL it was judged against (the
-  tasks' own layers: thresholds files, then config fields, read from the config classes or, without the stack,
-  their source) and each source's image verdict. `store` queries it with DuckDB. `app` is a Panel app: Live (the
-  latest visit and sequence group), Run (visit or HST range; verdict heat map and trends with each value's
-  thresholds, by night, gaps between runs labelled) and Visit (a check × camera verdict grid, each value's distance
-  past FAIL, the pipeline's PDFs, line residuals rasterised with Datashader). `bin.src/qaDashboard.py
-  --collection` serves it live: every `--refresh` seconds it reads only the images loaded since
-  (`live.QadbMetricsStore`, one read for every session), and the Live tab follows the latest visit; with
-  `--opdb-host` it adds each visit's IIC sequence, SpS start time and observers' notes, re-reading the notes of
-  recent visits (`comparison.queries.readVisitTimes` is new). With
-  `--write-snapshot` it saves one read, with its provenance, for `--snapshot` to serve offline. The app needs
-  panel, holoviews, datashader and duckdb, which are not dependencies of the package. The dashboard's files are in
-  comparison mode's `RESULT_NEUTRAL_PATHS`: changing them keeps a comparison's collection.
 
 - **b2 and n4 quartz take their reference from Run29** (PIPE2D-1938) — reduced with one pipeline, Runs 25–30 agree
   with Run25 in `medFwhm` to within 3 % everywhere but b2 quartz (SM2's slit refocused on 2026-03-11) and n4 quartz

@@ -1,18 +1,15 @@
-"""Tests for reading the dashboard's Tier 1 table back from qadb (`pfs.drp.qa.dashboard.qadbSource`).
+"""Tests for reading qadb back in the Butler tables' shapes (`pfs.drp.qa.qadb.reader`).
 
 Each test loads the fixtures with the loader, as qaActor does, and reads them back.
 """
 
 from datetime import datetime
 
-import numpy as np
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.dashboard.qadbSource import metricsTableFromQadb, readQadb
-from pfs.drp.qa.dashboard.schema import VERDICT
-from pfs.drp.qa.dashboard.serving import taskThresholds
 from pfs.drp.qa.qadb.loader import loadCollection
+from pfs.drp.qa.qadb.reader import readQadb
 
 COLLECTION = "u/test/qa"
 VISITS = [133025, 133040]
@@ -85,20 +82,3 @@ def testSinceReadsOnlyNewerLoads(butler, qadb):
     newer = readQadb(qadb, COLLECTION, since=stamp)
     assert set(newer["iqQaMetrics"]["visit"]) == {133040}
     assert set(newer["dmLineResidualMetrics"]["visit"]) == {133040}
-
-
-def testMetricsTableHasEachTasksVerdict(butler, fixtures, qadb):
-    load(butler, qadb)
-    table = metricsTableFromQadb(readQadb(qadb, COLLECTION), taskThresholds()[0])
-    verdicts = table[table["metric"] == VERDICT]
-    assert len(verdicts) == 8  # four images, two tasks
-    iq = byImage(verdicts[verdicts["source"] == "iqQaMetrics"])
-    assert iq["status"].tolist() == byImage(fixtures["iqQaMetrics"])["qaStatus"].tolist()
-    # Judged again with the shipped thresholds, for their limits: the quartz images have them.
-    fwhm = table[(table["source"] == "iqQaMetrics") & (table["metric"] == "medFwhm")]
-    traces = fwhm["visit"] == 133040
-    assert np.isfinite(fwhm.loc[traces, "warn"]).all() and traces.sum() == 2
-
-
-def testNothingReadIsAnEmptyTable(qadb):
-    assert metricsTableFromQadb(readQadb(qadb, COLLECTION), taskThresholds()[0]).empty

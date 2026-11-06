@@ -1,48 +1,28 @@
-"""Read the QA results qadb holds back as the dashboard's metrics table (PIPE2D-1924).
+"""Read the QA tables qadb holds back in the Butler tables' shapes (PIPE2D-1924).
 
-During a run qaActor loads every visit it judges into qadb (INSTRM-3040). This
-reads them back in the Butler tables' shapes (`pfs.drp.qa.qadb.tables`, in
-reverse) for `serving.buildMetricsTable`. A run judged after the fact is loaded
-into a qadb the same way (``bin.src/loadQadb.py``). `writeSnapshot` saves a read
-to parquet, for the dashboard offline.
+The inverse of `pfs.drp.qa.qadb.tables`: what `pfs.drp.qa.qadb.loader` wrote for a
+collection (by qaActor after each visit, or ``bin.src/loadQadb.py`` after a run)
+comes back as ``iqQaMetrics``, ``dmLineResidualSummary`` and
+``dmLineResidualMetrics``, for readers without a Butler (the QA dashboard,
+``pfs_qa_dashboard``).
 
 Read-only: one query per table, with bound parameters. An image judged in more
-than one Butler RUN of the collection is shown as the latest RUN judged it.
-Visit times are qadb's ``pfs_visit.issued_at`` (HST); sequences are inferred
-from runs of one ``seqName`` (`serving.inferSequences`), as qadb holds no IIC
-sequence.
+than one Butler RUN of the collection is read as the latest RUN judged it.
+Visit times are qadb's ``pfs_visit.issued_at`` (HST); qadb holds no IIC sequence.
 """
 
-import json
-from collections.abc import Mapping, Sequence
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from pfs.drp.qa.dashboard.serving import buildMetricsTable, inferSequences
-from pfs.drp.qa.qadb.tables import (
-    IMAGE_QUALITY,
-    LINE_RESIDUAL,
-    LINE_RESIDUAL_METRIC,
-    TableSpec,
-    snakeCase,
-)
+from pfs.drp.qa.qadb.tables import IMAGE_QUALITY, LINE_RESIDUAL, LINE_RESIDUAL_METRIC, TableSpec, snakeCase
 
-__all__ = [
-    "FIRST_VISIT",
-    "LAST_VISIT",
-    "metricsTableFromQadb",
-    "readQadb",
-    "readSnapshot",
-    "withSequences",
-    "writeSnapshot",
-]
+__all__ = ["FIRST_VISIT", "LAST_VISIT", "readQadb"]
 
 #: The widest visit range: every visit.
 FIRST_VISIT, LAST_VISIT = 0, 2**31 - 1
 
-#: The tables the dashboard reads, by Butler dataset type.
+#: The tables read back, by Butler dataset type.
 _SPECS = {spec.source: spec for spec in (IMAGE_QUALITY, LINE_RESIDUAL, LINE_RESIDUAL_METRIC)}
 
 # Each image's latest judgement in the collection: the highest processing (Butler RUN) that judged it.
@@ -141,61 +121,3 @@ def readQadb(
     times["time_exp_start"] = pd.to_datetime(times["time_exp_start"])
     tables["visitTimes"] = times.assign(iic_sequence_id=pd.array([pd.NA] * len(times), dtype="Int64"))
     return tables
-
-
-def metricsTableFromQadb(tables: Mapping[str, pd.DataFrame], layers: Mapping[str, Sequence]) -> pd.DataFrame:
-    """Return the metrics table for what `readQadb` read; empty when it read no image.
-
-    Parameters
-    ----------
-    tables : mapping
-        From `readQadb`.
-    layers : mapping
-        The thresholds each task judges with, as `serving.taskThresholds`
-        returns them, to record each metric's limits beside its stored value.
-    """
-    iq = tables["iqQaMetrics"]
-    if iq.empty:
-        return pd.DataFrame()
-    summary, metrics = tables["dmLineResidualSummary"], tables["dmLineResidualMetrics"]
-    hasLines = not summary.empty and not metrics.empty
-    return buildMetricsTable(
-        iq.drop(columns="decidedAt"),
-        layers["iqQaMetrics"],
-        summary.drop(columns="decidedAt") if hasLines else None,
-        metrics.drop(columns="decidedAt") if hasLines else None,
-        tables["visitTimes"],
-        layers["dmLineResidualMetrics"],
-    )
-
-
-def withSequences(table: pd.DataFrame, visitTimes: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Return a metrics table with its sequences and times inferred again over all its visits.
-
-    A table put together from several reads has each read's sequences, numbered
-    apart; this numbers them as one (`serving.inferSequences`).
-    """
-    images = table[["visit", "seqName"]].drop_duplicates("visit")
-    sequences = inferSequences(images, visitTimes)
-    return (
-        table.drop(columns=["sequenceKey", "sequenceSource", "timeExpStart"])
-        .merge(sequences, on="visit", how="left")
-        .reindex(columns=table.columns)
-    )
-
-
-def writeSnapshot(tables: Mapping[str, pd.DataFrame], directory: Path | str, provenance: Mapping) -> Path:
-    """Write what `readQadb` read to ``directory``: ``<table>.parquet`` each, and ``provenance.json``."""
-    directory = Path(directory)
-    directory.mkdir(parents=True, exist_ok=True)
-    for name, frame in tables.items():
-        frame.to_parquet(directory / f"{name}.parquet")
-    (directory / "provenance.json").write_text(json.dumps(dict(provenance), indent=2, default=str) + "\n")
-    return directory
-
-
-def readSnapshot(directory: Path | str) -> tuple[dict[str, pd.DataFrame], dict]:
-    """Return the tables and provenance `writeSnapshot` wrote to ``directory``."""
-    directory = Path(directory)
-    tables = {path.stem: pd.read_parquet(path) for path in sorted(directory.glob("*.parquet"))}
-    return tables, json.loads((directory / "provenance.json").read_text())
