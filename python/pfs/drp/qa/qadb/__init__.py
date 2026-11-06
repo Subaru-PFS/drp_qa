@@ -12,6 +12,7 @@ collections, and a Butler outage or a database outage cannot fail a quantum.
 - `pfs.drp.qa.qadb.writer`: idempotent writes (``INSERT ... ON CONFLICT DO UPDATE``)
   through a `pfs.utils.database.qadb.QaDB`.
 - `pfs.drp.qa.qadb.loader`: read a collection from a Butler and write it.
+- `pfs.drp.qa.qadb.reader`: read a collection back in the Butler tables' shapes.
 - `pfs.drp.qa.qadb.store`: store a per-image table judged after the fact in the Butler, where
   the loader finds it (``twilightQaMetrics``).
 """
