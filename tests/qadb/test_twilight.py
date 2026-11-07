@@ -346,7 +346,7 @@ class TestSequenceOfVisit:
         assert cli() == cli.script.EXIT_JUDGED
         assert list(tmp_path.iterdir()) == []
 
-    def testJudgedStoredAndLoaded(self, cli, qadb, monkeypatch, metrics):
+    def testJudgedStoredAndLoaded(self, cli, qadb, monkeypatch, metrics, scope):
         made = []
 
         def fakeQaDB(**kwargs):
@@ -360,9 +360,10 @@ class TestSequenceOfVisit:
         assert qadb.count("qa_gate") == len(metrics)
         gate = qadb.query_dataframe("SELECT DISTINCT decided_by_task, mode FROM qa_gate")
         assert gate.to_dict("records") == [{"decided_by_task": "twilightQa", "mode": "realtime"}]
-        assert qadb.query_scalars("SELECT DISTINCT collection_name FROM data_processing_pipe2d") == [
-            COLLECTION
-        ]
+        # Among the test collections: a copy of qadb holds real processings too.
+        assert qadb.query_scalars(
+            f"SELECT DISTINCT collection_name FROM data_processing_pipe2d WHERE {scope['data_processing_pipe2d']}"
+        ) == [COLLECTION]
 
     def testAFailedStoreIsPrintedInFull(self, cli, monkeypatch, capsys, metrics):
         def broken(*args, **kwargs):
