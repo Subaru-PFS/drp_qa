@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-06
+
 ### Added
 
 - **The thresholds an image was judged with read back** (PIPE2D-1988) — `pfs.drp.qa.qadb.reader.readQadb` gives
