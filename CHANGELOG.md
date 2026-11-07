@@ -10,6 +10,17 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-06
+
+### Added
+
+- **The thresholds an image was judged with read back** (PIPE2D-1988) — `pfs.drp.qa.qadb.reader.readQadb` gives
+  every table a `thresholdsId` (the file `qa_gate` cites for the image's task) and returns `thresholds`, the cited
+  files' `qa_threshold_entry` rows as the files' tables (the keys stored only in `population`, `species` and
+  `seqName`, parsed back into columns), and `thresholdsFiles`, their `qa_thresholds` rows; `thresholdsTables` gives
+  them to `metrics.gate.judge`. A reader shows the limits an image was judged by, not ones rebuilt from the files
+  its drp_qa ships.
+
 ## [0.1.3] - 2026-11-06
 
 ### Added
