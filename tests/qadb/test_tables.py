@@ -16,12 +16,14 @@ from pfs.drp.qa.qadb.tables import (
     LINE_RESIDUAL,
     LINE_RESIDUAL_METRIC,
     QA_GATE,
+    QA_GATE_THRESHOLDS,
     QA_THRESHOLD_ENTRY,
     QA_THRESHOLDS,
     TASK_TABLES,
     TWILIGHT_QA,
     cameraName,
     gateRows,
+    gateThresholdsRows,
     imageRows,
     populationKey,
     snakeCase,
@@ -66,6 +68,7 @@ def testSpecsMatchTheSchema(ddlColumns):
     assert list(QA_THRESHOLDS) == ddlColumns["qa_thresholds"]
     assert list(QA_THRESHOLD_ENTRY) == ddlColumns["qa_threshold_entry"]
     assert list(QA_GATE) == ddlColumns["qa_gate"]
+    assert list(QA_GATE_THRESHOLDS) == ddlColumns["qa_gate_thresholds"]
     # Negative control: a column the schema lacks is caught.
     assert "fit_trace_x_rms" not in ddlColumns["image_quality_qa"]
     assert "fitTraceXRms" not in IMAGE_QUALITY.columns
@@ -226,9 +229,7 @@ class TestGateRows:
                 (4, "b", 1, "FAIL", "medianDeltaX", "offset"),
             ]
         )
-        gate = gateRows(
-            {"imageQualityQa": iq, "dmLineResiduals": dm}, 9, "comparison", NOW, {"imageQualityQa": 1}
-        )
+        gate = gateRows({"imageQualityQa": iq, "dmLineResiduals": dm}, 9, "comparison", NOW)
         assert list(gate.columns) == list(QA_GATE)
         assert gate["camera_name"].tolist() == ["b1", "r1", "b1", "b1", "b1"]
         assert gate["qa_status"].tolist() == ["WARN", "FAIL", "PASS", "UNKNOWN", "FAIL"]
@@ -243,8 +244,6 @@ class TestGateRows:
         assert gate.loc[1, "qa_reason"] == "imageQualityQa: medFwhm 3.5 > 3.0; dmLineResiduals: scatter"
         assert gate.loc[2, "qa_reason"] == "imageQualityQa: no metric measured"
         assert (gate["mode"] == "comparison").all()
-        assert gate["iq_thresholds_id"].tolist() == [1] * 5
-        assert gate["dm_thresholds_id"].isna().all()
         assert gate["provisional"].isna().all()  # neither task said
         assert (gate["decided_at"] == NOW).all()
         # Negative control: alphabetical order would call image r1 "WARN", not FAIL.
@@ -258,24 +257,11 @@ class TestGateRows:
         assert gate["processing_id"].tolist() == [11, 22]
         assert gate["provisional"].tolist() == [True, None]
 
-    def testThresholdsOnlyWhereTheTaskJudged(self):
-        iq = self.task([(1, "b", 1, "PASS", "", "")])
-        dm = self.task([(1, "b", 1, "PASS", "", ""), (1, "r", 1, "PASS", "", "")])
-        ids = {"imageQualityQa": 7, "dmLineResiduals": 8}
-        gate = gateRows({"imageQualityQa": iq, "dmLineResiduals": dm}, 1, "backfill", NOW, ids)
-        assert gate["iq_thresholds_id"].tolist() == [7, None]  # r1 was not judged by imageQualityQa
-        assert gate["dm_thresholds_id"].tolist() == [8, 8]
-
-    def testThresholdsPerImage(self):
-        """An image's own thresholdsId wins over its task's id; a null one stays null."""
-        iq = self.task([(1, "b", 1, "PASS", "", ""), (1, "r", 1, "PASS", "", "")]).assign(
-            thresholdsId=[3, None]
-        )
-        dm = self.task([(1, "b", 1, "PASS", "", ""), (2, "b", 1, "PASS", "", "")])
-        ids = {"imageQualityQa": 7, "dmLineResiduals": 8}
-        gate = gateRows({"imageQualityQa": iq, "dmLineResiduals": dm}, 1, "backfill", NOW, ids)
-        assert gate["iq_thresholds_id"].tolist() == [3, None, None]  # b1, r1, then visit 2 not judged
-        assert gate["dm_thresholds_id"].tolist() == [8, None, 8]
+    def testNoThresholdsInTheGateRow(self):
+        """What judged an image is `gateThresholdsRows`' business: the gate row carries none of it."""
+        iq = self.task([(1, "b", 1, "PASS", "", "")]).assign(thresholdsIds=[[7, 8]])
+        gate = gateRows({"imageQualityQa": iq}, 1, "backfill", NOW)
+        assert list(gate.columns) == list(QA_GATE) and not any("thresholds" in c for c in gate.columns)
 
     def testRowWithoutVerdictIsUnknownAndDecides(self):
         iq = self.task([(1, "b", 1, None, "", ""), (2, "b", 1, np.nan, "", "")])
@@ -292,3 +278,41 @@ class TestGateRows:
         assert worstStatus(["PASS", None, np.nan]) == "PASS"
         assert worstStatus(["UNKNOWN", "PASS"]) == "PASS"
         assert worstStatus(["WARN", "FAIL", "PASS"]) == "FAIL"
+
+
+class TestGateThresholdsRows:
+    """Every layer of every task, keyed like the gate row and in the order judged."""
+
+    def task(self, images, **columns):
+        frame = pd.DataFrame(images, columns=["visit", "arm", "spectrograph"]).assign(qaStatus="PASS")
+        return frame.assign(**columns)
+
+    def testLayersInOrderWithGaps(self):
+        iq = self.task([(1, "b", 1), (1, "r", 1)], thresholdsIds=[[5, 7], [None, 7]])
+        dm = self.task([(1, "b", 1)], thresholdsIds=[[8]])
+        gate = gateRows({"imageQualityQa": iq, "dmLineResiduals": dm}, 3, "backfill", NOW)
+        rows = gateThresholdsRows(gate, {"imageQualityQa": iq, "dmLineResiduals": dm})
+        assert list(rows.columns) == list(QA_GATE_THRESHOLDS)
+        assert rows[["camera_name", "task", "layer", "thresholds_id"]].to_numpy().tolist() == [
+            ["b1", "imageQualityQa", 0, 5],
+            ["b1", "imageQualityQa", 1, 7],
+            ["b1", "dmLineResiduals", 0, 8],
+            ["r1", "imageQualityQa", 1, 7],  # layer 0 could not be cited: a gap, not a shift
+        ]
+        assert (rows["processing_id"] == 3).all() and (rows["pfs_visit_id"] == 1).all()
+        # Negative control: the order is the order judged, so the config layer is never first.
+        assert rows.loc[rows["thresholds_id"] == 7, "layer"].tolist() != [0, 0]
+
+    def testProcessingIsTheGateRows(self):
+        iq = self.task([(1, "b", 1), (1, "r", 1)], thresholdsIds=[[5], [5]], run=["r1", "r2"])
+        gate = gateRows({"imageQualityQa": iq}, {"r1": 11, "r2": 22}, "realtime", NOW)
+        rows = gateThresholdsRows(gate, {"imageQualityQa": iq})
+        assert rows["processing_id"].tolist() == [11, 22]
+
+    def testTablesWithoutLayersContributeNone(self):
+        iq = self.task([(1, "b", 1), (2, "b", 1)], thresholdsIds=[[5], []])
+        gate = gateRows({"imageQualityQa": iq}, 1, "backfill", NOW)
+        rows = gateThresholdsRows(gate, {"imageQualityQa": iq})
+        assert rows[["pfs_visit_id", "layer", "thresholds_id"]].to_numpy().tolist() == [[1, 0, 5]]
+        assert gateThresholdsRows(gate, {"imageQualityQa": iq.drop(columns="thresholdsIds")}).empty
+        assert gateThresholdsRows(gate, {}).empty

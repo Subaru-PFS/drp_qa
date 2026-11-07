@@ -10,6 +10,24 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Changed
+
+- **Every thresholds layer an image was judged with is cited** (PIPE2D-1991) — a task judges each metric by the
+  first of its layers with an entry for the image: its thresholds files, then its config's threshold fields.
+  `qa_gate` cited the first layer alone, so a metric a later layer judged (the `medianDeltaX/Y` drift rows of
+  `dmLineResiduals`, which the run25 file leaves to the config) had no stored limits. Now `imageQualityQa` and
+  `dmLineResiduals` record the config's fields as a layer of their own (`metrics.gate.thresholdsDocument`: the
+  table written as a thresholds file, so it has a content hash; `taskThresholdsRecord` lists it after the files
+  as `<task>.config`), the qadb loader registers it in `qa_thresholds` under that name when the RUN's stored
+  config rebuilds the recorded content (`loader.CONFIG_LAYERS`, `configDocumentOf`; a mismatch is logged and the
+  layer left out) and writes every layer, in order, to the new `qa_gate_thresholds`, the one record of what judged
+  an image: `qa_gate`'s `iq/dm/twilight_thresholds_id` are gone, their values moved in as layer 0 by the migration
+  (spt_qa_database 0.4.0, `acbd1a9681d6`). `qadb.reader.readQadb` gives each table `thresholdsIds` (the cited ids
+  in the order judged, comma-joined; `thresholdsLayers` splits it, `layeredThresholds` gives `judge` the tables) in
+  place of `thresholdsId`, and a `thresholdsLayers` table. `qadb.tables.gateRows` takes no thresholds.
+  `metrics.calibration.parseThresholds` reads a document from text, `writer.registerThresholdsContent` registers
+  one from bytes.
+
 ## [0.1.4] - 2026-11-06
 
 ### Added

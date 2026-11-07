@@ -3,7 +3,7 @@
 The Butler is the record: ``imageQualityQa`` and ``dmLineResiduals`` write one
 table per detector image there, as does ``bin.src/twilightQa.py`` once a twilight
 sequence is complete (``twilightQaMetrics``), and this package copies
-those tables, with the thresholds they were judged by and a per-image gate verdict, into qadb
+those tables, with every thresholds layer they were judged by and a per-image gate verdict, into qadb
 (``spt_qa_database``) after the fact. One code path serves qaActor after each
 visit's pipetask, comparison mode after a run, and the backfill of whole
 collections, and a Butler outage or a database outage cannot fail a quantum.

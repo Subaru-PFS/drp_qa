@@ -36,10 +36,14 @@ from pfs.drp.qa.utils.provenance import PIPELINE_PRODUCTS
 __all__ = [
     "DEFAULT_METRICS",
     "METRIC_SPECS",
+    "THRESHOLDS_VERSION",
     "MetricSpec",
     "addSpecies",
     "calibrate",
     "labelRows",
+    "parseThresholds",
+    "plainValue",
+    "populationValue",
     "readThresholds",
     "selectGroup",
     "summarizeGood",
@@ -508,11 +512,11 @@ def writeThresholds(
         spec = specFor(row["metric"])
         entry = {
             "metric": row["metric"],
-            "population": {column: _populationValue(row[column]) for column in columns},
+            "population": {column: populationValue(row[column]) for column in columns},
             "higherIsWorse": spec.higherIsWorse,
             "absolute": spec.absolute,
         }
-        entry |= {name: _plain(row[name]) for name in _THRESHOLD_FIELDS}
+        entry |= {name: plainValue(row[name]) for name in _THRESHOLD_FIELDS}
         entries.append(entry)
     document = {
         "version": THRESHOLDS_VERSION,
@@ -552,10 +556,29 @@ def readThresholds(path: Path | str) -> tuple[dict, pd.DataFrame]:
         If the file's version is not one this reader knows (1 or
         `THRESHOLDS_VERSION`).
     """
-    document = yaml.safe_load(Path(path).read_text())
+    return parseThresholds(Path(path).read_text(), str(path))
+
+
+def parseThresholds(text: str | bytes, source: str = "<thresholds>") -> tuple[dict, pd.DataFrame]:
+    """Read a thresholds document: a file's text (`readThresholds`), or one that was never a file.
+
+    Parameters
+    ----------
+    text : `str` or `bytes`
+        The document, as `writeThresholds` writes it or
+        `pfs.drp.qa.metrics.gate.thresholdsDocument` returns it.
+    source : `str`, optional
+        What to call it in an error.
+
+    Returns
+    -------
+    metadata, thresholds
+        As for `readThresholds`.
+    """
+    document = yaml.safe_load(text.decode() if isinstance(text, bytes) else text)
     version = document.get("version")
     if version not in _READABLE_VERSIONS:
-        raise ValueError(f"{path}: thresholds version {version!r}, expected one of {_READABLE_VERSIONS}")
+        raise ValueError(f"{source}: thresholds version {version!r}, expected one of {_READABLE_VERSIONS}")
     if version == 1:
         document["thresholds"] = [{"method": "percentile"} | entry for entry in document["thresholds"]]
     rows = [
@@ -582,14 +605,14 @@ def _pipeline(versions: Mapping[str, str]) -> dict[str, str]:
     return {product: str(versions[product]) for product in ordered}
 
 
-def _populationValue(value):
+def populationValue(value):
     """Return a population value for the file: a spectrograph 2, not the 2.0 a column with nulls holds."""
-    value = _plain(value)
+    value = plainValue(value)
     return int(value) if isinstance(value, float) and value.is_integer() else value
 
 
-def _plain(value):
-    """Return ``value`` as a YAML-safe Python scalar (numpy types and NaN included)."""
+def plainValue(value):
+    """Return ``value`` as a YAML-safe Python scalar (numpy types and NaN included): NaN is `None`."""
     if isinstance(value, np.generic):
         value = value.item()
     if isinstance(value, float) and not np.isfinite(value):
