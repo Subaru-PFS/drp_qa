@@ -20,11 +20,13 @@ made, and earlier sections to the weekly tag alone.
   table written as a thresholds file, so it has a content hash; `taskThresholdsRecord` lists it after the files
   as `<task>.config`), the qadb loader registers it in `qa_thresholds` under that name when the RUN's stored
   config rebuilds the recorded content (`loader.CONFIG_LAYERS`, `configDocumentOf`; a mismatch is logged and the
-  layer left out) and writes every layer, in order, to the new `qa_gate_thresholds`, the one record of what judged
-  an image: `qa_gate`'s `iq/dm/twilight_thresholds_id` are gone, their values moved in as layer 0 by the migration
-  (spt_qa_database 0.4.0, `acbd1a9681d6`). `qadb.reader.readQadb` gives each table `thresholdsIds` (the cited ids
-  in the order judged, comma-joined; `thresholdsLayers` splits it, `layeredThresholds` gives `judge` the tables) in
-  place of `thresholdsId`, and a `thresholdsLayers` table. `qadb.tables.gateRows` takes no thresholds.
+  layer left out) and writes every layer, in order, to the new `qa_processing_thresholds`, one row per processing
+  (a Butler RUN, which has one config), task and layer: the one record of what judged an image. `qa_gate`'s
+  `iq/dm/twilight_thresholds_id` are gone, their values moved in as layer 0 by the migration (spt_qa_database
+  0.4.0, `acbd1a9681d6`). `qadb.reader.readQadb` gives each table `thresholdsIds` (its processing's cited ids in
+  the order judged, comma-joined; `thresholdsLayers` splits it, `layeredThresholds` gives `judge` the tables) in
+  place of `thresholdsId`. `qadb.tables.gateRows` takes no thresholds; `processingThresholdsRows` makes the layer
+  rows.
   `metrics.calibration.parseThresholds` reads a document from text, `writer.registerThresholdsContent` registers
   one from bytes.
 

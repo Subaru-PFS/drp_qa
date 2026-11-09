@@ -8,7 +8,7 @@ The tables ``imageQualityQa`` and ``dmLineResiduals`` wrote for the visits
 collection and Butler RUN (``data_processing_pipe2d``), the visit and the camera;
 the thresholds layers each image was judged with (its task's files, then its
 config's fields) to ``qa_thresholds``; and each image's worst verdict to
-``qa_gate``, with every layer cited in ``qa_gate_thresholds``. Loading is idempotent: run it again after a
+``qa_gate``, with every layer cited per processing in ``qa_processing_thresholds``. Loading is idempotent: run it again after a
 re-judgement, or after a load that stopped.
 
 Examples::

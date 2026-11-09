@@ -17,7 +17,6 @@ from pfs.drp.qa.qadb.reader import (
     THRESHOLDS_COLUMNS,
     THRESHOLDS_FILES_COLUMNS,
     THRESHOLDS_IDS,
-    THRESHOLDS_LAYERS_COLUMNS,
     layeredThresholds,
     readQadb,
     thresholdsLayers,
@@ -197,7 +196,7 @@ def testEmptyReadHasTheThresholdsColumns(butler, qadb):
     tables = readQadb(qadb, "u/test/other")
     assert tables["thresholds"].empty and list(tables["thresholds"].columns) == list(THRESHOLDS_COLUMNS)
     assert tables["thresholdsFiles"].empty
-    assert THRESHOLDS_IDS in tables["iqQaMetrics"].columns and tables["thresholdsLayers"].empty
+    assert THRESHOLDS_IDS in tables["iqQaMetrics"].columns
     assert thresholdsTables(tables["thresholds"]) == {}
 
 
@@ -253,9 +252,6 @@ def testEveryLayerReadsBack(StubButler, fixtures, fullConfigs, qadb):
         )
         expected = f"{files[fileName]},{files[f'{task}.config']}"
         assert set(frame[THRESHOLDS_IDS]) == {expected}, source
-    layers = tables["thresholdsLayers"]
-    assert list(layers.columns) == list(THRESHOLDS_LAYERS_COLUMNS)
-    assert len(layers) == 16 and set(layers["layer"]) == {0, 1}
     # The layers give judge what the task judged with: the drift rows, which the run25 file lacks, have limits.
     stored = thresholdsTables(tables["thresholds"])
     key = tables["dmLineResidualSummary"][THRESHOLDS_IDS].iloc[0]
@@ -299,7 +295,9 @@ def testLayersSinceAndNone(StubButler, fixtures, fullConfigs, configs, qadb):
     )
     stamp = readQadb(qadb, COLLECTION)["iqQaMetrics"]["decidedAt"].max()
     newer = readQadb(qadb, COLLECTION, since=stamp)
-    assert set(newer["thresholdsLayers"]["visit"]) == {133040}
+    assert (newer["iqQaMetrics"][THRESHOLDS_IDS] != "").all() and set(newer["iqQaMetrics"]["visit"]) == {
+        133040
+    }
     assert thresholdsLayers("") == thresholdsLayers(None) == [] and layeredThresholds(None, {}) == []
     none = StubButler(
         {
@@ -315,6 +313,4 @@ def testLayersSinceAndNone(StubButler, fixtures, fullConfigs, configs, qadb):
     tables = readQadb(other, COLLECTION)
     assert (tables["dmLineResidualSummary"][THRESHOLDS_IDS] == "").all()
     empty = readQadb(other, "u/test/none")
-    assert THRESHOLDS_IDS in empty["iqQaMetrics"].columns and list(empty["thresholdsLayers"].columns) == list(
-        THRESHOLDS_LAYERS_COLUMNS
-    )
+    assert THRESHOLDS_IDS in empty["iqQaMetrics"].columns and "thresholdsLayers" not in empty

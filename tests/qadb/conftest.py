@@ -98,12 +98,10 @@ CREATE TABLE twilight_qa (
     twilight_patch REAL, twilight_arm_mean REAL, twilight_arm_half_diff REAL, qa_status TEXT,
     qa_decided_by TEXT, qa_reason TEXT,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
-CREATE TABLE qa_gate_thresholds (
-    processing_id INTEGER, pfs_visit_id INTEGER, camera_name VARCHAR(2), task TEXT, layer INTEGER,
+CREATE TABLE qa_processing_thresholds (
+    processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE, task TEXT, layer INTEGER,
     thresholds_id INTEGER NOT NULL REFERENCES qa_thresholds,
-    PRIMARY KEY (processing_id, pfs_visit_id, camera_name, task, layer),
-    FOREIGN KEY (processing_id, pfs_visit_id, camera_name)
-        REFERENCES qa_gate (processing_id, pfs_visit_id, camera_name) ON DELETE CASCADE);
+    PRIMARY KEY (processing_id, task, layer));
 """
 
 #: The tables `DDL` makes, in dependency order.

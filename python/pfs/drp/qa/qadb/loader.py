@@ -6,8 +6,9 @@ as its pipetask has run (`loadVisit`), comparison mode for a run, and
 ``data_processing_pipe2d`` row, with the drp_qa that wrote it (from the RUN's
 ``packages`` dataset) and the pipeline that reduced the images it judged (from
 their ``pfsArm`` headers, as comparison mode reads them); the thresholds layers
-each image was judged with are registered and cited, in order, in
-``qa_gate_thresholds``, and its gate verdict is written to ``qa_gate``.
+each image was judged with are registered and cited, in order, per processing
+and task in ``qa_processing_thresholds`` (a RUN has one config, so its images
+share them), and its gate verdict is written to ``qa_gate``.
 
 The tasks record those layers with each image, by name and SHA-256 as they were
 at judgement time (`pfs.drp.qa.metrics.gate.thresholdsRecord`), so what the
@@ -52,13 +53,14 @@ from pfs.drp.qa.qadb.tables import (
     LINE_RESIDUAL,
     LINE_RESIDUAL_METRIC,
     QA_GATE,
-    QA_GATE_THRESHOLDS,
+    QA_PROCESSING_THRESHOLDS,
     TASK_TABLES,
     TWILIGHT_QA,
     TableSpec,
     gateRows,
-    gateThresholdsRows,
     imageRows,
+    processingTasks,
+    processingThresholdsRows,
 )
 from pfs.drp.qa.qadb.writer import (
     UNKNOWN_VERSION,
@@ -471,7 +473,7 @@ def loadCollection(
     Returns
     -------
     `dict` [`str`, `int`]
-        Rows written per table (``qa_gate_thresholds`` counts layers cited),
+        Rows written per table (``qa_processing_thresholds`` counts layers cited),
         and ``processings``: the RUNs found.
 
     Raises
@@ -566,16 +568,17 @@ def loadCollection(
     # replaces the row the per-visit load wrote under pipetask's RUN rather than adding one.
     present = {task: table for task, table in images.items() if not table.empty}
     gate = gateRows(present, ids, mode, now()) if present else gateRows({}, 0, mode, now())
-    layers = gateThresholdsRows(gate, present)
+    layers = processingThresholdsRows(present, ids, log)
     if sink is not None:
         write("qa_gate", gate, list(QA_GATE[:3]))
-        write("qa_gate_thresholds", layers, list(QA_GATE_THRESHOLDS[:5]))
+        write("qa_processing_thresholds", layers, list(QA_PROCESSING_THRESHOLDS[:3]))
     else:
-        # Every layer of an image's new judgement replaces the old ones, with its gate row, in one transaction.
+        # The layers of each processing and task loaded replace the old ones, with the gate rows, in one
+        # transaction: a re-judgement with fewer layers leaves none behind.
         with qadb.connection() as conn:
             write("qa_gate", gate, list(QA_GATE[:3]), conn=conn)
-            deleteRows(qadb, "qa_gate_thresholds", gate[list(KEYS)], conn=conn)
-            write("qa_gate_thresholds", layers, list(QA_GATE_THRESHOLDS[:5]), conn=conn)
+            deleteRows(qadb, "qa_processing_thresholds", processingTasks(present, ids), conn=conn)
+            write("qa_processing_thresholds", layers, list(QA_PROCESSING_THRESHOLDS[:3]), conn=conn)
     log(f"loaded {collection} in {time.monotonic() - start:.0f} s")
     return counts
 

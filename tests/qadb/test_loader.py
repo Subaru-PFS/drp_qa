@@ -80,7 +80,7 @@ def recorded(
     }
 
 
-#: The ``qa_gate_thresholds`` task of each former ``qa_gate`` column.
+#: The ``qa_processing_thresholds`` task of each former ``qa_gate`` column.
 FIRST_LAYER = {
     "iq_thresholds_id": "imageQualityQa",
     "dm_thresholds_id": "dmLineResiduals",
@@ -95,8 +95,7 @@ def firstLayers(qadb) -> pd.DataFrame:
     """
     rows = qadb.query_dataframe(
         "SELECT g.pfs_visit_id, g.camera_name, t.task, t.thresholds_id FROM qa_gate g"
-        " LEFT JOIN qa_gate_thresholds t ON t.processing_id = g.processing_id"
-        " AND t.pfs_visit_id = g.pfs_visit_id AND t.camera_name = g.camera_name AND t.layer = 0"
+        " LEFT JOIN qa_processing_thresholds t ON t.processing_id = g.processing_id AND t.layer = 0"
         " ORDER BY g.pfs_visit_id, g.camera_name"
     )
     frame = rows[["pfs_visit_id", "camera_name"]].drop_duplicates(ignore_index=True)
@@ -189,7 +188,7 @@ class TestLoadCollection:
             "dm_line_residual_qa": 4,
             "dm_line_residual_qa_metric": 128,
             "qa_gate": 4,
-            "qa_gate_thresholds": 8,  # one file per task and image; these configs have no threshold fields
+            "qa_processing_thresholds": 2,  # one file per task, once for the RUN; these configs have no fields
         }
         processing = qadb.query_dataframe(
             "SELECT * FROM data_processing_pipe2d WHERE collection_name = :c", params={"c": COLLECTION}
@@ -447,13 +446,13 @@ class TestLoadCollection:
             "dm_line_residual_qa",
             "dm_line_residual_qa_metric",
             "qa_gate",
-            "qa_gate_thresholds",
+            "qa_processing_thresholds",
         }
         gate = pd.read_parquet(tmp_path / "qa_gate.parquet")
         assert (gate["processing_id"] < 0).all()  # placeholders: no database was asked
         assert not any("thresholds" in column for column in gate.columns)
         assert pd.read_parquet(
-            tmp_path / "qa_gate_thresholds.parquet"
+            tmp_path / "qa_processing_thresholds.parquet"
         ).empty  # nothing registered, nothing cited
 
     def testPipelineVersions(self, StubButler, tables, configs, qadb):
@@ -591,17 +590,24 @@ class TestRecordedThresholds:
             "dmLineResidualThresholds-run25.yaml"
         }
 
-    def testPerImage(self, StubButler, tables, configs, qadb):
-        """Images of one RUN that judged with different files cite their own."""
+    def testImagesOfOneRunDisagreeing(self, StubButler, tables, configs, qadb):
+        """A RUN has one config, so its images record the same layers; should they not, the first image's are cited."""
         iq = recorded(tables)["iqQaMetrics"]
         later = iq["visit"] == 133040
         iq.loc[later, list(thresholdsRecord([]))] = list(
             thresholdsRecord(["iqQaThresholds-iis-run30.yaml"]).values()
         )
-        load(StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs), qadb)
+        messages = self.logged(StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs), qadb)
         gate = self.gate(qadb).set_index("pfs_visit_id")["iq_thresholds_id"]
-        assert set(gate[133025]) == {self.idOf(qadb, "iqQaThresholds-run25.yaml")}
-        assert set(gate[133040]) == {self.idOf(qadb, "iqQaThresholds-iis-run30.yaml")}
+        assert set(gate) == {self.idOf(qadb, "iqQaThresholds-run25.yaml")}
+        assert (
+            messages.count(
+                f"{RUN}: imageQualityQa's images record different thresholds layers; citing the first image's"
+            )
+            == 1
+        )
+        # Both files are registered all the same: every recorded layer is.
+        assert self.idOf(qadb, "iqQaThresholds-iis-run30.yaml") is not None
 
     def logged(self, butler, qadb):
         messages = []
@@ -666,15 +672,15 @@ class TestRecordedThresholds:
         assert sum("entries missing" in m for m in messages) == 1
 
     def testMalformedRecordIsNullAndLogged(self, StubButler, tables, configs, qadb):
-        """A record naming one file with two hashes leaves that image's id null; the load goes on."""
+        """A record naming one file with two hashes is logged and left to the RUN's other images; the load goes on."""
         iq = recorded(tables)["iqQaMetrics"]
         bad = (iq["visit"] == 133025).to_numpy()
         iq.loc[bad, "thresholdsSha256"] = "f" * 64 + "," + "e" * 64
         messages = self.logged(StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs), qadb)
         gate = self.gate(qadb).set_index("pfs_visit_id")
-        assert gate.loc[133025, "iq_thresholds_id"].isna().all()
-        assert gate.loc[133040, "iq_thresholds_id"].notna().all()
-        assert gate["dm_thresholds_id"].notna().all()
+        # The layers are the RUN's: the images with a readable record decide them, for the unreadable one too.
+        assert gate["iq_thresholds_id"].notna().all() and gate["dm_thresholds_id"].notna().all()
+        assert not any("different thresholds layers" in m for m in messages)
         assert (
             sum("1 thresholds layers recorded with 2 SHA-256s" in m for m in messages) == 2
         )  # one per image
@@ -685,9 +691,9 @@ class TestConfigLayers:
 
     def layers(self, qadb):
         return qadb.query_dataframe(
-            "SELECT g.pfs_visit_id, g.camera_name, g.task, g.layer, t.name FROM qa_gate_thresholds g"
-            " JOIN qa_thresholds t ON t.thresholds_id = g.thresholds_id"
-            " ORDER BY g.pfs_visit_id, g.camera_name, g.task, g.layer"
+            "SELECT p.processing_id, p.task, p.layer, t.name FROM qa_processing_thresholds p"
+            " JOIN qa_thresholds t ON t.thresholds_id = p.thresholds_id"
+            " ORDER BY p.processing_id, p.task, p.layer"
         )
 
     def logged(self, butler, qadb):
@@ -704,7 +710,7 @@ class TestConfigLayers:
         return messages
 
     def testConfigLayerIsRebuiltFromTheStoredConfigAndCited(self, StubButler, tables, fullConfigs, qadb):
-        """Each image cites its file, then its config layer, in ``qa_gate_thresholds``; ``qa_gate`` the file."""
+        """The RUN cites each task's file, then its config layer, in ``qa_processing_thresholds``."""
         datasets = {"packages": {"drp_qa": "x"}, **fullConfigs}
         counts = load(StubButler(recorded(tables, configs=fullConfigs), datasets=datasets), qadb)
         names = qadb.query_dataframe("SELECT thresholds_id, name, n_entries FROM qa_thresholds")
@@ -715,17 +721,12 @@ class TestConfigLayers:
             "dmLineResiduals.config",
         }
         layers = self.layers(qadb)
-        assert counts["qa_gate_thresholds"] == len(layers) == 16  # 4 images x 2 tasks x 2 layers
-        perImage = layers.groupby(["pfs_visit_id", "camera_name", "task"])["name"].agg(list)
-        assert all(
-            perImage.xs("imageQualityQa", level="task").map(tuple)
-            == ("iqQaThresholds-run25.yaml", "imageQualityQa.config")
-        )
-        assert all(
-            perImage.xs("dmLineResiduals", level="task").map(tuple)
-            == ("dmLineResidualThresholds-run25.yaml", "dmLineResiduals.config")
-        )
-        assert layers["layer"].tolist() == [0, 1] * 8
+        assert counts["qa_processing_thresholds"] == len(layers) == 4  # one RUN x 2 tasks x 2 layers
+        assert layers["processing_id"].nunique() == 1
+        byTask = layers.groupby("task")["name"].agg(tuple)
+        assert byTask["imageQualityQa"] == ("iqQaThresholds-run25.yaml", "imageQualityQa.config")
+        assert byTask["dmLineResiduals"] == ("dmLineResidualThresholds-run25.yaml", "dmLineResiduals.config")
+        assert layers["layer"].tolist() == [0, 1] * 2
         # qa_gate itself cites nothing: the layers are the one record.
         assert not {"iq_thresholds_id", "dm_thresholds_id", "twilight_thresholds_id"} & set(
             qadb.query_dataframe("SELECT * FROM qa_gate").columns
@@ -800,28 +801,32 @@ class TestConfigLayers:
         """A table recording nothing gets its RUN's config: the files it names, then its fields."""
         datasets = {"packages": {"drp_qa": "x"}, **fullConfigs}
         messages = self.logged(StubButler(tables, datasets=datasets), qadb)
-        layers = self.layers(qadb)
-        perImage = layers.groupby(["pfs_visit_id", "camera_name", "task"])["name"].agg(tuple)
-        assert set(perImage.xs("imageQualityQa", level="task")) == {
-            ("iqQaThresholds-run25.yaml", "imageQualityQa.config")
-        }
-        assert set(perImage.xs("dmLineResiduals", level="task")) == {
-            ("dmLineResidualThresholds-run25.yaml", "dmLineResiduals.config")
-        }
+        byTask = self.layers(qadb).groupby("task")["name"].agg(tuple)
+        assert byTask["imageQualityQa"] == ("iqQaThresholds-run25.yaml", "imageQualityQa.config")
+        assert byTask["dmLineResiduals"] == ("dmLineResidualThresholds-run25.yaml", "dmLineResiduals.config")
         assert sum("recorded no thresholds layers" in m for m in messages) == 2
 
     def testReloadReplacesTheLayers(self, StubButler, tables, fullConfigs, qadb):
         """A new judgement's layers replace the old ones: none linger from a judgement with more."""
         datasets = {"packages": {"drp_qa": "x"}, **fullConfigs}
         load(StubButler(recorded(tables, configs=fullConfigs), datasets=datasets), qadb)
-        assert len(self.layers(qadb)) == 16
+        assert len(self.layers(qadb)) == 4
         load(StubButler(recorded(tables), datasets=datasets), qadb)  # judged with the files alone
         layers = self.layers(qadb)
-        assert len(layers) == 8 and set(layers["name"]) == {
+        assert len(layers) == 2 and set(layers["name"]) == {
             "iqQaThresholds-run25.yaml",
             "dmLineResidualThresholds-run25.yaml",
         }
         assert qadb.count("qa_thresholds") == 4  # the config layers outlive the judgements that cited them
+
+    def testReloadOfOneTaskKeepsTheOthers(self, StubButler, tables, fullConfigs, qadb):
+        """Only the processings and tasks loaded have their layers replaced."""
+        datasets = {"packages": {"drp_qa": "x"}, **fullConfigs}
+        load(StubButler(recorded(tables, configs=fullConfigs), datasets=datasets), qadb)
+        iqOnly = {k: v for k, v in recorded(tables, configs=fullConfigs).items() if k.startswith("iq")}
+        load(StubButler(iqOnly, datasets=datasets), qadb)
+        layers = self.layers(qadb)
+        assert set(layers["task"]) == {"imageQualityQa", "dmLineResiduals"} and len(layers) == 4
 
     def testMissingLayerKeepsTheOthersPositions(self, StubButler, tables, fullConfigs, qadb):
         """A layer that cannot be cited leaves a gap: the config layer stays at position 1."""
