@@ -19,6 +19,13 @@ made, and earlier sections to the weekly tag alone.
   collection and visit range, optionally as JSON, and exits 0/1/2/3 for `PASS`/`WARN`/`FAIL`/nothing judged; a
   collection qadb holds no processing of (`qadb.reader.collectionLoaded`) or an unreadable database exits 4, bad
   arguments 64.
+- **Run comparison** (PIPE2D-1923) — `metrics.runComparison.compareRuns` compares a set of visits' metrics with one
+  or more references' (the previous run's set, the run's own first calibration night): per metric, camera and
+  population (illumination, frame type, lamp) the two medians, their difference, and `PASS`/`WARN`/`FAIL` where the
+  metric declares a tolerance (`medFwhm`, the line-residual scatter). A reference's `WARN` and `FAIL`
+  values are left out of its medians. Nothing is stored: `qadb.compareRuns.compareCollections` reads the visits from
+  qadb when asked, and `bin.src/qaCompareRuns.py` prints the result, optionally as JSON, with the exit statuses of
+  `qaVisitSummary.py`.
 
 ## [0.2.1] - 2026-11-10
 

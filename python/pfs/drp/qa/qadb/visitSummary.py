@@ -133,7 +133,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--visit-range", type=int, nargs=2, metavar=("FIRST", "LAST"), help="a visit range")
     parser.add_argument("--host", default="pfsa-db", help="qadb host (default pfsa-db)")
     parser.add_argument("--port", type=int, default=5436, help="qadb port (default 5436)")
-    parser.add_argument("--user", default="public_user", help="qadb user; reading suffices")
+    parser.add_argument("--user", default="pfs", help="qadb user (default pfs)")
     parser.add_argument("--dbname", default="qadb", help="database name (default qadb)")
     parser.add_argument("--opdb-host", default=None, help="check the cameras that exposed in the opdb here")
     parser.add_argument("--opdb-port", type=int, default=5432, help="opdb port (default 5432)")

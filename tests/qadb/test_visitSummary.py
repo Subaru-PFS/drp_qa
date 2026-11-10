@@ -158,7 +158,7 @@ class TestMain:
         status, made = run("--json", str(tmp_path / "s.json"))
         rollup, _ = visitSummary(loaded, COLLECTION)
         assert status == exitCode(rollup)
-        assert made == [{"host": "pfsa-db", "port": 5436, "user": "public_user", "dbname": "qadb"}]
+        assert made == [{"host": "pfsa-db", "port": 5436, "user": "pfs", "dbname": "qadb"}]
         assert "2 visits judged" in capsys.readouterr().out
         assert json.loads((tmp_path / "s.json").read_text())["exitCode"] == status
 
