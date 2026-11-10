@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-10
+
 ### Changed
 
 - **Every thresholds layer an image was judged with is cited** (PIPE2D-1991) — a task judges each metric by the
