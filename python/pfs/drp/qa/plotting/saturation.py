@@ -93,7 +93,7 @@ def plotSaturation(
         for position, row in zip(positions, summary.itertuples(), strict=True):
             barAxes.text(row.nSaturated, position, f" {row.nSaturated}", va="center", fontsize=8)
         barAxes.set_xlabel("fibers")
-        barAxes.legend(loc="lower right", fontsize=8)
+        barAxes.legend(loc="lower right", bbox_to_anchor=(1.0, 1.0), ncols=2, fontsize=8, frameon=False)
         barAxes.set_title("Saturated lines, by wavelength (nm)", loc="left", fontsize=10)
     else:
         barAxes.text(0.5, 0.5, "no saturated line", ha="center", va="center", transform=barAxes.transAxes)
