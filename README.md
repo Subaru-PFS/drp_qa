@@ -924,6 +924,26 @@ one RUN of the collection is read as the latest; with `since`, only images loade
 bound is inclusive). The QA dashboard (`pfs_qa_dashboard`) is built on it, with the opdb's IIC sequences, times and
 notes from `comparison.queries.readVisitTimes` and `readNotes`.
 
+### Verdicts per visit
+
+`qadb.reader.readGate(qadb, collection, first, last)` returns each image's gate verdict (the worst of the QA tasks'
+on it, from its latest RUN), and `metrics.visitRollup.rollupVisits(gate, expected=None)` rolls them up to one row per
+visit: the worst of its images' verdicts, the count of each, and for a `WARN` or `FAIL` the camera, task, metric and
+reason of the first image with that verdict (by spectrograph, then arm). An image no task could judge (`UNKNOWN`) is
+counted and does not lower a visit whose other images passed. Given the cameras that exposed
+(`comparison.queries.readVisitCameras`, from the opdb), the rollup names those without a verdict (`missingCameras`);
+they are reported, not judged. `bin.src/qaVisitSummary.py` prints it:
+
+```bash
+python bin.src/qaVisitSummary.py -c qaActor/reductions --visit-range 153000 153534 --opdb-host pfsa-db --json summary.json
+```
+
+Its exit status is the worst visit verdict, for a nightly job: 0 `PASS`, 1 `WARN`, 2 `FAIL`, 3 when no visit was
+judged. A summary that could not be made is none of those: 4 for a collection qadb holds no processing of (a mistyped
+name is an error, not missing data) or a database that could not be read, 64 for bad arguments. Visits of the range
+with SpS exposures and no verdict at all are counted on their own line (and listed in the JSON), not in the status:
+not every exposure is one the QA tasks judge.
+
 ## Command-line tools
 
 Scripts live in `bin.src/` and are run directly — there is no SCons step to copy them into a `bin/` directory on `PATH`:
@@ -991,6 +1011,11 @@ Thin entry point for `pfs.drp.qa.fiberNormsQa.main`, which plots fiber normaliza
 Loads a collection's QA tables, thresholds and gate verdicts into qadb; see
 [Loading QA results into qadb](#loading-qa-results-into-qadb). Requires the stack (it reads the Butler) and a qadb
 user that may write; `--dry-run DIR` writes parquet files instead.
+
+### `qaVisitSummary.py`
+
+Prints a collection's QA verdict per visit from qadb, and exits with the worst; see
+[Verdicts per visit](#verdicts-per-visit). Stack-free; reading suffices.
 
 ## Command-line tools
 

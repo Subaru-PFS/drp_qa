@@ -10,6 +10,16 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Added
+
+- **Verdicts per visit** (PIPE2D-1923) — `qadb.reader.readGate` reads each image's latest `qa_gate` row of a
+  collection, and `metrics.visitRollup.rollupVisits` rolls them up to one row per visit: the worst verdict, the count
+  of each, the camera, task, metric and reason that decided a `WARN` or `FAIL`, and, given the cameras that exposed
+  (`comparison.queries.readVisitCameras`), those without a verdict. `bin.src/qaVisitSummary.py` prints it for a
+  collection and visit range, optionally as JSON, and exits 0/1/2/3 for `PASS`/`WARN`/`FAIL`/nothing judged; a
+  collection qadb holds no processing of (`qadb.reader.collectionLoaded`) or an unreadable database exits 4, bad
+  arguments 64.
+
 ## [0.2.1] - 2026-11-10
 
 ### Fixed

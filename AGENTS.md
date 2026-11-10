@@ -127,6 +127,10 @@ the pipeline/config glue to run them.
     the per-image verdict in the Butler (`twilightQaMetrics`, via `qadb.store`) for the qadb loader's
     gate, and with `--qadb-host` loads the judged visits; its exit status tells ics_qaActor what
     happened
+  - `qaVisitSummary.py` — entry point for `pfs.drp.qa.qadb.visitSummary.main`: a collection's gate verdicts per
+    visit from qadb (`qadb.reader.readGate`, rolled up by the stack-free `metrics.visitRollup`), with the cameras
+    that exposed but have no verdict when given an opdb (`comparison.queries.readVisitCameras`); its exit status is
+    the worst visit verdict (0/1/2, 3 nothing judged, 4 could not be read) for a nightly job
   - `exportMetrics.py` — per-detector QA tables (`iqQaMetrics`, `dmLineResidualMetrics`, ...) from a
     collection to parquet, with progress, via `metrics.readers.exportMetrics`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),

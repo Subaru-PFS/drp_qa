@@ -36,6 +36,7 @@ from pfs.drp.qa.qadb.tables import (
     IMAGE_QUALITY,
     LINE_RESIDUAL,
     LINE_RESIDUAL_METRIC,
+    QA_GATE,
     QA_THRESHOLD_ENTRY,
     QA_THRESHOLDS,
     TableSpec,
@@ -44,12 +45,15 @@ from pfs.drp.qa.qadb.tables import (
 
 __all__ = [
     "FIRST_VISIT",
+    "GATE_COLUMNS",
     "LAST_VISIT",
     "THRESHOLDS_COLUMNS",
     "THRESHOLDS_FILES_COLUMNS",
     "THRESHOLDS_ID",
     "THRESHOLDS_IDS",
+    "collectionLoaded",
     "layeredThresholds",
+    "readGate",
     "readQadb",
     "thresholdsLayers",
     "thresholdsTables",
@@ -120,6 +124,30 @@ WITH latest AS (
     WHERE p.collection_name = :collection AND g.pfs_visit_id BETWEEN :first AND :last
 )
 """
+
+# Each image's latest gate row in the collection, whole.
+_GATE_SQL = """
+WITH latest AS (
+    SELECT g.*, p.run_name,
+        ROW_NUMBER() OVER (
+            PARTITION BY g.pfs_visit_id, g.camera_name ORDER BY g.processing_id DESC
+        ) AS n
+    FROM qa_gate g JOIN data_processing_pipe2d p ON p.processing_id = g.processing_id
+    WHERE p.collection_name = :collection AND g.pfs_visit_id BETWEEN :first AND :last
+)
+SELECT * FROM latest WHERE n = 1 ORDER BY pfs_visit_id, camera_name
+"""
+
+_COLLECTION_SQL = "SELECT COUNT(*) FROM data_processing_pipe2d WHERE collection_name = :collection"
+
+#: Columns of `readGate`: the image, then ``qa_gate`` in camelCase, then the Butler RUN that judged it.
+GATE_COLUMNS = (
+    "visit",
+    "arm",
+    "spectrograph",
+    *(_camelCase(c) for c in QA_GATE if c not in ("processing_id", "pfs_visit_id", "camera_name")),
+    "run",
+)
 
 _VISITS_SQL = """
 SELECT pfs_visit_id, issued_at AS time_exp_start FROM pfs_visit WHERE pfs_visit_id = ANY(:visits)
@@ -398,3 +426,52 @@ def readQadb(
     times["time_exp_start"] = pd.to_datetime(times["time_exp_start"])
     tables["visitTimes"] = times.assign(iic_sequence_id=pd.array([pd.NA] * len(times), dtype="Int64"))
     return tables
+
+
+def collectionLoaded(qadb: Any, collection: str) -> bool:
+    """Return whether qadb holds any processing of a collection.
+
+    Tells a collection nothing was loaded for (a mistyped name) from one with
+    no verdicts in a visit range, which read back alike.
+
+    Parameters
+    ----------
+    qadb : `pfs.utils.database.qadb.QaDB`
+        The qadb, read-only.
+    collection : `str`
+        The collection, as loaded.
+    """
+    return bool(qadb.query_scalar(_COLLECTION_SQL, params={"collection": collection}))
+
+
+def readGate(qadb: Any, collection: str, first: int = FIRST_VISIT, last: int = LAST_VISIT) -> pd.DataFrame:
+    """Read each image's gate verdict in a collection: the worst of the QA tasks' on it.
+
+    Parameters
+    ----------
+    qadb : `pfs.utils.database.qadb.QaDB`
+        The qadb, read-only.
+    collection : `str`
+        The collection the QA tasks wrote to, as loaded.
+    first, last : `int`
+        The visit range, inclusive.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        `GATE_COLUMNS`, one row per image, sorted by visit and camera: the row
+        of the highest processing (Butler RUN, ``run``) of the collection that
+        judged the image, as `readQadb` reads it.
+        `pfs.drp.qa.metrics.visitRollup.rollupVisits` takes it.
+    """
+    params = {"collection": collection, "first": int(first), "last": int(last)}
+    rows = qadb.query_dataframe(_GATE_SQL, params=params)
+    names = {column: _camelCase(column) for column in QA_GATE if column != "camera_name"}
+    frame = rows.rename(columns={**names, "pfs_visit_id": "visit", "run_name": "run"})
+    camera = frame["camera_name"].astype(str)
+    frame["arm"] = camera.str[0]
+    frame["spectrograph"] = pd.to_numeric(camera.str[1:]).astype("int64")
+    frame["visit"] = frame["visit"].astype("int64")
+    frame["provisional"] = frame["provisional"].map(_nullableBool)
+    frame["decidedAt"] = pd.to_datetime(frame["decidedAt"])
+    return frame.reindex(columns=list(GATE_COLUMNS)).reset_index(drop=True)
