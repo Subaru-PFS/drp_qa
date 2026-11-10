@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-10
+
 ### Fixed
 
 - **Each QA table reads back at its own newest RUN** (PIPE2D-1989) — `qadb.reader.readQadb` joined every table to
