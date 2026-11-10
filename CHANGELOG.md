@@ -21,6 +21,9 @@ made, and earlier sections to the weekly tag alone.
   `metrics.lineFlux`; `metrics.longFormat.metricsFrame` writes them, and `speciesStats` now skips a species with
   no fit statistic. The per-species rows reach qadb's `image_quality_qa_species` as they are; the two
   `iqQaMetrics` columns are not in `image_quality_qa` yet.
+- **`bin.src/saturationReport.py`** (PIPE2D-1922) — a figure and a Markdown file for each saturated detector image
+  of a visit: the `SAT` pixels and saturated lines on the detector, the fibers each line is saturated on, and
+  cutouts of the worst (`pfs.drp.qa.saturationReport`; the plot is `plotting.saturation.plotSaturation`).
 
 ## [0.2.1] - 2026-11-10
 

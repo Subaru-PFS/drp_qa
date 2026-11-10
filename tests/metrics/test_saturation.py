@@ -1,8 +1,15 @@
 """`pfs.drp.qa.metrics.saturation`: saturated lines and aperture pixels from a boolean plane."""
 
 import numpy as np
+import pandas as pd
+import pytest
 
-from pfs.drp.qa.metrics.saturation import apertureSaturation, saturatedAt
+from pfs.drp.qa.metrics.saturation import (
+    apertureSaturation,
+    measureSaturation,
+    saturatedAt,
+    saturatedLineSummary,
+)
 
 
 def testSaturatedAtSearchesTheBoxAboutThePosition():
@@ -51,3 +58,57 @@ def testApertureSaturationCountsSharedAndMissingPixelsOnce():
     # Rows 0-1: columns 4-8 (5 pixels, not 2 x 3); row 2: none; row 3: columns 0-1 (-1 is off the image).
     assert apertureSaturation(saturated, xCenters, halfWidth=1) == (12, 12)
     assert apertureSaturation(np.zeros((4, 12), dtype=bool), xCenters, halfWidth=1) == (0, 12)
+
+
+class FakeDetectorMap:
+    """Vertical traces 10 px apart; wavelength 500 + 0.1 nm per row."""
+
+    fiberId = np.array([1, 2, 3], dtype=np.int32)
+
+    def getXCenter(self, fiberId, y):
+        return 10.0 * np.asarray(fiberId, dtype=float) + 0.0 * np.asarray(y)
+
+    def findPoint(self, fiberId, wavelength):
+        y = (np.asarray(wavelength, dtype=float) - 500.0) / 0.1
+        return np.column_stack([self.getXCenter(fiberId, y), y])
+
+
+def makeDetector():
+    """Return a 50 x 40 plane with fiber 2's line at row 20 saturated, and the three fibers' two lines."""
+    saturated = np.zeros((50, 40), dtype=bool)
+    saturated[19:22, 19:22] = True
+    lines = pd.DataFrame(
+        {
+            "fiberId": [1, 2, 3, 1, 2, 3, 2],
+            "wavelength": [502.0, 502.0, 502.0, 504.0, 504.0, 504.0, np.nan],
+            "description": ["NeI"] * 6 + ["Trace"],
+        }
+    )
+    return saturated, lines
+
+
+def testMeasureSaturationPutsLinesAtTheirWavelength():
+    """A line is looked up at the detectorMap's position for its wavelength; a trace centroid nowhere."""
+    saturated, lines = makeDetector()
+    lineSaturated, x, y, pct = measureSaturation(saturated, FakeDetectorMap(), lines)
+    assert lineSaturated.tolist() == [False, True, False, False, False, False, False]
+    assert (x[1], y[1]) == (20.0, 20.0) and np.isnan(x[-1])
+    assert pct == pytest.approx(100.0 * 9 / (3 * 50 * 7))
+
+    # Lit fibers alone: fiber 2 hidden leaves no saturated aperture pixel.
+    assert measureSaturation(saturated, FakeDetectorMap(), lines, litFiberIds={1, 3})[3] == 0.0
+    assert np.isnan(measureSaturation(saturated, FakeDetectorMap(), lines, litFiberIds=set())[3])
+
+    # Negative control: the same line 2 nm (20 rows) along is not saturated.
+    assert not measureSaturation(saturated, FakeDetectorMap(), lines.assign(wavelength=504.0))[0].any()
+
+
+def testSaturatedLineSummaryCountsFibersPerLine():
+    """Each saturated line is listed with the fibers it is saturated on, the most saturated first."""
+    _, lines = makeDetector()
+    lines = lines.iloc[:6].assign(saturated=[False, True, False, True, True, False])
+    summary = saturatedLineSummary(lines)
+    assert summary["wavelength"].tolist() == [504.0, 502.0]
+    assert summary["nSaturated"].tolist() == [2, 1]
+    assert summary["nFibers"].tolist() == [3, 3]
+    assert len(saturatedLineSummary(lines.assign(saturated=False))) == 0

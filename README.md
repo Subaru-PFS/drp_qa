@@ -244,6 +244,10 @@ width, a Gaussian fitted to the profile understates it by 8–10 %, and drp_stel
   `lines`' own, in the calexp's units and not per second. Within one image a species' lines span orders of
   magnitude, so these say nothing about the lamp alone: they are the inputs to a comparison across visits of the
   same exposure time (`pfs.drp.qa.metrics.lineFlux`, `saturation`; both stack-free).
+  `python bin.src/saturationReport.py -c <QA collection>,<reductions> --visit <visit> -o <dir>` writes, for each
+  saturated detector of the visit (or `--cameras r1 r2`), a figure and a Markdown file: where the `SAT` pixels and
+  saturated lines are on the detector, the fibers each line is saturated on, and cutouts of the worst
+  (`pfs.drp.qa.saturationReport`, `plotting.saturation`).
 - **`linesPerFiber`** — The judged count: unflagged lamp lines per lit fiber on an arc, unflagged trace centroids
   per lit fiber on a quartz (about 4,160, one per detector row); `NaN` on other frames or without a pfsConfig.
   A design that lights one fiber group (a *shaka* exposure: every fourth cobra, the others parked behind their black

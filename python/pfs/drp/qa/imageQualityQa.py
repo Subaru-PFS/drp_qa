@@ -43,7 +43,7 @@ from pfs.drp.qa.metrics.gate import (
 )
 from pfs.drp.qa.metrics.lineFlux import speciesLineFlux
 from pfs.drp.qa.metrics.longFormat import metricsFrame, parseSpeciesStats, speciesFrame
-from pfs.drp.qa.metrics.saturation import apertureSaturation, saturatedAt
+from pfs.drp.qa.metrics.saturation import measureSaturation
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
 from pfs.drp.stella.utils.stability import addTraceLambdaToArclines
@@ -716,7 +716,13 @@ class ImageQualityQaTask(PipelineTask):
 
         # Saturation, against the detector's own level (the calexp's SAT plane), and each
         # species' line flux for cross-visit lamp stability. Measured, not judged.
-        line_saturated, pct_saturated_pixels = self._measureSaturation(calexp, detectorMap, data, lit_fibers)
+        # Null without a calexp, not zero.
+        line_saturated, pct_saturated_pixels = None, np.nan
+        if calexp is not None:
+            is_saturated = (calexp.mask.array & calexp.mask.getPlaneBitMask(["SAT"])) != 0
+            line_saturated, _, _, pct_saturated_pixels = measureSaturation(
+                is_saturated, detectorMap, data, lit_fibers
+            )
         n_saturated_lines = (
             int((line_saturated & lamp_line_rows).sum()) if line_saturated is not None else np.nan
         )
@@ -1207,69 +1213,6 @@ class ImageQualityQaTask(PipelineTask):
             iqQaMetrics=metrics,
             iqQaSpeciesMetrics=species_metrics,
         )
-
-    @staticmethod
-    def _measureSaturation(
-        calexp: lsst.afw.image.Exposure | None,
-        detectorMap: DetectorMap,
-        lines: pd.DataFrame,
-        litFiberIds: set | None,
-    ) -> tuple[np.ndarray | None, float]:
-        """Measure saturation from the calexp's ``SAT`` mask plane.
-
-        Parameters
-        ----------
-        calexp : `lsst.afw.image.Exposure` or `None`
-            Calibrated exposure for this quantum.
-        detectorMap : `DetectorMap`
-            This visit's detector map: where each line is expected, and the traces.
-        lines : `pandas.DataFrame`
-            The ``lines`` table, with ``fiberId`` and ``wavelength``.
-        litFiberIds : `set` or `None`
-            The fibers whose apertures are counted (`litFibers`); every fiber of
-            the detectorMap when `None`.
-
-        Returns
-        -------
-        lineSaturated : `numpy.ndarray` [`bool`] or `None`
-            Per row of ``lines``, whether a pixel at the line's expected position is
-            ``SAT`` (`pfs.drp.qa.metrics.saturation.saturatedAt`); `False` for a row
-            without a wavelength (trace centroids). `None` without a calexp.
-        pctSaturatedPixels : `float`
-            Percentage of the pixels within the lit fibers' apertures that are ``SAT``
-            (`pfs.drp.qa.metrics.saturation.apertureSaturation`); NaN without a calexp
-            or a lit fiber.
-        """
-        if calexp is None:
-            return None, np.nan
-        saturated = (calexp.mask.array & calexp.mask.getPlaneBitMask(["SAT"])) != 0
-
-        lineSaturated = np.zeros(len(lines), dtype=bool)
-        if len(lines) and "wavelength" in lines.columns:
-            wavelength = lines["wavelength"].to_numpy(dtype=np.float64)
-            hasWavelength = np.isfinite(wavelength)
-            if hasWavelength.any():
-                points = np.asarray(
-                    detectorMap.findPoint(
-                        lines["fiberId"].to_numpy(dtype=np.int32)[hasWavelength], wavelength[hasWavelength]
-                    ),
-                    dtype=np.float64,
-                ).reshape(-1, 2)
-                lineSaturated[hasWavelength] = saturatedAt(saturated, points[:, 0], points[:, 1])
-
-        fiberIds = np.asarray(detectorMap.fiberId, dtype=np.int32)
-        if litFiberIds is not None:
-            fiberIds = fiberIds[np.isin(fiberIds, list(litFiberIds))]
-        pctSaturatedPixels = np.nan
-        if len(fiberIds):
-            height = saturated.shape[0]
-            ff = np.repeat(fiberIds, height)
-            yy = np.tile(np.arange(height, dtype=np.float64), len(fiberIds))
-            xCenters = np.asarray(detectorMap.getXCenter(ff, yy), dtype=np.float64).reshape(-1, height)
-            numSaturated, numPixels = apertureSaturation(saturated, xCenters)
-            if numPixels:
-                pctSaturatedPixels = 100.0 * numSaturated / numPixels
-        return lineSaturated, pctSaturatedPixels
 
     @staticmethod
     def _logToString(logData: Any) -> str:

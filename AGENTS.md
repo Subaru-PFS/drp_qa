@@ -128,6 +128,8 @@ the pipeline/config glue to run them.
     the per-image verdict in the Butler (`twilightQaMetrics`, via `qadb.store`) for the qadb loader's
     gate, and with `--qadb-host` loads the judged visits; its exit status tells ics_qaActor what
     happened
+  - `saturationReport.py` — entry point for `pfs.drp.qa.saturationReport.main`: a figure and a Markdown file per
+    saturated detector image of a visit, from the calexp's `SAT` plane
   - `exportMetrics.py` — per-detector QA tables (`iqQaMetrics`, `dmLineResidualMetrics`, ...) from a
     collection to parquet, with progress, via `metrics.readers.exportMetrics`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),

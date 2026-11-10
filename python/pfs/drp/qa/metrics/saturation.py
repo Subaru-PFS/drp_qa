@@ -14,11 +14,29 @@ from the detectorMap.
   elsewhere or missing.
 - `apertureSaturation`: the saturated pixels among those the lit fibers'
   traces cover.
+
+`linePositions` and `traceCentres` ask a detectorMap (any object with its
+``findPoint`` and ``getXCenter``) where those are, and `measureSaturation`
+puts the four together for the task and for the per-detector report
+(`pfs.drp.qa.saturationReport`). `saturatedLineSummary` counts the saturated
+fibers of each line.
 """
 
-import numpy as np
+from typing import Any
 
-__all__ = ["APERTURE_HALF_WIDTH", "PEAK_HALF_SIZE", "apertureSaturation", "saturatedAt"]
+import numpy as np
+import pandas as pd
+
+__all__ = [
+    "APERTURE_HALF_WIDTH",
+    "PEAK_HALF_SIZE",
+    "apertureSaturation",
+    "linePositions",
+    "measureSaturation",
+    "saturatedAt",
+    "saturatedLineSummary",
+    "traceCentres",
+]
 
 #: Half-size (pixels) of the box about a line's expected position searched for a
 #: saturated pixel: the peak pixel and its neighbours, which covers the
@@ -99,3 +117,137 @@ def apertureSaturation(
         inside = (cc >= 0) & (cc < width)
         aperture[row[inside], cc[inside]] = True
     return int((aperture & saturated).sum()), int(aperture.sum())
+
+
+def linePositions(detectorMap: Any, fiberId: Any, wavelength: Any) -> tuple[np.ndarray, np.ndarray]:
+    """Return where the detectorMap expects each line.
+
+    Parameters
+    ----------
+    detectorMap : `pfs.drp.stella.DetectorMap`
+        Mapping from fiberId and wavelength to x, y (``findPoint``).
+    fiberId : array of `int`
+        Each line's fiber.
+    wavelength : array of `float`
+        Each line's wavelength; not finite for a row that has none (a trace
+        centroid).
+
+    Returns
+    -------
+    x, y : `numpy.ndarray` [`float`]
+        The expected positions; NaN for a row without a wavelength, or off the
+        detector.
+    """
+    fiberId = np.asarray(fiberId, dtype=np.int32)
+    wavelength = np.asarray(wavelength, dtype=np.float64)
+    x = np.full(len(wavelength), np.nan)
+    y = np.full(len(wavelength), np.nan)
+    known = np.isfinite(wavelength)
+    if known.any():
+        points = np.asarray(detectorMap.findPoint(fiberId[known], wavelength[known]), dtype=np.float64)
+        points = points.reshape(-1, 2)
+        x[known], y[known] = points[:, 0], points[:, 1]
+    return x, y
+
+
+def traceCentres(detectorMap: Any, fiberIds: Any, height: int) -> np.ndarray:
+    """Return each fiber's trace centre on every row.
+
+    Parameters
+    ----------
+    detectorMap : `pfs.drp.stella.DetectorMap`
+        Mapping from fiberId and row to x (``getXCenter``).
+    fiberIds : array of `int`
+        The fibers.
+    height : `int`
+        Number of rows of the image.
+
+    Returns
+    -------
+    `numpy.ndarray` [`float`], shape ``(len(fiberIds), height)``
+        The x of each trace on each row.
+    """
+    fiberIds = np.asarray(fiberIds, dtype=np.int32)
+    fibers = np.repeat(fiberIds, height)
+    rows = np.tile(np.arange(height, dtype=np.float64), len(fiberIds))
+    return np.asarray(detectorMap.getXCenter(fibers, rows), dtype=np.float64).reshape(len(fiberIds), height)
+
+
+def measureSaturation(
+    saturated: np.ndarray, detectorMap: Any, lines: pd.DataFrame, litFiberIds: Any = None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    """Measure one detector image's saturation.
+
+    Parameters
+    ----------
+    saturated : `numpy.ndarray` [`bool`], shape ``(height, width)``
+        The calexp's ``SAT`` pixels.
+    detectorMap : `pfs.drp.stella.DetectorMap`
+        The visit's detector map; ``fiberId`` gives the detector's fibers.
+    lines : `pandas.DataFrame`
+        The ``lines`` table, with ``fiberId`` and ``wavelength``.
+    litFiberIds : collection of `int`, optional
+        The fibers whose apertures are counted; every fiber of the
+        detectorMap when `None`.
+
+    Returns
+    -------
+    lineSaturated : `numpy.ndarray` [`bool`]
+        Per row of ``lines``, whether the line is saturated (`saturatedAt` its
+        expected position); `False` for a row without a wavelength.
+    x, y : `numpy.ndarray` [`float`]
+        Each line's expected position (`linePositions`).
+    pctSaturatedPixels : `float`
+        Percentage of the pixels within the lit fibers' apertures that are
+        saturated (`apertureSaturation`); NaN when no fiber is lit.
+    """
+    saturated = np.asarray(saturated, dtype=bool)
+    if len(lines) and "wavelength" in lines.columns:
+        x, y = linePositions(detectorMap, lines["fiberId"].to_numpy(), lines["wavelength"].to_numpy())
+    else:
+        x = np.full(len(lines), np.nan)
+        y = np.full(len(lines), np.nan)
+    lineSaturated = saturatedAt(saturated, x, y)
+
+    fiberIds = np.asarray(detectorMap.fiberId, dtype=np.int32)
+    if litFiberIds is not None:
+        fiberIds = fiberIds[np.isin(fiberIds, list(litFiberIds))]
+    pctSaturatedPixels = np.nan
+    if len(fiberIds):
+        numSaturated, numPixels = apertureSaturation(
+            saturated, traceCentres(detectorMap, fiberIds, saturated.shape[0])
+        )
+        if numPixels:
+            pctSaturatedPixels = 100.0 * numSaturated / numPixels
+    return lineSaturated, x, y, pctSaturatedPixels
+
+
+def saturatedLineSummary(lines: pd.DataFrame) -> pd.DataFrame:
+    """Return, for each line with a saturated fiber, how many fibers are.
+
+    Parameters
+    ----------
+    lines : `pandas.DataFrame`
+        One row per line and fiber: ``description``, ``wavelength``,
+        ``fiberId`` and ``saturated``.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``description``, ``wavelength``, ``nFibers`` (fibers with the line)
+        and ``nSaturated`` (those saturated), for the lines with any, the most
+        saturated first.
+    """
+    columns = ["description", "wavelength", "nFibers", "nSaturated"]
+    if len(lines) == 0:
+        return pd.DataFrame(columns=columns)
+    summary = (
+        lines.groupby(["description", "wavelength"], sort=True)
+        .agg(nFibers=("fiberId", "nunique"), nSaturated=("saturated", "sum"))
+        .reset_index()
+    )
+    summary["nSaturated"] = summary["nSaturated"].astype(int)
+    summary = summary[summary["nSaturated"] > 0]
+    return summary.sort_values(["nSaturated", "wavelength"], ascending=[False, True], ignore_index=True)[
+        columns
+    ]
