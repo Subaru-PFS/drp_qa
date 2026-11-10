@@ -19,7 +19,10 @@ headers (``thresholdsFiles``, a config layer named by
 today's files and defaults.
 
 Read-only: one query per table, with bound parameters. An image judged in more
-than one Butler RUN of the collection is read as the latest RUN judged it.
+than one Butler RUN of the collection is read, table by table, as the newest
+RUN that wrote that table: a task rerun alone into a newer RUN shows its new
+rows beside the other task's older ones, as the gate (the worst of the tasks'
+latest verdicts) already did. ``since`` is the image's latest gate row.
 Visit times are qadb's ``pfs_visit.issued_at`` (HST); qadb holds no IIC sequence.
 """
 
@@ -129,18 +132,25 @@ SELECT * FROM qa_threshold_entry WHERE thresholds_id = ANY(:ids) ORDER BY thresh
 _FILES_SQL = "SELECT * FROM qa_thresholds WHERE thresholds_id = ANY(:ids) ORDER BY thresholds_id"
 
 _LAYERS_SQL = (
-    _LATEST + "SELECT p.processing_id, p.task, p.layer, p.thresholds_id FROM qa_processing_thresholds p"
-    " WHERE p.processing_id IN (SELECT l.processing_id FROM latest l WHERE l.n = 1{since})"
-    " ORDER BY p.processing_id, p.task, p.layer"
+    "SELECT processing_id, task, layer, thresholds_id FROM qa_processing_thresholds"
+    " WHERE processing_id = ANY(:ids) ORDER BY processing_id, task, layer"
 )
 
 
 def _tableSql(table: str, since: bool) -> str:
-    # The table name is _SPECS', never input.
+    # The table name is _SPECS', never input. Each image's rows come from the newest processing of the
+    # collection that wrote this table for it; the gate row (latest) gives decided_at and the since filter.
     return (
-        _LATEST + f"SELECT t.*, l.decided_at FROM {table} t"
-        " JOIN latest l ON l.processing_id = t.processing_id"
-        " AND l.pfs_visit_id = t.pfs_visit_id AND l.camera_name = t.camera_name WHERE l.n = 1"
+        _LATEST + f""", newest AS (
+    SELECT t.pfs_visit_id, t.camera_name, MAX(t.processing_id) AS processing_id
+    FROM {table} t JOIN data_processing_pipe2d p ON p.processing_id = t.processing_id
+    WHERE p.collection_name = :collection AND t.pfs_visit_id BETWEEN :first AND :last
+    GROUP BY t.pfs_visit_id, t.camera_name
+)
+SELECT t.*, l.decided_at FROM {table} t"""
+        " JOIN newest w ON w.processing_id = t.processing_id"
+        " AND w.pfs_visit_id = t.pfs_visit_id AND w.camera_name = t.camera_name"
+        " JOIN latest l ON l.pfs_visit_id = t.pfs_visit_id AND l.camera_name = t.camera_name WHERE l.n = 1"
         + (" AND l.decided_at >= :since" if since else "")
     )
 
@@ -329,8 +339,9 @@ def readQadb(
     first, last : `int`
         The visit range, inclusive.
     since : optional
-        Only images whose latest judgement was loaded at or after this
+        Only images whose latest gate row was decided at or after this
         (``qa_gate.decided_at``, as a previous read returned it); default all.
+        A task rerun alone re-decides the gate, so its images come back whole.
 
     Returns
     -------
@@ -350,13 +361,20 @@ def readQadb(
     params = {"collection": collection, "first": int(first), "last": int(last)}
     if since is not None:
         params["since"] = since
-    layers = qadb.query_dataframe(
-        _LAYERS_SQL.format(since=" AND l.decided_at >= :since" if since else ""), params=params
+    read = {
+        source: qadb.query_dataframe(_tableSql(spec.name, since is not None), params=params)
+        for source, spec in _SPECS.items()
+    }
+    processings = sorted({int(p) for rows in read.values() for p in rows["processing_id"]})
+    layers = (
+        qadb.query_dataframe(_LAYERS_SQL, params={"ids": processings})
+        if processings
+        else pd.DataFrame(columns=["processing_id", "task", "layer", "thresholds_id"])
     )
     keys = _layerKeys(layers)
     tables = {}
     for source, spec in _SPECS.items():
-        rows = qadb.query_dataframe(_tableSql(spec.name, since is not None), params=params)
+        rows = read[source]
         # Each row's layers are its own processing's, before the Butler shape drops the processing.
         cited = [keys.get((int(processing), _GATE_TASK[source]), "") for processing in rows["processing_id"]]
         frame = _butlerFrame(rows, spec).rename(columns={"decided_at": "decidedAt"})

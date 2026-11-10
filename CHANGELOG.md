@@ -10,6 +10,15 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Each QA table reads back at its own newest RUN** (PIPE2D-1989) — `qadb.reader.readQadb` joined every table to
+  the image's latest `qa_gate` row, whose processing is the first task's RUN, so a `dmLineResiduals` rerun alone
+  into a newer RUN updated the gate verdict but the reader kept the older line-residual rows. Each table now comes
+  from the newest processing of the collection that wrote it for the image, with that processing's thresholds
+  layers; `since` stays on the gate row.
+- `qadb.tables.gateRows` no longer trips pandas' downcasting `FutureWarning` on the task-presence flags.
+
 ## [0.2.0] - 2026-11-10
 
 ### Changed
