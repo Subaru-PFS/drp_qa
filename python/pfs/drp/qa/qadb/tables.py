@@ -7,7 +7,7 @@ Nothing here touches a database: every function takes and returns
 `pandas.DataFrame`, with Python scalars and `None` for missing values, ready
 for `pfs.drp.qa.qadb.writer`.
 
-The tables are those of ``spt_qa_database`` 0.4.0 (its ``qadb.models``); a
+The tables are those of ``spt_qa_database`` 0.5.0 (its ``qadb.models``); a
 column added to a Butler table reaches qadb only once both that schema and the
 spec here name it.
 """

@@ -23,7 +23,7 @@ made, and earlier sections to the weekly tag alone.
   layer left out) and writes every layer, in order, to the new `qa_processing_thresholds`, one row per processing
   (a Butler RUN, which has one config), task and layer: the one record of what judged an image. `qa_gate`'s
   `iq/dm/twilight_thresholds_id` are gone, their values moved in as layer 0 by the migration (spt_qa_database
-  0.4.0, `acbd1a9681d6`). `qadb.reader.readQadb` gives each table `thresholdsIds` (its processing's cited ids in
+  0.5.0, `acbd1a9681d6`). `qadb.reader.readQadb` gives each table `thresholdsIds` (its processing's cited ids in
   the order judged, comma-joined; `thresholdsLayers` splits it, `layeredThresholds` gives `judge` the tables) in
   place of `thresholdsId`. `qadb.tables.gateRows` takes no thresholds; `processingThresholdsRows` makes the layer
   rows.

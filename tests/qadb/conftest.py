@@ -4,7 +4,7 @@ The database is SQLite in memory through SQLAlchemy, behind the same
 ``commit``/``query_scalar``/``query_dataframe`` surface as
 `pfs.utils.database.db.DB`: the ``INSERT ... ON CONFLICT DO UPDATE ...
 RETURNING`` statements the writer builds run unchanged on both. ``DDL`` below
-mirrors the tables of ``spt_qa_database`` 0.4.0 (migration ``acbd1a9681d6``);
+mirrors the tables of ``spt_qa_database`` 0.5.0 (migration ``acbd1a9681d6``);
 change both together. Set ``PFS_QADB_TEST_DSN`` (``dbname=... user=... host=...
 port=...``) to run the same tests against a scratch PostgreSQL through
 `pfs.utils.database.qadb.QaDB` as well.
@@ -29,7 +29,7 @@ from sqlalchemy.pool import StaticPool
 
 DATA = Path(__file__).parent / "data"
 
-#: The qadb tables the loader writes, as ``spt_qa_database`` 0.4.0 defines them.
+#: The qadb tables the loader writes, as ``spt_qa_database`` 0.5.0 defines them.
 DDL = """
 CREATE TABLE pfs_visit (
     pfs_visit_id INTEGER PRIMARY KEY, pfs_visit_description TEXT, pfs_design_id BIGINT, issued_at TIMESTAMP);
