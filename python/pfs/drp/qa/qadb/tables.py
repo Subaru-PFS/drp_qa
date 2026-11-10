@@ -541,7 +541,8 @@ def gateRows(
     decidedByOf = {task: column(task, "qaDecidedBy") for task in tasks}
     reasonOf = {task: column(task, "qaReason") for task in tasks}
     provisionalOf = {task: column(task, "qaProvisional") for task in tasks}
-    present = {task: merged[f"present_{task}"].fillna(False).astype(bool) for task in tasks}
+    # The flag is True where the task has a row and null where the outer merge found none.
+    present = {task: merged[f"present_{task}"].eq(True) for task in tasks}
     worst, decidedByTask, decidedBy, reasons, provisional = [], [], [], [], []
     for index in merged.index:
         # A task's row with no verdict counts as UNKNOWN; a task with no row at all does not count.

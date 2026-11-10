@@ -314,3 +314,50 @@ def testLayersSinceAndNone(StubButler, fixtures, fullConfigs, configs, qadb):
     assert (tables["dmLineResidualSummary"][THRESHOLDS_IDS] == "").all()
     empty = readQadb(other, "u/test/none")
     assert THRESHOLDS_IDS in empty["iqQaMetrics"].columns and "thresholdsLayers" not in empty
+
+
+def testATaskRerunAloneReadsBackItsNewRows(StubButler, fixtures, fullConfigs, configs, qadb):
+    """A dmLineResiduals rerun alone into a newer RUN: its new rows and layers come back, the IQ rows stay."""
+    datasets = {"packages": {"drp_qa": "x"}, **configs}
+    load(
+        StubButler(fixtures, datasets=datasets), qadb
+    )  # judged with the files alone (no config fields stored)
+    before = readQadb(qadb, COLLECTION)
+    rerun = recordedWithConfigs(fixtures, fullConfigs)
+    summary = rerun["dmLineResidualSummary"].assign(qaStatus="FAIL", nSpecies=99)
+    metrics = rerun["dmLineResidualMetrics"].assign(value=-1.0)
+    runs = {tuple(image): "u/test/qa/20261026T020000Z" for image in summary[IMAGE].itertuples(index=False)}
+    rerunDatasets = {"packages": {"drp_qa": "y"}, **fullConfigs}
+    load(
+        StubButler(
+            {"dmLineResidualSummary": summary, "dmLineResidualMetrics": metrics},
+            runs=runs,
+            datasets=rerunDatasets,
+        ),
+        qadb,
+        now=LATER,
+    )
+    after = readQadb(qadb, COLLECTION)
+    # The rerun's rows, with the rerun's layers (the file, then the config layer it recorded).
+    assert (after["dmLineResidualSummary"]["nSpecies"] == 99).all()
+    assert (after["dmLineResidualSummary"]["qaStatus"] == "FAIL").all()
+    assert (after["dmLineResidualMetrics"]["value"] == -1.0).all()
+    assert len(after["dmLineResidualMetrics"]) == len(before["dmLineResidualMetrics"])
+    dmLayers = set(after["dmLineResidualSummary"][THRESHOLDS_IDS])
+    assert len(dmLayers) == 1 and len(thresholdsLayers(dmLayers.pop())) == 2
+    assert set(after["dmLineResidualMetrics"][THRESHOLDS_IDS]) == set(
+        after["dmLineResidualSummary"][THRESHOLDS_IDS]
+    )
+    assert "dmLineResiduals.config" in set(after["thresholdsFiles"]["name"])
+    # The IQ rows are the older RUN's, unchanged, with their own layers.
+    byImage(after["iqQaMetrics"]).drop(columns="decidedAt").equals(
+        byImage(before["iqQaMetrics"]).drop(columns="decidedAt")
+    )
+    assert set(after["iqQaMetrics"][THRESHOLDS_IDS]) == set(before["iqQaMetrics"][THRESHOLDS_IDS])
+    # The gate was re-decided, so a since read at the rerun returns these images.
+    stamp = after["iqQaMetrics"]["decidedAt"].max()
+    assert stamp > before["iqQaMetrics"]["decidedAt"].max()
+    assert len(readQadb(qadb, COLLECTION, since=stamp)["dmLineResidualSummary"]) == 4
+    # Negative control: before the rerun, the summary read back as first judged.
+    assert (before["dmLineResidualSummary"]["nSpecies"] != 99).all()
+    assert all(len(thresholdsLayers(k)) == 1 for k in before["dmLineResidualSummary"][THRESHOLDS_IDS])
