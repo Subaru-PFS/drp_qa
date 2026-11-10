@@ -28,7 +28,7 @@ from lsst.pipe.base.connectionTypes import PrerequisiteInput as PrerequisiteConn
 
 from pfs.datamodel import PfsConfig
 from pfs.drp.qa.imageQualityQa import litFibers
-from pfs.drp.qa.metrics.gate import thresholdsNames, thresholdsRecord
+from pfs.drp.qa.metrics.gate import taskThresholdsRecord, thresholdsNames
 from pfs.drp.qa.metrics.lineResiduals import (
     BOTH,
     CALIB,
@@ -133,8 +133,9 @@ class DmLineResidualsConnections(
             " the calibration: ``calibId`` and ``calibRun`` (look up its validity range with"
             " `pfs.drp.qa.metrics.readers.readCalibValidity`), ``calibCreated``,"
             " ``calibFirstVisit`` and ``calibLastVisit`` (the visits it was made from); and the thresholds"
-            " file judged with, ``thresholdsFiles`` and ``thresholdsSha256`` (its content then; empty when"
-            " none: `pfs.drp.qa.metrics.gate.thresholdsRecord`)."
+            " layers judged with, ``thresholdsFiles`` and ``thresholdsSha256`` (the file, then the config's"
+            " fields as ``dmLineResiduals.config``, and their content then, comma-separated:"
+            " `pfs.drp.qa.metrics.gate.taskThresholdsRecord`)."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -273,8 +274,11 @@ class DmLineResidualsTask(PipelineTask):
         super().__init__(**kwargs)
         # Highest priority first; see pfs.drp.qa.metrics.gate.
         self.thresholds = residualTaskThresholds(self.config)
-        # Which file judged, by content, for qadb: the loader's drp_qa may ship another.
-        self.thresholdsRecord = thresholdsRecord(thresholdsNames(self.config))
+        # Which layers judged, by content, for qadb: the loader's drp_qa may ship another file, and the
+        # config's fields are a layer of their own there (`pfs.drp.qa.metrics.gate.configLayerName`).
+        self.thresholdsRecord = taskThresholdsRecord(
+            "dmLineResiduals", thresholdsNames(self.config), self.thresholds[-1]
+        )
 
     def runQuantum(
         self,

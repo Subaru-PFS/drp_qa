@@ -11,6 +11,7 @@ from pfs.drp.qa.metrics.gate import (
     configThresholds,
     recordedThresholds,
     sha256Of,
+    thresholdsDocument,
     thresholdsPath,
 )
 
@@ -219,7 +220,7 @@ def testDefaultConfigJudgesByTheShippedFile(iqqa):
 
 
 def testMetricsRecordTheThresholdsFilesJudgedWith(iqqa, runTask, fakes):
-    """Each image's row names the files the task loaded, by content then."""
+    """Each image's row names the layers the task loaded, by content then: its files, then its config's fields."""
     detectorMap = fakes.DetectorMap()
     calexp = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*ARC))
     lines = fakes.arcLines(detectorMap, numPerFiber=30)
@@ -228,12 +229,26 @@ def testMetricsRecordTheThresholdsFilesJudgedWith(iqqa, runTask, fakes):
         row = runTask(lines, detectorMap=detectorMap, calexp=calexp, config=config).iqQaMetrics.iloc[0]
         return recordedThresholds(*(row[column] for column in THRESHOLDS_COLUMNS))
 
-    assert layers(iqqa.ImageQualityQaConfig()) == [
-        (name, sha256Of(thresholdsPath(name)))
-        for name in ("iqQaThresholds-run25.yaml", "iqQaThresholds-iis-run30.yaml")
+    def configLayer(config):
+        return (
+            "imageQualityQa.config",
+            sha256Of(thresholdsDocument(configThresholds(config), "imageQualityQa.config")),
+        )
+
+    default = iqqa.ImageQualityQaConfig()
+    assert layers(default) == [
+        *(
+            (name, sha256Of(thresholdsPath(name)))
+            for name in ("iqQaThresholds-run25.yaml", "iqQaThresholds-iis-run30.yaml")
+        ),
+        configLayer(default),
     ]
-    # runTask's own config names no file: judged by the fields alone, which is recorded as such.
-    assert layers() == []
+    # runTask's own config names no file: judged by the fields alone, recorded as the one layer, by content.
+    assert layers() == [configLayer(default)]  # the same fields as the default config
+    # Negative control: other field values are another layer.
+    changed = iqqa.ImageQualityQaConfig()
+    changed.thresholdsFile, changed.extraThresholdsFiles, changed.fwhmWarnThreshold = "", [], 9.0
+    assert layers(changed) == [configLayer(changed)] != [configLayer(default)]
 
 
 def testRunQuantumRecordsTheCalexpRun(iqqa, monkeypatch):

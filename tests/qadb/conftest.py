@@ -4,7 +4,7 @@ The database is SQLite in memory through SQLAlchemy, behind the same
 ``commit``/``query_scalar``/``query_dataframe`` surface as
 `pfs.utils.database.db.DB`: the ``INSERT ... ON CONFLICT DO UPDATE ...
 RETURNING`` statements the writer builds run unchanged on both. ``DDL`` below
-mirrors the tables of ``spt_qa_database`` 0.3.0 (migration ``5d2e8f71c0b3``);
+mirrors the tables of ``spt_qa_database`` 0.5.0 (migration ``acbd1a9681d6``);
 change both together. Set ``PFS_QADB_TEST_DSN`` (``dbname=... user=... host=...
 port=...``) to run the same tests against a scratch PostgreSQL through
 `pfs.utils.database.qadb.QaDB` as well.
@@ -29,7 +29,7 @@ from sqlalchemy.pool import StaticPool
 
 DATA = Path(__file__).parent / "data"
 
-#: The qadb tables the loader writes, as ``spt_qa_database`` 0.3.0 defines them.
+#: The qadb tables the loader writes, as ``spt_qa_database`` 0.5.0 defines them.
 DDL = """
 CREATE TABLE pfs_visit (
     pfs_visit_id INTEGER PRIMARY KEY, pfs_visit_description TEXT, pfs_design_id BIGINT, issued_at TIMESTAMP);
@@ -87,9 +87,7 @@ CREATE TABLE qa_gate (
     processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
     pfs_visit_id INTEGER REFERENCES pfs_visit,
     camera_name VARCHAR(2), qa_status TEXT, decided_by_task TEXT, qa_decided_by TEXT, qa_reason TEXT,
-    provisional BOOLEAN, mode TEXT, iq_thresholds_id INTEGER REFERENCES qa_thresholds,
-    dm_thresholds_id INTEGER REFERENCES qa_thresholds, twilight_thresholds_id INTEGER REFERENCES qa_thresholds,
-    decided_at TIMESTAMP,
+    provisional BOOLEAN, mode TEXT, decided_at TIMESTAMP,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
 CREATE TABLE twilight_qa (
     processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
@@ -100,6 +98,10 @@ CREATE TABLE twilight_qa (
     twilight_patch REAL, twilight_arm_mean REAL, twilight_arm_half_diff REAL, qa_status TEXT,
     qa_decided_by TEXT, qa_reason TEXT,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
+CREATE TABLE qa_processing_thresholds (
+    processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE, task TEXT, layer INTEGER,
+    thresholds_id INTEGER NOT NULL REFERENCES qa_thresholds,
+    PRIMARY KEY (processing_id, task, layer));
 """
 
 #: The tables `DDL` makes, in dependency order.
@@ -301,6 +303,39 @@ def configs():
     return {
         "imageQualityQa_config": SimpleNamespace(thresholdsFile="iqQaThresholds-run25.yaml"),
         "dmLineResiduals_config": SimpleNamespace(thresholdsFile="dmLineResidualThresholds-run25.yaml"),
+    }
+
+
+@pytest.fixture
+def fullConfigs():
+    """Return the tasks' configs with their threshold fields too, as the real configs store them.
+
+    The fields are the tasks' defaults (``flagRate*Threshold`` cut down), so the config layer
+    each builds is what `pfs.drp.qa.metrics.gate.configThresholds` and
+    `pfs.drp.qa.metrics.lineResiduals.residualConfigThresholds` give for them.
+    """
+    return {
+        "imageQualityQa_config": SimpleNamespace(
+            thresholdsFile="iqQaThresholds-run25.yaml",
+            extraThresholdsFiles=[],
+            fwhmWarnThreshold=3.2,
+            fwhmFailThreshold=3.5,
+            flagRateWarnThreshold={"b": 55.0, "r": 15.0, "b:HgCd": 20.0},
+            flagRateFailThreshold={"b": 60.0, "r": 20.0, "b:HgCd": 25.0},
+            dxCenterWarnThreshold=1.0,
+            dxCenterFailThreshold=2.0,
+        ),
+        "dmLineResiduals_config": SimpleNamespace(
+            thresholdsFile="dmLineResidualThresholds-run25.yaml",
+            xWarnThreshold=1.0,
+            xFailThreshold=2.0,
+            yWarnThreshold=1.0,
+            yFailThreshold=2.0,
+            xRmsWarnThreshold=float("nan"),
+            xRmsFailThreshold=float("nan"),
+            yRmsWarnThreshold=float("nan"),
+            yRmsFailThreshold=float("nan"),
+        ),
     }
 
 

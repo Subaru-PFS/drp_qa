@@ -5,15 +5,23 @@ as its pipetask has run (`loadVisit`), comparison mode for a run, and
 ``bin.src/loadQadb.py`` for a backfill. Each Butler RUN found becomes a
 ``data_processing_pipe2d`` row, with the drp_qa that wrote it (from the RUN's
 ``packages`` dataset) and the pipeline that reduced the images it judged (from
-their ``pfsArm`` headers, as comparison mode reads them); the thresholds files
-each image was judged with are registered, and its gate verdict is written to
-``qa_gate``.
+their ``pfsArm`` headers, as comparison mode reads them); the thresholds layers
+each image was judged with are registered and cited, in order, per processing
+and task in ``qa_processing_thresholds`` (a RUN has one config, so its images
+share them), and its gate verdict is written to ``qa_gate``.
 
-The tasks record those files with each image, by name and SHA-256 as they were
-at judgement time (`pfs.drp.qa.metrics.gate.thresholdsRecord`), so
-what the gate cites does not depend on the drp_qa that loads. A table written
-before then records none, and its RUN's stored task config is read instead:
-through today's config class, and with today's files under those names.
+The tasks record those layers with each image, by name and SHA-256 as they were
+at judgement time (`pfs.drp.qa.metrics.gate.thresholdsRecord`), so what the
+gate cites does not depend on the drp_qa that loads: its thresholds files, then
+its config's threshold fields as a document of their own
+(`pfs.drp.qa.metrics.gate.thresholdsDocument`, named by
+`pfs.drp.qa.metrics.gate.configLayerName`). A file is registered from the copy
+this drp_qa ships with the recorded content; the config layer is rebuilt from
+the RUN's stored task config (`CONFIG_LAYERS`) and registered when it hashes as
+recorded, so a layer this drp_qa would build differently is left out, and
+logged, rather than misattributed. A table written before the tasks recorded
+anything has its RUN's stored config read instead: through today's config class,
+with today's files under those names, and its fields as the config layer.
 """
 
 import time
@@ -26,11 +34,16 @@ import pandas as pd
 
 from pfs.drp.qa.metrics.gate import (
     THRESHOLDS_COLUMNS,
+    configLayerName,
+    configThresholds,
+    isConfigLayer,
     recordedThresholds,
     sha256Of,
+    thresholdsDocument,
     thresholdsNames,
     thresholdsPath,
 )
+from pfs.drp.qa.metrics.lineResiduals import residualConfigThresholds
 from pfs.drp.qa.metrics.readers import readMetrics, readReductionPipelines
 from pfs.drp.qa.qadb.tables import (
     IMAGE_KEYS,
@@ -40,11 +53,14 @@ from pfs.drp.qa.qadb.tables import (
     LINE_RESIDUAL,
     LINE_RESIDUAL_METRIC,
     QA_GATE,
+    QA_PROCESSING_THRESHOLDS,
     TASK_TABLES,
     TWILIGHT_QA,
     TableSpec,
     gateRows,
     imageRows,
+    processingTasks,
+    processingThresholdsRows,
 )
 from pfs.drp.qa.qadb.writer import (
     UNKNOWN_VERSION,
@@ -52,20 +68,30 @@ from pfs.drp.qa.qadb.writer import (
     ensureVisits,
     processingId,
     registerThresholds,
+    registerThresholdsContent,
     upsert,
 )
 from pfs.drp.qa.utils.provenance import commonPipeline
 
 __all__ = [
+    "CONFIG_LAYERS",
     "MODES",
     "SPECS",
     "collectionExists",
+    "configDocumentOf",
     "drpQaVersionOf",
     "loadCollection",
     "loadVisit",
     "readTables",
     "thresholdsFilesOf",
 ]
+
+#: How each task's config threshold fields become its last thresholds layer: the table the task judges with
+#: after its files, built from its config as the task builds it. ``twilightQa`` has no config layer.
+CONFIG_LAYERS: dict[str, Callable[[Any], pd.DataFrame]] = {
+    "imageQualityQa": configThresholds,
+    "dmLineResiduals": residualConfigThresholds,
+}
 
 #: How a load came about: qaActor as the run goes, comparison mode over a run, or later.
 MODES = ("realtime", "comparison", "backfill")
@@ -172,18 +198,59 @@ def thresholdsFilesOf(butler: Any, run: str, task: str) -> list[Path]:
     return [thresholdsPath(name) for name in thresholdsNames(config)]
 
 
-def _thresholdsIdOf(qadb: Any, butler: Any, run: str, task: str, now: datetime, log: Callable) -> int | None:
-    """Register the thresholds files a RUN's stored config names; return the first layer's id.
+def configDocumentOf(butler: Any, run: str, task: str) -> bytes | None:
+    """Return a RUN's stored config for a task as the task's config thresholds layer.
 
-    For tables written before the tasks recorded their files. Every file is
-    registered, so each is in ``qa_thresholds`` by content; ``qa_gate`` cites
-    the first, the layer judged first. `None`, with a log line, for a file
-    this drp_qa no longer ships.
+    The table `CONFIG_LAYERS` builds from the config, as a
+    `pfs.drp.qa.metrics.gate.thresholdsDocument`: what the task recorded the
+    SHA-256 of, when its drp_qa built the same table from the same fields.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        A Butler.
+    run : `str`
+        The RUN, whose ``<task>_config`` is read.
+    task : `str`
+        The task.
+
+    Returns
+    -------
+    `bytes` or `None`
+        The document; `None` when the task has no config layer
+        (``twilightQa``), the RUN has no config for it, or the config lacks
+        the threshold fields (read through today's config class, a config
+        stored by a drp_qa without them has none).
+    """
+    build = CONFIG_LAYERS.get(task)
+    if build is None:
+        return None
+    try:
+        config = butler.get(f"{task}_config", collections=[run])
+    except Exception:  # a RUN without the task has no config
+        return None
+    try:
+        table = build(config)
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return None
+    return thresholdsDocument(table, configLayerName(task))
+
+
+def _thresholdsIdsOf(
+    qadb: Any, butler: Any, run: str, task: str, now: datetime, log: Callable
+) -> list[int | None]:
+    """Register the thresholds layers a RUN's stored config gives; return their ids in the order judged.
+
+    For tables written before the tasks recorded their layers. Every file the
+    config names is registered, so each is in ``qa_thresholds`` by content,
+    then the config's fields as the task's config layer (`configDocumentOf`).
+    `None` in a file's place, with a log line, when this drp_qa no longer
+    ships it.
     """
     log(
-        f"{run}: {task} recorded no thresholds files; citing those its stored config names, as this drp_qa has them"
+        f"{run}: {task} recorded no thresholds layers; citing those its stored config gives, as this drp_qa has them"
     )
-    ids = []
+    ids: list[int | None] = []
     for path in thresholdsFilesOf(butler, run, task):
         try:
             ids.append(registerThresholds(qadb, path, now))
@@ -192,7 +259,12 @@ def _thresholdsIdOf(qadb: Any, butler: Any, run: str, task: str, now: datetime, 
                 f"{run}: {task} judged with {path.name}, which this drp_qa no longer has; thresholds left null"
             )
             ids.append(None)
-    return ids[0] if ids else None
+    document = configDocumentOf(butler, run, task)
+    if document is not None:
+        ids.append(registerThresholdsContent(qadb, document, configLayerName(task), now))
+    elif task in CONFIG_LAYERS:
+        log(f"{run}: {task}'s stored config gives no threshold fields; its config layer is not cited")
+    return ids
 
 
 def _shippedWith(name: str, digest: str) -> Path | None:
@@ -204,14 +276,25 @@ def _shippedWith(name: str, digest: str) -> Path | None:
     return None
 
 
-def _recordedId(qadb: Any, name: str, digest: str, now: datetime, log: Callable) -> int | None:
-    """Return the ``thresholds_id`` of a file an image records judging with, registering it if needed.
+def _recordedId(
+    qadb: Any,
+    name: str,
+    digest: str,
+    now: datetime,
+    log: Callable,
+    rebuild: Callable[[], bytes | None] | None = None,
+) -> int | None:
+    """Return the ``thresholds_id`` of a layer an image records judging with, registering it if needed.
 
-    By content: qadb's row with that SHA-256, else a file this drp_qa ships
-    with it, registered under the name judged with. `None`, with a log line,
-    when there is neither: the file changed or went before it was registered.
-    A row with fewer entries than it counts (a registration that stopped
-    between its two writes) is registered again when the file is shipped.
+    By content: qadb's row with that SHA-256, else the same content found
+    again and registered under the name judged with: for a file, a copy this
+    drp_qa ships (`_shippedWith`); for a config layer, the document
+    ``rebuild`` returns (`configDocumentOf` on the RUN's stored config) when it
+    hashes as recorded. `None`, with a log line, when there is neither: the
+    file changed or went before it was registered, or this drp_qa builds the
+    config layer differently. A row with fewer entries than it counts (a
+    registration that stopped between its two writes) is registered again
+    when the content is at hand.
     """
     found = qadb.query_dataframe(
         "SELECT t.thresholds_id, t.n_entries,"
@@ -224,19 +307,27 @@ def _recordedId(qadb: Any, name: str, digest: str, now: datetime, log: Callable)
     )
     if not found.empty and complete:
         return int(found["thresholds_id"].iloc[0])
-    path = _shippedWith(name, digest)
-    if path is None and not found.empty:
+    content, why = None, "shipped with this drp_qa"
+    if isConfigLayer(name):
+        document = rebuild() if rebuild is not None else None
+        if document is None:
+            why = "given by the RUN's stored config"
+        elif sha256Of(document) != digest:
+            why = f"what this drp_qa builds from the RUN's stored config (sha256 {sha256Of(document)[:12]})"
+        else:
+            content = document
+    else:
+        path = _shippedWith(name, digest)
+        content = path.read_bytes() if path is not None else None
+    if content is None and not found.empty:
         log(
-            f"thresholds {name} (sha256 {digest[:12]}) has entries missing in qadb, and this drp_qa has no copy to restore them"
+            f"thresholds {name} (sha256 {digest[:12]}) has entries missing in qadb, and is not {why} to restore them"
         )
         return int(found["thresholds_id"].iloc[0])
-    if path is None:
-        log(
-            f"thresholds {name} (sha256 {digest[:12]}) is neither in qadb nor shipped with this drp_qa;"
-            " thresholds left null"
-        )
+    if content is None:
+        log(f"thresholds {name} (sha256 {digest[:12]}) is neither in qadb nor {why}; layer left null")
         return None
-    return registerThresholds(qadb, path, now, name=name)
+    return registerThresholdsContent(qadb, content, Path(name).name, now)
 
 
 def _thresholdsIds(
@@ -244,40 +335,53 @@ def _thresholdsIds(
     butler: Any,
     task: str,
     judged: pd.DataFrame,
-    registered: dict[tuple[str, str], int | None],
+    registered: dict[tuple, int | None],
     now: datetime,
     log: Callable[[str], None],
-) -> list[int | None]:
-    """Return the ``thresholds_id`` of the first file each image of a task was judged with.
+) -> list[list[int | None]]:
+    """Return the ``thresholds_id`` of each layer each image of a task was judged with, in the order judged.
 
-    Every recorded file is registered (``registered`` caches them by name and
-    SHA-256 across the load); an image that records none falls back on its
-    RUN's stored config (`_thresholdsIdOf`).
+    Every recorded layer is registered (``registered`` caches them across the
+    load: a file by name and SHA-256, a config layer by those and the RUN,
+    whose stored config rebuilds it); a layer that cannot be cited is `None`
+    in its place. An image that records none falls back on its RUN's stored
+    config (`_thresholdsIdsOf`); one whose record is unreadable gets no
+    layers.
     """
     recorded = (
         judged[list(THRESHOLDS_COLUMNS)].itertuples(index=False, name=None)
         if set(THRESHOLDS_COLUMNS) <= set(judged.columns)
         else [(None, None)] * len(judged)
     )
-    fromConfig: dict[str, int | None] = {}
-    ids = []
+    fromConfig: dict[str, list[int | None]] = {}
+    ids: list[list[int | None]] = []
     for (files, digests), run in zip(recorded, judged["run"], strict=True):
         try:
             layers = recordedThresholds(files, digests)
         except ValueError as error:
             # One unreadable record must not stop the load (qaActor runs it for every visit).
             log(f"{run}: {task} {error}; thresholds left null")
-            ids.append(None)
+            ids.append([])
             continue
         if layers is None:
             if run not in fromConfig:
-                fromConfig[run] = _thresholdsIdOf(qadb, butler, run, task, now, log)
+                fromConfig[run] = _thresholdsIdsOf(qadb, butler, run, task, now, log)
             ids.append(fromConfig[run])
             continue
-        for layer in layers:
-            if layer not in registered:
-                registered[layer] = _recordedId(qadb, *layer, now, log)
-        ids.append(registered[layers[0]] if layers else None)
+        found: list[int | None] = []
+        for name, digest in layers:
+            if isConfigLayer(name):
+                key: tuple = (name, digest, run)
+
+                def rebuild(run: str = run) -> bytes | None:
+                    return configDocumentOf(butler, run, task)
+
+            else:
+                key, rebuild = (name, digest), None  # type: ignore[assignment]
+            if key not in registered:
+                registered[key] = _recordedId(qadb, name, digest, now, log, rebuild=rebuild)
+            found.append(registered[key])
+        ids.append(found)
     return ids
 
 
@@ -369,7 +473,8 @@ def loadCollection(
     Returns
     -------
     `dict` [`str`, `int`]
-        Rows written per table, and ``processings``: the RUNs found.
+        Rows written per table (``qa_processing_thresholds`` counts layers cited),
+        and ``processings``: the RUNs found.
 
     Raises
     ------
@@ -407,17 +512,17 @@ def loadCollection(
         else:
             ids[run] = processingId(qadb, collection, run, drpQaVersionOf(butler, run), pipeline.get(run))
 
-    # The thresholds each image was judged with, as its task recorded them.
+    # The thresholds each image was judged with, as its task recorded them: every layer, in order.
     if sink is None:
-        registered: dict[tuple[str, str], int | None] = {}
-        images = {
-            task: judged.assign(
-                thresholdsId=_thresholdsIds(qadb, butler, task, judged, registered, now(), log)
-            )
-            if not judged.empty
-            else judged
-            for task, judged in images.items()
-        }
+        registered: dict[tuple, int | None] = {}
+        cited = {}
+        for task, judged in images.items():
+            if judged.empty:
+                cited[task] = judged
+                continue
+            layers = _thresholdsIds(qadb, butler, task, judged, registered, now(), log)
+            cited[task] = judged.assign(thresholdsIds=pd.Series(layers, index=judged.index, dtype=object))
+        images = cited
 
     allVisits = {int(v) for table in images.values() for v in table.get("visit", pd.Series(dtype=object))}
     counts: dict[str, int] = {"processings": len(runs)}
@@ -463,7 +568,17 @@ def loadCollection(
     # replaces the row the per-visit load wrote under pipetask's RUN rather than adding one.
     present = {task: table for task, table in images.items() if not table.empty}
     gate = gateRows(present, ids, mode, now()) if present else gateRows({}, 0, mode, now())
-    write("qa_gate", gate, list(QA_GATE[:3]))
+    layers = processingThresholdsRows(present, ids, log)
+    if sink is not None:
+        write("qa_gate", gate, list(QA_GATE[:3]))
+        write("qa_processing_thresholds", layers, list(QA_PROCESSING_THRESHOLDS[:3]))
+    else:
+        # The layers of each processing and task loaded replace the old ones, with the gate rows, in one
+        # transaction: a re-judgement with fewer layers leaves none behind.
+        with qadb.connection() as conn:
+            write("qa_gate", gate, list(QA_GATE[:3]), conn=conn)
+            deleteRows(qadb, "qa_processing_thresholds", processingTasks(present, ids), conn=conn)
+            write("qa_processing_thresholds", layers, list(QA_PROCESSING_THRESHOLDS[:3]), conn=conn)
     log(f"loaded {collection} in {time.monotonic() - start:.0f} s")
     return counts
 

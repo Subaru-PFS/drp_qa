@@ -1,6 +1,7 @@
 """Tests for the gate: judging metrics against layered threshold tables."""
 
 import ast
+import hashlib
 import importlib.util
 import math
 from pathlib import Path
@@ -16,14 +17,18 @@ from pfs.drp.qa.metrics.gate import (
     PROVISIONAL_COLUMNS,
     THRESHOLDS_COLUMNS,
     VERDICT_COLUMNS,
+    configLayerName,
     configThresholds,
     gate,
+    isConfigLayer,
     judge,
     layerPipelineMismatch,
     loadThresholds,
     pipelineMismatch,
     recordedThresholds,
     sha256Of,
+    taskThresholdsRecord,
+    thresholdsDocument,
     thresholdsNames,
     thresholdsPath,
     thresholdsRecord,
@@ -640,5 +645,83 @@ class TestThresholdsRecord:
     def testBadRecords(self):
         with pytest.raises(ValueError, match="comma"):
             thresholdsRecord(["a,b.yaml"])
-        with pytest.raises(ValueError, match="2 thresholds files recorded with 1"):
+        with pytest.raises(ValueError, match="2 thresholds layers recorded with 1"):
             recordedThresholds("a.yaml,b.yaml", "0" * 64)
+
+
+class TestThresholdsDocument:
+    """A task config's fields become a thresholds layer with a content hash, read back as the same table."""
+
+    CONFIG = SimpleNamespace(
+        fwhmWarnThreshold=3.2,
+        fwhmFailThreshold=3.5,
+        flagRateWarnThreshold={"b": 55.0, "b:HgCd": 20.0},
+        flagRateFailThreshold={"b": 60.0, "b:HgCd": 25.0},
+        dxCenterWarnThreshold=1.0,
+        dxCenterFailThreshold=2.0,
+    )
+
+    def testNames(self):
+        assert configLayerName("imageQualityQa") == "imageQualityQa.config"
+        assert isConfigLayer("dmLineResiduals.config") and not isConfigLayer("iqQaThresholds-run25.yaml")
+
+    def testDeterministicAndContentAddressed(self):
+        table = configThresholds(self.CONFIG)
+        document = thresholdsDocument(table, "imageQualityQa.config")
+        assert document == thresholdsDocument(configThresholds(self.CONFIG), "imageQualityQa.config")
+        assert b"name: imageQualityQa.config" in document and b"version: 2" in document
+        # Negative control: another field value is another document, so another SHA-256.
+        other = SimpleNamespace(**vars(self.CONFIG), **{})
+        other.fwhmWarnThreshold = 3.3
+        assert sha256Of(thresholdsDocument(configThresholds(other), "imageQualityQa.config")) != sha256Of(
+            document
+        )
+
+    def testReadsBackAsTheTable(self, tmp_path):
+        """What `parseThresholds` reads from the document judges as the table did: null populations are 'any'."""
+        from pfs.drp.qa.metrics.calibration import parseThresholds, readThresholds
+
+        table = configThresholds(self.CONFIG)
+        document = thresholdsDocument(table, "imageQualityQa.config")
+        metadata, parsed = parseThresholds(document)
+        assert metadata["pipelineVersions"] == {} and metadata["collection"] is None
+        assert parsed["metric"].tolist() == table["metric"].tolist()
+        assert parsed.loc[parsed["species"].notna(), "species"].tolist() == ["HgCd"]
+        assert parsed["arm"].isna().sum() == table["arm"].isna().sum()
+        metrics = pd.DataFrame(
+            {
+                "medFwhm": [3.0, 3.4],
+                "pctFlagged": [21.0, 10.0],
+                "medDxCenter": [-1.5, 0.1],
+                "arm": ["b", "r"],
+                "species": ["HgCd", "Neon"],
+            }
+        )
+        pd.testing.assert_frame_equal(
+            judge(metrics, parsed)[["metric", "status", "warn", "fail", "population"]],
+            judge(metrics, table)[["metric", "status", "warn", "fail", "population"]],
+        )
+        path = tmp_path / "imageQualityQa.config.yaml"
+        path.write_bytes(document)
+        assert readThresholds(path)[1].equals(parsed)
+
+    def testNanThresholdsAreNull(self):
+        """A field left NaN (not judged) is null in the document, and an unjudged entry when read back."""
+        from pfs.drp.qa.metrics.calibration import parseThresholds
+        from pfs.drp.qa.metrics.lineResiduals import residualThresholds
+
+        table = residualThresholds(1.0, 2.0, 1.0, 2.0)
+        document = thresholdsDocument(table, "dmLineResiduals.config")
+        assert b"warn: null" in document and b".nan" not in document
+        _, parsed = parseThresholds(document)
+        rms = parsed[parsed["metric"] == "robustRmsDeltaX"].iloc[0]
+        assert pd.isna(rms["warn"]) and pd.isna(rms["fail"]) and rms["statusType"] == "RESERVED"
+
+    def testTaskRecordListsFilesThenTheConfigLayer(self):
+        table = configThresholds(self.CONFIG)
+        record = taskThresholdsRecord("imageQualityQa", ["iqQaThresholds-run25.yaml"], table)
+        layers = recordedThresholds(*record.values())
+        assert [name for name, _ in layers] == ["iqQaThresholds-run25.yaml", "imageQualityQa.config"]
+        assert layers[0][1] == sha256Of(thresholdsPath("iqQaThresholds-run25.yaml"))
+        assert layers[1][1] == sha256Of(thresholdsDocument(table, "imageQualityQa.config"))
+        assert sha256Of(b"abc") == hashlib.sha256(b"abc").hexdigest()

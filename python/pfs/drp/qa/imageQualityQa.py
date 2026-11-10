@@ -37,9 +37,9 @@ from pfs.drp.qa.metrics.gate import (
     configThresholds,
     gate,
     loadThresholds,
+    taskThresholdsRecord,
     thresholdsNames,
     thresholdsPath,
-    thresholdsRecord,
 )
 from pfs.drp.qa.metrics.longFormat import parseSpeciesStats, speciesFrame
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
@@ -186,9 +186,10 @@ class ImageQualityQaConnections(
             " the science fibers, or ``iis``, the 16 engineering fibers), ``qaStatus``"
             " (``PASS``, ``WARN``, ``FAIL``, or ``UNKNOWN`` when no metric was"
             " judged), ``qaDecidedBy``, ``qaReason``, ``thresholdsFiles`` and"
-            " ``thresholdsSha256`` (the thresholds files judged with and their"
-            " content then, comma-separated; empty when none:"
-            " `pfs.drp.qa.metrics.gate.thresholdsRecord`), ``calexpRun`` (the RUN"
+            " ``thresholdsSha256`` (the thresholds layers judged with, the files then"
+            " the config's fields as ``imageQualityQa.config``, and their content"
+            " then, comma-separated: `pfs.drp.qa.metrics.gate.taskThresholdsRecord`),"
+            " ``calexpRun`` (the RUN"
             " collection of the calexp judged, null without one)."
         ),
         storageClass="DataFrame",
@@ -525,8 +526,9 @@ class ImageQualityQaTask(PipelineTask):
             *loadThresholds([thresholdsPath(name) for name in names]),
             configThresholds(self.config),
         ]
-        # Which files judged, by content, for qadb: the loader's drp_qa may ship others.
-        self.thresholdsRecord = thresholdsRecord(names)
+        # Which layers judged, by content, for qadb: the loader's drp_qa may ship other files, and the
+        # config's fields are a layer of their own there (`pfs.drp.qa.metrics.gate.configLayerName`).
+        self.thresholdsRecord = taskThresholdsRecord("imageQualityQa", names, self.thresholds[-1])
 
     def runQuantum(
         self,

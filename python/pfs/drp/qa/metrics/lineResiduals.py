@@ -91,6 +91,7 @@ __all__ = [
     "lineTable",
     "longResiduals",
     "observationType",
+    "residualConfigThresholds",
     "residualTaskThresholds",
     "residualThresholds",
     "residualVerdict",
@@ -653,6 +654,34 @@ def residualThresholds(
     return pd.DataFrame(rows).astype({"reference": object, "description": object, "statusType": object})
 
 
+def residualConfigThresholds(config: Any) -> pd.DataFrame:
+    """Return the thresholds a ``dmLineResiduals`` config's fields give: the task's last layer.
+
+    Parameters
+    ----------
+    config : `Any`
+        A ``DmLineResidualsConfig``, or any object with its threshold fields
+        (``xWarnThreshold`` ... ``yRmsFailThreshold``); duck-typed so this is
+        tested without the stack, and so the qadb loader rebuilds the layer
+        from a RUN's stored config.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        `residualThresholds` of the fields.
+    """
+    return residualThresholds(
+        config.xWarnThreshold,
+        config.xFailThreshold,
+        config.yWarnThreshold,
+        config.yFailThreshold,
+        config.xRmsWarnThreshold,
+        config.xRmsFailThreshold,
+        config.yRmsWarnThreshold,
+        config.yRmsFailThreshold,
+    )
+
+
 def residualTaskThresholds(config: Any) -> list[pd.DataFrame]:
     """Return the thresholds a ``dmLineResiduals`` config judges with, as the task builds them.
 
@@ -666,20 +695,10 @@ def residualTaskThresholds(config: Any) -> list[pd.DataFrame]:
     -------
     `list` [`pandas.DataFrame`]
         The thresholds file's table, if any, then the config's
-        (`residualThresholds`), highest priority first.
+        (`residualConfigThresholds`), highest priority first.
     """
     files = [thresholdsPath(name) for name in thresholdsNames(config)]
-    fields = residualThresholds(
-        config.xWarnThreshold,
-        config.xFailThreshold,
-        config.yWarnThreshold,
-        config.yFailThreshold,
-        config.xRmsWarnThreshold,
-        config.xRmsFailThreshold,
-        config.yRmsWarnThreshold,
-        config.yRmsFailThreshold,
-    )
-    return [*loadThresholds(files), fields]
+    return [*loadThresholds(files), residualConfigThresholds(config)]
 
 
 def judgedRows(species: pd.DataFrame) -> pd.DataFrame:

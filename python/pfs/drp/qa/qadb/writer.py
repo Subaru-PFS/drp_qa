@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import text
 
-from pfs.drp.qa.metrics.calibration import readThresholds
+from pfs.drp.qa.metrics.calibration import parseThresholds
 from pfs.drp.qa.metrics.gate import sha256Of
 from pfs.drp.qa.qadb.tables import QA_THRESHOLD_ENTRY, QA_THRESHOLDS, thresholdRows
 
@@ -28,6 +28,7 @@ __all__ = [
     "processingId",
     "records",
     "registerThresholds",
+    "registerThresholdsContent",
     "sha256Of",
     "upsert",
     "upsertSql",
@@ -283,9 +284,39 @@ def registerThresholds(
         The id.
     """
     path = Path(path)
-    name = Path(name).name if name else path.name
-    digest = sha256Of(path)
-    metadata, thresholds = readThresholds(path)
+    return registerThresholdsContent(
+        qadb, path.read_bytes(), Path(name).name if name else path.name, registeredAt
+    )
+
+
+def registerThresholdsContent(
+    qadb: Any, content: bytes, name: str, registeredAt: datetime | None = None
+) -> int:
+    """Register a thresholds document by its bytes: a file's, or a layer that was never a file.
+
+    `registerThresholds` for a `pfs.drp.qa.metrics.gate.thresholdsDocument`
+    (a task config's threshold fields, named by
+    `pfs.drp.qa.metrics.gate.configLayerName`): identified by the SHA-256 of
+    ``content``, which is what the task recorded with each image.
+
+    Parameters
+    ----------
+    qadb : `pfs.utils.database.qadb.QaDB`
+        The database.
+    content : `bytes`
+        The document.
+    name : `str`
+        The name to record (``qa_thresholds.name``).
+    registeredAt : `datetime.datetime`, optional
+        Default now.
+
+    Returns
+    -------
+    `int`
+        The id.
+    """
+    digest = sha256Of(content)
+    metadata, thresholds = parseThresholds(content, name)
     header, _ = thresholdRows(metadata, thresholds, 0, name, digest, registeredAt or datetime.now())
     columns = [column for column in QA_THRESHOLDS if column != "thresholds_id"]
     params = records(header[columns])[0]
@@ -295,7 +326,7 @@ def registerThresholds(
     )
     found = qadb.query_scalar(sql, params=params)
     if found is None:
-        raise RuntimeError(f"No thresholds_id returned for {path}")
+        raise RuntimeError(f"No thresholds_id returned for {name}")
     thresholdsId = int(found)
     _, entries = thresholdRows(metadata, thresholds, thresholdsId, name, digest, registeredAt)
     upsert(qadb, "qa_threshold_entry", entries, list(QA_THRESHOLD_ENTRY[:3]))

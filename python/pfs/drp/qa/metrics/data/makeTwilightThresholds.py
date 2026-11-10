@@ -5,8 +5,8 @@ The values are `pfs.drp.qa.metrics.twilight.twilightThresholds`'s provisional on
 detector's level against its sequence's (``twilightLevelOffset``, on its absolute value), the field's RMS
 beyond photon noise (``twilightResidRms``) and its deepest coherent patch (``twilightPatch``), with the n
 arm deliberately unjudged. They are written as a thresholds file so that the judge records what it judged
-with (`pfs.drp.qa.metrics.gate.thresholdsRecord`) and the qadb loader cites it in ``qa_gate``
-(``twilight_thresholds_id``), as it does for the other tasks' files.
+with (`pfs.drp.qa.metrics.gate.thresholdsRecord`) and the qadb loader cites it in ``qa_processing_thresholds``
+(task ``twilightQa``), as it does for the other tasks' layers.
 
     python makeTwilightThresholds.py
 """

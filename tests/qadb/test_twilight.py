@@ -45,7 +45,7 @@ def quiet(_):
 class TestSpec:
     def testTwilightIsAThirdTask(self):
         assert TASK_TABLES["twilightQa"] == (TWILIGHT_QA.source, None)
-        assert "twilight_thresholds_id" in QA_GATE
+        assert not any("thresholds" in column for column in QA_GATE)  # the layers table cites them
 
     def testColumns(self, images):
         rows = imageRows(images, TWILIGHT_QA, 7)
@@ -87,8 +87,12 @@ class TestLoad:
         assert qadb.count("qa_thresholds") == 1  # the shipped twilight thresholds, registered from the record
         gate = qadb.query_dataframe("SELECT * FROM qa_gate ORDER BY pfs_visit_id, camera_name")
         assert (gate["decided_by_task"] == "twilightQa").all()
-        assert gate["twilight_thresholds_id"].notna().all()
-        assert gate["iq_thresholds_id"].isna().all() and gate["dm_thresholds_id"].isna().all()
+        layers = qadb.query_dataframe("SELECT task, layer, thresholds_id FROM qa_processing_thresholds")
+        assert len(layers) == 1 and layers.iloc[0].tolist()[:2] == [
+            "twilightQa",
+            0,
+        ]  # once for the judge's RUN
+        assert layers["thresholds_id"].notna().all()
         expected = images.assign(camera=images["arm"] + images["spectrograph"].astype(str))
         expected = expected.set_index(["visit", "camera"])["qaStatus"]
         for row in gate.itertuples():
@@ -136,7 +140,12 @@ class TestLoad:
         row = rows.iloc[0]
         assert row["qa_status"] == "FAIL" and row["decided_by_task"] == "imageQualityQa"
         assert "imageQualityQa: medFwhm 9 px" in row["qa_reason"]
-        assert row["twilight_thresholds_id"] is not None and not pd.isna(row["twilight_thresholds_id"])
+        cited = qadb.query_dataframe(
+            "SELECT p.processing_id, p.task FROM qa_processing_thresholds p"
+            " JOIN twilight_qa t ON t.processing_id = p.processing_id WHERE t.pfs_visit_id = :v",
+            params={"v": VISITS[1]},
+        )
+        assert set(cited["task"]) == {"twilightQa"}  # cited under the judge's own RUN, not the gate row's
         # Keyed by the reduction's processing (the first task's RUN), not the judge's.
         assert row["run_name"] != judgeRun
         # Negative control: the twilight rows themselves sit under the judge's processing.
