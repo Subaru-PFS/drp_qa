@@ -5,7 +5,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 from pfs.drp.qa.plotting.saturation import plotSaturation
-from pfs.drp.qa.saturationReport import reportMarkdown, saturatedCameras, writeReport
+from pfs.drp.qa.saturationReport import hasSaturationColumns, reportMarkdown, saturatedCameras, writeReport
 
 DATA_ID = {"instrument": "PFS", "visit": 153432, "arm": "r", "spectrograph": 2}
 
@@ -76,5 +76,6 @@ def testSaturatedCamerasAreThoseWithLinesOrPixels():
         }
     )
     assert saturatedCameras(metrics) == [("n", 3), ("r", 2)]
-    # Metrics written before the columns existed report nothing.
+    # Metrics written before the columns existed report nothing, and say so.
     assert saturatedCameras(metrics[["arm", "spectrograph"]]) == []
+    assert hasSaturationColumns(metrics) and not hasSaturationColumns(metrics[["arm", "spectrograph"]])

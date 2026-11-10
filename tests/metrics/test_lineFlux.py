@@ -36,6 +36,20 @@ def testSpeciesLineFluxIsPerSpeciesOverGoodLines():
     assert speciesLineFlux(blended)["X"]["medLineFlux"] not in (pytest.approx(250.0), pytest.approx(20.0))
 
 
+@pytest.mark.parametrize("bit", [0x01, 0x02, 0x04, 0x08, 0x10])
+def testEveryBadStatusBitExcludesALine(bit):
+    """NOT_VISIBLE, BLEND, SUSPECT, REJECTED and BROAD lines are each left out of the flux."""
+    lines = makeLines()
+    lines.loc[0, "status"] = bit  # NeI 100.0
+    stats = speciesLineFlux(lines)["NeI"]
+    assert stats["nFluxLines"] == 3
+    assert stats["medLineFlux"] == pytest.approx(300.0)
+
+    # Negative control: the fit's own USED and RESERVED marks, alone or together, exclude nothing.
+    lines.loc[0, "status"] = 0x60
+    assert speciesLineFlux(lines)["NeI"]["nFluxLines"] == 4
+
+
 def testSpeciesLineFluxSelectsRowsAndCountsSaturation():
     """``select`` limits the rows; saturated lines are counted whether or not they are flagged."""
     lines = makeLines()

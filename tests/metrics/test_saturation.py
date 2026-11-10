@@ -25,6 +25,14 @@ def testSaturatedAtSearchesTheBoxAboutThePosition():
     assert saturatedAt(saturated, x, y, halfSize=0).tolist() == [True, False, False, False, False, False]
     assert not saturatedAt(saturated, np.array([10.0]), np.array([15.0])).any()
 
+    # A position belongs to the pixel whose centre is nearest: 15.6 is pixel 16, 14.6 pixel 15.
+    assert saturatedAt(saturated, np.array([14.6, 15.6]), np.array([10.4, 10.0]), halfSize=0).tolist() == [
+        True,
+        False,
+    ]
+    # Negative control: truncated, 15.6 would be pixel 15 and count.
+    assert saturated[10, int(15.6)]
+
 
 def testSaturatedAtIgnoresPixelsOffTheImage():
     """A box hanging over the edge is searched where it is on the image."""
@@ -50,6 +58,12 @@ def testApertureSaturationCountsWithinTheApertures():
     numSaturated, _ = apertureSaturation(saturated, xCenters, halfWidth=10)
     assert numSaturated == 3 + 10
 
+    # The aperture is about the nearest pixel to the trace centre: at 26.6 that is column 27, whose
+    # aperture (24-30) reaches the bad column; truncated to 26 (23-29) it would not.
+    numSaturated, _ = apertureSaturation(saturated, np.full((1, 10), 26.6), halfWidth=3)
+    assert numSaturated == 10
+    assert apertureSaturation(saturated, np.full((1, 10), 26.4), halfWidth=3)[0] == 0
+
 
 def testApertureSaturationCountsSharedAndMissingPixelsOnce():
     """Overlapping apertures share pixels; rows without a trace and columns off the image have none."""
@@ -74,13 +88,13 @@ class FakeDetectorMap:
 
 
 def makeDetector():
-    """Return a 50 x 40 plane with fiber 2's line at row 20 saturated, and the three fibers' two lines."""
+    """Return a 50 x 40 plane saturated at fiber 2, row 20; the fibers' two lines; fiber 2's trace centroid there."""
     saturated = np.zeros((50, 40), dtype=bool)
     saturated[19:22, 19:22] = True
     lines = pd.DataFrame(
         {
             "fiberId": [1, 2, 3, 1, 2, 3, 2],
-            "wavelength": [502.0, 502.0, 502.0, 504.0, 504.0, 504.0, np.nan],
+            "wavelength": [502.0, 502.0, 502.0, 504.0, 504.0, 504.0, 502.0],
             "description": ["NeI"] * 6 + ["Trace"],
         }
     )
@@ -88,11 +102,15 @@ def makeDetector():
 
 
 def testMeasureSaturationPutsLinesAtTheirWavelength():
-    """A line is looked up at the detectorMap's position for its wavelength; a trace centroid nowhere."""
+    """A row is looked up at the detectorMap's position for its wavelength, a trace centroid's too."""
     saturated, lines = makeDetector()
     lineSaturated, x, y, pct = measureSaturation(saturated, FakeDetectorMap(), lines)
-    assert lineSaturated.tolist() == [False, True, False, False, False, False, False]
-    assert (x[1], y[1]) == (20.0, 20.0) and np.isnan(x[-1])
+    # The last row is fiber 2's trace centroid on the saturated pixels: drp_stella gives trace
+    # centroids their row's wavelength, so it is marked, and the caller counts lamp lines alone.
+    assert lineSaturated.tolist() == [False, True, False, False, False, False, True]
+    assert (x[1], y[1]) == (20.0, 20.0)
+    noWavelength = measureSaturation(saturated, FakeDetectorMap(), lines.assign(wavelength=np.nan))
+    assert not noWavelength[0].any() and np.isnan(noWavelength[1]).all()
     assert pct == pytest.approx(100.0 * 9 / (3 * 50 * 7))
 
     # Lit fibers alone: fiber 2 hidden leaves no saturated aperture pixel.

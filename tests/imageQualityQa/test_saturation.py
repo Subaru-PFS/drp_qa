@@ -90,10 +90,45 @@ def testSaturationIsOfLitFibers(runTask, fakes):
     metrics = outputs.iqQaMetrics.iloc[0]
     assert metrics["nSaturatedLines"] == 1
     assert metrics["pctSaturatedPixels"] == pytest.approx(100.0 * 1 / (len(lit) * 400 * 7))
+    # The species rows are of lit fibers too: fibers 1 and 5 are NeI, fiber 9 ArI, 5 lines each.
+    species = outputs.iqQaSpeciesMetrics
+    assert longValue(species, "NeI", "nSaturatedLines") == 1
+    assert longValue(species, "NeI", "nFluxLines") == 10
+    assert longValue(species, "ArI", "nFluxLines") == 5
 
     # Negative control: without the pfsConfig every fiber is taken as lit, and both count.
     outputs = runTask(lines, detectorMap=detectorMap, calexp=calexp)
     assert outputs.iqQaMetrics["nSaturatedLines"].iloc[0] == 2
+    assert longValue(outputs.iqQaSpeciesMetrics, "NeI", "nSaturatedLines") == 2
+    assert longValue(outputs.iqQaSpeciesMetrics, "NeI", "nFluxLines") == 25
+
+
+def testSaturatedQuartz(runTask, fakes):
+    """A saturated quartz shows in the aperture pixels; its trace centroids are not saturated lines."""
+    detectorMap = fakes.DetectorMap()
+    # As drp_stella writes a quartz's ``lines``: trace centroids alone, each with its row's wavelength.
+    lines = fakes.arcLines(detectorMap, numPerFiber=40, description="Trace")
+    lines["wavelength"] = lines["lam"]
+    calexp = fakes.Exposure(fakes.traceImage(detectorMap, sigma=1.2), fakes.header("scienceTrace", "Trace"))
+    calexp.mask.getPlaneBitMask = planes
+    # Fiber 3's trace is saturated over rows 100-299: its central 3 columns.
+    column = round(float(detectorMap.getXCenter(3, 0.0)))
+    calexp.mask.array[100:300, column - 1 : column + 2] |= SAT
+
+    outputs = runTask(lines, detectorMap=detectorMap, calexp=calexp)
+    metrics = outputs.iqQaMetrics.iloc[0]
+    assert metrics["obsType"] == "trace"
+    assert metrics["pctSaturatedPixels"] == pytest.approx(100.0 * 200 * 3 / (10 * 400 * 7))
+    assert metrics["nSaturatedLines"] == 0
+    assert "nSaturatedLines" not in set(outputs.iqQaSpeciesMetrics["metric"])
+
+    # Negative control: the same rows as lamp lines are saturated lines (those of fiber 3 in rows
+    # 99-300, within a pixel of the saturated ones), so it is the Trace description that excludes them.
+    asLines = lines.assign(description="NeI")
+    onTrace = (asLines["fiberId"] == 3) & asLines["y"].round().between(99, 300)
+    assert onTrace.sum() > 0
+    outputs = runTask(asLines, detectorMap=detectorMap, calexp=calexp)
+    assert outputs.iqQaMetrics["nSaturatedLines"].iloc[0] == onTrace.sum()
 
 
 def testNoCalexpGivesNoSaturation(runTask, fakes):

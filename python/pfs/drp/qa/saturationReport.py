@@ -24,7 +24,19 @@ import pandas as pd
 from pfs.drp.qa.metrics.lineFlux import TRACE
 from pfs.drp.qa.metrics.saturation import measureSaturation, saturatedLineSummary
 
-__all__ = ["main", "readDetector", "reportMarkdown", "saturatedCameras", "writeReport"]
+__all__ = [
+    "hasSaturationColumns",
+    "main",
+    "readDetector",
+    "reportMarkdown",
+    "saturatedCameras",
+    "writeReport",
+]
+
+
+def hasSaturationColumns(metrics: pd.DataFrame) -> bool:
+    """Return whether ``iqQaMetrics`` rows carry the saturation columns at all."""
+    return "nSaturatedLines" in metrics.columns or "pctSaturatedPixels" in metrics.columns
 
 
 def saturatedCameras(metrics: pd.DataFrame) -> list[tuple[str, int]]:
@@ -204,8 +216,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.cameras:
         cameras = [(camera[0], int(camera[1:])) for camera in args.cameras]
     else:
-        refs = butler.registry.queryDatasets("iqQaMetrics", instrument=args.instrument, visit=args.visit)
+        # findFirst: each camera once, from the first collection holding it, not from a superseded RUN too.
+        refs = butler.registry.queryDatasets(
+            "iqQaMetrics", instrument=args.instrument, visit=args.visit, findFirst=True
+        )
         frames = [butler.get(ref) for ref in refs]
+        if frames and not hasSaturationColumns(pd.concat(frames, ignore_index=True)):
+            print(
+                f"visit {args.visit}: these iqQaMetrics were written before saturation was measured;"
+                " name the cameras with --cameras",
+                flush=True,
+            )
+            return 1
         cameras = saturatedCameras(pd.concat(frames, ignore_index=True)) if frames else []
         print(f"visit {args.visit}: {len(cameras)} of {len(frames)} detector images saturated", flush=True)
     for number, (arm, spectrograph) in enumerate(cameras, start=1):

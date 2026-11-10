@@ -129,13 +129,13 @@ def linePositions(detectorMap: Any, fiberId: Any, wavelength: Any) -> tuple[np.n
     fiberId : array of `int`
         Each line's fiber.
     wavelength : array of `float`
-        Each line's wavelength; not finite for a row that has none (a trace
-        centroid).
+        Each row's wavelength. A trace centroid has one too (its row's), so it is
+        placed like a line: the caller leaves those rows out of its counts.
 
     Returns
     -------
     x, y : `numpy.ndarray` [`float`]
-        The expected positions; NaN for a row without a wavelength, or off the
+        The expected positions; NaN for a row whose wavelength is not finite, or off the
         detector.
     """
     fiberId = np.asarray(fiberId, dtype=np.int32)
@@ -194,7 +194,8 @@ def measureSaturation(
     -------
     lineSaturated : `numpy.ndarray` [`bool`]
         Per row of ``lines``, whether the line is saturated (`saturatedAt` its
-        expected position); `False` for a row without a wavelength.
+        expected position). Trace centroids are rows like any other here, and on a
+        saturated trace are `True`: count the lamp or sky lines alone.
     x, y : `numpy.ndarray` [`float`]
         Each line's expected position (`linePositions`).
     pctSaturatedPixels : `float`
