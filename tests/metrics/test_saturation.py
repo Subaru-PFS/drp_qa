@@ -122,11 +122,11 @@ def testMeasureSaturationPutsLinesAtTheirWavelength():
 
 
 def testSaturatedLineSummaryCountsFibersPerLine():
-    """Each saturated line is listed with the fibers it is saturated on, the most saturated first."""
+    """Each saturated line is listed with the fibers it is saturated on, in order of wavelength."""
     _, lines = makeDetector()
     lines = lines.iloc[:6].assign(saturated=[False, True, False, True, True, False])
     summary = saturatedLineSummary(lines)
-    assert summary["wavelength"].tolist() == [504.0, 502.0]
-    assert summary["nSaturated"].tolist() == [2, 1]
+    assert summary["wavelength"].tolist() == [502.0, 504.0]
+    assert summary["nSaturated"].tolist() == [1, 2]  # by wavelength, not by how saturated
     assert summary["nFibers"].tolist() == [3, 3]
     assert len(saturatedLineSummary(lines.assign(saturated=False))) == 0

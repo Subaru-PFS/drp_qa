@@ -43,8 +43,8 @@ def plotSaturation(
     title : `str`, optional
         Figure title, e.g. the visit and camera.
     maxLines : `int`, optional
-        Lines (species and wavelength) shown in the bar chart, the most
-        saturated first.
+        Lines (species and wavelength) shown in the bar chart: those
+        saturated on the most fibers, when there are more.
     maxCutouts : `int`, optional
         Saturated lines shown as cutouts: those with the most saturated
         pixels about them.
@@ -56,7 +56,7 @@ def plotSaturation(
     `matplotlib.figure.Figure`
         Top left, the detector: every ``SAT`` pixel, and a ring at each
         saturated line. Top right, the number of fibers each line is saturated
-        on. Below, cutouts of the image about the worst lines, their ``SAT``
+        on, in order of wavelength from the top. Below, cutouts of the image about the worst lines, their ``SAT``
         pixels outlined and the expected position crossed.
     """
     saturated = np.asarray(saturated, dtype=bool)
@@ -83,7 +83,11 @@ def plotSaturation(
     if len(rows) or len(hit):
         mapAxes.legend(loc="upper right", fontsize=8, markerscale=2)
 
-    summary = saturatedLineSummary(lines).head(maxLines).iloc[::-1]
+    # In order of wavelength, the shortest at the top; the most saturated if there are too many to show.
+    summary = saturatedLineSummary(lines)
+    summary = (
+        summary.loc[summary["nSaturated"].nlargest(maxLines, keep="first").index].sort_index().iloc[::-1]
+    )
     if len(summary):
         labels = [f"{row.description} {row.wavelength:.2f}" for row in summary.itertuples()]
         positions = np.arange(len(summary))

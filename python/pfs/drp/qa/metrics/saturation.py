@@ -236,8 +236,8 @@ def saturatedLineSummary(lines: pd.DataFrame) -> pd.DataFrame:
     -------
     `pandas.DataFrame`
         ``description``, ``wavelength``, ``nFibers`` (fibers with the line)
-        and ``nSaturated`` (those saturated), for the lines with any, the most
-        saturated first.
+        and ``nSaturated`` (those saturated), for the lines with any, in order
+        of wavelength.
     """
     columns = ["description", "wavelength", "nFibers", "nSaturated"]
     if len(lines) == 0:
@@ -249,6 +249,4 @@ def saturatedLineSummary(lines: pd.DataFrame) -> pd.DataFrame:
     )
     summary["nSaturated"] = summary["nSaturated"].astype(int)
     summary = summary[summary["nSaturated"] > 0]
-    return summary.sort_values(["nSaturated", "wavelength"], ascending=[False, True], ignore_index=True)[
-        columns
-    ]
+    return summary.sort_values(["wavelength", "description"], ignore_index=True)[columns]

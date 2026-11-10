@@ -38,8 +38,23 @@ def testPlotSaturationDrawsTheMapTheLinesAndTheCutouts():
     fig = plotSaturation(image, saturated, lines, title="153432 r2")
     mapAxes, barAxes, *cutouts = fig.axes
     assert "15 SAT pixels, 3 saturated lines" in mapAxes.get_title(loc="left")
-    # Two lines are saturated (760.15 on two fibers, 811.29 on one): the most saturated on top.
+    # Two lines are saturated (760.15 on two fibers, 811.29 on one): the shortest wavelength on top,
+    # so the last tick (bars are drawn upwards).
     assert [tick.get_text() for tick in barAxes.get_yticklabels()] == ["KrI 811.29", "KrI 760.15"]
+    # Negative control: with the longer wavelength the more saturated, it still comes second;
+    # ordered by how saturated, it would be on top.
+    longer = lines.assign(saturated=(lines["wavelength"] > 800) & (lines["fiberId"] <= 3))
+    longer.loc[0, "saturated"] = True
+    byWavelength = plotSaturation(image, saturated, longer)
+    assert [tick.get_text() for tick in byWavelength.axes[1].get_yticklabels()] == [
+        "KrI 811.29",
+        "KrI 760.15",
+    ]
+    plt.close(byWavelength)
+    # More lines than shown: the most saturated are kept, still in order of wavelength.
+    fewer = plotSaturation(image, saturated, lines, maxLines=1)
+    assert [tick.get_text() for tick in fewer.axes[1].get_yticklabels()] == ["KrI 760.15"]
+    plt.close(fewer)
     assert sum(axes.axison for axes in cutouts) == 3
     plt.close(fig)
 
@@ -60,7 +75,7 @@ def testReportListsTheSaturatedLines(tmp_path):
     text = report.read_text()
     assert "# Saturation: visit 153432 r2 (ImageQuality (Kr))" in text
     assert "`nSaturatedLines`: 3 of 16 lines on lit fibers, on 2 of 8 fibers" in text
-    assert "| KrI | 760.150 | 2 | 8 |" in text and "| KrI | 811.290 | 1 | 8 |" in text
+    assert text.index("| KrI | 760.150 | 2 | 8 |") < text.index("| KrI | 811.290 | 1 | 8 |")
     assert "No line is saturated." in reportMarkdown(
         DATA_ID, saturated, lines.assign(saturated=False), 0.0, "", "f.png"
     )
