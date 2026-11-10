@@ -202,6 +202,10 @@ class FakeDetectorMap:
     def findWavelength(self, fiberId, y):
         return 500.0 + 0.1 * np.asarray(y, dtype=float) + 0.0 * np.asarray(fiberId)
 
+    def findPoint(self, fiberId, wavelength):
+        y = (np.asarray(wavelength, dtype=float) - 500.0) / 0.1
+        return np.column_stack([self.getXCenter(fiberId, y), y])
+
 
 class FakeExposure:
     """A calexp: image, mask and header."""

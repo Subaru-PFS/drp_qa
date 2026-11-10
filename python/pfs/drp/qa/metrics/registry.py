@@ -139,6 +139,16 @@ _TWILIGHT = (
     "median."
 )
 
+_SATURATION = (
+    "The detector's saturation level, as ISR marks it in the calexp's SAT mask plane (on an H4RG, "
+    "a ramp leaving the valid range)."
+)
+
+_LINE_FLUX = (
+    "The same line species on the same detector at another epoch: within one image the lines of a "
+    "species span orders of magnitude, so it is compared across visits, not judged per image."
+)
+
 _LINE_REFERENCES = (
     "Per the ``reference`` column: detectorMap_calib (``calib``), as above; or the visit's own "
     "detectorMap (``visit``), adjusted to these lines, whose RESERVED lines it was not fitted to."
@@ -252,6 +262,30 @@ METRIC_SPECS = {
             units="pixels",
             reference="The fitDetectorMap solution, per line species, from the reduceExposure log.",
             unitSuffix="px",
+        ),
+        # Saturation and line flux: measured, with no thresholds yet. The validation set has
+        # no saturated frame to derive saturation's from, and a species' flux is judged across
+        # visits, not per image.
+        MetricSpec(
+            "pctSaturatedPixels",
+            units="percent",
+            reference=_SATURATION,
+            valueFormat=".3f",
+            unitSuffix="%",
+        ),
+        MetricSpec("nSaturatedLines", units="lines", reference=_SATURATION, valueFormat=".0f"),
+        MetricSpec(
+            "medLineFlux",
+            higherIsWorse=False,
+            groupBy=("arm", "description"),
+            units="counts",
+            reference=_LINE_FLUX,
+        ),
+        MetricSpec(
+            "robustRmsLineFlux",
+            groupBy=("arm", "description"),
+            units="counts",
+            reference=_LINE_FLUX,
         ),
         # Twilight sky flats: each exposure against the other exposures of its sequence,
         # minutes apart (pfs.drp.qa.metrics.twilight).

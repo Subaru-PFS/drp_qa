@@ -10,6 +10,18 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Added
+
+- **Saturation and per-species line flux in `imageQualityQa`** (PIPE2D-1922) — `iqQaMetrics` gains
+  `nSaturatedLines` (lines on lit fibers with a `SAT` pixel at their `detectorMap` position) and
+  `pctSaturatedPixels` (`SAT` pixels among those the lit fibers' traces cover), from the calexp's `SAT` mask plane
+  and null without a calexp. `iqQaSpeciesMetrics` gains, per line species, `medLineFlux`, `robustRmsLineFlux`,
+  `nFluxLines` and `nSaturatedLines`, measured from `lines`: the inputs to cross-visit lamp stability. None is
+  judged, and no config field is added. The measurements are stack-free in `metrics.saturation` and
+  `metrics.lineFlux`; `metrics.longFormat.metricsFrame` writes them, and `speciesStats` now skips a species with
+  no fit statistic. The per-species rows reach qadb's `image_quality_qa_species` as they are; the two
+  `iqQaMetrics` columns are not in `image_quality_qa` yet.
+
 ## [0.2.1] - 2026-11-10
 
 ### Fixed
