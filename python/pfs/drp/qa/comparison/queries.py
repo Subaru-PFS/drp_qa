@@ -19,6 +19,7 @@ __all__ = [
     "readNotes",
     "readSequenceOfVisit",
     "readTelStatus",
+    "readVisitCameras",
     "readVisitListing",
     "readVisitTimes",
 ]
@@ -77,6 +78,13 @@ FROM sps_exposure
 LEFT JOIN visit_set ON visit_set.pfs_visit_id = sps_exposure.pfs_visit_id
 WHERE sps_exposure.pfs_visit_id = ANY(:visits)
 GROUP BY sps_exposure.pfs_visit_id, visit_set.iic_sequence_id
+"""
+
+_VISIT_CAMERAS_SQL = """
+SELECT DISTINCT sps_exposure.pfs_visit_id AS visit, sps_camera.sps_camera_name AS camera
+FROM sps_exposure
+JOIN sps_camera ON sps_camera.sps_camera_id = sps_exposure.sps_camera_id
+WHERE sps_exposure.pfs_visit_id BETWEEN :first AND :last
 """
 
 _SEQUENCE_NOTES_SQL = """
@@ -221,6 +229,29 @@ def readVisitTimes(opdb, visits: Iterable[int]) -> pd.DataFrame:
     times["time_exp_start"] = pd.to_datetime(times["time_exp_start"])
     times["iic_sequence_id"] = pd.to_numeric(times["iic_sequence_id"]).astype("Int64")
     return times.sort_values("pfs_visit_id").reset_index(drop=True)
+
+
+def readVisitCameras(opdb, first: int, last: int) -> pd.DataFrame:
+    """Read which SpS cameras took an exposure on each visit of a range.
+
+    Parameters
+    ----------
+    opdb : `pfs.utils.database.opdb.OpDB`
+        The opdb, read-only.
+    first, last : `int`
+        The visit range, inclusive.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``visit`` and ``camera`` (``b1``), one row per image, sorted; what
+        `pfs.drp.qa.metrics.visitRollup.rollupVisits` takes as the cameras to
+        expect a verdict for.
+    """
+    cameras = opdb.query_dataframe(_VISIT_CAMERAS_SQL, params={"first": int(first), "last": int(last)})
+    cameras = cameras.reindex(columns=["visit", "camera"])
+    cameras["visit"] = cameras["visit"].astype("int64")
+    return cameras.sort_values(["visit", "camera"]).reset_index(drop=True)
 
 
 def readNotes(opdb, visits: Iterable[int], sequences: Iterable[int]) -> pd.DataFrame:
