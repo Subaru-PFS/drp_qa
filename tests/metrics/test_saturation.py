@@ -130,3 +130,7 @@ def testSaturatedLineSummaryCountsFibersPerLine():
     assert summary["nSaturated"].tolist() == [1, 2]  # by wavelength, not by how saturated
     assert summary["nFibers"].tolist() == [3, 3]
     assert len(saturatedLineSummary(lines.assign(saturated=False))) == 0
+    # No lines at all (a quartz): the same columns, typed, so that it sorts like any other.
+    empty = saturatedLineSummary(lines.iloc[:0])
+    assert list(empty.columns) == list(summary.columns) and len(empty) == 0
+    assert len(empty["nSaturated"].nlargest(3)) == 0

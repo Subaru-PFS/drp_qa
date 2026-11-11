@@ -164,8 +164,9 @@ identified by visit number, with no observer, target or design names.
 
 ### Gaps
 
-- An unsaturated IIS Kr arc on the r arm: every `ImageQuality (Kr)` arc of Run30 and Run31 measured (24 nights) is saturated there (known bad,
-  `nSaturatedLines`, unchecked), so saturation has no known-good reference on those detectors and no threshold.
+- An unsaturated IIS Kr arc on the r or m arm: every `ImageQuality (Kr)` arc of Run30 and Run31 measured is saturated
+  there (24 nights on r, one on m; known bad, `nSaturatedLines`, unchecked), so saturation has no known-good
+  reference on those detectors and no threshold.
 - m-arm traces: only the short block B and C sequences exist, below the sample floor.
 
 ## Every entry

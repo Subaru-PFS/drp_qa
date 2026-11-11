@@ -198,13 +198,8 @@ class TestCheckedInSet:
         assert len(loadValidationVisits(path)) == 0
         withPlaceholders = loadValidationVisits(path, includePlaceholders=True)
         assert [entry.placeholder for entry in withPlaceholders] == [True]
+        assert [entry.visits for entry in withPlaceholders] == [()]  # a placeholder carries no visits
         assert "### Placeholders" in formatTables(withPlaceholders)
-
-    def testPlaceholdersCarryNoVisits(self):
-        visitSet = loadValidationVisits(includePlaceholders=True)
-        for entry in visitSet:
-            if entry.placeholder:
-                assert entry.visits == ()
 
 
 class TestRun30KnownBad:

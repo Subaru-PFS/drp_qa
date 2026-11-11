@@ -25,6 +25,7 @@ from pfs.drp.qa.metrics.lineFlux import TRACE
 from pfs.drp.qa.metrics.saturation import measureSaturation, saturatedLineSummary
 
 __all__ = [
+    "camerasFromMetrics",
     "hasSaturationColumns",
     "main",
     "readDetector",
@@ -48,6 +49,27 @@ def saturatedCameras(metrics: pd.DataFrame) -> list[tuple[str, int]]:
         (str(arm), int(spectrograph))
         for arm, spectrograph in zip(hit["arm"], hit["spectrograph"], strict=True)
     ]
+
+
+def camerasFromMetrics(frames: Sequence[pd.DataFrame]) -> tuple[list[tuple[str, int]], int]:
+    """Return the saturated cameras among per-detector ``iqQaMetrics``, and how many say nothing.
+
+    Parameters
+    ----------
+    frames : sequence of `pandas.DataFrame`
+        One ``iqQaMetrics`` per detector image.
+
+    Returns
+    -------
+    cameras : `list` [`tuple` [`str`, `int`]]
+        `saturatedCameras` of the frames that carry the saturation columns.
+    numUnmeasured : `int`
+        The frames that don't (`hasSaturationColumns`): written before
+        saturation was measured, they say nothing either way.
+    """
+    measured = [frame for frame in frames if hasSaturationColumns(frame)]
+    cameras = saturatedCameras(pd.concat(measured, ignore_index=True)) if measured else []
+    return cameras, len(frames) - len(measured)
 
 
 def readDetector(butler: Any, dataId: dict) -> dict:
@@ -221,15 +243,26 @@ def main(argv: Sequence[str] | None = None) -> int:
             "iqQaMetrics", instrument=args.instrument, visit=args.visit, findFirst=True
         )
         frames = [butler.get(ref) for ref in refs]
-        if frames and not hasSaturationColumns(pd.concat(frames, ignore_index=True)):
+        cameras, numUnmeasured = camerasFromMetrics(frames)
+        if len(frames) == numUnmeasured:
+            # Nothing says which cameras are saturated: not the same as none being.
+            why = (
+                "these iqQaMetrics were written before saturation was measured"
+                if frames
+                else "no iqQaMetrics in these collections"
+            )
+            print(f"visit {args.visit}: {why}; name the cameras with --cameras", flush=True)
+            return 1
+        print(
+            f"visit {args.visit}: {len(cameras)} of {len(frames) - numUnmeasured} detector images saturated",
+            flush=True,
+        )
+        if numUnmeasured:
             print(
-                f"visit {args.visit}: these iqQaMetrics were written before saturation was measured;"
-                " name the cameras with --cameras",
+                f"visit {args.visit}: {numUnmeasured} more iqQaMetrics were written before saturation was"
+                " measured, and are not counted",
                 flush=True,
             )
-            return 1
-        cameras = saturatedCameras(pd.concat(frames, ignore_index=True)) if frames else []
-        print(f"visit {args.visit}: {len(cameras)} of {len(frames)} detector images saturated", flush=True)
     for number, (arm, spectrograph) in enumerate(cameras, start=1):
         dataId = {
             "instrument": args.instrument,

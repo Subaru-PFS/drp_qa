@@ -983,10 +983,10 @@ known_bad:
   # ---- Run30 saturated IIS Kr arcs (PIPE2D-1922) ------------------------------
   # The nightly "ImageQuality (Kr)" arc (85-88 s) saturates the r arm of every
   # spectrograph, the same way each night: on Run30's 14 nights with the r arm
-  # (u/wtg/PIPE2D-1922/002 and /003), nSaturatedLines is 87-90 on r1, 196-201 on r2,
+  # (the 13 listed here and 149594; u/wtg/PIPE2D-1922/002 and /003), nSaturatedLines is 87-90 on r1, 196-201 on r2,
   # 174-180 on r3 and 115-126 on r4, and pctSaturatedPixels 0.20-0.21, 0.54-0.57,
   # 0.48-0.49 and 0.27-0.29 %; no b or n detector has a saturated line. On 148972,
-  # taken with the m arm in place of r, m1-m4 have 75, 160, 152 and 107. Ten Run31
+  # taken with the m arm in place of r, m1-m4 have 75, 160, 152 and 107 (0.18-0.56 %). Ten Run31
   # nights (152765 to 153977) are the same, with 178-184 on r2. The frames stay known
   # good for the other metrics (above): the IIS thresholds were derived from them.
   # Recorded as bad so that these counts are what a shorter exposure is measured

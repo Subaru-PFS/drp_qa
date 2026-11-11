@@ -237,11 +237,13 @@ def saturatedLineSummary(lines: pd.DataFrame) -> pd.DataFrame:
     `pandas.DataFrame`
         ``description``, ``wavelength``, ``nFibers`` (fibers with the line)
         and ``nSaturated`` (those saturated), for the lines with any, in order
-        of wavelength.
+        of wavelength; empty, with the same columns, when ``lines`` is.
     """
     columns = ["description", "wavelength", "nFibers", "nSaturated"]
     if len(lines) == 0:
-        return pd.DataFrame(columns=columns)
+        # Typed, so that an image with no lamp or sky line (a quartz) sorts and selects like any other.
+        dtypes = {"description": object, "wavelength": float, "nFibers": int, "nSaturated": int}
+        return pd.DataFrame({name: pd.Series(dtype=dtype) for name, dtype in dtypes.items()})
     summary = (
         lines.groupby(["description", "wavelength"], sort=True)
         .agg(nFibers=("fiberId", "nunique"), nSaturated=("saturated", "sum"))

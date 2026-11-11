@@ -5,7 +5,13 @@ import pandas as pd
 from matplotlib import pyplot as plt
 
 from pfs.drp.qa.plotting.saturation import plotSaturation
-from pfs.drp.qa.saturationReport import hasSaturationColumns, reportMarkdown, saturatedCameras, writeReport
+from pfs.drp.qa.saturationReport import (
+    camerasFromMetrics,
+    hasSaturationColumns,
+    reportMarkdown,
+    saturatedCameras,
+    writeReport,
+)
 
 DATA_ID = {"instrument": "PFS", "visit": 153432, "arm": "r", "spectrograph": 2}
 
@@ -67,6 +73,18 @@ def testPlotSaturationOfAnUnsaturatedImage():
     plt.close(fig)
 
 
+def testSaturatedImageWithNoLines(tmp_path):
+    """A saturated quartz has SAT pixels and no lamp or sky line: its report is the map alone."""
+    image, saturated, lines = makeImage()
+    noLines = lines.iloc[:0]
+    fig = plotSaturation(image, saturated, noLines)
+    assert "15 SAT pixels, 0 saturated lines" in fig.axes[0].get_title(loc="left")
+    assert not fig.axes[1].axison  # no bar chart to draw
+    plt.close(fig)
+    report = writeReport(tmp_path, DATA_ID, image, saturated, noLines, 0.25)
+    assert "No line is saturated." in report.read_text()
+
+
 def testReportListsTheSaturatedLines(tmp_path):
     image, saturated, lines = makeImage()
     report = writeReport(tmp_path, DATA_ID, image, saturated, lines, 0.25, seqName="ImageQuality (Kr)")
@@ -94,3 +112,15 @@ def testSaturatedCamerasAreThoseWithLinesOrPixels():
     # Metrics written before the columns existed report nothing, and say so.
     assert saturatedCameras(metrics[["arm", "spectrograph"]]) == []
     assert hasSaturationColumns(metrics) and not hasSaturationColumns(metrics[["arm", "spectrograph"]])
+
+
+def testCamerasFromMetricsLeavesOutUnmeasuredImages():
+    """Metrics written before saturation was measured are counted apart, not read as unsaturated."""
+    new = pd.DataFrame(
+        {"arm": ["r"], "spectrograph": [2], "nSaturatedLines": [5], "pctSaturatedPixels": [0.4]}
+    )
+    clean = new.assign(spectrograph=3, nSaturatedLines=0, pctSaturatedPixels=0.0)
+    old = pd.DataFrame({"arm": ["r"], "spectrograph": [1]})
+    assert camerasFromMetrics([new, clean, old]) == ([("r", 2)], 1)
+    assert camerasFromMetrics([old, old]) == ([], 2)
+    assert camerasFromMetrics([]) == ([], 0)
