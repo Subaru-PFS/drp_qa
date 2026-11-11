@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-10
+
 ### Added
 
 - **Verdicts per visit** (PIPE2D-1923) — `qadb.reader.readGate` reads each image's latest `qa_gate` row of a
