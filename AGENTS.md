@@ -130,6 +130,14 @@ the pipeline/config glue to run them.
     happened
   - `saturationReport.py` — entry point for `pfs.drp.qa.saturationReport.main`: a figure and a Markdown file per
     saturated detector image of a visit, from the calexp's `SAT` plane
+  - `qaVisitSummary.py` — entry point for `pfs.drp.qa.qadb.visitSummary.main`: a collection's gate verdicts per
+    visit from qadb (`qadb.reader.readGate`, rolled up by the stack-free `metrics.visitRollup`), with the cameras
+    that exposed but have no verdict when given an opdb (`comparison.queries.readVisitCameras`); its exit status is
+    the worst visit verdict (0/1/2, 3 nothing judged, 4 could not be read) for a nightly job
+  - `qaCompareRuns.py` — entry point for `pfs.drp.qa.qadb.compareRuns.main`: a visit range's metrics against
+    reference visits' (`--reference NAME=[COLLECTION:]FIRST-LAST`, repeatable), read from qadb and compared by the
+    stack-free `metrics.runComparison.compareRuns` (medians per camera and population, status by
+    `MetricSpec.tolerance`); computed on demand, nothing stored; same exit statuses as `qaVisitSummary.py`
   - `exportMetrics.py` — per-detector QA tables (`iqQaMetrics`, `dmLineResidualMetrics`, ...) from a
     collection to parquet, with progress, via `metrics.readers.exportMetrics`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),

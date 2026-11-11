@@ -941,6 +941,57 @@ one RUN of the collection is read as the latest; with `since`, only images loade
 bound is inclusive). The QA dashboard (`pfs_qa_dashboard`) is built on it, with the opdb's IIC sequences, times and
 notes from `comparison.queries.readVisitTimes` and `readNotes`.
 
+### Verdicts per visit
+
+`qadb.reader.readGate(qadb, collection, first, last)` returns each image's gate verdict (the worst of the QA tasks'
+on it, from its latest RUN), and `metrics.visitRollup.rollupVisits(gate, expected=None)` rolls them up to one row per
+visit: the worst of its images' verdicts, the count of each, and for a `WARN` or `FAIL` the camera, task, metric and
+reason of the first image with that verdict (by spectrograph, then arm). An image no task could judge (`UNKNOWN`) is
+counted and does not lower a visit whose other images passed. Given the cameras that exposed
+(`comparison.queries.readVisitCameras`, from the opdb), the rollup names those without a verdict (`missingCameras`);
+they are reported, not judged. `bin.src/qaVisitSummary.py` prints it:
+
+```bash
+python bin.src/qaVisitSummary.py -c qaActor/reductions --visit-range 153000 153534 --opdb-host pfsa-db --json summary.json
+```
+
+Its exit status is the worst visit verdict, for a nightly job: 0 `PASS`, 1 `WARN`, 2 `FAIL`, 3 when no visit was
+judged. A summary that could not be made is none of those: 4 for a collection qadb holds no processing of (a mistyped
+name is an error, not missing data) or a database that could not be read, 64 for bad arguments. Visits of the range
+with SpS exposures and no verdict at all are counted on their own line (and listed in the JSON), not in the status:
+not every exposure is one the QA tasks judge.
+
+### Run comparison
+
+A gate verdict judges one image against thresholds. `metrics.runComparison.compareRuns(run, references)` asks whether
+a detector has moved since it was known to be good: it takes the metrics tables of the visits in question
+(`iqQaMetrics`, `dmLineResidualMetrics`) and of each named reference, and returns one row per reference, metric,
+camera and population with the two medians (`runMedian`, `referenceMedian`), their counts, `difference`, `relative`
+(the difference over the reference's median) and a `status`. Populations are kept apart: for `iqQaMetrics` by illumination (IIS beside PFI), frame type and lamp (`species`, from
+`seqName`); for line residuals by frame type, reference, species and line set (they carry no illumination, so IIS and
+PFI arcs share a population there). A
+population the reference lacks is listed with no reference median.
+
+`status` is `PASS`, `WARN` or `FAIL` by `relative` in the metric's bad direction against the metric's tolerance
+(`MetricSpec.tolerance`, the fractions the gate's per-detector thresholds are derived with: `medFwhm` 3 % and 5 %,
+`robustRmsDeltaX` 20 % and 50 %, `robustRmsDeltaY` 50 % and 150 %). A metric without
+one (`linesPerFiber`, `pctFlagged`, the offsets) is reported and left `UNKNOWN`. An offset is compared by its size. A
+reference's `WARN` and `FAIL` values are left out of its medians (`knownGood=False` keeps them); the run's are all
+used.
+
+Nothing is stored. `qadb.compareRuns.compareCollections(qadb, collection, first, last, references)` reads the visits
+and each `Reference(name, first, last, collection=None)` from qadb and compares them; the dashboard calls it too.
+`bin.src/qaCompareRuns.py` prints it:
+
+```bash
+python bin.src/qaCompareRuns.py -c qaActor/reductions --visit-range 154000 154074 \
+    --reference firstNight=153534-153600 --reference run30=u/me/run30:148302-148348 --json comparison.json
+```
+
+It prints the counts per reference and a line per `WARN` or `FAIL` (`--all` for every row; the JSON always holds
+all), and exits like `qaVisitSummary.py`: 0 `PASS`, 1 `WARN`, 2 `FAIL`, 3 when nothing was judged, 4 when a collection
+is not in qadb or the database could not be read, 64 for bad arguments.
+
 ## Command-line tools
 
 Scripts live in `bin.src/` and are run directly — there is no SCons step to copy them into a `bin/` directory on `PATH`:
@@ -1008,6 +1059,16 @@ Thin entry point for `pfs.drp.qa.fiberNormsQa.main`, which plots fiber normaliza
 Loads a collection's QA tables, thresholds and gate verdicts into qadb; see
 [Loading QA results into qadb](#loading-qa-results-into-qadb). Requires the stack (it reads the Butler) and a qadb
 user that may write; `--dry-run DIR` writes parquet files instead.
+
+### `qaVisitSummary.py`
+
+Prints a collection's QA verdict per visit from qadb, and exits with the worst; see
+[Verdicts per visit](#verdicts-per-visit). Stack-free; reading suffices.
+
+### `qaCompareRuns.py`
+
+Compares a visit range's QA metrics with reference visits' from qadb, and exits with the worst status; see
+[Run comparison](#run-comparison). Stack-free; reading suffices.
 
 ## Command-line tools
 

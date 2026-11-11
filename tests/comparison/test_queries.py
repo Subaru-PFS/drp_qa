@@ -152,3 +152,17 @@ def testSequenceStillRunningHasNoFinish(FakeOpDB):
     )
     sequence = queries.readSequenceOfVisit(FakeOpDB({r"FROM visit_set AS given": answer}), 150840)
     assert sequence["finished_at"].isna().all()
+
+
+def testVisitCamerasByRange(FakeOpDB):
+    answer = pd.DataFrame({"visit": [141578, 141577, 141577], "camera": ["b1", "r1", "b1"]})
+    opdb = FakeOpDB({r"SELECT DISTINCT sps_exposure.pfs_visit_id": answer})
+    cameras = queries.readVisitCameras(opdb, 141577, 141578)
+
+    assert opdb.calls[0].params == {"first": 141577, "last": 141578}
+    assert ":first" in opdb.calls[0].sql and "141577" not in opdb.calls[0].sql
+    assert cameras.to_dict("records") == [
+        {"visit": 141577, "camera": "b1"},
+        {"visit": 141577, "camera": "r1"},
+        {"visit": 141578, "camera": "b1"},
+    ]
