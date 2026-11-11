@@ -132,7 +132,7 @@ def rollupVisits(gate: pd.DataFrame, expected: pd.DataFrame | None = None) -> pd
                     qaDecidedBy=_text(first["qaDecidedBy"]),
                     qaReason=_text(first["qaReason"]),
                 )
-            record["provisional"] = any(value is True or value == 1 for value in rows["provisional"])
+            record["provisional"] = bool(rows["provisional"].fillna(False).astype(bool).any())
             times = pd.to_datetime(rows["decidedAt"]).dropna()
             record["decidedAt"] = times.max() if len(times) else None
             seen = list(rows["camera"])

@@ -950,8 +950,9 @@ A gate verdict judges one image against thresholds. `metrics.runComparison.compa
 a detector has moved since it was known to be good: it takes the metrics tables of the visits in question
 (`iqQaMetrics`, `dmLineResidualMetrics`) and of each named reference, and returns one row per reference, metric,
 camera and population with the two medians (`runMedian`, `referenceMedian`), their counts, `difference`, `relative`
-(the difference over the reference's median) and a `status`. Populations are never pooled: illumination (IIS beside
-PFI), frame type, lamp (`species`, from `seqName`) and, for line residuals, the reference, species and line set. A
+(the difference over the reference's median) and a `status`. Populations are kept apart: for `iqQaMetrics` by illumination (IIS beside PFI), frame type and lamp (`species`, from
+`seqName`); for line residuals by frame type, reference, species and line set (they carry no illumination, so IIS and
+PFI arcs share a population there). A
 population the reference lacks is listed with no reference median.
 
 `status` is `PASS`, `WARN` or `FAIL` by `relative` in the metric's bad direction against the metric's tolerance

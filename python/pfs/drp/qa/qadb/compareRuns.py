@@ -15,7 +15,7 @@ when a collection is not in qadb or the database could not be read, `EXIT_USAGE`
 import argparse
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -31,6 +31,7 @@ __all__ = [
     "Reference",
     "compareCollections",
     "comparisonDocument",
+    "comparisonTables",
     "formatComparison",
     "main",
     "metricTables",
@@ -76,11 +77,21 @@ def parseReference(text: str) -> Reference:
     return Reference(name, int(first), int(last), collection or None)
 
 
-def metricTables(qadb: Any, collection: str, first: int, last: int) -> list[pd.DataFrame]:
-    """Return a visit range's metrics tables, as `compareRuns` takes them.
+def comparisonTables(tables: Mapping[str, pd.DataFrame]) -> list[pd.DataFrame]:
+    """Return the tables `compareRuns` takes from what `pfs.drp.qa.qadb.reader.readQadb` read.
 
     ``iqQaMetrics``, and ``dmLineResidualMetrics`` with the ``obsType`` of its
     image (from ``dmLineResidualSummary``), which qadb does not repeat per metric.
+    """
+    residuals = tables["dmLineResidualMetrics"]
+    if "obsType" not in residuals:
+        obsType = tables["dmLineResidualSummary"].reindex(columns=[*IMAGE_KEYS, "obsType"])
+        residuals = residuals.merge(obsType, on=list(IMAGE_KEYS), how="left")
+    return [tables["iqQaMetrics"], residuals]
+
+
+def metricTables(qadb: Any, collection: str, first: int, last: int) -> list[pd.DataFrame]:
+    """Return a visit range's metrics tables, read from qadb, as `compareRuns` takes them.
 
     Raises
     ------
@@ -89,12 +100,7 @@ def metricTables(qadb: Any, collection: str, first: int, last: int) -> list[pd.D
     """
     if not collectionLoaded(qadb, collection):
         raise LookupError(f"qadb holds no processing of collection {collection!r}")
-    tables = readQadb(qadb, collection, first, last)
-    residuals = tables["dmLineResidualMetrics"]
-    if "obsType" not in residuals:
-        obsType = tables["dmLineResidualSummary"][[*IMAGE_KEYS, "obsType"]]
-        residuals = residuals.merge(obsType, on=list(IMAGE_KEYS), how="left")
-    return [tables["iqQaMetrics"], residuals]
+    return comparisonTables(readQadb(qadb, collection, first, last))
 
 
 def compareCollections(
@@ -130,7 +136,13 @@ def compareCollections(
     ------
     LookupError
         If qadb holds no processing of a collection.
+    ValueError
+        If two references share a name.
     """
+    names = [reference.name for reference in references]
+    repeated = sorted({name for name in names if names.count(name) > 1})
+    if repeated:
+        raise ValueError(f"reference names must differ: {', '.join(repeated)} given more than once")
     run = metricTables(qadb, collection, first, last)
     others = {
         reference.name: metricTables(
@@ -234,6 +246,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     first, last = args.visit_range
+    if last < first:
+        parser.error(f"--visit-range {first} {last}: the range ends before it starts")
+    names = [reference.name for reference in args.reference]
+    if len(set(names)) < len(names):
+        parser.error("--reference: each needs its own name")
     try:
         from pfs.utils.database.qadb import QaDB
 
@@ -246,12 +263,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.reference,
             knownGood=not args.all_reference_values,
         )
+        text = formatComparison(comparison, everything=args.all)
+        if args.json:
+            document = comparisonDocument(args.collection, (first, last), args.reference, comparison)
+            Path(args.json).write_text(json.dumps(document, indent=2))
     except Exception as error:
-        # Whatever stopped the read, the caller must not take the status for a verdict.
+        # Whatever stopped the read or the write, the caller must not take the status for a verdict.
         print(f"qaCompareRuns: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
         return EXIT_ERROR
-    print(formatComparison(comparison, everything=args.all), flush=True)
-    if args.json:
-        document = comparisonDocument(args.collection, (first, last), args.reference, comparison)
-        Path(args.json).write_text(json.dumps(document, indent=2))
+    print(text, flush=True)
     return exitCode(comparison)

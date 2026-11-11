@@ -59,7 +59,8 @@ def visitSummary(
         The visit range, inclusive.
     opdb : `pfs.utils.database.opdb.OpDB`, optional
         The opdb, read-only: which cameras exposed. It is read over the range
-        given, or over the judged visits' span when the range is open.
+        given, an open end taken from the judged visits' span; not at all when
+        an end is open and no visit was judged.
 
     Returns
     -------
@@ -81,7 +82,8 @@ def visitSummary(
     gate = readGate(qadb, collection, first, last)
     if opdb is None:
         return rollupVisits(gate), []
-    if gate.empty and (first, last) == (FIRST_VISIT, LAST_VISIT):
+    if gate.empty and (first == FIRST_VISIT or last == LAST_VISIT):
+        # Nothing judged bounds an open end, and the whole opdb is not read to find out.
         return rollupVisits(gate), []
     low = int(gate["visit"].min()) if first == FIRST_VISIT else int(first)
     high = int(gate["visit"].max()) if last == LAST_VISIT else int(last)
@@ -143,6 +145,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     first, last = args.visit_range or (FIRST_VISIT, LAST_VISIT)
+    if last < first:
+        parser.error(f"--visit-range {first} {last}: the range ends before it starts")
     try:
         from pfs.utils.database.qadb import QaDB
 
@@ -155,11 +159,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 host=args.opdb_host, port=args.opdb_port, dbname=args.opdb_dbname, user=args.opdb_user
             )
         rollup, unjudged = visitSummary(qadb, args.collection, first, last, opdb=opdb)
+        text = formatSummary(rollup, unjudged)
+        if args.json:
+            document = summaryDocument(args.collection, rollup, unjudged)
+            Path(args.json).write_text(json.dumps(document, indent=2))
     except Exception as error:
-        # Whatever stopped the read, the caller must not take the status for a verdict.
+        # Whatever stopped the read or the write, the caller must not take the status for a verdict.
         print(f"qaVisitSummary: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
         return EXIT_ERROR
-    print(formatSummary(rollup, unjudged), flush=True)
-    if args.json:
-        Path(args.json).write_text(json.dumps(summaryDocument(args.collection, rollup, unjudged), indent=2))
+    print(text, flush=True)
     return exitCode(rollup)

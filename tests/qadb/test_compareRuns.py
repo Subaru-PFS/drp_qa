@@ -17,12 +17,14 @@ from pfs.drp.qa.qadb.compareRuns import (
     Reference,
     compareCollections,
     comparisonDocument,
+    comparisonTables,
     formatComparison,
     main,
     metricTables,
     parseReference,
 )
 from pfs.drp.qa.qadb.loader import loadCollection
+from pfs.drp.qa.qadb.reader import readQadb
 from pfs.drp.qa.qadb.visitSummary import EXIT_ERROR, EXIT_USAGE
 
 SCRIPT = Path(__file__).parents[2] / "bin.src" / "qaCompareRuns.py"
@@ -68,6 +70,13 @@ def testMetricTablesCarryTheFrameType(loaded, fixtures):
     assert residuals["obsType"].notna().all() and len(residuals)
     with pytest.raises(LookupError, match="u/test/typo"):
         metricTables(loaded, "u/test/typo", 1, 2)
+
+    # The same from a read already made, as the dashboard holds one.
+    read = readQadb(loaded, COLLECTION, VISITS[0], VISITS[0])
+    again = comparisonTables(read)
+    assert again[0].equals(iq) and again[1]["obsType"].tolist() == residuals["obsType"].tolist()
+    # Negative control: qadb's own residuals table has no frame type to compare by.
+    assert "obsType" not in read["dmLineResidualMetrics"]
 
 
 def testCompareCollections(loaded):
@@ -158,6 +167,12 @@ class TestMain:
         # Negative control: nothing but the reference changed.
         assert main([*self.ARGS[:-1], "itself=133025-133040", "--all-reference-values"]) == EXIT_PASS
 
+    def testJsonThatCannotBeWrittenIsNotAWarn(self, made, tmp_path, capsys):
+        assert main([*self.ARGS, "--json", str(tmp_path / "absent" / "c.json")]) == EXIT_ERROR != 1
+        assert "absent" in capsys.readouterr().err
+        # Negative control: written where it can be, the status is the comparison's.
+        assert main([*self.ARGS, "--json", str(tmp_path / "c.json")]) == EXIT_FAIL
+
     def testNoDataAndErrorsAreNotVerdicts(self, made, monkeypatch, capsys):
         assert main(["-c", COLLECTION, "--visit-range", "1", "2", "--reference", "a=3-4"]) == EXIT_NO_DATA
         assert main(["-c", "u/test/typo", *self.ARGS[2:]]) == EXIT_ERROR
@@ -178,12 +193,23 @@ class TestMain:
             ["-c", COLLECTION, "--visit-range", "1", "2"],
             ["-c", COLLECTION, "--visit-range", "1", "2", "--reference", "nonsense"],
             [*ARGS, "--tolerance", "medFwhm=0.2,0.3"],
+            [*ARGS, "--reference", "before=1-2"],
+            ["-c", COLLECTION, "--visit-range", "9", "1", "--reference", "a=3-4"],
         ],
     )
     def testBadArgumentsAreNotAFail(self, argv):
         with pytest.raises(SystemExit) as error:
             main(argv)
         assert error.value.code == EXIT_USAGE != EXIT_FAIL
+
+
+def testReferenceNamesMustDiffer(loaded):
+    twice = [BEFORE, Reference("before", 1, 2)]
+    with pytest.raises(ValueError, match="before"):
+        compareCollections(loaded, COLLECTION, *VISITS, twice)
+    # Negative control: under its own name the second is one more reference.
+    both = compareCollections(loaded, COLLECTION, *VISITS, [BEFORE, Reference("other", 1, 2)])
+    assert set(both["referenceName"]) == {"before", "other"}
 
 
 def testScriptCallsMain():

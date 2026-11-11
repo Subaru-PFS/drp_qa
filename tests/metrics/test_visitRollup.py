@@ -138,3 +138,30 @@ def testExitCodeIsTheWorstVisit():
     assert exitCode(unknown) == EXIT_NO_DATA == 3
     # Negative control: nothing judged is not a pass.
     assert exitCode(unknown) != EXIT_PASS
+
+
+def testMediumResolutionCamerasAreNotMissing():
+    """The opdb names a medium-resolution exposure's camera ``m1``, as the gate's arm ``m`` does."""
+    gate = pd.DataFrame(
+        {"visit": [200, 200], "arm": ["b", "m"], "spectrograph": [1, 1], "qaStatus": ["PASS"] * 2}
+    )
+    rollup = rollupVisits(gate, expect([(200, "b1"), (200, "m1")]))
+    assert row(rollup, 200)["missingCameras"] == ""
+    # Negative control: the red camera is another camera, and is missed.
+    assert row(rollupVisits(gate, expect([(200, "b1"), (200, "r1")])), 200)["missingCameras"] == "r1"
+
+
+def testNullProvisionalIsNotProvisional():
+    gate = pd.DataFrame(
+        {
+            "visit": [300, 300, 301],
+            "arm": ["b", "r", "b"],
+            "spectrograph": [1, 1, 1],
+            "qaStatus": ["PASS"] * 3,
+            "provisional": pd.array([pd.NA, False, True], dtype="boolean"),
+        }
+    )
+    rollup = rollupVisits(gate)
+    assert not row(rollup, 300)["provisional"]
+    # Negative control: a set flag still shows.
+    assert row(rollup, 301)["provisional"]

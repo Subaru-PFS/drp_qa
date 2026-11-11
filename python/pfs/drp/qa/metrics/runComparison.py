@@ -33,6 +33,7 @@ __all__ = [
     "exitCode",
     "metricRows",
     "populationMedians",
+    "toleranceStatus",
 ]
 
 #: The metrics compared by default: those of ``iqQaMetrics``, then those of ``dmLineResidualMetrics``.
@@ -189,18 +190,41 @@ def compareRuns(
     positive = result["referenceMedian"] > 0
     result["relative"] = (result["difference"] / result["referenceMedian"]).where(positive)
 
-    limits = [specFor(name).tolerance or (np.nan, np.nan) for name in result["metric"]]
-    result["warn"] = [float(limit[0]) for limit in limits]
-    result["fail"] = [float(limit[1]) for limit in limits]
-    outwards = result["metric"].map(lambda name: 1.0 if specFor(name).higherIsWorse else -1.0)
-    excess = result["relative"] * outwards
-    status = pd.Series("PASS", index=result.index)
-    status[excess >= result["warn"]] = "WARN"
-    status[excess >= result["fail"]] = "FAIL"
-    status[excess.isna() | result["warn"].isna()] = "UNKNOWN"
-    result["status"] = status
+    result[["warn", "fail", "status"]] = toleranceStatus(result["metric"], result["relative"])
     result = result.sort_values(["referenceName", "metric", "spectrograph", "arm", *POPULATION_COLUMNS])
     return result[list(COMPARISON_COLUMNS)].reset_index(drop=True)
+
+
+def toleranceStatus(metric: pd.Series, relative: pd.Series) -> pd.DataFrame:
+    """Return the status of relative differences from a reference, by each metric's tolerance.
+
+    Parameters
+    ----------
+    metric : `pandas.Series`
+        The metric each difference is of.
+    relative : `pandas.Series`
+        The differences, as fractions of the reference; on the same index.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``warn`` and ``fail``, the metric's `MetricSpec.tolerance` fractions
+        (missing when it declares none), and ``status``: ``PASS``, ``WARN`` or
+        ``FAIL`` by the difference in the metric's bad direction, ``UNKNOWN``
+        without a tolerance or a difference.
+    """
+    limits = [specFor(name).tolerance or (np.nan, np.nan) for name in metric]
+    warn = pd.Series([float(limit[0]) for limit in limits], index=metric.index, dtype="float64")
+    fail = pd.Series([float(limit[1]) for limit in limits], index=metric.index, dtype="float64")
+    outwards = pd.Series(
+        [1.0 if specFor(name).higherIsWorse else -1.0 for name in metric], index=metric.index, dtype="float64"
+    )
+    excess = relative.astype("float64") * outwards
+    status = pd.Series("PASS", index=metric.index, dtype=object)
+    status[excess >= warn] = "WARN"
+    status[excess >= fail] = "FAIL"
+    status[excess.isna() | warn.isna()] = "UNKNOWN"
+    return pd.DataFrame({"warn": warn, "fail": fail, "status": status})
 
 
 def exitCode(comparison: pd.DataFrame) -> int:

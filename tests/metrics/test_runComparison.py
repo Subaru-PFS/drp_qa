@@ -191,3 +191,16 @@ def testExitCode():
     empty = compareRuns(iq(), {"before": REFERENCE})
     assert empty.empty and list(empty.columns) == list(COMPARISON_COLUMNS) and exitCode(empty) == EXIT_NO_DATA
     assert compareRuns(REFERENCE, {}).empty
+
+
+def testToleranceStatusOfSingleValues():
+    """A visit's own value is judged against a reference median as a run's median is."""
+    metric = pd.Series(["medFwhm", "medFwhm", "medFwhm", "medDxCenter", "medFwhm"], index=[5, 6, 7, 8, 9])
+    relative = pd.Series([0.0, 0.04, 0.06, 0.5, np.nan], index=metric.index)
+    judged = runComparison.toleranceStatus(metric, relative)
+    assert judged["status"].tolist() == ["PASS", "WARN", "FAIL", "UNKNOWN", "UNKNOWN"]
+    assert judged.index.tolist() == metric.index.tolist()
+    assert judged["warn"].iloc[0] == specFor("medFwhm").tolerance[0] and np.isnan(judged["warn"].iloc[3])
+    # Negative control: narrower by as much is not worse.
+    assert set(runComparison.toleranceStatus(metric[:3], -relative[:3])["status"]) == {"PASS"}
+    assert runComparison.toleranceStatus(metric[:0], relative[:0]).empty

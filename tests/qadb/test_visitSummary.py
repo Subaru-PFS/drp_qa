@@ -131,6 +131,16 @@ def testSummaryWithOpdb(loaded):
     assert given.calls == [{"first": 133000, "last": 133100}]
 
 
+def testOpenEndWithNothingJudgedDoesNotReadTheOpdb(loaded):
+    opdb = OneAnswerOpDB(cameras([(5, "b1")]))
+    for ends in ({"first": 134000}, {"last": 1000}):
+        rollup, unjudged = visitSummary(loaded, COLLECTION, opdb=opdb, **ends)
+        assert rollup.empty and unjudged == []
+    assert opdb.calls == []
+    # Negative control: with both ends given the opdb says what exposed unjudged.
+    assert visitSummary(loaded, COLLECTION, 1, 1000, opdb=opdb)[1] == [5] and len(opdb.calls) == 1
+
+
 def testDocumentIsJson(loaded):
     rollup, _ = visitSummary(loaded, COLLECTION)
     document = json.loads(json.dumps(summaryDocument(COLLECTION, rollup, [133030])))
@@ -176,10 +186,17 @@ class TestMain:
         assert status == EXIT_ERROR and status not in (EXIT_PASS, EXIT_FAIL)
         assert "refused" in capsys.readouterr().err
 
-    def testBadArgumentsAreNotAFail(self):
+    @pytest.mark.parametrize("argv", [["--visit-range", "1"], ["-c", COLLECTION, "--visit-range", "9", "1"]])
+    def testBadArgumentsAreNotAFail(self, argv):
         with pytest.raises(SystemExit) as error:
-            main(["--visit-range", "1"])
+            main(argv)
         assert error.value.code == EXIT_USAGE != EXIT_FAIL
+
+    def testJsonThatCannotBeWrittenIsNotAWarn(self, run, tmp_path, capsys):
+        status, _ = run("--json", str(tmp_path / "absent" / "s.json"))
+        assert status == EXIT_ERROR != 1 and "absent" in capsys.readouterr().err
+        # Negative control: the same summary, written where it can be, is a verdict.
+        assert run("--json", str(tmp_path / "s.json"))[0] != EXIT_ERROR
 
 
 def testScriptCallsMain():
