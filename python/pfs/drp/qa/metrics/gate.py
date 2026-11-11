@@ -86,23 +86,22 @@ __all__ = [
 #: Verdicts from best to worst.
 STATUS_ORDER = ("PASS", "WARN", "FAIL")
 
-#: Columns of a thresholds table that are not population columns.
-_FIELDS = frozenset(
-    (
-        "metric",
-        "method",
-        "higherIsWorse",
-        "absolute",
-        "warn",
-        "fail",
-        "nGood",
-        "nGoodVisits",
-        "visitRange",
-        "reliable",
-        "failBounded",
-        "degenerate",
-        "provenance",
-    )
+#: Columns of a thresholds table that are not population columns. A tuple: `thresholdsDocument` writes an
+#: entry's keys in this order, and a set's order differs from one process to the next, so would the SHA-256.
+_FIELDS = (
+    "metric",
+    "method",
+    "higherIsWorse",
+    "absolute",
+    "warn",
+    "fail",
+    "nGood",
+    "nGoodVisits",
+    "visitRange",
+    "reliable",
+    "failBounded",
+    "degenerate",
+    "provenance",
 )
 
 #: The same, for readers of a thresholds table: every other column names its population.

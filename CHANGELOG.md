@@ -10,6 +10,16 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-10
+
+### Fixed
+
+- **A config thresholds layer hashes the same in every process** (PIPE2D-1991) — `metrics.gate.thresholdsDocument`
+  wrote each entry's keys in the order of a set, which Python shuffles per process, so the SHA-256 a task recorded
+  for its config's fields differed from quantum to quantum and from what `loadQadb.py` rebuilt: the layer was
+  left null in qadb ("neither in qadb nor what this drp_qa builds"). The keys are now written in a fixed order.
+  Images judged before this keep the SHA-256 they recorded, and their config layer stays null.
+
 ## [0.3.0] - 2026-11-10
 
 ### Added
