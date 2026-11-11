@@ -19,7 +19,7 @@ made, and earlier sections to the weekly tag alone.
   `nFluxLines` and `nSaturatedLines`, measured from `lines`: the inputs to cross-visit lamp stability. None is
   judged, and no config field is added. The measurements are stack-free in `metrics.saturation` and
   `metrics.lineFlux`; `metrics.longFormat.metricsFrame` writes them, and `speciesStats` now skips a species with
-  no fit statistic. The validation set records the nightly IIS Kr arcs' saturated r arm (six Run30 visits, known
+  no fit statistic. The validation set records the nightly IIS Kr arcs' saturated r arm (Run30's 14 visits, known
   bad for `nSaturatedLines`, unchecked) in place of its saturated-frame placeholder. The per-species rows reach qadb's `image_quality_qa_species` as they are; the two
   `iqQaMetrics` columns are not in `image_quality_qa` yet.
 - **`bin.src/saturationReport.py`** (PIPE2D-1922) — a figure and a Markdown file for each saturated detector image

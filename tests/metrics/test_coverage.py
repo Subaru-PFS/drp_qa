@@ -111,8 +111,8 @@ def testEveryKnownBadEntryIsCaughtOrUnchecked(sources):
     assert unchecked["result"].value_counts().to_dict() == {
         "not judged": 16,  # the b-arm pctFlagged baselines
         # The unlit IIS arcs (5), stored before linesPerFiber was taken on the engineering fibers,
-        # and the saturated IIS Kr arcs (6), stored before saturation was measured.
-        "not measured": 11,
+        # and the saturated IIS Kr arcs (14), stored before saturation was measured.
+        "not measured": 19,
     }
 
 
@@ -123,7 +123,7 @@ def testUncheckedEntriesFailWithoutTheirReason(sources):
         visitSet, knownBad=tuple(replace(entry, unchecked=None) for entry in visitSet.knownBad)
     )
     coverage = knownBadCoverage(stripped, sources)
-    assert (~coverage["ok"]).sum() == 27
+    assert (~coverage["ok"]).sum() == 35
     assert set(coverage.loc[~coverage["ok"], "metric"]) == {
         "pctFlagged",
         "linesPerFiber",
