@@ -194,7 +194,8 @@ def measureSaturation(
     -------
     lineSaturated : `numpy.ndarray` [`bool`]
         Per row of ``lines``, whether the line is saturated (`saturatedAt` its
-        expected position). Trace centroids are rows like any other here, and on a
+        expected position). A row is a line-list entry on a fiber: two entries
+        blended on the same saturated pixels are both `True`. Trace centroids are rows like any other here, and on a
         saturated trace are `True`: count the lamp or sky lines alone.
     x, y : `numpy.ndarray` [`float`]
         Each line's expected position (`linePositions`).

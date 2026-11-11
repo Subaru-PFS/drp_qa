@@ -236,7 +236,9 @@ width, a Gaussian fitted to the profile understates it by 8–10 %, and drp_stel
 - **Saturation and line flux** — Measured, not judged. `pctSaturatedPixels` is the percentage of `SAT` pixels
   among those the lit fibers' traces cover (7 columns about each trace centre, every row); `nSaturatedLines` counts
   the lamp or sky lines on lit fibers with a `SAT` pixel within one pixel of where the `detectorMap` puts them
-  (not the measured centroid: drp_stella's line finder skips `SAT` pixels). The reference is the detector's own
+  (not the measured centroid: drp_stella's line finder skips `SAT` pixels). It counts rows of `lines`, one per
+  line-list entry and fiber, so two entries that fall on the same saturated pixels (Kr 810.625 and 810.659 nm) count
+  as two. The reference is the detector's own
   saturation level, which ISR marks in the calexp's `SAT` plane; both are null without a calexp. There is no
   threshold. The validation set's saturated frames are the nightly IIS Kr arcs, whose r arm saturates every night
   (`docs/validation-visits.md`): known bad for `nSaturatedLines`, and recorded as what a shorter exposure is measured against.
