@@ -4,6 +4,9 @@ import ast
 import hashlib
 import importlib.util
 import math
+import os
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -661,6 +664,12 @@ class TestThresholdsDocument:
         dxCenterFailThreshold=2.0,
     )
 
+    #: The SHA-256 of `CONFIG`'s document and of ``residualThresholds(1.0, 2.0, 1.0, 2.0)``'s. The bytes are a
+    #: stored format: tasks record these and a loader of another drp_qa must rebuild them, so a change here
+    #: is a change to make on purpose, knowing layers recorded before it no longer register.
+    IMAGE_QUALITY_SHA256 = "06e1340eea51d350f5b7bbb72566aa27ff556946fb162825bbce9f10a0107027"
+    RESIDUALS_SHA256 = "c0cf0fcf971c345c4e254a3a19d2d56b401a9afc495389a327745b8fb877530f"
+
     def testNames(self):
         assert configLayerName("imageQualityQa") == "imageQualityQa.config"
         assert isConfigLayer("dmLineResiduals.config") and not isConfigLayer("iqQaThresholds-run25.yaml")
@@ -676,6 +685,35 @@ class TestThresholdsDocument:
         assert sha256Of(thresholdsDocument(configThresholds(other), "imageQualityQa.config")) != sha256Of(
             document
         )
+
+    def testTheSameBytesInEveryProcess(self):
+        """Every process builds the SHA-256 pinned here: the task that judges and the loader that registers."""
+        code = (
+            "from types import SimpleNamespace\n"
+            "from pfs.drp.qa.metrics.gate import configThresholds, sha256Of, thresholdsDocument\n"
+            "from pfs.drp.qa.metrics.lineResiduals import residualThresholds\n"
+            f"config = SimpleNamespace(**{vars(self.CONFIG)!r})\n"
+            "print(sha256Of(thresholdsDocument(configThresholds(config), 'imageQualityQa.config')))\n"
+            "residuals = residualThresholds(1.0, 2.0, 1.0, 2.0)\n"
+            "print(sha256Of(thresholdsDocument(residuals, 'dmLineResiduals.config')))\n"
+        )
+        path = os.pathsep.join(path for path in sys.path if path)
+        digests = set()
+        for seed in ("0", "1", "2", "3", "random"):
+            env = {**os.environ, "PYTHONPATH": path, "PYTHONHASHSEED": seed}
+            result = subprocess.run(
+                [sys.executable, "-c", code], capture_output=True, text=True, check=True, env=env
+            )
+            digests.add(tuple(result.stdout.split()))
+        document = thresholdsDocument(configThresholds(self.CONFIG), "imageQualityQa.config")
+        assert digests == {(self.IMAGE_QUALITY_SHA256, self.RESIDUALS_SHA256)}
+        assert sha256Of(document) == self.IMAGE_QUALITY_SHA256
+        # Negative control: the same entries with their keys in another order are other bytes.
+        content = yaml.safe_load(document)
+        content["thresholds"] = [dict(reversed(entry.items())) for entry in content["thresholds"]]
+        reordered = yaml.safe_dump(content, sort_keys=False, allow_unicode=True, width=110).encode()
+        assert yaml.safe_load(reordered) == yaml.safe_load(document)
+        assert sha256Of(reordered) != sha256Of(document)
 
     def testReadsBackAsTheTable(self, tmp_path):
         """What `parseThresholds` reads from the document judges as the table did: null populations are 'any'."""
