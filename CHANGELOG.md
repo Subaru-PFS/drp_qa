@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-10
+
 ### Fixed
 
 - **A config thresholds layer hashes the same in every process** (PIPE2D-1991) — `metrics.gate.thresholdsDocument`
