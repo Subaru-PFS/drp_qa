@@ -108,13 +108,12 @@ def testEveryKnownBadEntryIsCaughtOrUnchecked(sources):
         "twilightLevelOffset": 5,  # Run21 twilights: b1 through a sequence, b4 in one exposure
     }
     unchecked = confirmed[confirmed["unchecked"] != ""]
-    assert (
-        unchecked["result"].value_counts().to_dict()
-        == {
-            "not judged": 16,  # the b-arm pctFlagged baselines
-            "not measured": 5,  # the unlit IIS arcs: stored before linesPerFiber was taken on the engineering fibers
-        }
-    )
+    assert unchecked["result"].value_counts().to_dict() == {
+        "not judged": 16,  # the b-arm pctFlagged baselines
+        # The unlit IIS arcs (5), stored before linesPerFiber was taken on the engineering fibers,
+        # and the saturated IIS Kr arcs (14), stored before saturation was measured.
+        "not measured": 19,
+    }
 
 
 def testUncheckedEntriesFailWithoutTheirReason(sources):
@@ -124,10 +123,11 @@ def testUncheckedEntriesFailWithoutTheirReason(sources):
         visitSet, knownBad=tuple(replace(entry, unchecked=None) for entry in visitSet.knownBad)
     )
     coverage = knownBadCoverage(stripped, sources)
-    assert (~coverage["ok"]).sum() == 21
+    assert (~coverage["ok"]).sum() == 35
     assert set(coverage.loc[~coverage["ok"], "metric"]) == {
         "pctFlagged",
         "linesPerFiber",
+        "nSaturatedLines",
     }
 
 

@@ -97,7 +97,8 @@ the pipeline/config glue to run them.
   suggestions, and `readers` reads them from a
   Butler it is given. `registry` declares each metric once (direction, units, reference,
   populations); `gate` is the only gating path, judging metrics rows against a thresholds
-  file layered over the task config; `longFormat` holds `iqQaSpeciesMetrics`; `twilight`
+  file layered over the task config; `longFormat` holds `iqQaSpeciesMetrics`; `saturation` (the calexp's
+  `SAT` plane) and `lineFlux` (per-species flux of `lines`) are `imageQualityQa`'s unjudged measurements; `twilight`
   measures and judges twilight sequences, each exposure against the sequence's others. Read [`docs/qa-principles.md`](docs/qa-principles.md) (rules R1–R7,
   the metric checklist) before adding a metric or a threshold. The procedure is the
   notebook [`docs/qa-thresholds.ipynb`](docs/qa-thresholds.ipynb), from `pipetask` to
@@ -127,6 +128,8 @@ the pipeline/config glue to run them.
     the per-image verdict in the Butler (`twilightQaMetrics`, via `qadb.store`) for the qadb loader's
     gate, and with `--qadb-host` loads the judged visits; its exit status tells ics_qaActor what
     happened
+  - `saturationReport.py` — entry point for `pfs.drp.qa.saturationReport.main`: a figure and a Markdown file per
+    saturated detector image of a visit, from the calexp's `SAT` plane
   - `qaVisitSummary.py` — entry point for `pfs.drp.qa.qadb.visitSummary.main`: a collection's gate verdicts per
     visit from qadb (`qadb.reader.readGate`, rolled up by the stack-free `metrics.visitRollup`), with the cameras
     that exposed but have no verdict when given an opdb (`comparison.queries.readVisitCameras`); its exit status is

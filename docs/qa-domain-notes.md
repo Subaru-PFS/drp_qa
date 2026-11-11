@@ -190,6 +190,29 @@ and `reduceExposure_log` connections are present — ISR, cosmic-ray, and `fitDe
 statistics (`fitChi2`, `fitXRms`, `fitYRms`, `fitReserved*`, per-fiber arrays; the
 per-species values go to `iqQaSpeciesMetrics`).
 
+### Saturation (PIPE2D-1922)
+
+`nSaturatedLines` and `pctSaturatedPixels` read the calexp's `SAT` mask plane on the lit fibers
+(`pfs.drp.qa.metrics.saturation`). What the first runs showed (`u/wtg/PIPE2D-1922/001`–`003`, 2026-11-10):
+
+- **The nightly IIS Kr arc saturates the red arm.** "ImageQuality (Kr)" (85–88 s) was measured on 25 nights of
+  Run30 and Run31. On all 24 with the r arm, every r detector has saturated KrI lines: 83–90 on r1, 178–201 on r2,
+  174–180 on r3, 112–126 on r4 (0.19–0.57 % of the lit fibers' aperture pixels). On 148972, taken with the m arm,
+  m1–m4 have 75–160. No b or n detector has a saturated line on any night. On r2 the Run30 nights have 196–201 and
+  the Run31 nights 178–184; the other cameras' ranges overlap between the runs. On 153432 r2, nine KrI lines from
+  760.36 to 893.11 nm are saturated on all 16 engineering fibers. The Run30 nights are in the validation set twice:
+  known good for the IIS thresholds, and known bad for `nSaturatedLines`.
+- **A count of line-list entries.** Kr 810.625 and 810.659 nm fall on the same pixels and count as two saturated
+  lines per fiber.
+- **`SAT` pixels are interpolated over.** On the ten calexps examined every `SAT` pixel is also `INTRP`, so the
+  image value there is the interpolation (median 1,900 counts inside the `SAT` pixels of 153432 r2, whose brightest
+  pixel is 68,000), not the saturated signal.
+- **The CCDs set `SAT`; no n-arm image examined has it.** r, m and b images have `SAT` pixels (a b1 arc has 5). The
+  four n-arm calexps examined (two IIS Kr arcs, an Ne arc and a quartz, brightest pixels 22,000–34,000) have none
+  anywhere on the image. Whether an H4RG frame bright enough to saturate gets the plane has not been seen.
+- **Other frames.** An IIS Ne arc, an IIS halogen quartz, a 5 s Ne arc and a 30 s quartz (153431–153478) have no
+  saturated line; the quartz has 12 `SAT` pixels on r2.
+
 ### Shaka exposures: one fiber group lit (PIPE2D-1935)
 
 A *shaka* exposure is taken on a fiber-group design that lights about a quarter of the fibers:

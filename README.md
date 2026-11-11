@@ -233,6 +233,24 @@ width, a Gaussian fitted to the profile understates it by 8–10 %, and drp_stel
   lamp's list on every `GOOD` fiber, flagged when not measured, and the trace centroids `fitDetectorMap` found,
   on an arc as on a quartz. Not judged: it follows how many fibers the design lights, and on an arc the trace
   centroids, whose number follows the illumination and the pipeline rather than the lamp.
+- **Saturation and line flux** — Measured, not judged. `pctSaturatedPixels` is the percentage of `SAT` pixels
+  among those the lit fibers' traces cover (7 columns about each trace centre, every row); `nSaturatedLines` counts
+  the lamp or sky lines on lit fibers with a `SAT` pixel within one pixel of where the `detectorMap` puts them
+  (not the measured centroid: drp_stella's line finder skips `SAT` pixels). It counts rows of `lines`, one per
+  line-list entry and fiber, so two entries that fall on the same saturated pixels (Kr 810.625 and 810.659 nm) count
+  as two. The reference is the detector's own
+  saturation level, which ISR marks in the calexp's `SAT` plane; both are null without a calexp. There is no
+  threshold. The validation set's saturated frames are the nightly IIS Kr arcs, whose r arm saturates every night
+  (`docs/validation-visits.md`): known bad for `nSaturatedLines`, and recorded as what a shorter exposure is measured against.
+  Per species, in `iqQaSpeciesMetrics`: `nSaturatedLines` again, and `medLineFlux` and `robustRmsLineFlux` over
+  the species' good lines (unflagged, no bad status bit, finite flux; `nFluxLines` of them). The flux is
+  `lines`' own, in the calexp's units and not per second. Within one image a species' lines span orders of
+  magnitude, so these say nothing about the lamp alone: they are the inputs to a comparison across visits of the
+  same exposure time (`pfs.drp.qa.metrics.lineFlux`, `saturation`; both stack-free).
+  `python bin.src/saturationReport.py -c <QA collection>,<reductions> --visit <visit> -o <dir>` writes, for each
+  saturated detector of the visit (or `--cameras r1 r2`), a figure and a Markdown file: where the `SAT` pixels and
+  saturated lines are on the detector, the fibers each line is saturated on, and cutouts of the worst
+  (`pfs.drp.qa.saturationReport`, `plotting.saturation`).
 - **`linesPerFiber`** — The judged count: unflagged lamp lines per lit fiber on an arc, unflagged trace centroids
   per lit fiber on a quartz (about 4,160, one per detector row); `NaN` on other frames or without a pfsConfig.
   A design that lights one fiber group (a *shaka* exposure: every fourth cobra, the others parked behind their black
@@ -370,7 +388,7 @@ does not exist in `drp_stella`, so the permissive thresholds above are the curre
 |---------------|----------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `iqQaData`    | `instrument, visit, arm, spectrograph` | Only with `doWriteLineData` (default off). Per-line or per-trace-sample measurements: `fiberId`, `x`, `y`, `lam`, `fwhm`, `fwhmIntrinsic` (calexp only), `theta`, `dxCenter`, `flux`, `fluxErr`, `flag`, `traceOnly`, `peakRatio`, `snr` (calexp only), `status`, plus `visit`/`arm`/`spectrograph`. |
 | `iqQaMetrics` | `instrument, visit, arm, spectrograph` | Single-row summary; see below.                                                                                                                                                    |
-| `iqQaSpeciesMetrics` | `instrument, visit, arm, spectrograph` | Per-species `fitDetectorMap` statistics from the `reduceExposure` log, one row per species and metric: `visit`, `arm`, `spectrograph`, `description` (line species, e.g. `NeI`, or `Trace`), `metric` (`fitXRms`, `fitYRms`: weighted RMS; `fitXSoften`, `fitYSoften`: softening), `value`. |
+| `iqQaSpeciesMetrics` | `instrument, visit, arm, spectrograph` | Per-species `fitDetectorMap` statistics from the `reduceExposure` log, one row per species and metric: `visit`, `arm`, `spectrograph`, `description` (line species, e.g. `NeI`, or `Trace`), `metric` (`fitXRms`, `fitYRms`: weighted RMS; `fitXSoften`, `fitYSoften`: softening), `value`. Also, measured from `lines` on lit fibers, each species' `medLineFlux`, `robustRmsLineFlux`, `nFluxLines` and (with a calexp) `nSaturatedLines`; see *Saturation and line flux*. |
 
 `iqQaMetrics` columns, by group:
 
@@ -378,6 +396,7 @@ does not exist in `drp_stella`, so the permissive thresholds above are the curre
   calexp judged, whose `pfsArm` records the reducing pipeline; null without a calexp)
 - **Image quality** — `medFwhm`, `medDxCenter`, `dxCenterRms`, `pctFlagged`, `nLines`,
   `traceOnly`, `qaStatus`, `qaDecidedBy`, `qaReason`
+- **Saturation** (null without a calexp) — `nSaturatedLines`, `pctSaturatedPixels`
 - **Flag breakdown** (only when `pctFlagged` is finite) — `pctNotVisible`, `pctBlend`,
   `pctSuspect`, `pctRejected`, `pctBroad`, and on the arc-line path `pctLowSN`, `pctMeasFail`
 - **Log-derived** (zero/`NaN` when the corresponding log is absent) — `isrBadPixels`,
