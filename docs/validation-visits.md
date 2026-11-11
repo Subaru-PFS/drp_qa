@@ -164,7 +164,8 @@ identified by visit number, with no observer, target or design names.
 
 ### Gaps
 
-- A saturated frame (for PIPE2D-1922's saturation metric).
+- An unsaturated IIS Kr arc on the r arm: every `ImageQuality (Kr)` arc measured is saturated there (known bad,
+  `nSaturatedLines`, unchecked), so saturation has no known-good reference on those detectors and no threshold.
 - m-arm traces: only the short block B and C sequences exist, below the sample floor.
 
 ## Every entry
@@ -307,6 +308,12 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 139971 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
 | 140005–140006 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
 | 140124–140138 | 27 | scienceArc | b, r | 2 | any | FAIL | `medianDeltaY` | Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius. |
+| 150080 | 30 | scienceArc | r | 1, 2, 3, 4 | ImageQuality (Kr) | WARN | `nSaturatedLines` (unchecked) | IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (84-200 lines, 0.19-0.56 % of the lit fibers' aperture pixels). *Unchecked:* Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against. |
+| 150227 | 30 | scienceArc | r | 1, 2, 3, 4 | ImageQuality (Kr) | WARN | `nSaturatedLines` (unchecked) | IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (84-200 lines, 0.19-0.56 % of the lit fibers' aperture pixels). *Unchecked:* Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against. |
+| 150285 | 30 | scienceArc | r | 1, 2, 3, 4 | ImageQuality (Kr) | WARN | `nSaturatedLines` (unchecked) | IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (84-200 lines, 0.19-0.56 % of the lit fibers' aperture pixels). *Unchecked:* Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against. |
+| 150472 | 30 | scienceArc | r | 1, 2, 3, 4 | ImageQuality (Kr) | WARN | `nSaturatedLines` (unchecked) | IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (84-200 lines, 0.19-0.56 % of the lit fibers' aperture pixels). *Unchecked:* Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against. |
+| 150622 | 30 | scienceArc | r | 1, 2, 3, 4 | ImageQuality (Kr) | WARN | `nSaturatedLines` (unchecked) | IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (84-200 lines, 0.19-0.56 % of the lit fibers' aperture pixels). *Unchecked:* Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against. |
+| 150720 | 30 | scienceArc | r | 1, 2, 3, 4 | ImageQuality (Kr) | WARN | `nSaturatedLines` (unchecked) | IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (84-200 lines, 0.19-0.56 % of the lit fibers' aperture pixels). *Unchecked:* Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against. |
 | 139971 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `linesPerFiber` (unchecked) | SM1 lamp didn't turn on. (Run27, 1 s arc) *Unchecked:* IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954). |
 | 140477 | 27 | scienceArc | b, r, n | 1 | ImageQuality | FAIL | `linesPerFiber` (unchecked) | No light on SM1. (Run27, 1 s arc) *Unchecked:* IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954). |
 | 140640 | 27 | scienceArc | b, r, n | 2 | ImageQuality | FAIL | `linesPerFiber` (unchecked) | No light on SM2. (Run27, 1 s arc) *Unchecked:* IIS frame named without its lamp (ImageQuality): no linesPerFiber entry matches it (PIPE2D-1954). |
@@ -328,12 +335,6 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 134334–134337 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
 | 134880–134886 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
 | 135275–135279 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
-
-### Placeholders
-
-| Visits | Run | Type | Arms | Spectrographs | Sequence | Expect | Metric | Reason |
-|---|---|---|---|---|---|---|---|---|
-| *to find* |  |  | all | all | any | FAIL | `pctSaturatedPixels` | Saturated exposure; peak pixels flagged SAT. |
 <!-- END GENERATED: validationVisits tables -->
 
 ## Changing the set

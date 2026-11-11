@@ -62,7 +62,16 @@ NO_METRIC, NO_ROWS, NOT_MEASURED, MISSED, NOT_JUDGED, CAUGHT = (
 UNCHECKABLE = (NO_METRIC, NOT_MEASURED, NOT_JUDGED)
 
 #: The metrics of ``iqQaMetrics`` that the gate can judge.
-IMAGE_QUALITY_METRICS = ("medFwhm", "medDxCenter", "dxCenterRms", "pctFlagged", "nLines", "linesPerFiber")
+IMAGE_QUALITY_METRICS = (
+    "medFwhm",
+    "medDxCenter",
+    "dxCenterRms",
+    "pctFlagged",
+    "nLines",
+    "linesPerFiber",
+    "nSaturatedLines",
+    "pctSaturatedPixels",
+)
 
 #: The metrics of the ``dmLineResiduals`` tables that the gate can judge.
 LINE_RESIDUAL_METRICS = tuple(RESIDUAL_METRICS)

@@ -263,9 +263,9 @@ METRIC_SPECS = {
             reference="The fitDetectorMap solution, per line species, from the reduceExposure log.",
             unitSuffix="px",
         ),
-        # Saturation and line flux: measured, with no thresholds yet. The validation set has
-        # no saturated frame to derive saturation's from, and a species' flux is judged across
-        # visits, not per image.
+        # Saturation and line flux: measured, with no thresholds. The validation set's saturated
+        # frames (the nightly IIS Kr arcs, r arm) have no unsaturated counterpart to derive
+        # saturation's from, and a species' flux is judged across visits, not per image.
         MetricSpec(
             "pctSaturatedPixels",
             units="percent",

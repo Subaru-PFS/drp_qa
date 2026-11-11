@@ -980,13 +980,71 @@ known_bad:
     metric: medianDeltaY
     reason: "Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius."
 
-  # TODO(PIPE2D-1922): find a saturated frame if one exists in the archive.
-  # This is the reference case for the real-saturation metric of PIPE2D-1922.
-  - placeholder: true
-    visit: null
-    expect: FAIL
-    metric: pctSaturatedPixels
-    reason: "Saturated exposure; peak pixels flagged SAT."
+  # ---- Run30 saturated IIS Kr arcs (PIPE2D-1922) ------------------------------
+  # The nightly "ImageQuality (Kr)" arc (86-88 s) saturates the r arm of every
+  # spectrograph, the same way each night: on the six nights measured
+  # (u/wtg/PIPE2D-1922/002), nSaturatedLines is 88-89 on r1, 196-200 on r2, 175-179
+  # on r3 and 115-123 on r4, and pctSaturatedPixels 0.20-0.21, 0.55-0.56, 0.48-0.49
+  # and 0.27-0.28 %; b and n have none. The six Run31 nights measured (152765 to
+  # 153432) are the same, with 178-184 on r2. The frames stay known good for the
+  # other metrics (above): the IIS thresholds were derived from them. Recorded as bad
+  # so that these counts are what a shorter exposure is measured against.
+  # Saturation is not judged, so no check runs. The nine earlier Run30 nights of
+  # the sequence have not been measured.
+  - visit: 150080
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (84-200 lines, 0.19-0.56 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 150227
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (84-200 lines, 0.19-0.56 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 150285
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (84-200 lines, 0.19-0.56 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 150472
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (84-200 lines, 0.19-0.56 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 150622
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (84-200 lines, 0.19-0.56 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 150720
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (84-200 lines, 0.19-0.56 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
 
   # Run27 nightly ImageQuality arcs where one spectrograph's lamp gave no light,
   # as noted in the run's calibration summary. That spectrograph's detectors have no lines; QA must not pass
