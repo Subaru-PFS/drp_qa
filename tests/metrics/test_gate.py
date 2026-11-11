@@ -4,6 +4,9 @@ import ast
 import hashlib
 import importlib.util
 import math
+import os
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -676,6 +679,31 @@ class TestThresholdsDocument:
         assert sha256Of(thresholdsDocument(configThresholds(other), "imageQualityQa.config")) != sha256Of(
             document
         )
+
+    def testTheSameBytesInEveryProcess(self):
+        """The task that judges and the loader that registers are different processes: their SHA-256 must agree."""
+        code = (
+            "from types import SimpleNamespace\n"
+            "from pfs.drp.qa.metrics.gate import configThresholds, sha256Of, thresholdsDocument\n"
+            f"config = SimpleNamespace(**{vars(self.CONFIG)!r})\n"
+            "print(sha256Of(thresholdsDocument(configThresholds(config), 'imageQualityQa.config')))\n"
+        )
+        path = os.pathsep.join(path for path in sys.path if path)
+        digests = set()
+        for seed in ("0", "1", "2", "3", "random"):
+            env = {**os.environ, "PYTHONPATH": path, "PYTHONHASHSEED": seed}
+            result = subprocess.run(
+                [sys.executable, "-c", code], capture_output=True, text=True, check=True, env=env
+            )
+            digests.add(result.stdout.strip())
+        document = thresholdsDocument(configThresholds(self.CONFIG), "imageQualityQa.config")
+        assert digests == {sha256Of(document)}
+        # Negative control: the same entries with their keys in another order are other bytes.
+        content = yaml.safe_load(document)
+        content["thresholds"] = [dict(reversed(entry.items())) for entry in content["thresholds"]]
+        reordered = yaml.safe_dump(content, sort_keys=False, allow_unicode=True, width=110).encode()
+        assert yaml.safe_load(reordered) == yaml.safe_load(document)
+        assert sha256Of(reordered) != sha256Of(document)
 
     def testReadsBackAsTheTable(self, tmp_path):
         """What `parseThresholds` reads from the document judges as the table did: null populations are 'any'."""
