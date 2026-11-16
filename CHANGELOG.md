@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-16
+
 ### Changed
 
 - **AG image sizes come from `pfs.utils.agMetrics`, and the FWHM is about 21% larger** (INSTRM-3069) —
