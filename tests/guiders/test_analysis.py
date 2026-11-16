@@ -822,6 +822,17 @@ def testAddImageSizes():
     det = addImageSizes(stars, useTraceRadius=False)
     np.testing.assert_allclose(det.rms_pix, [2.0, 15.0**0.25, np.nan, np.nan])
     np.testing.assert_allclose(det.fwhm_arcsec, fwhmPerPix * det.rms_pix)
+
+    # A BAD_SHAPE detection keeps unweighted moments: it has a radius but no FWHM.
+    badShape = stars.assign(
+        agc_data_flags=[int(SourceDetectionFlags.BAD_SHAPE), int(SourceDetectionFlags.RIGHT), 0, 0]
+    )
+    flagged = addImageSizes(badShape)
+    np.testing.assert_allclose(flagged.rms_pix, trace.rms_pix)
+    assert np.isnan(flagged.fwhm_arcsec[0]) and flagged.fwhm_arcsec[1] == pytest.approx(trace.fwhm_arcsec[1])
+    # Negative control: the other flags leave the FWHM alone.
+    edge = addImageSizes(stars.assign(agc_data_flags=int(SourceDetectionFlags.EDGE)))
+    np.testing.assert_allclose(edge.fwhm_arcsec, trace.fwhm_arcsec)
     # Negative control: the last row's determinant is positive, though its moments are impossible.
     assert stars.mxx.iloc[-1] * stars.myy.iloc[-1] - stars.mxy.iloc[-1] ** 2 > 0
     assert "rms_pix" not in stars  # drp_stella's setImageSizes added it to its input

@@ -19,6 +19,8 @@ made, and earlier sections to the weekly tag alone.
   stored moments, where the old code used 2.355. The run report also used 0.14 arcsec per pixel where the
   plate scale gives 0.137. Both now call `agMetrics.momentsToFwhm` (Run 30's median goes from 0.59 to 0.71
   arcsec). `rms_pix` and `sigma_pix` stay on the stored scale, which ics_agActor's focus calibration uses.
+  `BAD_SHAPE` detections, whose moments are unweighted, get no FWHM and are left out of `sigma_pix` (up to 3% of
+  the good matches before July 2026, none since).
   Needs a pfs_utils with `pfs.utils.agMetrics`.
 
 ## [0.3.2] - 2026-11-16

@@ -1325,7 +1325,8 @@ def addImageSizes(agcData: pd.DataFrame, useTraceRadius: bool = True) -> pd.Data
     agcData : `pandas.DataFrame`
         A copy with ``rms_pix``, the radius of the moments as stored (NaN
         for impossible moments); ``fwhm_arcsec``, the stars' FWHM from
-        `pfs.utils.agMetrics.momentsToFwhm`; and ``left``, whether the star
+        `pfs.utils.agMetrics.storedRadiusToFwhm` (NaN for a ``BAD_SHAPE``
+        detection, whose moments are on another scale); and ``left``, whether the star
         is on the left half of its detector (its detection isn't flagged
         RIGHT).
 
@@ -1345,9 +1346,10 @@ def addImageSizes(agcData: pd.DataFrame, useTraceRadius: bool = True) -> pd.Data
         rms = np.where((mxx < 0) | (myy < 0) | (det < 0), np.nan, det) ** 0.25
 
     agcData["rms_pix"] = rms
-    agcData["fwhm_arcsec"] = agMetrics.momentsToFwhm(
-        mxx, myy, mxy, radius="trace" if useTraceRadius else "determinant"
-    )
+    # A BAD_SHAPE detection keeps unweighted moments, twice the others': its radius is not on the
+    # scale the FWHM is defined for.
+    badShape = (agcData.agc_data_flags.to_numpy() & int(SourceDetectionFlags.BAD_SHAPE)) != 0
+    agcData["fwhm_arcsec"] = agMetrics.storedRadiusToFwhm(np.where(badShape, np.nan, rms))
     agcData["left"] = (agcData.agc_data_flags & int(SourceDetectionFlags.RIGHT)) == 0
 
     return agcData

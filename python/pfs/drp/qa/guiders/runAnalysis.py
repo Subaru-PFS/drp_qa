@@ -310,8 +310,7 @@ def prepareRun(tables: dict[str, pd.DataFrame], config: RunConfig | None = None)
         )
         frames[f"state{cid}"] = np.where(usable, state, CameraState.UNUSABLE)
 
-    # sigma_pix is the radius of the moments as stored; momentsToFwhm takes the moments.
-    cameras = cameras.assign(fwhm=agMetrics.momentsToFwhm(cameras.sigma_pix**2, cameras.sigma_pix**2)).merge(
+    cameras = cameras.assign(fwhm=agMetrics.storedRadiusToFwhm(cameras.sigma_pix)).merge(
         frames[["agc_exposure_id", "night", "population"]], on="agc_exposure_id"
     )
     focus = tables["focus"].assign(night=lambda df: nightOf(df.created_at))
