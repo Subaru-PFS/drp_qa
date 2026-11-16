@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-16
+
 ### Changed
 
 - **The AG run report names the flag bits it reads** (INSTRM-2800) — `agc_guide_offset.mask` is tested with
