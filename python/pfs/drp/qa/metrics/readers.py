@@ -17,6 +17,7 @@ from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS, pipelineVersions
 
 __all__ = [
     "chooseRun",
+    "datasetDetectors",
     "exportMetrics",
     "readCalibValidity",
     "readMetrics",
@@ -26,6 +27,40 @@ __all__ = [
 
 #: Data ID keys copied onto each row when the stored table lacks them.
 _DATA_ID_KEYS = ("visit", "arm", "spectrograph")
+
+
+def datasetDetectors(
+    butler, datasetType: str, visits: Iterable[int], instrument: str = "PFS"
+) -> dict[int, set[str]]:
+    """Return, per visit, the cameras (``b1``, ``r3``, ...) with a ``datasetType`` dataset.
+
+    One registry query; nothing is read. A visit with none is absent.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        A Butler with its collections set.
+    datasetType : `str`
+        The dataset type, per (visit, arm, spectrograph).
+    visits : iterable of `int`
+        The visits.
+    instrument : `str`, optional
+        Instrument name. Default is ``PFS``.
+    """
+    visits = tuple(sorted({int(visit) for visit in visits}))
+    refs = butler.query_datasets(
+        datasetType,
+        where="instrument = instrumentName AND visit IN (visits)",
+        bind={"instrumentName": instrument, "visits": visits},
+        find_first=True,
+        limit=None,
+        explain=False,
+    )
+    cameras: dict[int, set[str]] = {}
+    for ref in refs:
+        dataId = ref.dataId
+        cameras.setdefault(int(dataId["visit"]), set()).add(f"{dataId['arm']}{dataId['spectrograph']}")
+    return cameras
 
 
 def readMetrics(

@@ -1,6 +1,6 @@
 """Line residuals in comparison mode: ``dmLineResiduals``' verdicts beside ``imageQualityQa``'s.
 
-``dmLineResiduals`` (PIPE2D-1921, PIPE2D-1956) judges the same detector images as the gate,
+``dmLineResiduals`` judges the same detector images as the gate,
 against ``detectorMap_calib`` (drift) and against the visit's own ``detectorMap`` (the scatter it
 leaves on the lines the fit held back). Its verdict is stored in ``dmLineResidualSummary`` and
 each crossing is a ``WARN`` or ``FAIL`` row of ``dmLineResidualMetrics``. This module turns them
@@ -14,7 +14,14 @@ from pfs.drp.qa.comparison.findings import describeImages
 from pfs.drp.qa.metrics.gate import STATUS_ORDER
 from pfs.drp.qa.metrics.lineResiduals import RESERVED, VISIT
 
-__all__ = ["bReadWith", "describeCrossing", "residualFindings", "residualProblems", "scatterTable"]
+__all__ = [
+    "bReadWith",
+    "describeCrossing",
+    "driftByImage",
+    "residualFindings",
+    "residualProblems",
+    "scatterTable",
+]
 
 #: The keys of a detector image.
 KEYS = ["visit", "arm", "spectrograph"]
@@ -81,6 +88,49 @@ def residualFindings(
     images["status"] = images["qaStatus"].where(images["qaStatus"].isin(STATUS_ORDER), "")
     images["metrics"] = images["metrics"].fillna("")
     return describeImages(images[[*KEYS, "status", "metrics", "recommendedAction"]], visits, notes)
+
+
+def driftByImage(metrics: pd.DataFrame) -> pd.DataFrame:
+    """Return each image's drift from ``detectorMap_calib``: the median over species of the median offsets.
+
+    Parameters
+    ----------
+    metrics : `pandas.DataFrame`
+        ``dmLineResidualMetrics`` rows: ``visit``, ``arm``, ``spectrograph``, ``reference``,
+        ``statusType``, ``description``, ``metric``, ``value``.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        One row per image with ``medianDeltaX`` and ``medianDeltaY`` (px), signed, against ``calib``
+        on ``BOTH`` lines (``UNFITTED`` for a visit whose fit marked none). ``medianDeltaX`` is the
+        traces' offset: every arc and trace has them, on every row and whatever the lamp, where a
+        median over lamp species cancels when the species disagree (the b arm against the Run30 map
+        read +0.26 px on traces and HgCd, 0 on Ar, Kr and Xe and −0.21 on Ne, PIPE2D-1941).
+        ``medianDeltaY`` is the median over the lamp species, since traces have no y. Empty when
+        nothing was measured against the calibration.
+    """
+    rows = metrics[
+        (metrics["reference"] == "calib")
+        & (metrics["statusType"].isin(["BOTH", "UNFITTED"]))
+        & (metrics["metric"].isin(["medianDeltaX", "medianDeltaY"]))
+    ]
+    if rows.empty:
+        return pd.DataFrame(columns=[*KEYS, "medianDeltaX", "medianDeltaY"])
+    isTrace = rows["description"] == "Trace"
+    x = (
+        rows[isTrace & (rows["metric"] == "medianDeltaX")]
+        .groupby(KEYS)["value"]
+        .median()
+        .rename("medianDeltaX")
+    )
+    y = (
+        rows[~isTrace & (rows["metric"] == "medianDeltaY")]
+        .groupby(KEYS)["value"]
+        .median()
+        .rename("medianDeltaY")
+    )
+    return pd.concat([x, y], axis=1).reindex(columns=["medianDeltaX", "medianDeltaY"]).reset_index()
 
 
 def residualProblems(findings: pd.DataFrame) -> pd.DataFrame:
@@ -153,7 +203,7 @@ def bReadWith(arm: pd.Series, cameraSet: pd.Series) -> pd.Series:
     """Return which camera the b arm was read with: ``m``, ``r``, or empty.
 
     The one camera-set effect found is the b arm's offset from the
-    calibration when read with m (PIPE2D-1927), so only the b arm is labelled.
+    calibration when read with m, so only the b arm is labelled.
 
     Parameters
     ----------
@@ -185,9 +235,9 @@ def scatterTable(
     """Summarize the scatter the adjusted map leaves, by arm and species, beside a reference run's.
 
     The robust RMS of ``RESERVED`` lines against the visit's ``detectorMap``:
-    what a threshold on it would be derived from (PIPE2D-1956). The b arm is
+    what a threshold on it would be derived from. The b arm is
     split by whether it was read with m or with r, to show that its scatter
-    does not depend on it (PIPE2D-1927); no other arm is split by camera set.
+    does not depend on it; no other arm is split by camera set.
 
     Parameters
     ----------

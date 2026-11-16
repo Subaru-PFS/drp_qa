@@ -15,10 +15,12 @@ from pfs.drp.qa.metrics.coverage import (
     CAUGHT,
     IMAGE_QUALITY_METRICS,
     LINE_RESIDUAL_METRICS,
+    TWILIGHT_METRICS,
     CoverageSource,
     knownBadCoverage,
 )
 from pfs.drp.qa.metrics.lineResiduals import judgedRows, residualTaskThresholds
+from pfs.drp.qa.metrics.twilight import twilightThresholds
 from pfs.drp.qa.metrics.validationVisits import ValidationVisit, ValidationVisitSet, loadValidationVisits
 
 ROOT = Path(__file__).parents[2]
@@ -61,7 +63,7 @@ def sources() -> list[CoverageSource]:
     iq = configDefaults("imageQualityQa.py", "ImageQualityQaConfig")
     dm = configDefaults("dmLineResiduals.py", "DmLineResidualsConfig")
     lines = pd.read_parquet(DATA / "dmDriftMetrics-validation.parquet")
-    # Run30's nightly IIS frames (PIPE2D-1954) join the validation visits' metrics: the IIS
+    # Run30's nightly IIS frames join the validation visits' metrics: the IIS
     # thresholds file judges them, and one table answers for each metric.
     imageQuality = pd.concat(
         [
@@ -74,14 +76,18 @@ def sources() -> list[CoverageSource]:
         CoverageSource(imageQuality, taskThresholds(iq), IMAGE_QUALITY_METRICS),
         # A species with fewer than minLines lines is stored as NaN: not measured.
         CoverageSource(judgedRows(lines), residualTaskThresholds(dm), LINE_RESIDUAL_METRICS),
+        # Twilight sequences, 2025-03 to 2026-09: the Run21 detector steps.
+        CoverageSource(
+            pd.read_parquet(DATA / "twilightMetrics.parquet"), twilightThresholds(), TWILIGHT_METRICS
+        ),
     ]
 
 
 def testEveryKnownBadEntryIsCaughtOrUnchecked(sources):
     """The validation set's promise: a known-bad entry's check runs and gives its verdict, or it says why not.
 
-    An entry naming a metric that stopped being judged (nLines, pctFlagged; PIPE2D-1935, 1929)
-    went unnoticed until PIPE2D-1934 because nothing checked this.
+    An entry naming a metric that stopped being judged (nLines, pctFlagged)
+    went unnoticed because nothing checked this.
     """
     visitSet = loadValidationVisits()
     coverage = knownBadCoverage(visitSet, sources)
@@ -99,6 +105,7 @@ def testEveryKnownBadEntryIsCaughtOrUnchecked(sources):
         "medianDeltaX": 88,  # Run27 against a later calibration, SM3
         "medianDeltaY": 36,  # and SM2
         "robustRmsDeltaX": 70,  # SM1 defocused, in the line scatter
+        "twilightLevelOffset": 5,  # Run21 twilights: b1 through a sequence, b4 in one exposure
     }
     unchecked = confirmed[confirmed["unchecked"] != ""]
     assert (
@@ -106,7 +113,6 @@ def testEveryKnownBadEntryIsCaughtOrUnchecked(sources):
         == {
             "not judged": 16,  # the b-arm pctFlagged baselines
             "not measured": 5,  # the unlit IIS arcs: stored before linesPerFiber was taken on the engineering fibers
-            "no metric": 1,  # the cloudy twilight: no metric measured on twilights sees cloud
         }
     )
 
@@ -118,11 +124,10 @@ def testUncheckedEntriesFailWithoutTheirReason(sources):
         visitSet, knownBad=tuple(replace(entry, unchecked=None) for entry in visitSet.knownBad)
     )
     coverage = knownBadCoverage(stripped, sources)
-    assert (~coverage["ok"]).sum() == 22
+    assert (~coverage["ok"]).sum() == 21
     assert set(coverage.loc[~coverage["ok"], "metric"]) == {
         "pctFlagged",
         "linesPerFiber",
-        "skyFluxUniformity",
     }
 
 

@@ -1224,7 +1224,7 @@ def testPlotsCheckChoices(realAgcData, plot, kwargs):
         plot(realAgcData("focusSweep"), fig=Figure(), **kwargs)
 
 
-# Disabled cameras (INSTRM-3057)
+# Disabled cameras
 
 DISABLED = 3  # AG4, which has data in every row of every fixture
 DISABLED_NAME = "AG4 (disabled)"

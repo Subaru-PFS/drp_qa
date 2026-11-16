@@ -8,6 +8,7 @@ import pytest
 
 from pfs.drp.qa.metrics.readers import (
     chooseRun,
+    datasetDetectors,
     exportMetrics,
     readCalibValidity,
     readMetrics,
@@ -357,3 +358,14 @@ def testReadCalibValidity():
     ]
     assert registry.queries == [("detectorMap_calib", "PFS/calib", True)]
     assert readCalibValidity(SimpleNamespace(registry=registry), [], "PFS/calib").empty
+
+
+def testDatasetDetectorsListsCamerasPerVisit():
+    butler = StubButler(
+        {(150840, "b", 1): None, (150840, "r", 1): None, (150841, "b", 2): None, (149000, "b", 1): None}
+    )
+    cameras = datasetDetectors(butler, "twilightFiberFlux", [150841, 150840, 150840])
+    assert cameras == {150840: {"b1", "r1"}, 150841: {"b2"}}
+    assert butler.queries[0]["bind"]["visits"] == (150840, 150841)
+    # Negative control: a visit outside the list is not reported.
+    assert 149000 not in cameras

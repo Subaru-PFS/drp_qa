@@ -1,7 +1,7 @@
 """Make ``iqQaThresholds-run25.yaml``, the thresholds ``imageQualityQa`` uses by default.
 
 The source is the file ``docs/qa-thresholds.ipynb`` derived from the validation
-visits (collection ``u/wtg/qa-thresholds/010``, PIPE2D-1938: every validation
+visits (collection ``u/wtg/qa-thresholds/010``: every validation
 visit reduced afresh with the pipeline of the Run25-30 comparison, datamodel
 w.2026.40, obs_pfs w.2026.40 and drp_stella w.2026.41-6-ge56938d2, which the
 file records), kept in the tests as ``tests/metrics/data/iqQaThresholds-run25.yaml``
@@ -14,9 +14,9 @@ outlier against every run since. Adopting it changes six things:
   sits at the sample's maximum, and Run27's known-good n-arm flag rates are 2-5
   points higher, likely because Run27 had no calibrations of its own. The task
   config's fallback (n 15/20 %) is no better: Run25's known-good n-arm Neon
-  sets flag 34 % and Run30's 26-35 % (comparison mode, PIPE2D-1929). One entry
+  sets flag 34 % and Run30's 26-35 % (comparison mode). One entry
   with neither WARN nor FAIL stops the search, so the config isn't used either.
-- **linesPerFiber replaces nLines** (PIPE2D-1935). ``nLines`` counts rows of
+- **linesPerFiber replaces nLines**. ``nLines`` counts rows of
   ``lines``: on an arc mostly trace centroids, whose number follows the
   illumination, and only the fibers a design lights, so an arc lighting one
   fiber group failed it. ``linesPerFiber`` counts unflagged lamp lines (trace
@@ -26,20 +26,20 @@ outlier against every run since. Adopting it changes six things:
   below), quartz 2.5 %/5 % (known-good 1.1 %, obstructed 9-55 %). An arm whose
   lamp gives under ``MIN_LINES_PER_FIBER`` lines per fiber (b Argon) is not
   judged. Twilight is not measured.
-- **medFwhm is judged per detector and lamp** (PIPE2D-1942): WARN 3 % and FAIL
+- **medFwhm is judged per detector and lamp**: WARN 3 % and FAIL
   5 % above the reference known-good median of its arm, spectrograph, obsType and
   lamp, adopted as derived. The spectrographs of one arm differ from each
   other by more than any one of them varies (r quartz: r2 3.27 px, r4 3.39 px,
   each within 0.03 px), so the per-arm percentiles put each arm's widest
   spectrograph at FAIL. The per-arm entries stay, judging
   only an image whose detector and lamp have no reference median.
-- **b-arm Argon medFwhm is not judged** (PIPE2D-1938). With under a line per lit
+- **b-arm Argon medFwhm is not judged**. With under a line per lit
   fiber, the median width of a b-arm Argon arc rests on a handful of lines: the
   known-good exposures scatter -4 to +2 % about their median where every other
   lamp sits within 1.5 %, and in Runs 28-30 one in twelve b-arm Argon images
   crossed WARN or FAIL with nothing else wrong. The same reason leaves its
   linesPerFiber unjudged.
-- **Per-arm quartz medFwhm is judged on b, r and n as derived** (PIPE2D-1918),
+- **Per-arm quartz medFwhm is judged on b, r and n as derived**,
   from the calexp width. The m arm's derivation has 16 known-good values,
   below the 20-sample floor, so it judges nothing: the config's 3.2 px WARN
   would flag every known-good one (3.31-3.42 px).

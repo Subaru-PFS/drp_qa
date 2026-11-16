@@ -184,7 +184,7 @@ def testDailyLitFiberMetricsNotJudged(periods, visit, listing):
     assert judged[(10, "nLines")] == "FAIL" and judged[(10, "pctFlagged")] == "FAIL"
     assert describeSetup(visits.set_index("pfs_visit_id").loc[1]).startswith("scienceArc 'Arc: Neon' (daily)")
 
-    # Measured on the fibers lit (PIPE2D-1935), the daily arc is judged like the set.
+    # Measured on the fibers lit, the daily arc is judged like the set.
     lit = metrics.assign(nLitFibers=150.0)
     judged = judgeImages(lit, visits, thresholds).set_index(["visit", "metric"])["status"]
     assert judged[(1, "nLines")] == "FAIL" and judged[(1, "pctFlagged")] == "FAIL"
@@ -248,7 +248,7 @@ def testTaskPipeline(tmp_path):
         )
     )
     # Further files (extraThresholdsFiles) are read too; when they disagree, the first file's pipeline
-    # stands and the difference is logged (PIPE2D-1954).
+    # stands and the difference is logged.
     assert taskPipeline(SimpleNamespace(thresholdsFile=str(bare), extraThresholdsFiles=[str(path)])) == {
         "datamodel": "a",
         "obs_pfs": "b",
@@ -269,7 +269,7 @@ def testTaskPipeline(tmp_path):
 
 
 def testMetricsPredatingAThresholdAreUnjudged(defocus):
-    """Images measured before linesPerFiber existed get no verdict on it, not a KeyError (PIPE2D-1935)."""
+    """Images measured before linesPerFiber existed get no verdict on it, not a KeyError."""
     visits, metrics = defocus
     metrics = metrics.assign(medFwhm=2.3).drop(columns=["linesPerFiber"], errors="ignore")
     thresholds = THRESHOLDS.assign(metric=["medFwhm", "linesPerFiber"])

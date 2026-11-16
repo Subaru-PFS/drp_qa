@@ -6,8 +6,9 @@ The tables ``imageQualityQa`` and ``dmLineResiduals`` wrote for the visits
 ``dmLineResidualMetrics``) go to ``image_quality_qa``, ``image_quality_qa_species``,
 ``dm_line_residual_qa`` and ``dm_line_residual_qa_metric``, keyed by the
 collection and Butler RUN (``data_processing_pipe2d``), the visit and the camera;
-the thresholds files their configs name to ``qa_thresholds``; and each image's
-worst verdict to ``qa_gate``. Loading is idempotent: run it again after a
+the thresholds layers each image was judged with (its task's files, then its
+config's fields) to ``qa_thresholds``; and each image's worst verdict to
+``qa_gate``, with every layer cited per processing in ``qa_processing_thresholds``. Loading is idempotent: run it again after a
 re-judgement, or after a load that stopped.
 
 Examples::
@@ -41,10 +42,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--user", default="pfs", help="qadb user; must be allowed to write (default pfs)")
     parser.add_argument("--dbname", default="qadb", help="database name (default qadb)")
     parser.add_argument(
-        "--opdb-host",
-        default=None,
-        help="copy visit descriptions from the opdb on this host (read-only user)",
+        "--opdb-host", default=None, help="copy visit descriptions from the opdb on this host"
     )
+    parser.add_argument("--opdb-port", type=int, default=5432, help="opdb port (default 5432)")
+    parser.add_argument(
+        "--opdb-user", default="public_user", help="opdb user; reading suffices (default public_user)"
+    )
+    parser.add_argument("--opdb-dbname", default="opdb", help="opdb database name (default opdb)")
     parser.add_argument("--mode", choices=MODES, default="backfill", help="recorded in qa_gate.mode")
     parser.add_argument(
         "--no-pipeline-versions",
@@ -67,7 +71,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.opdb_host and args.dry_run is None:
         from pfs.utils.database.opdb import OpDB
 
-        opdb = OpDB(host=args.opdb_host, user="public_user")
+        opdb = OpDB(host=args.opdb_host, port=args.opdb_port, dbname=args.opdb_dbname, user=args.opdb_user)
 
     counts = loadCollection(
         butler,

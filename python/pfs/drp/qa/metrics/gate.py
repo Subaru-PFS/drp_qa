@@ -21,7 +21,7 @@ deliberately not judged in that population.
 
 One population column has a default, `DEFAULT_POPULATION`: ``illumination``,
 ``full`` for the science fibers and ``iis`` for the 16 engineering fibers lit
-by the IIS lamps (PIPE2D-1954). An entry that doesn't name it applies to
+by the IIS lamps. An entry that doesn't name it applies to
 ``full`` images only, since every threshold derived before the column existed
 was from full-slit frames; an IIS image is judged only by an entry naming
 ``illumination: iis``. An image without the column has the default.
@@ -46,26 +46,38 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import yaml
 
-from pfs.drp.qa.metrics.calibration import addSpecies, readThresholds
+from pfs.drp.qa.metrics.calibration import (
+    THRESHOLDS_VERSION,
+    addSpecies,
+    plainValue,
+    populationValue,
+    readThresholds,
+)
 from pfs.drp.qa.metrics.registry import specFor
 from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS, PIPELINE_PRODUCTS, knownVersion
 
 __all__ = [
+    "CONFIG_LAYER_SUFFIX",
     "DEFAULT_POPULATION",
     "PROVISIONAL_COLUMNS",
     "STATUS_ORDER",
     "THRESHOLDS_COLUMNS",
     "THRESHOLD_FIELDS",
     "VERDICT_COLUMNS",
+    "configLayerName",
     "configThresholds",
     "gate",
+    "isConfigLayer",
     "judge",
     "layerPipelineMismatch",
     "loadThresholds",
     "pipelineMismatch",
     "recordedThresholds",
     "sha256Of",
+    "taskThresholdsRecord",
+    "thresholdsDocument",
     "thresholdsNames",
     "thresholdsPath",
     "thresholdsRecord",
@@ -74,23 +86,22 @@ __all__ = [
 #: Verdicts from best to worst.
 STATUS_ORDER = ("PASS", "WARN", "FAIL")
 
-#: Columns of a thresholds table that are not population columns.
-_FIELDS = frozenset(
-    (
-        "metric",
-        "method",
-        "higherIsWorse",
-        "absolute",
-        "warn",
-        "fail",
-        "nGood",
-        "nGoodVisits",
-        "visitRange",
-        "reliable",
-        "failBounded",
-        "degenerate",
-        "provenance",
-    )
+#: Columns of a thresholds table that are not population columns. A tuple: `thresholdsDocument` writes an
+#: entry's keys in this order, and a set's order differs from one process to the next, so would the SHA-256.
+_FIELDS = (
+    "metric",
+    "method",
+    "higherIsWorse",
+    "absolute",
+    "warn",
+    "fail",
+    "nGood",
+    "nGoodVisits",
+    "visitRange",
+    "reliable",
+    "failBounded",
+    "degenerate",
+    "provenance",
 )
 
 #: The same, for readers of a thresholds table: every other column names its population.
@@ -102,9 +113,13 @@ VERDICT_COLUMNS = ("qaStatus", "qaDecidedBy", "qaReason")
 #: Columns `gate` adds when given the thresholds' pipeline: whether the verdict is provisional, and why.
 PROVISIONAL_COLUMNS = ("qaProvisional", "qaPipeline")
 
-#: Columns a task adds to each image's row: the thresholds files it judged with, in the order judged,
-#: comma-separated, and the SHA-256 of each as it was then (`thresholdsRecord`, PIPE2D-1976).
+#: Columns a task adds to each image's row: the thresholds layers it judged with, in the order judged,
+#: comma-separated, and the SHA-256 of each as it was then (`thresholdsRecord`): its files by name, and its
+#: config's threshold fields as `configLayerName` names them.
 THRESHOLDS_COLUMNS = ("thresholdsFiles", "thresholdsSha256")
+
+#: What a task's config layer is named after the task: ``imageQualityQa.config`` (`configLayerName`).
+CONFIG_LAYER_SUFFIX = ".config"
 
 #: Columns identifying an image, copied to `judge`'s output when present.
 _ID_COLUMNS = ("visit", "arm", "spectrograph")
@@ -168,35 +183,141 @@ def thresholdsNames(config: Any) -> list[str]:
     return [str(name) for name in names if name]
 
 
-def sha256Of(path: Path | str) -> str:
-    """Return the hex SHA-256 of a file."""
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+def sha256Of(content: Path | str | bytes) -> str:
+    """Return the hex SHA-256 of a file, or of some bytes (a `thresholdsDocument`)."""
+    if not isinstance(content, bytes):
+        content = Path(content).read_bytes()
+    return hashlib.sha256(content).hexdigest()
 
 
-def thresholdsRecord(names: Sequence[str]) -> dict[str, str]:
-    """Return `THRESHOLDS_COLUMNS` for the thresholds files a task judges with.
+def configLayerName(task: str) -> str:
+    """Return the name a task's config threshold fields are recorded under as a thresholds layer.
 
-    A task calls this when it loads the files, so the record is of their
+    ``imageQualityQa.config``: the task's label in the pipeline and
+    `CONFIG_LAYER_SUFFIX`. It is what qadb's ``qa_thresholds.name`` holds
+    for the layer, beside the files' names.
+    """
+    return f"{task}{CONFIG_LAYER_SUFFIX}"
+
+
+def isConfigLayer(name: str) -> bool:
+    """Say whether a recorded thresholds layer is a task config's fields (`configLayerName`), not a file."""
+    return name.endswith(CONFIG_LAYER_SUFFIX)
+
+
+def thresholdsDocument(table: pd.DataFrame, name: str) -> bytes:
+    """Return a thresholds table as the bytes of a thresholds file.
+
+    A table that is no file (the thresholds a task config's fields give,
+    `configThresholds`) has no content to hash. Written this way it has: the
+    same table gives the same bytes, so the same SHA-256, and
+    `pfs.drp.qa.metrics.calibration.parseThresholds` reads them back as the
+    table, so qadb registers the layer as it does a file (``qa_thresholds``,
+    by content). The document records no origin (``derivedOn``,
+    ``collection``, ``referenceRuns``, ``drpQaVersion`` null): a config's
+    fields have none, and the drp_qa version is kept out so the same fields
+    hash the same whichever drp_qa judged with them.
+
+    Parameters
+    ----------
+    table : `pandas.DataFrame`
+        A thresholds table as `judge` takes it: ``metric``, ``warn``,
+        ``fail``, and the population columns; ``higherIsWorse``,
+        ``absolute``, ``provenance`` and the other `THRESHOLD_FIELDS` where
+        present. A null population value is left out of the entry ("any").
+    name : `str`
+        The layer's name (`configLayerName`), written into the document.
+
+    Returns
+    -------
+    `bytes`
+        UTF-8 YAML, version `pfs.drp.qa.metrics.calibration.THRESHOLDS_VERSION`.
+    """
+    fields = [field for field in _FIELDS if field in table.columns and field != "metric"]
+    populationColumns = [column for column in table.columns if column not in _FIELDS]
+    entries = []
+    for record in table.to_dict("records"):
+        entry: dict[str, Any] = {
+            "metric": str(record["metric"]),
+            "population": {
+                column: populationValue(record[column])
+                for column in populationColumns
+                if not _isNull(record[column])
+            },
+        }
+        for field in fields:
+            value = plainValue(record[field])
+            if field in ("higherIsWorse", "absolute", "reliable", "failBounded", "degenerate"):
+                if value is not None:
+                    entry[field] = bool(value)
+            elif field in ("warn", "fail"):
+                entry[field] = None if value is None else float(value)
+            elif value is not None:
+                entry[field] = value
+        entries.append(entry)
+    document = {
+        "version": THRESHOLDS_VERSION,
+        "name": name,
+        "derivedOn": None,
+        "collection": None,
+        "referenceRuns": [],
+        "drpQaVersion": None,
+        "thresholds": entries,
+    }
+    return yaml.safe_dump(document, sort_keys=False, allow_unicode=True, width=110).encode()
+
+
+def thresholdsRecord(names: Sequence[str], documents: Mapping[str, bytes] | None = None) -> dict[str, str]:
+    """Return `THRESHOLDS_COLUMNS` for the thresholds layers a task judges with.
+
+    A task calls this when it loads its layers, so the record is of their
     content at judgement time, whatever the drp_qa that later reads it ships.
-    No file gives empty strings: judged by the config's fields alone.
+    Nothing given records empty strings: judged with no layer.
 
     Parameters
     ----------
     names : sequence [`str`]
-        The files as the config names them (`thresholdsNames`); none may
-        contain a comma.
+        The files as the config names them (`thresholdsNames`), in the order
+        judged; none may contain a comma.
+    documents : mapping [`str`, `bytes`], optional
+        Layers that are no file, judged after the files in the order given:
+        each by its name (`configLayerName`) and its `thresholdsDocument`.
     """
-    if any("," in name for name in names):
-        raise ValueError(f"A thresholds file name may not contain a comma: {names}")
-    digests = [sha256Of(thresholdsPath(name)) for name in names]
-    return dict(zip(THRESHOLDS_COLUMNS, (",".join(names), ",".join(digests)), strict=True))
+    documents = dict(documents or {})
+    layers = [*names, *documents]
+    if any("," in name for name in layers):
+        raise ValueError(f"A thresholds layer name may not contain a comma: {layers}")
+    digests = [
+        *(sha256Of(thresholdsPath(name)) for name in names),
+        *(sha256Of(document) for document in documents.values()),
+    ]
+    return dict(zip(THRESHOLDS_COLUMNS, (",".join(layers), ",".join(digests)), strict=True))
+
+
+def taskThresholdsRecord(task: str, names: Sequence[str], config: pd.DataFrame) -> dict[str, str]:
+    """Return `THRESHOLDS_COLUMNS` for a task that judges with its files, then its config's fields.
+
+    Parameters
+    ----------
+    task : `str`
+        The task's label in the pipeline (``imageQualityQa``,
+        ``dmLineResiduals``), which names the config layer (`configLayerName`).
+    names : sequence [`str`]
+        Its thresholds files (`thresholdsNames`).
+    config : `pandas.DataFrame`
+        The table its config's fields give (`configThresholds`,
+        `pfs.drp.qa.metrics.lineResiduals.residualConfigThresholds`): its last
+        layer.
+    """
+    layer = configLayerName(task)
+    return thresholdsRecord(names, {layer: thresholdsDocument(config, layer)})
 
 
 def recordedThresholds(files: Any, digests: Any) -> list[tuple[str, str]] | None:
     """Return the ``(name, sha256)`` pairs a `thresholdsRecord` holds, in the order judged.
 
     `None` when nothing was recorded (a table written before PIPE2D-1976, or
-    a null); an empty list when the task judged with no file.
+    a null); an empty list when the task judged with no layer.
 
     Raises
     ------
@@ -208,7 +329,7 @@ def recordedThresholds(files: Any, digests: Any) -> list[tuple[str, str]] | None
     names = [name for name in files.split(",") if name]
     hashes = [digest for digest in digests.split(",") if digest]
     if len(names) != len(hashes):
-        raise ValueError(f"{len(names)} thresholds files recorded with {len(hashes)} SHA-256s: {files!r}")
+        raise ValueError(f"{len(names)} thresholds layers recorded with {len(hashes)} SHA-256s: {files!r}")
     return list(zip(names, hashes, strict=True))
 
 
@@ -442,8 +563,8 @@ def layerPipelineMismatch(
     """Say which images were reduced with another pipeline than the thresholds that judged them.
 
     Thresholds files derived from different collections record different
-    pipelines (the Run25 file obs_pfs w.2026.40, the IIS file w.2026.43;
-    PIPE2D-1954), and each image is judged by some of the layers: it is
+    pipelines (the Run25 file obs_pfs w.2026.40, the IIS file w.2026.43),
+    and each image is judged by some of the layers: it is
     provisional when its reduction differs from the pipeline of any layer that
     gave it a verdict. An image no layer judged is compared with the first
     pipeline recorded, as `pipelineMismatch` would.

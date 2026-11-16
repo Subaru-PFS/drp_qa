@@ -214,6 +214,8 @@ RESULT_NEUTRAL_PATHS = (
         for name in (
             "__init__.py",
             "butlerQueries.py",
+            "calibInputs.py",
+            "calibValidate.py",
             "classify.py",
             "cli.py",
             "data",
@@ -227,7 +229,10 @@ RESULT_NEUTRAL_PATHS = (
         )
     ),
     "python/pfs/drp/qa/plotting/comparison.py",
+    "python/pfs/drp/qa/plotting/calibInputs.py",
     "bin.src/qaComparison.py",
+    "bin.src/calibInputsReport.py",
+    "bin.src/calibValidate.py",
     "tests",
     "docs",
     "examples",
@@ -450,7 +455,7 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     config = butler.get("imageQualityQa_config", collections=[output])
     judged = judgeImages(metrics, visits, taskThresholds(config))
     # Provisional against the pipeline of the layer that judged each image: the Run25 and IIS
-    # thresholds files record different ones (PIPE2D-1954).
+    # thresholds files record different ones.
     mismatch = layerPipelineMismatch(metrics, judged, taskPipelines(config))
     for column in mismatch.columns:
         metrics[column] = mismatch[column].to_numpy()
@@ -463,7 +468,7 @@ def _report(args, period, periods, visits, frames, stamp, output, version, workD
     if residualSummary is not None:
         from pfs.drp.qa.metrics.lineResiduals import addObsType
 
-        # Tables stored before obsType was a column (PIPE2D-1956) take it from imageQualityQa's.
+        # Tables stored before obsType was a column take it from imageQualityQa's.
         residualMetrics = addObsType(residualMetrics, metrics)
         residualSummary = addObsType(residualSummary, metrics)
         residualSummary.to_parquet(workDir / f"dmLineResidualSummary-{period.name}.parquet")
@@ -526,7 +531,7 @@ def _readResiduals(butler, visits, collections: Sequence[str]):
     """Return the ``dmLineResidualSummary`` and ``dmLineResidualMetrics`` rows of some visits.
 
     `None` for both when the collections hold none: a collection judged
-    before ``dmLineResiduals`` joined the thresholds pipeline (PIPE2D-1956).
+    before ``dmLineResiduals`` joined the thresholds pipeline.
     """
     from pfs.drp.qa.metrics.readers import readMetrics
 
@@ -534,7 +539,7 @@ def _readResiduals(butler, visits, collections: Sequence[str]):
         summary = readMetrics(butler, visits, "dmLineResidualSummary", collections=collections)
     except LookupError:
         print(
-            "no dmLineResiduals output: judged before the task joined the pipeline (PIPE2D-1956)",
+            "no dmLineResiduals output: judged before the task joined the pipeline",
             file=sys.stderr,
         )
         return None, None
@@ -618,7 +623,9 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
             skipExistingIn=skip,
             cosmicrayConfigFile=None if configFile is None else str(configFile),
             jobs=args.jobs,
-            rebase=outputExists,
+            # The first pass creates the output chain when it doesn't exist yet; every later pass finds it,
+            # and must rebase it in case drpActor added a reduction RUN meanwhile (it does, daily).
+            rebase=outputExists or bool(commands),
         )
         if args.dry_run:
             command = _qgraph(command)
@@ -632,10 +639,19 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
 
     # A failed quantum fails its pass but not the others: run every pass, then say what failed.
     failed = []
-    for name, command in commands:
+    for index, (name, command) in enumerate(commands):
+        if not args.dry_run and (outputExists or (index > 0 and collectionExists(butler, output))):
+            # The chain must hold today's inputs before pipetask searches it for the graph. A
+            # first pass that failed before making the chain leaves nothing to rebase.
+            from lsst.daf.butler import Butler
+
+            from pfs.drp.qa.comparison.butlerQueries import rebaseOutputChain
+
+            inputs = command[command.index("-i") + 1].split(",")
+            rebaseOutputChain(Butler(args.butler, writeable=True), output, inputs)
         step = "qgraph" if args.dry_run else "pipetask"
         log = workDir / f"{step}-{period.name}-{name}-{datetime.datetime.now():%Y%m%dT%H%M%S}.log"
-        print(f"running {name}; log: {log}")
+        print(f"running {name}; log: {log}", flush=True)
         with log.open("w") as stream:
             stream.write(shlex.join(command) + "\n")
             stream.flush()
@@ -645,10 +661,10 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
             print("\n".join(line for line in text.splitlines() if "quanta" in line))
         summary, lines = pipetaskFailures(text)
         if summary:
-            print(f"{name}: {summary}")
+            print(f"{name}: {summary}", flush=True)
         newlyFailed = failedQuanta(text)
         if not newlyFailed.empty:
-            print(f"{name}: {len(newlyFailed)} detector images failed, now marked failed")
+            print(f"{name}: {len(newlyFailed)} detector images failed, now marked failed", flush=True)
         if result.returncode:
             failed.append((name, result.returncode, log, lines))
     for name, code, log, lines in failed:
@@ -714,7 +730,7 @@ def unexpectedPipeline(
 
     Reductions are reused only under the same label, so a shell with another
     stack set up plans the whole reduction again, silently, where a judge pass
-    was meant (PIPE2D-1938).
+    was meant.
 
     Parameters
     ----------
@@ -743,10 +759,10 @@ def unexpectedPipeline(
 
 
 def _earlier(butler, args, period: Period, output: str) -> list[str]:
-    """Return the earlier collections of this period, and mode, whose reductions this one reuses."""
-    from pfs.drp.qa.comparison.butlerQueries import earlierReductions
+    """Return the runs of this period's earlier comparisons (same mode) whose reductions this one reuses."""
+    from pfs.drp.qa.comparison.butlerQueries import earlierRuns
 
-    return earlierReductions(butler, args.prefix, period.name, args.variant, output)
+    return earlierRuns(butler, args.prefix, period.name, args.variant, output)
 
 
 def _qgraph(command: list[str]) -> list[str]:

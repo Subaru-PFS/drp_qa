@@ -21,7 +21,7 @@ from pfs.drp.qa.comparison.queries import LISTING_COLUMNS, proposalCategory
         ("N/A", "none"),
         ("", "none"),
         (None, "none"),
-        ("S25A-123", "other"),  # semester and number only
+        ("S25A-123", "uncoded"),  # semester and number only: a science program (S26B-047 in Run31)
         ("engineering", "other"),
     ],
 )
@@ -72,8 +72,27 @@ def testNotesFromVisitsAndSequences(FakeOpDB):
     assert notes["iic_sequence_id"].isna().tolist() == [True, True, False]
 
 
+def testVisitTimesByVisit(FakeOpDB):
+    answer = pd.DataFrame(
+        {
+            "pfs_visit_id": [141578, 141577],
+            "time_exp_start": ["2026-05-04 22:10:47", "2026-05-04 22:08:25"],
+            "iic_sequence_id": [61288, None],
+        }
+    )
+    opdb = FakeOpDB({"FROM sps_exposure": answer})
+    times = queries.readVisitTimes(opdb, [141578, 141577, 141578])
+
+    assert opdb.calls[0].params == {"visits": [141577, 141578]}
+    assert ":visits" in opdb.calls[0].sql and "141577" not in opdb.calls[0].sql
+    assert list(times["pfs_visit_id"]) == [141577, 141578]
+    assert times["iic_sequence_id"].tolist()[1] == 61288 and times["iic_sequence_id"].isna().tolist()[0]
+    assert pd.api.types.is_datetime64_any_dtype(times["time_exp_start"])
+
+
 def testNothingToReadMakesNoQuery(FakeOpDB):
     opdb = FakeOpDB({})
+    assert queries.readVisitTimes(opdb, []).empty
     assert queries.readNotes(opdb, [], []).empty
     assert queries.readTelStatus(opdb, []).empty
     assert queries.readDesignCategories(opdb, []).empty
@@ -98,4 +117,52 @@ def testDesignCategoriesDropProposalIds(FakeOpDB):
         {"pfs_design_id": 7, "category": "EN", "n_fibers": 120},
         {"pfs_design_id": 7, "category": "none", "n_fibers": 5},
         {"pfs_design_id": 8, "category": "QF", "n_fibers": 400},
+    ]
+
+
+def testSequenceOfVisitBindsTheVisit(FakeOpDB):
+    answer = pd.DataFrame(
+        {
+            "pfs_visit_id": [150842, 150840, 150841],
+            "iic_sequence_id": 69251,
+            "sequence_type": "scienceObject",
+            "sequence_name": "Twilight sky",
+            "finished_at": ["2026-09-16 05:40:51"] * 3,
+            "sequence_status": "complete",
+        }
+    )
+    opdb = FakeOpDB({r"FROM visit_set AS given": answer})
+    sequence = queries.readSequenceOfVisit(opdb, 150841)
+    assert opdb.calls[0].params == {"visit": 150841}
+    assert list(sequence.columns) == list(queries.SEQUENCE_COLUMNS)
+    assert sequence["pfs_visit_id"].tolist() == [150840, 150841, 150842]
+    assert pd.api.types.is_datetime64_any_dtype(sequence["finished_at"])
+
+
+def testSequenceStillRunningHasNoFinish(FakeOpDB):
+    answer = pd.DataFrame(
+        {
+            "pfs_visit_id": [150840],
+            "iic_sequence_id": 69251,
+            "sequence_type": "scienceObject",
+            "sequence_name": "Twilight sky",
+            "finished_at": [None],
+            "sequence_status": [None],
+        }
+    )
+    sequence = queries.readSequenceOfVisit(FakeOpDB({r"FROM visit_set AS given": answer}), 150840)
+    assert sequence["finished_at"].isna().all()
+
+
+def testVisitCamerasByRange(FakeOpDB):
+    answer = pd.DataFrame({"visit": [141578, 141577, 141577], "camera": ["b1", "r1", "b1"]})
+    opdb = FakeOpDB({r"SELECT DISTINCT sps_exposure.pfs_visit_id": answer})
+    cameras = queries.readVisitCameras(opdb, 141577, 141578)
+
+    assert opdb.calls[0].params == {"first": 141577, "last": 141578}
+    assert ":first" in opdb.calls[0].sql and "141577" not in opdb.calls[0].sql
+    assert cameras.to_dict("records") == [
+        {"visit": 141577, "camera": "b1"},
+        {"visit": 141577, "camera": "r1"},
+        {"visit": 141578, "camera": "b1"},
     ]

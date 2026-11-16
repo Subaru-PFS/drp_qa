@@ -41,7 +41,7 @@ __all__ = [
 STATUS_ORDER = ("judged", "to judge", "to reduce", "failed", "no pfsConfig", "no raw", "raw not in opdb")
 
 #: The QA tasks of the pipeline, which a judge-only pass runs on reductions that exist: the gate,
-#: and the line residuals against the calibration and the visit's detectorMap (PIPE2D-1956).
+#: and the line residuals against the calibration and the visit's detectorMap.
 JUDGE_TASKS = ("imageQualityQa", "dmLineResiduals")
 
 #: A failed quantum in a ``pipetask`` log.
@@ -323,6 +323,10 @@ def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
     toReduce = set(detectors.loc[detectors["status"] == "to reduce", "visit"])
     reduceSequences = set(todo.loc[todo["pfs_visit_id"].isin(toReduce), "iic_sequence_id"].dropna())
     whole = judged[judged["iic_sequence_id"].isin(reduceSequences)]
+    # A visit with raw but no pfsConfig can't be in a pass: pipetask's graph builder refuses the
+    # whole pass over the missing prerequisite rather than skipping its quanta (Run31, 152678).
+    noPfsConfig = set(detectors.loc[detectors["status"] == "no pfsConfig", "visit"])
+    whole = whole[~whole["pfs_visit_id"].isin(noPfsConfig)]
     todo = pd.concat([todo, whole]).drop_duplicates("pfs_visit_id")
     groups = cosmicrayGroups(judged[judged["iic_sequence_id"].isin(set(todo["iic_sequence_id"].dropna()))])
     todo = todo.assign(
@@ -437,7 +441,7 @@ def pipetaskCommand(
     """
     # The tasks log as pfs.<task>, lowercase, as drpActor sets them (CliLog.setLogLevels): PFS=INFO
     # misses them, and a bare INFO sets only lsst. The fit statistics imageQualityQa reads from
-    # the stored reduceExposure_log are INFO lines (PIPE2D-1938).
+    # the stored reduceExposure_log are INFO lines.
     command = ["pipetask", "--long-log", "--log-level", "pfs=INFO", "run", "-j", str(jobs)]
     # A judge-only pass runs the QA tasks alone, so the reduction's overrides would name labels it lacks.
     subset = f"{pipeline}#{','.join(JUDGE_TASKS)}" if item.judgeOnly else pipeline

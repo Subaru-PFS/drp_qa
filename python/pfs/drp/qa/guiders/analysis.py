@@ -151,7 +151,7 @@ def selectValidMatches(agcData: pd.DataFrame) -> np.ndarray:
 def selectEnabledCameras(agcData: pd.DataFrame) -> np.ndarray:
     """Select the spots from cameras that the guider fitted.
 
-    ics_agActor can disable a camera (INSTRM-2919): its spots are still
+    ics_agActor can disable a camera: its spots are still
     matched, and may be ``GOOD_MATCH``, but don't drive the guide offsets or
     the focus. ``camera_enabled`` is False for them. Rows written before
     INSTRM-3057 have no value (NA) and are taken as enabled, as is every row

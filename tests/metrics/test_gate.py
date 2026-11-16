@@ -1,8 +1,12 @@
 """Tests for the gate: judging metrics against layered threshold tables."""
 
 import ast
+import hashlib
 import importlib.util
 import math
+import os
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,14 +20,18 @@ from pfs.drp.qa.metrics.gate import (
     PROVISIONAL_COLUMNS,
     THRESHOLDS_COLUMNS,
     VERDICT_COLUMNS,
+    configLayerName,
     configThresholds,
     gate,
+    isConfigLayer,
     judge,
     layerPipelineMismatch,
     loadThresholds,
     pipelineMismatch,
     recordedThresholds,
     sha256Of,
+    taskThresholdsRecord,
+    thresholdsDocument,
     thresholdsNames,
     thresholdsPath,
     thresholdsRecord,
@@ -352,7 +360,7 @@ def iisStored() -> pd.DataFrame:
 
 
 def testShippedIisFileIsTheAdoptedRun30(iisStored, tmp_path):
-    """The IIS file is what its script derives from the Run30 IIS frames and adopts (PIPE2D-1954)."""
+    """The IIS file is what its script derives from the Run30 IIS frames and adopts."""
     module = loadScript("makeIisThresholds")
     derived = module.derive(iisStored, tmp_path / "derived.yaml")
     assert yaml.safe_load(derived.read_text()) == yaml.safe_load(IIS.read_text())
@@ -404,7 +412,7 @@ def testShippedIisFileVerdicts(iisStored):
 def testShippedFileVerdicts(stored):
     """The adopted file: obstructed frames and defocused quartz fail, no known-good fails; flags aren't judged.
 
-    The fixture is ``u/wtg/qa-thresholds/010`` (PIPE2D-1938): the validation visits reduced afresh,
+    The fixture is ``u/wtg/qa-thresholds/010``: the validation visits reduced afresh,
     Run29's b2 and n4 quartz among them. The one-group Run30 arcs that PIPE2D-1935 checked are no
     longer validation visits; comparison mode judges them with every other daily arc.
     """
@@ -414,8 +422,8 @@ def testShippedFileVerdicts(stored):
 
     obstructed = stored["visit"].isin([150115, 150116, 150641, 150642])
     assert (verdicts.loc[obstructed, "qaStatus"] == "FAIL").all()
-    # The validation set records them as known-bad for linesPerFiber, the metric that fails them
-    # (PIPE2D-1935): each lit fiber measures fewer lines.
+    # The validation set records them as known-bad for linesPerFiber, the metric that fails them:
+    # each lit fiber measures fewer lines.
     lines = labelRows(stored, loadValidationVisits(), "linesPerFiber")
     perFiber = judged[judged["metric"] == "linesPerFiber"].set_index("row")
     obstructedLines = lines[lines["visit"].isin([150115, 150116, 150641, 150642])]
@@ -430,9 +438,9 @@ def testShippedFileVerdicts(stored):
     assert (goodLines.loc[~argon, "status"] == "PASS").all() and (goodLines.loc[argon, "status"] == "").all()
     run25Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(133040, 135850)
     assert (perFiber.loc[np.flatnonzero(run25Quartz), "status"] == "PASS").all()
-    # medFwhm (PIPE2D-1942): every known-good arc and quartz is judged against its own detector and
+    # medFwhm: every known-good arc and quartz is judged against its own detector and
     # lamp's reference median, and none fails; every known-bad one with a value fails. b-arm Argon
-    # is not judged (PIPE2D-1938): under a line per fiber, its width rests on a handful of lines.
+    # is not judged: under a line per fiber, its width rests on a handful of lines.
     labelled = labelRows(stored, loadValidationVisits(), "medFwhm")
     fwhm = judged[judged["metric"] == "medFwhm"].set_index("row")
     bArgon = (stored["arm"] == "b") & (stored["seqName"] == "Arc: Argon")
@@ -450,7 +458,7 @@ def testShippedFileVerdicts(stored):
     bad = bad[bad["value"].notna()]
     assert len(bad) == 82 and (bad["status"] == "FAIL").all()
     assert not bArgon[bad.index].any()  # the set asserts nothing about b-arm Argon widths
-    # The b2 and n4 quartz reference is Run29's set (PIPE2D-1938): its traces pass on those two cameras,
+    # The b2 and n4 quartz reference is Run29's set: its traces pass on those two cameras,
     # and Run25's own, narrower, pass as well.
     camera = stored["arm"].add(stored["spectrograph"].astype(str))
     run29Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(144587, 147830)
@@ -479,7 +487,7 @@ def testShippedFileVerdicts(stored):
     derived = gate(stored, [RUN25, configThresholds(configDefaults())])
     assert (derived.loc[run25Quartz, "qaStatus"] == "FAIL").any()
 
-    # nLines is no longer judged (PIPE2D-1935), nor is a twilight frame's count.
+    # nLines is no longer judged, nor is a twilight frame's count.
     assert "nLines" not in set(judged["metric"])
     twilight = perFiber.loc[np.flatnonzero(stored["seqName"] == "Twilight sky")]
     assert len(twilight) and (twilight["status"] == "").all()
@@ -534,7 +542,7 @@ def testPipelineMismatchWithoutAReference():
 
 
 def testLayerPipelineMismatch():
-    """Each image is provisional against the pipeline of the layer that judged it (PIPE2D-1954)."""
+    """Each image is provisional against the pipeline of the layer that judged it."""
     run25 = table({"metric": "medFwhm", "warn": 3.0, "fail": 4.0})
     iis = table({"metric": "medFwhm", "illumination": "iis", "warn": 2.0, "fail": 2.5})
     iisPipeline = PIPELINE | {"obs_pfs": "w.2026.43"}
@@ -601,7 +609,7 @@ def testGateKeepsOneRowPerImageWithDuplicateLabels():
 
 
 class TestThresholdsRecord:
-    """A task records the files it judged with by name and content, in the order judged (PIPE2D-1976)."""
+    """A task records the files it judged with by name and content, in the order judged."""
 
     def testNamesInTheOrderJudged(self):
         config = SimpleNamespace(thresholdsFile="a.yaml", extraThresholdsFiles=["b.yaml", ""])
@@ -640,5 +648,118 @@ class TestThresholdsRecord:
     def testBadRecords(self):
         with pytest.raises(ValueError, match="comma"):
             thresholdsRecord(["a,b.yaml"])
-        with pytest.raises(ValueError, match="2 thresholds files recorded with 1"):
+        with pytest.raises(ValueError, match="2 thresholds layers recorded with 1"):
             recordedThresholds("a.yaml,b.yaml", "0" * 64)
+
+
+class TestThresholdsDocument:
+    """A task config's fields become a thresholds layer with a content hash, read back as the same table."""
+
+    CONFIG = SimpleNamespace(
+        fwhmWarnThreshold=3.2,
+        fwhmFailThreshold=3.5,
+        flagRateWarnThreshold={"b": 55.0, "b:HgCd": 20.0},
+        flagRateFailThreshold={"b": 60.0, "b:HgCd": 25.0},
+        dxCenterWarnThreshold=1.0,
+        dxCenterFailThreshold=2.0,
+    )
+
+    #: The SHA-256 of `CONFIG`'s document and of ``residualThresholds(1.0, 2.0, 1.0, 2.0)``'s. The bytes are a
+    #: stored format: tasks record these and a loader of another drp_qa must rebuild them, so a change here
+    #: is a change to make on purpose, knowing layers recorded before it no longer register.
+    IMAGE_QUALITY_SHA256 = "06e1340eea51d350f5b7bbb72566aa27ff556946fb162825bbce9f10a0107027"
+    RESIDUALS_SHA256 = "c0cf0fcf971c345c4e254a3a19d2d56b401a9afc495389a327745b8fb877530f"
+
+    def testNames(self):
+        assert configLayerName("imageQualityQa") == "imageQualityQa.config"
+        assert isConfigLayer("dmLineResiduals.config") and not isConfigLayer("iqQaThresholds-run25.yaml")
+
+    def testDeterministicAndContentAddressed(self):
+        table = configThresholds(self.CONFIG)
+        document = thresholdsDocument(table, "imageQualityQa.config")
+        assert document == thresholdsDocument(configThresholds(self.CONFIG), "imageQualityQa.config")
+        assert b"name: imageQualityQa.config" in document and b"version: 2" in document
+        # Negative control: another field value is another document, so another SHA-256.
+        other = SimpleNamespace(**vars(self.CONFIG), **{})
+        other.fwhmWarnThreshold = 3.3
+        assert sha256Of(thresholdsDocument(configThresholds(other), "imageQualityQa.config")) != sha256Of(
+            document
+        )
+
+    def testTheSameBytesInEveryProcess(self):
+        """Every process builds the SHA-256 pinned here: the task that judges and the loader that registers."""
+        code = (
+            "from types import SimpleNamespace\n"
+            "from pfs.drp.qa.metrics.gate import configThresholds, sha256Of, thresholdsDocument\n"
+            "from pfs.drp.qa.metrics.lineResiduals import residualThresholds\n"
+            f"config = SimpleNamespace(**{vars(self.CONFIG)!r})\n"
+            "print(sha256Of(thresholdsDocument(configThresholds(config), 'imageQualityQa.config')))\n"
+            "residuals = residualThresholds(1.0, 2.0, 1.0, 2.0)\n"
+            "print(sha256Of(thresholdsDocument(residuals, 'dmLineResiduals.config')))\n"
+        )
+        path = os.pathsep.join(path for path in sys.path if path)
+        digests = set()
+        for seed in ("0", "1", "2", "3", "random"):
+            env = {**os.environ, "PYTHONPATH": path, "PYTHONHASHSEED": seed}
+            result = subprocess.run(
+                [sys.executable, "-c", code], capture_output=True, text=True, check=True, env=env
+            )
+            digests.add(tuple(result.stdout.split()))
+        document = thresholdsDocument(configThresholds(self.CONFIG), "imageQualityQa.config")
+        assert digests == {(self.IMAGE_QUALITY_SHA256, self.RESIDUALS_SHA256)}
+        assert sha256Of(document) == self.IMAGE_QUALITY_SHA256
+        # Negative control: the same entries with their keys in another order are other bytes.
+        content = yaml.safe_load(document)
+        content["thresholds"] = [dict(reversed(entry.items())) for entry in content["thresholds"]]
+        reordered = yaml.safe_dump(content, sort_keys=False, allow_unicode=True, width=110).encode()
+        assert yaml.safe_load(reordered) == yaml.safe_load(document)
+        assert sha256Of(reordered) != sha256Of(document)
+
+    def testReadsBackAsTheTable(self, tmp_path):
+        """What `parseThresholds` reads from the document judges as the table did: null populations are 'any'."""
+        from pfs.drp.qa.metrics.calibration import parseThresholds, readThresholds
+
+        table = configThresholds(self.CONFIG)
+        document = thresholdsDocument(table, "imageQualityQa.config")
+        metadata, parsed = parseThresholds(document)
+        assert metadata["pipelineVersions"] == {} and metadata["collection"] is None
+        assert parsed["metric"].tolist() == table["metric"].tolist()
+        assert parsed.loc[parsed["species"].notna(), "species"].tolist() == ["HgCd"]
+        assert parsed["arm"].isna().sum() == table["arm"].isna().sum()
+        metrics = pd.DataFrame(
+            {
+                "medFwhm": [3.0, 3.4],
+                "pctFlagged": [21.0, 10.0],
+                "medDxCenter": [-1.5, 0.1],
+                "arm": ["b", "r"],
+                "species": ["HgCd", "Neon"],
+            }
+        )
+        pd.testing.assert_frame_equal(
+            judge(metrics, parsed)[["metric", "status", "warn", "fail", "population"]],
+            judge(metrics, table)[["metric", "status", "warn", "fail", "population"]],
+        )
+        path = tmp_path / "imageQualityQa.config.yaml"
+        path.write_bytes(document)
+        assert readThresholds(path)[1].equals(parsed)
+
+    def testNanThresholdsAreNull(self):
+        """A field left NaN (not judged) is null in the document, and an unjudged entry when read back."""
+        from pfs.drp.qa.metrics.calibration import parseThresholds
+        from pfs.drp.qa.metrics.lineResiduals import residualThresholds
+
+        table = residualThresholds(1.0, 2.0, 1.0, 2.0)
+        document = thresholdsDocument(table, "dmLineResiduals.config")
+        assert b"warn: null" in document and b".nan" not in document
+        _, parsed = parseThresholds(document)
+        rms = parsed[parsed["metric"] == "robustRmsDeltaX"].iloc[0]
+        assert pd.isna(rms["warn"]) and pd.isna(rms["fail"]) and rms["statusType"] == "RESERVED"
+
+    def testTaskRecordListsFilesThenTheConfigLayer(self):
+        table = configThresholds(self.CONFIG)
+        record = taskThresholdsRecord("imageQualityQa", ["iqQaThresholds-run25.yaml"], table)
+        layers = recordedThresholds(*record.values())
+        assert [name for name, _ in layers] == ["iqQaThresholds-run25.yaml", "imageQualityQa.config"]
+        assert layers[0][1] == sha256Of(thresholdsPath("iqQaThresholds-run25.yaml"))
+        assert layers[1][1] == sha256Of(thresholdsDocument(table, "imageQualityQa.config"))
+        assert sha256Of(b"abc") == hashlib.sha256(b"abc").hexdigest()

@@ -13,11 +13,15 @@ import pandas as pd
 
 __all__ = [
     "LISTING_COLUMNS",
+    "SEQUENCE_COLUMNS",
     "proposalCategory",
     "readDesignCategories",
     "readNotes",
+    "readSequenceOfVisit",
     "readTelStatus",
+    "readVisitCameras",
     "readVisitListing",
+    "readVisitTimes",
 ]
 
 #: The columns of `readVisitListing`.
@@ -68,6 +72,21 @@ GROUP BY pfs_visit.pfs_visit_id, sps_visit.exp_type, visit_set.iic_sequence_id,
 ORDER BY pfs_visit.pfs_visit_id
 """
 
+_VISIT_TIMES_SQL = """
+SELECT sps_exposure.pfs_visit_id, min(sps_exposure.time_exp_start) AS time_exp_start, visit_set.iic_sequence_id
+FROM sps_exposure
+LEFT JOIN visit_set ON visit_set.pfs_visit_id = sps_exposure.pfs_visit_id
+WHERE sps_exposure.pfs_visit_id = ANY(:visits)
+GROUP BY sps_exposure.pfs_visit_id, visit_set.iic_sequence_id
+"""
+
+_VISIT_CAMERAS_SQL = """
+SELECT DISTINCT sps_exposure.pfs_visit_id AS visit, sps_camera.sps_camera_name AS camera
+FROM sps_exposure
+JOIN sps_camera ON sps_camera.sps_camera_id = sps_exposure.sps_camera_id
+WHERE sps_exposure.pfs_visit_id BETWEEN :first AND :last
+"""
+
 _SEQUENCE_NOTES_SQL = """
 SELECT iic_sequence_id, body AS note
 FROM obslog_visit_set_note
@@ -110,6 +129,57 @@ GROUP BY pfs_design_id, proposal_id
 _PROPOSAL_RE = re.compile(r"^S\d\d[AB]-([A-Z]*)\d*([A-Z]*)")
 
 
+# Every visit of the sequence a visit belongs to, with whether and when the sequence finished:
+# the IIC writes iic_sequence_status when a sequence ends, so a missing row is a sequence still
+# running (or one the IIC never closed).
+_SEQUENCE_OF_VISIT_SQL = """
+SELECT
+    member.pfs_visit_id,
+    iic_sequence.iic_sequence_id,
+    iic_sequence.sequence_type,
+    iic_sequence.name AS sequence_name,
+    iic_sequence_status.finished_at,
+    iic_sequence_status.cmd_output AS sequence_status
+FROM visit_set AS given
+JOIN iic_sequence ON iic_sequence.iic_sequence_id = given.iic_sequence_id
+JOIN visit_set AS member ON member.iic_sequence_id = iic_sequence.iic_sequence_id
+LEFT JOIN iic_sequence_status ON iic_sequence_status.iic_sequence_id = iic_sequence.iic_sequence_id
+WHERE given.pfs_visit_id = :visit
+"""
+
+#: The columns of `readSequenceOfVisit`.
+SEQUENCE_COLUMNS = {
+    "pfs_visit_id": "a visit of the sequence",
+    "iic_sequence_id": "the sequence",
+    "sequence_type": "iic_sequence.sequence_type",
+    "sequence_name": "iic_sequence.name",
+    "finished_at": "iic_sequence_status.finished_at (HST); NaT while the sequence runs",
+    "sequence_status": "iic_sequence_status.cmd_output: complete, ...; NA while the sequence runs",
+}
+
+
+def readSequenceOfVisit(opdb, visit: int) -> pd.DataFrame:
+    """Read every visit of the IIC sequence ``visit`` belongs to.
+
+    Parameters
+    ----------
+    opdb : `pfs.utils.database.opdb.OpDB`
+        The opdb, read-only.
+    visit : `int`
+        Any visit of the sequence.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        One row per visit of the sequence, with the `SEQUENCE_COLUMNS`, sorted
+        by visit; no rows when the visit is in no sequence.
+    """
+    sequence = opdb.query_dataframe(_SEQUENCE_OF_VISIT_SQL, params={"visit": int(visit)})
+    sequence = sequence.reindex(columns=list(SEQUENCE_COLUMNS))
+    sequence["finished_at"] = pd.to_datetime(sequence["finished_at"])
+    return sequence.sort_values("pfs_visit_id").reset_index(drop=True)
+
+
 def readVisitListing(opdb, start, end) -> pd.DataFrame:
     """Read every SpS visit with an exposure starting in ``[start, end)``.
 
@@ -133,6 +203,55 @@ def readVisitListing(opdb, start, end) -> pd.DataFrame:
     listing["pfs_design_id"] = listing["pfs_design_id"].astype("Int64")
     listing["time_exp_start"] = pd.to_datetime(listing["time_exp_start"])
     return listing.sort_values("pfs_visit_id").reset_index(drop=True)
+
+
+def readVisitTimes(opdb, visits: Iterable[int]) -> pd.DataFrame:
+    """Read some visits' start times and IIC sequences: `readVisitListing`'s first columns, by visit.
+
+    Parameters
+    ----------
+    opdb : `pfs.utils.database.opdb.OpDB`
+        The opdb, read-only.
+    visits : iterable of `int`
+        PFS visits; one without an SpS exposure is left out.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``pfs_visit_id``, ``time_exp_start`` (HST) and ``iic_sequence_id``
+        (NA outside any sequence), sorted by visit.
+    """
+    visits = sorted({int(visit) for visit in visits})
+    columns = ["pfs_visit_id", "time_exp_start", "iic_sequence_id"]
+    times = opdb.query_dataframe(_VISIT_TIMES_SQL, params={"visits": visits}) if visits else None
+    times = pd.DataFrame(columns=columns) if times is None else times.reindex(columns=columns)
+    times["pfs_visit_id"] = times["pfs_visit_id"].astype("int64")
+    times["time_exp_start"] = pd.to_datetime(times["time_exp_start"])
+    times["iic_sequence_id"] = pd.to_numeric(times["iic_sequence_id"]).astype("Int64")
+    return times.sort_values("pfs_visit_id").reset_index(drop=True)
+
+
+def readVisitCameras(opdb, first: int, last: int) -> pd.DataFrame:
+    """Read which SpS cameras took an exposure on each visit of a range.
+
+    Parameters
+    ----------
+    opdb : `pfs.utils.database.opdb.OpDB`
+        The opdb, read-only.
+    first, last : `int`
+        The visit range, inclusive.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``visit`` and ``camera`` (``b1``), one row per image, sorted; what
+        `pfs.drp.qa.metrics.visitRollup.rollupVisits` takes as the cameras to
+        expect a verdict for.
+    """
+    cameras = opdb.query_dataframe(_VISIT_CAMERAS_SQL, params={"first": int(first), "last": int(last)})
+    cameras = cameras.reindex(columns=["visit", "camera"])
+    cameras["visit"] = cameras["visit"].astype("int64")
+    return cameras.sort_values(["visit", "camera"]).reset_index(drop=True)
 
 
 def readNotes(opdb, visits: Iterable[int], sequences: Iterable[int]) -> pd.DataFrame:
@@ -245,12 +364,15 @@ def proposalCategory(proposalId: str | None) -> str:
     -------
     `str`
         The letters of the ID without semester and number (``EN``, ``QF``),
-        ``none`` for a fiber with no proposal (``N/A``, empty or NULL), or
-        ``other`` for an ID that doesn't follow the pattern.
+        ``none`` for a fiber with no proposal (``N/A``, empty or NULL),
+        ``uncoded`` for a proposal with a semester and a number but no
+        category letters (``S26B-047``: a science program whose category
+        isn't in its ID), or ``other`` for an ID that doesn't follow the
+        pattern.
     """
     if proposalId is None or pd.isna(proposalId) or str(proposalId).strip() in ("", "N/A"):
         return "none"
     match = _PROPOSAL_RE.match(str(proposalId).strip())
-    if not match or not "".join(match.groups()):
+    if not match:
         return "other"
-    return "".join(match.groups())
+    return "".join(match.groups()) or "uncoded"

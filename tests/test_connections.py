@@ -219,7 +219,9 @@ def connections():
 
 def testPipelineModulesExist():
     paths = pipelineModules()
-    assert len(paths) == 4  # extractionQa, extractionQaCombined, imageQualityQa, dmLineResiduals
+    assert (
+        len(paths) == 5
+    )  # extractionQa, extractionQaCombined, imageQualityQa, dmLineResiduals, twilightFluxQa
     for path in paths:
         assert path.exists(), f"{PIPELINE.name} registers a task whose module is missing: {path}"
 

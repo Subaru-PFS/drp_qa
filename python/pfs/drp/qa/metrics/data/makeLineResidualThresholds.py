@@ -1,13 +1,13 @@
 """Make ``dmLineResidualThresholds-run25.yaml``, the scatter thresholds ``dmLineResiduals`` uses by default.
 
 The source is the file ``docs/qa-thresholds.ipynb`` derived from the validation
-visits (collection ``u/wtg/qa-thresholds/010``, PIPE2D-1938: every validation
+visits (collection ``u/wtg/qa-thresholds/010``: every validation
 visit reduced afresh with the pipeline the file records), kept in the tests as
 ``tests/metrics/data/dmLineResidualThresholds-run25.yaml`` beside the metrics it
 was derived from: the robust RMS of the lines the visit's detectorMap fit held
 back (``RESERVED``), against that adjusted map, as percentiles per arm, line
 species, camera set and observation type, and as a tolerance per detector,
-species and observation type (`pfs.drp.qa.metrics.registry`, PIPE2D-1956). The
+species and observation type (`pfs.drp.qa.metrics.registry`). The
 calibration's own input visits stay in: they sit at zero against the
 calibration by construction, which is the drift's concern, while the scatter is
 measured against the visit's own map on lines held back from its fit, where a

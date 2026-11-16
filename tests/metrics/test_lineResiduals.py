@@ -1,7 +1,4 @@
-"""Tests for line residuals against the calibration and the visit's detectorMap (dmLineResiduals).
-
-Drift against the calibration is PIPE2D-1921; the visit reference, PIPE2D-1956.
-"""
+"""Tests for line residuals against the calibration and the visit's detectorMap (dmLineResiduals)."""
 
 from types import SimpleNamespace
 
@@ -568,7 +565,7 @@ def testValidationVerdicts():
     """The shipped config on the validation run (u/wtg/qa-thresholds/010): no known-good is flagged.
 
     The calibration's own input visits are known-good too, and sit at zero by construction. The
-    sky-line species of the twilights (OH, O2, OI, NaI) are set aside: judging them is PIPE2D-1956.
+    sky-line species of the twilights (OH, O2, OI, NaI) are set aside.
     """
     from pathlib import Path
 
@@ -576,7 +573,7 @@ def testValidationVerdicts():
     from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 
     rows = pd.read_parquet(Path(__file__).parent / "data" / "dmDriftMetrics-validation.parquet")
-    # The 008 fixture holds dmDriftMonitor's rows (PIPE2D-1921), all against the calibration.
+    # The 008 fixture holds dmDriftMonitor's rows, all against the calibration.
     if "reference" not in rows:
         rows = rows.assign(reference=CALIB)
     rows = rows[(rows["nLines"] >= 10) & (rows["reference"] == CALIB)].reset_index(drop=True)
@@ -1092,7 +1089,7 @@ def testShippedScatterVerdicts():
             "lamps": {"PASS": 468, "FAIL": 63, "WARN": 23},
             "goodQuartzTraces": {"PASS": 144},  # every known-good quartz trace passes
             "goodLamps": {"PASS": 357, "WARN": 3},  # three b-arm Xenon arcs at the 20 % WARN
-            # The SM1 defocus (Run27), known-bad in the scatter too (PIPE2D-1934): every quartz
+            # The SM1 defocus (Run27), known-bad in the scatter too: every quartz
             # trace and every lamp it names fails.
             "badQuartzTraces": {"FAIL": 36},
             "badLamps": {"FAIL": 34},
@@ -1149,7 +1146,7 @@ def testShippedScatterVerdicts():
 def testJudgedRowsAreWhatTheTaskJudges():
     """Drift against the calibration on BOTH and UNFITTED rows; scatter against the visit on RESERVED ones.
 
-    Coverage judges stored tables with `judge` (PIPE2D-1934), so it needs the same selection as
+    Coverage judges stored tables with `judge`, so it needs the same selection as
     `residualVerdict`: a thresholds file whose entries don't name the reference would otherwise
     judge rows the task never does.
     """

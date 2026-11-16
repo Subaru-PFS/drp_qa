@@ -82,7 +82,7 @@ class ValidationVisit:
         Cameras (``b2``, ``n4``) the entry applies to, within ``arms`` and
         ``spectrographs``; empty means all. For a detector whose reference is
         another run's: a camera that changed state, or whose reference-run
-        value is the outlier (PIPE2D-1938).
+        value is the outlier.
     excludeCameras : `tuple` [`str`]
         Cameras the entry leaves out, the complement of ``cameras``.
     seqType : `str` or `None`
@@ -95,7 +95,7 @@ class ValidationVisit:
         For a ``known_good`` entry, the metrics it is known good for; empty
         means every metric. A visit can be a reference for one metric and not
         another: Run25's trace sets are b2 and n4's reference for the line
-        scatter (PIPE2D-1956) while their image-quality reference is Run29's.
+        scatter while their image-quality reference is Run29's.
     excludeMetrics : `tuple` [`str`]
         For a ``known_good`` entry, metrics it is not a reference for: the
         complement of ``metrics``. Run29's trace sets are the b2 and n4

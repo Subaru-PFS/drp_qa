@@ -100,11 +100,11 @@ identified by visit number, with no observer, target or design names.
   exposures are good for every other metric; these entries hold for `pctFlagged` only, so
   today's rates are the baseline for the drp_stella work rather than the threshold.
   Unchecked: `pctFlagged` is not judged (PIPE2D-1929).
-- **Cloudy twilight (Run25):** taken through cloud. Unchecked: nothing measured on a
-  twilight sees cloud. FWHM is not measured on twilights (PIPE2D-1917), and cloud need not
-  widen the lines; their `nLines` sit within the clear twilights' range. The check that
-  would see it, the uniformity of the sky's flux across the fibers against `fiberNorms`,
-  is not written yet (PIPE2D-1973), and the entry names it (`skyFluxUniformity`).
+- **Twilight detector levels (Run21, 2025-03-22 and 04-01):** in a twilight sequence, one detector's level differs
+  between exposures while every other detector stays within 2 %: b1 at −14 % and −8 % in the first two exposures
+  of 2025-03-22 and +8 % in the last two, b4 at −12 % in 123320 of 2025-04-01 (r within 1 %). As flats, those
+  detectors' exposures are not usable. `twilightLevelOffset` (PIPE2D-1973), judged against the sequence's own
+  exposures. Run21 is in the set for these alone.
 - **SM1 defocused (Run27, 2026-03-09/10, spectrograph 1):** the eight arc and trace
   sequences noted "SM1 defocused", with FWHM 3.83–4.86 px across every lamp type;
   `medFwhm`. The same visits are known-bad for the line scatter, `robustRmsDeltaX`, at
@@ -147,6 +147,20 @@ identified by visit number, with no observer, target or design names.
   (PIPE2D-1921). The adjustment absorbs it, so they stay known-good, but SM3 reaches the
   1.0 px `medianDeltaY` WARN. Unconfirmed until the cause is known. Only SM3's arcs and
   twilights are listed: a quartz has trace centroids only, and no `medianDeltaY`.
+- **Run29 twilight b-arm patch, 2026-07-08 (unconfirmed):** in the b arm of 145073, the first bright exposure of
+  its sequence, a patch at x = −173, y = −28 mm on the focal plane, +10 % against the other bright exposures (which
+  agree within 0.2 %), on fibers of SM1 and SM2 alike (r within 1.2 %). `twilightPatch` fails it (PIPE2D-1973).
+  Unconfirmed: one exposure, cause not investigated.
+- **"Cloudy" twilight, Run25 2025-11-21 (unconfirmed):** listed as known-bad from the obslog
+  note, since a twilight is the screen-response reference and assumes a uniform sky. The
+  cloud shows in its spectrum, not across the field (PIPE2D-1973): at the same brightness it
+  is bluer in b and redder in r than the clear nights' (red/blue third of each arm's window:
+  b 0.40–0.43 against 0.49–0.61, r 0.59–0.68 against 0.35–0.56). Within its own sequence it
+  is as consistent as any clear night (0.4–0.5 % rms), and against other nights' twilights,
+  normalised per wavelength, it differs by 0.45–0.6 % rms, as clear nights do. As a flat
+  normalised per wavelength it is good; the uniformity check cannot see a colour change that
+  is the same across the field. It
+  keeps the metric it named, `skyFluxUniformity`, not yet written, so that it labels no other metric.
 
 ### Gaps
 
@@ -265,7 +279,8 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 | 135843–135844 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Xenon | WARN | `pctFlagged` (unchecked) | b-arm Xenon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
 | 135845–135846 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Neon | WARN | `pctFlagged` (unchecked) | b-arm Neon (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
 | 135847–135848 | 25 | scienceArc | b | 1, 2, 3, 4 | Arc: Krypton | WARN | `pctFlagged` (unchecked) | b-arm Krypton (Run25 block C): most lines flagged by adjustDetectorMap's single S/N cut. *Unchecked:* pctFlagged is not judged (PIPE2D-1929); this records the rate a drp_stella fix is measured against. |
-| 134334–134337 | 25 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | FAIL | `skyFluxUniformity` (unchecked) | Cloudy; 180 s twilight sky taken through cloud. *Unchecked:* No metric measured on twilights sees cloud; the sky-uniformity check is PIPE2D-1973. |
+| 121949–121952 | 21 | scienceObject | all; cameras b1 | all | any | FAIL | `twilightLevelOffset` | Twilight sky, 2025-03-22: b1's level steps by 8-14 % between the sequence's exposures. |
+| 123320 | 21 | scienceObject | all; cameras b4 | all | any | FAIL | `twilightLevelOffset` | Twilight sky, 2025-04-01: b4's level 12 % below the rest of its sequence. |
 | 140005–140006 | 27 | scienceArc | r, n | 1 | Arc: Argon | FAIL | `medFwhm` | SM1 defocused (Run27). 15 s, az 90. |
 | 140032 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
 | 140035 | 27 | scienceTrace | b, r, n | 1 | Trace | FAIL | `medFwhm` | SM1 defocused (Run27). 30 s, az 226. |
@@ -307,6 +322,8 @@ Generated from the YAML by `python -m pfs.drp.qa.metrics.validationVisits tables
 
 | Visits | Run | Type | Arms | Spectrographs | Sequence | Expect | Metric | Reason |
 |---|---|---|---|---|---|---|---|---|
+| 134334–134337 | 25 | scienceObject | b, r, n | 1, 2, 3, 4 | Twilight sky | FAIL | `skyFluxUniformity` | Obslog: cloudy. 180 s twilight sky; no cloud signature found in the data (PIPE2D-1973). |
+| 145073 | 29 | scienceObject | b | all | Twilight sky | FAIL | `twilightPatch` | Twilight sky, 2026-07-08: a b-arm patch at x=-173, y=-28 mm, +10 % against its sequence; cause unknown. |
 | 135830–135848 | 25 | scienceArc | all | 3 | any | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
 | 134334–134337 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |
 | 134880–134886 | 25 | scienceObject | all | 3 | Twilight sky | WARN | `medianDeltaY` | Run25 SM3, after the calibration block: lines 1.4 px off detectorMap_calib in y, cause unknown. |

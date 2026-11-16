@@ -184,7 +184,7 @@ def testAddSpeciesFollowsTheTask():
     """Same rule as imageQualityQa's flag-rate keys."""
     frame = addSpecies(pd.DataFrame({"seqName": ["Arc: HgCd", "Trace", None]}))
     assert frame["species"].tolist() == ["HgCd", "", ""]
-    # The IIS sequences name their lamp in parentheses (PIPE2D-1954); a colon still wins.
+    # The IIS sequences name their lamp in parentheses; a colon still wins.
     iis = addSpecies(
         pd.DataFrame({"seqName": ["ImageQuality (Ne)", "ImageQuality (Halogen)", "Arc: Ne (test)"]})
     )

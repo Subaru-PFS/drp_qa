@@ -108,7 +108,7 @@ def testPassesGroupByConfigAndSequence(classified):
     detectors = coverage(classified, holdings)
     result = passes(classified, detectors)
 
-    assert [item.name for item in result] == ["calibration", "sky"]
+    assert [item.name for item in result] == ["calibration", "unvalidated-sky"]
     assert result[0].types == ("scienceArc", "scienceTrace")
     arcsAndTraces, sky = result
     assert arcsAndTraces.visits == (1, 2, 3)
@@ -135,7 +135,7 @@ def testReducedSequencesAreOnlyJudged(classified):
     assert [(item.name, item.visits, item.judgeOnly) for item in result] == [
         ("calibration-judge", (3,), True),
         ("calibration", (1, 2), False),
-        ("sky-judge", (4,), True),
+        ("unvalidated-sky-judge", (4,), True),
     ]
     common = {
         "butler": "/work/datastore",
@@ -335,6 +335,24 @@ def testReducePassTakesTheWholeSequence(classified):
     calibration = next(item for item in result if item.name == "calibration")
     assert calibration.visits == (1, 2)  # visit 1 too, so cosmicray combines the sequence
     assert calibration.groups == {1: 1, 2: 1}
+
+
+def testWholeSequenceLeavesOutVisitsWithoutPfsConfig(classified):
+    # Arc sequence 50 is visits 1 and 2: 2 has an image to reduce, 1 has raw but no pfsConfig.
+    holdings = _holdings(
+        [
+            (1, "b", 1, True, False, False),
+            (1, "r", 1, True, False, False),
+            (2, "b", 1, True, False, False),
+            (2, "r", 1, True, False, False),
+        ]
+    )
+    holdings["pfsConfig"] = holdings["visit"] != 1
+    detectors = coverage(classified, holdings)
+    assert set(detectors.loc[detectors["visit"] == 1, "status"]) == {"no pfsConfig"}
+    calibration = next(item for item in passes(classified, detectors) if item.name == "calibration")
+    assert calibration.visits == (2,)  # not the whole sequence: pipetask would refuse the pass over visit 1
+    assert 1 not in calibration.groups
 
 
 def testSelectCadences(periods, visit, listing):

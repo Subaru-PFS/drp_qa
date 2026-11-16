@@ -1,4 +1,4 @@
-"""Judging an image on the fibers its pfsConfig lights (PIPE2D-1935).
+"""Judging an image on the fibers its pfsConfig lights.
 
 A design lighting one fiber group hides the others behind their black dots
 (``fiberStatus`` BLACKSPOT). ``lines`` has rows only for the ``GOOD`` fibers, and
@@ -55,7 +55,7 @@ def testLitFibers(iqqa, fakes):
     assert lit == {1, 2}
     assert possible == 4  # 1, 2 and the hidden 3, 4
     assert iqqa.litFibers(None, detectorMap.fiberId) == (None, None)
-    # On an IIS frame the GOOD engineering fibers are the lit ones; the others count as possible (PIPE2D-1954).
+    # On an IIS frame the GOOD engineering fibers are the lit ones; the others count as possible.
     assert iqqa.litFibers(pfsConfig, detectorMap.fiberId, engineering=True) == ({6}, 1)
     broken = fakes.PfsConfig([1, 6], status=[1, 2], targetType=[9, 5])
     assert iqqa.litFibers(broken, detectorMap.fiberId, engineering=True) == (set(), 1)
@@ -232,7 +232,7 @@ def testPfsConfigAlsoSaysIis(iqqa, fakes, oldGetLamps):
 
 
 def testIisQuartzIsMeasuredOnTheEngineeringFibers(iqqa, runTask, fakes, oldGetLamps):
-    """An IIS quartz is judged like a quartz on its engineering fibers, by IIS thresholds (PIPE2D-1954)."""
+    """An IIS quartz is judged like a quartz on its engineering fibers, by IIS thresholds."""
     detectorMap = fakes.DetectorMap(numFibers=20)
     pfsConfig = iisPfsConfig(fakes, detectorMap)
     header = {"DATA-TYP": "FLAT", "W_IISQTH": True, **fakes.header(*IIS_QUARTZ)}

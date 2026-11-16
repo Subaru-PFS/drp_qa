@@ -7,13 +7,12 @@ Nothing here touches a database: every function takes and returns
 `pandas.DataFrame`, with Python scalars and `None` for missing values, ready
 for `pfs.drp.qa.qadb.writer`.
 
-The tables are those of ``spt_qa_database`` 0.2.0 (its ``qadb.models``); a
-column added to a Butler table reaches qadb only once both that schema and the
-spec here name it.
+The tables are ``spt_qa_database``'s (its ``qadb.models``); a column added to a
+Butler table reaches qadb only once both that schema and the spec here name it.
 """
 
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -31,14 +30,18 @@ __all__ = [
     "LINE_RESIDUAL",
     "LINE_RESIDUAL_METRIC",
     "QA_GATE",
+    "QA_PROCESSING_THRESHOLDS",
     "QA_THRESHOLDS",
     "QA_THRESHOLD_ENTRY",
     "TASK_TABLES",
+    "TWILIGHT_QA",
     "TableSpec",
     "cameraName",
     "gateRows",
     "imageRows",
     "populationKey",
+    "processingTasks",
+    "processingThresholdsRows",
     "snakeCase",
     "thresholdRows",
     "worstStatus",
@@ -55,10 +58,13 @@ IMAGE_KEYS = ("visit", "arm", "spectrograph")
 GATE_ORDER = ("UNKNOWN", "PASS", "WARN", "FAIL")
 
 #: The tasks, with the Butler tables each writes: the per-image table first,
-#: then the long table whose rows take the image's processing.
-TASK_TABLES = {
+#: then the long table whose rows take the image's processing (`None` for a
+#: task with none). ``twilightQa`` is ``bin.src/twilightQa.py``, not a pipeline
+#: task: it stores its verdict once the sequence is complete.
+TASK_TABLES: dict[str, tuple[str, str | None]] = {
     "imageQualityQa": ("iqQaMetrics", "iqQaSpeciesMetrics"),
     "dmLineResiduals": ("dmLineResidualSummary", "dmLineResidualMetrics"),
+    "twilightQa": ("twilightQaMetrics", None),
 }
 
 _ACRONYM = re.compile(r"([A-Z]+)([A-Z][a-z])")
@@ -98,22 +104,30 @@ class TableSpec:
     extraKeys : `tuple` [`str`, ...], optional
         Butler columns that, with `KEYS`, identify a row of a long table;
         stored as strings.
+    renames : `tuple` [`tuple` [`str`, `str`], ...], optional
+        Butler columns whose qadb column is not their `snakeCase`, as
+        ``(butlerColumn, qadbColumn)`` pairs.
     """
 
     name: str
     source: str
     columns: Mapping[str, str]
     extraKeys: tuple[str, ...] = ()
+    renames: tuple[tuple[str, str], ...] = ()
+
+    def qadbColumn(self, column: str) -> str:
+        """Return the qadb column of a Butler column."""
+        return dict(self.renames).get(column) or snakeCase(column)
 
     @property
     def keys(self) -> tuple[str, ...]:
         """The qadb key columns."""
-        return (*KEYS, *(snakeCase(key) for key in self.extraKeys))
+        return (*KEYS, *(self.qadbColumn(key) for key in self.extraKeys))
 
     @property
     def qadbColumns(self) -> tuple[str, ...]:
         """Every qadb column, keys first."""
-        return (*self.keys, *(snakeCase(column) for column in self.columns))
+        return (*self.keys, *(self.qadbColumn(column) for column in self.columns))
 
 
 IMAGE_QUALITY = TableSpec(
@@ -198,6 +212,34 @@ LINE_RESIDUAL_METRIC = TableSpec(
     extraKeys=("reference", "description", "statusType", "metric"),
 )
 
+TWILIGHT_QA = TableSpec(
+    "twilight_qa",
+    "twilightQaMetrics",
+    {
+        "spectrograph": "int",
+        "arm": "str",
+        "sequence": "int",
+        "seqName": "str",
+        "nExposures": "int",
+        "snr": "float",
+        "brightness": "float",
+        "tooFaint": "bool",
+        "nReference": "int",
+        "noise": "float",
+        "satFraction": "float",
+        "nMeasured": "int",
+        "twilightLevelOffset": "float",
+        "twilightResidRms": "float",
+        "twilightPatch": "float",
+        "twilightArmMean": "float",
+        "twilightArmHalfDiff": "float",
+        "qaStatus": "str",
+        "qaDecidedBy": "str",
+        "qaReason": "str",
+    },
+    renames=(("sequence", "iic_sequence_id"),),
+)
+
 #: ``qa_thresholds``: one row per thresholds file, identified by its content.
 QA_THRESHOLDS = (
     "thresholds_id",
@@ -269,10 +311,12 @@ QA_GATE = (
     "qa_reason",
     "provisional",
     "mode",
-    "iq_thresholds_id",
-    "dm_thresholds_id",
     "decided_at",
 )
+
+#: ``qa_processing_thresholds``: every thresholds layer a task judged a processing's images with, in the
+#: order judged (`processingThresholdsRows`); the one record of what judged an image.
+QA_PROCESSING_THRESHOLDS = ("processing_id", "task", "layer", "thresholds_id")
 
 
 def _scalar(value: Any, dtype: str) -> Any:
@@ -343,9 +387,9 @@ def imageRows(frame: pd.DataFrame, spec: TableSpec, processingId: int | Mapping[
         ],
     }
     for key in spec.extraKeys:
-        rows[snakeCase(key)] = _column(frame, key, "str")
+        rows[spec.qadbColumn(key)] = _column(frame, key, "str")
     for column, dtype in spec.columns.items():
-        rows[snakeCase(column)] = _column(frame, column, dtype)
+        rows[spec.qadbColumn(column)] = _column(frame, column, dtype)
     return pd.DataFrame(rows, columns=list(spec.qadbColumns), dtype=object)
 
 
@@ -435,7 +479,6 @@ def gateRows(
     processingId: int | Mapping[str, int],
     mode: str,
     decidedAt: Any,
-    thresholdsIds: Mapping[str, int | None] | None = None,
 ) -> pd.DataFrame:
     """Return the gate's verdict on each image: the worst of its tasks'.
 
@@ -445,18 +488,15 @@ def gateRows(
         The per-image table of each task in `TASK_TABLES`, by task:
         `IMAGE_KEYS`, ``qaStatus``, ``qaDecidedBy``, ``qaReason``, and
         ``qaProvisional`` where known (``run`` when ``processingId`` is a
-        mapping), and ``thresholdsId``, the ``thresholds_id`` the image was
-        judged with, where known. A task may be absent, or have no row for an
-        image.
+        mapping). A task may be absent, or have no row for an image. The
+        thresholds the image was judged with are `processingThresholdsRows`'
+        business.
     processingId : `int` or mapping [`str`, `int`]
         As for `imageRows`.
     mode : `str`
         ``realtime``, ``comparison`` or ``backfill``.
     decidedAt : `datetime.datetime`
         When the gate decided.
-    thresholdsIds : mapping [`str`, `int`], optional
-        The ``thresholds_id`` each task judged with, by task, for a task
-        whose table has no ``thresholdsId``.
 
     Returns
     -------
@@ -466,16 +506,13 @@ def gateRows(
         `TASK_TABLES` order, with the worst verdict; ``qa_reason`` joins every
         task's reason, each prefixed by its task.
     """
-    thresholdsIds = thresholdsIds or {}
     tasks = [task for task in TASK_TABLES if task in verdicts and not verdicts[task].empty]
     keys = list(IMAGE_KEYS)
     merged = None
     for task in tasks:
         table = verdicts[task]
         columns = [
-            c
-            for c in ("qaStatus", "qaDecidedBy", "qaReason", "qaProvisional", "thresholdsId", "run")
-            if c in table.columns
+            c for c in ("qaStatus", "qaDecidedBy", "qaReason", "qaProvisional", "run") if c in table.columns
         ]
         part = table[keys + columns].rename(columns={c: f"{c}_{task}" for c in columns})
         part[f"present_{task}"] = True
@@ -498,8 +535,14 @@ def gateRows(
             merged[label] if label in merged.columns else pd.Series([None] * len(merged), index=merged.index)
         )
 
+    # One lookup per task and column, not one per image: a missing column (a task without
+    # qaProvisional, say) would otherwise build a full-length Series for every image.
     statuses = {task: column(task, "qaStatus") for task in tasks}
-    present = {task: merged[f"present_{task}"].fillna(False).astype(bool) for task in tasks}
+    decidedByOf = {task: column(task, "qaDecidedBy") for task in tasks}
+    reasonOf = {task: column(task, "qaReason") for task in tasks}
+    provisionalOf = {task: column(task, "qaProvisional") for task in tasks}
+    # The flag is True where the task has a row and null where the outer merge found none.
+    present = {task: merged[f"present_{task}"].eq(True) for task in tasks}
     worst, decidedByTask, decidedBy, reasons, provisional = [], [], [], [], []
     for index in merged.index:
         # A task's row with no verdict counts as UNKNOWN; a task with no row at all does not count.
@@ -512,27 +555,16 @@ def gateRows(
         decider = next((task for task in tasks if rowStatuses.get(task) == status), None)
         worst.append(status)
         decidedByTask.append(decider)
-        decidedBy.append(_scalar(column(decider, "qaDecidedBy")[index], "str") if decider else None)
+        decidedBy.append(_scalar(decidedByOf[decider][index], "str") if decider else None)
         parts = []
         for task in tasks:
-            reason = _scalar(column(task, "qaReason")[index], "str")
+            reason = _scalar(reasonOf[task][index], "str")
             if reason:
                 parts.append(f"{task}: {reason}")
         reasons.append("; ".join(parts))
-        flags = [_scalar(column(task, "qaProvisional")[index], "bool") for task in tasks]
+        flags = [_scalar(provisionalOf[task][index], "bool") for task in tasks]
         flags = [flag for flag in flags if flag is not None]
         provisional.append(any(flags) if flags else None)
-
-    def thresholdsId(task: str) -> list[int | None]:
-        """Return the thresholds a task judged each image with; a task's apply only to the images it judged."""
-        if task not in present:
-            return [None] * len(merged)
-        ids = (
-            [_scalar(value, "int") for value in column(task, "thresholdsId")]
-            if f"thresholdsId_{task}" in merged.columns
-            else [thresholdsIds.get(task)] * len(merged)
-        )
-        return [found if judged else None for found, judged in zip(ids, present[task], strict=True)]
 
     return pd.DataFrame(
         {
@@ -547,10 +579,110 @@ def gateRows(
             "qa_reason": reasons,
             "provisional": provisional,
             "mode": [mode] * len(merged),
-            "iq_thresholds_id": thresholdsId("imageQualityQa"),
-            "dm_thresholds_id": thresholdsId("dmLineResiduals"),
             "decided_at": [decidedAt] * len(merged),
         },
         columns=list(QA_GATE),
         dtype=object,
     )
+
+
+def processingTasks(
+    verdicts: Mapping[str, pd.DataFrame], processingId: int | Mapping[str, int]
+) -> pd.DataFrame:
+    """Return each processing and task a load's tables hold: the ``qa_processing_thresholds`` keys to replace.
+
+    Parameters
+    ----------
+    verdicts : mapping [`str`, `pandas.DataFrame`]
+        The per-image table of each task in `TASK_TABLES`, by task, with
+        ``run`` when ``processingId`` is a mapping.
+    processingId : `int` or mapping [`str`, `int`]
+        As for `imageRows`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``processing_id`` and ``task``, one row each, in `TASK_TABLES` order.
+    """
+    rows = []
+    for task in TASK_TABLES:
+        table = verdicts.get(task)
+        if table is None or table.empty:
+            continue
+        for processing in sorted(set(_processingIds(table, processingId))):
+            rows.append({"processing_id": processing, "task": task})
+    return pd.DataFrame(rows, columns=["processing_id", "task"], dtype=object)
+
+
+def processingThresholdsRows(
+    verdicts: Mapping[str, pd.DataFrame],
+    processingId: int | Mapping[str, int],
+    log: Callable[[str], None] | None = None,
+) -> pd.DataFrame:
+    """Return every thresholds layer each task judged a processing's images with: the ``qa_processing_thresholds`` rows.
+
+    A processing is one Butler RUN, which has one config per task, so its
+    images record the same layers (the twilight judge stores one sequence's
+    verdicts per RUN, likewise). Should they not, the first image's are cited
+    and ``log`` told. An image recording no layer at all (an unreadable record)
+    neither decides nor disagrees: the others' layers are the RUN's.
+
+    Parameters
+    ----------
+    verdicts : mapping [`str`, `pandas.DataFrame`]
+        As for `gateRows`, each task's table with ``thresholdsIds``: per
+        image, the ``thresholds_id`` of each layer in the order judged, `None`
+        for one that could not be cited (its position is kept, so the layers
+        cited keep theirs). A table without the column contributes no rows.
+    processingId : `int` or mapping [`str`, `int`]
+        As for `imageRows`.
+    log : callable, optional
+        Told of a processing whose images disagree.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        `QA_PROCESSING_THRESHOLDS`, in `TASK_TABLES` order, then processing
+        and layer.
+    """
+    rows = []
+    for task in TASK_TABLES:
+        table = verdicts.get(task)
+        if table is None or table.empty or "thresholdsIds" not in table.columns:
+            continue
+        cited: dict[int, list[int | None]] = {}
+        differing: set[int] = set()
+        for processing, layers in zip(
+            _processingIds(table, processingId), table["thresholdsIds"], strict=True
+        ):
+            layers = [_scalar(value, "int") for value in layers] if isinstance(layers, list | tuple) else []
+            if not layers:
+                continue
+            if processing not in cited:
+                cited[processing] = layers
+            elif cited[processing] != layers:
+                differing.add(processing)
+        if differing and log is not None:
+            runs = (
+                {value: key for key, value in processingId.items()}
+                if isinstance(processingId, Mapping)
+                else {}
+            )
+            for processing in sorted(differing):
+                log(
+                    f"{runs.get(processing, processing)}: {task}'s images record different thresholds layers;"
+                    " citing the first image's"
+                )
+        for processing in sorted(cited):
+            for position, thresholdsId in enumerate(cited[processing]):
+                if thresholdsId is None:
+                    continue
+                rows.append(
+                    {
+                        "processing_id": int(processing),
+                        "task": task,
+                        "layer": position,
+                        "thresholds_id": int(thresholdsId),
+                    }
+                )
+    return pd.DataFrame(rows, columns=list(QA_PROCESSING_THRESHOLDS), dtype=object)
