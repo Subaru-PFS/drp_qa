@@ -74,7 +74,7 @@ __all__ = [
     "smoothAgcData",
 ]
 
-GAUSSIAN_FWHM_PER_SIGMA = agMetrics.GAUSSIAN_FWHM_PER_SIGMA
+GAUSSIAN_FWHM_PER_SIGMA = 2 * np.sqrt(2 * np.log(2))
 
 # ics_agActor's focus calibration (momentdifference2focuserror): the focus
 # error is FOCUS_PISTON_MM_PER_PIX2 times the difference of the 2-D second
