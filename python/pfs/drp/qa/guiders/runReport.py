@@ -194,7 +194,8 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
     md = [
         f"# {title}: AG run report",
         "",
-        "1 AG pixel = 13 µm = 0.14″. Offsets in arcsec, ΔRA on the sky (ΔRA cos Dec). Times HST. "
+        "1 AG pixel = 13 µm = 0.14″. FWHM is 2.9 × the radius of the stored second moments. "
+        "Offsets in arcsec, ΔRA on the sky (ΔRA cos Dec). Times HST. "
         f"{describePeriod(run)}.",
         "",
         "## Flags",

@@ -815,7 +815,8 @@ def readAgRun(
             ``right_half``) with a detection: ``n_spots`` detections,
             ``n_good`` good matches, and the median ``sigma_pix`` (the
             radius of the second moments as stored, sqrt(2) below the
-            stars' sigma) of the good matches without ``BAD_SHAPE`` and median
+            stars' sigma) of the good matches without ``BAD_SHAPE`` (a NULL
+            ``agc_data.flags`` counts as without) and median
             ``background`` of the detections. ``right_half`` is 1 on the
             no-glass half.
         ``grid``

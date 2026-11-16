@@ -1335,7 +1335,10 @@ def addImageSizes(agcData: pd.DataFrame, useTraceRadius: bool = True) -> pd.Data
     ics_agccActor stores weighted moments, half the stars' variance, so
     ``rms_pix`` is sqrt(2) below a star's sigma. It is kept on the stored
     scale because ics_agActor's focus calibration is in those units
-    (`estimateFocusErrors`); ``fwhm_arcsec`` has the factor applied.
+    (`estimateFocusErrors`); ``fwhm_arcsec`` has the factor applied. Detections
+    from before ics_agccActor weighted the moments (December 2022) hold
+    unweighted ones without a ``BAD_SHAPE`` flag: their FWHM reads about
+    sqrt(2) too large.
     """
     agcData = agcData.copy()
     mxx, myy, mxy = (agcData[column].to_numpy(dtype=float) for column in ("mxx", "myy", "mxy"))
