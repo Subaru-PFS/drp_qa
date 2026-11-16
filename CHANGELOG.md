@@ -16,8 +16,7 @@ made, and earlier sections to the weekly tag alone.
   pfs_utils's `GuideOffsetFlag` (new `runAnalysis.isRejectedOffset`) instead of `& 1`, and `readAgRun` binds
   `GOOD_MATCH` and `RIGHT` instead of writing `1` into its SQL (the tables it returns are unchanged). The
   rejected-frames flag also says how many were `TOO_FEW_STARS`, which ics_agActor writes (with `INVALID_OFFSET`)
-  when fewer than 3 guide stars matched. Needs a pfs_utils release with `GuideOffsetFlag`
-  (pfs_utils `tickets/INSTRM-2800`; 7.4.43 does not have it).
+  when fewer than 3 guide stars matched. Needs pfs_utils 7.4.44 or later.
 
 ## [0.3.1] - 2026-11-10
 
