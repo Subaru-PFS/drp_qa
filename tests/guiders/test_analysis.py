@@ -809,16 +809,30 @@ def testAddImageSizes():
     )
     trace = addImageSizes(stars)
     np.testing.assert_allclose(trace.rms_pix, [2.0, np.sqrt(5.0), np.nan, np.nan])
-    fwhmPerPix = 2 * np.sqrt(2 * np.log(2)) * AGC_PIXEL_SIZE_UM / AGC_PLATE_SCALE_UM_PER_ARCSEC
+    # The stored moments are half the stars' variance (sigma = sqrt(2) rms_pix), and the FWHM of an AG
+    # spot is 2.05 sigma: 2.9 rms_pix.
+    fwhmPerPix = 2.05 * np.sqrt(2) * AGC_PIXEL_SIZE_UM / AGC_PLATE_SCALE_UM_PER_ARCSEC
     np.testing.assert_allclose(trace.fwhm_arcsec, fwhmPerPix * trace.rms_pix)
-    np.testing.assert_allclose(trace.fwhm_arcsec[0], 0.6466, atol=1e-4)  # 2 pixels rms, in arcsec
+    np.testing.assert_allclose(trace.fwhm_arcsec[0], 0.7960, atol=1e-4)  # stored rms of 2 pixels, in arcsec
+    # Negative control: the FWHM of a Gaussian with the stored rms as its sigma is 19% smaller.
+    gaussianPerPix = 2 * np.sqrt(2 * np.log(2)) * AGC_PIXEL_SIZE_UM / AGC_PLATE_SCALE_UM_PER_ARCSEC
+    assert not np.allclose(trace.fwhm_arcsec[:2], gaussianPerPix * trace.rms_pix[:2], rtol=0.15)
     assert list(trace.left) == [True, False, True, True]
 
     det = addImageSizes(stars, useTraceRadius=False)
     np.testing.assert_allclose(det.rms_pix, [2.0, 15.0**0.25, np.nan, np.nan])
-    # Negative control: the last row's determinant is positive, though its moments are impossible.
-    assert stars.mxx.iloc[-1] * stars.myy.iloc[-1] - stars.mxy.iloc[-1] ** 2 > 0
-    assert "rms_pix" not in stars  # drp_stella's setImageSizes added it to its input
+    np.testing.assert_allclose(det.fwhm_arcsec, fwhmPerPix * det.rms_pix)
+
+    # A BAD_SHAPE detection keeps unweighted moments: it has a radius but no FWHM. The flag is a bit, set
+    # here beside RIGHT as on the right half of a detector.
+    right, badShape = int(SourceDetectionFlags.RIGHT), int(SourceDetectionFlags.BAD_SHAPE)
+    flagged = addImageSizes(stars.assign(agc_data_flags=[badShape, badShape | right, 0, 0]))
+    np.testing.assert_allclose(flagged.rms_pix, trace.rms_pix)
+    assert flagged.fwhm_arcsec[:2].isna().all()
+    assert list(flagged.left) == [True, False, True, True]
+    # Negative control: the other flags leave the FWHM alone.
+    edge = addImageSizes(stars.assign(agc_data_flags=int(SourceDetectionFlags.EDGE)))
+    np.testing.assert_allclose(edge.fwhm_arcsec, trace.fwhm_arcsec)
 
 
 def testMomentDifferenceToPiston():

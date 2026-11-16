@@ -683,7 +683,8 @@ _AG_RUN_SQL = {
     # One row per (AG exposure, camera, detector half) with at least one detection. A good match is
     # agc_match.flags = :goodMatch (GOOD_MATCH alone since ics_agActor 1.1.78; before that 1, the same value, for
     # any match). The no-glass half is :right (RIGHT), inferred from the centroid where flags is NULL, as in
-    # readAgcData.
+    # readAgcData. sigma_pix leaves out :badShape (BAD_SHAPE) detections, whose moments are unweighted and so
+    # twice the others'.
     "cameras": """
     SELECT
         agc_data.agc_exposure_id,
@@ -693,7 +694,7 @@ _AG_RUN_SQL = {
         count(*) FILTER (WHERE agc_match.flags = :goodMatch) AS n_good,
         percentile_cont(0.5) WITHIN GROUP (
             ORDER BY sqrt(greatest(agc_data.central_image_moment_20_pix + agc_data.central_image_moment_02_pix, 0) / 2)
-        ) FILTER (WHERE agc_match.flags = :goodMatch) AS sigma_pix,
+        ) FILTER (WHERE agc_match.flags = :goodMatch AND COALESCE(agc_data.flags, 0) & :badShape = 0) AS sigma_pix,
         percentile_cont(0.5) WITHIN GROUP (ORDER BY agc_data.background) AS background
     FROM agc_exposure
     JOIN agc_data ON agc_data.agc_exposure_id = agc_exposure.agc_exposure_id
@@ -812,8 +813,10 @@ def readAgRun(
         ``cameras``
             One row per (``agc_exposure_id``, ``agc_camera_id``,
             ``right_half``) with a detection: ``n_spots`` detections,
-            ``n_good`` good matches, and the median Gaussian ``sigma_pix``
-            (from the second moments) of the good matches and median
+            ``n_good`` good matches, and the median ``sigma_pix`` (the
+            radius of the second moments as stored, sqrt(2) below the
+            stars' sigma) of the good matches without ``BAD_SHAPE`` (a NULL
+            ``agc_data.flags`` counts as without) and median
             ``background`` of the detections. ``right_half`` is 1 on the
             no-glass half.
         ``grid``
@@ -844,7 +847,7 @@ def readAgRun(
     for name, sql in _AG_RUN_SQL.items():
         bound = {
             "designStars": {**params, "magLimit": float(magLimit)},
-            "cameras": {**params, **AG_RUN_FLAGS},
+            "cameras": {**params, **AG_RUN_FLAGS, "badShape": int(SourceDetectionFlags.BAD_SHAPE)},
             "grid": {**params, **AG_GRID_CELL_PIX, **AG_RUN_FLAGS},
         }.get(name, params)
         tables[name] = opdb.query_dataframe(sql, params=bound).reset_index(drop=True)

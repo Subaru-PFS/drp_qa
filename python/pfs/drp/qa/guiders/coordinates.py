@@ -34,6 +34,7 @@ import numpy as np
 import pandas as pd
 from numpy.typing import ArrayLike
 
+from pfs.utils import agMetrics
 from pfs.utils.coordinates.Subaru_POPT2_PFS import PFS
 
 __all__ = [
@@ -76,9 +77,9 @@ AGC_CAMERA_CENTERS_MM = {
 }
 AGC_RING_RADIUS_MM = float(np.mean(np.hypot(*np.array(list(AGC_CAMERA_CENTERS_MM.values())).T)))
 
-# AG detector pixel size and plate scale, as per JEG.
-AGC_PIXEL_SIZE_UM = 13.0
-AGC_PLATE_SCALE_UM_PER_ARCSEC = 94.7
+# AG detector pixel size and plate scale.
+AGC_PIXEL_SIZE_UM = agMetrics.AG_PIXEL_SIZE_UM
+AGC_PLATE_SCALE_UM_PER_ARCSEC = agMetrics.AG_PLATE_SCALE_UM_PER_ARCSEC
 
 # Guider focus offset (microns) per mm of M2_OFF3. Origin unrecorded; it
 # should come from pfs_utils.

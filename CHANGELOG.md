@@ -10,6 +10,23 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-11-16
+
+### Changed
+
+- **AG image sizes come from `pfs.utils.agMetrics`, and the FWHM is 21-23% larger** (INSTRM-3069) —
+  `guiders.analysis.addImageSizes` (`fwhm_arcsec`) and the run report (`guiders.runAnalysis`) took the second
+  moments in `agc_data` as the variance of a Gaussian star. ics_agccActor stores weighted moments, half the
+  variance, and the stars are Moffat-shaped: fitted to AG images, their FWHM is 2.9 times the radius of the
+  stored moments, where the old code used 2.355. Both now call `agMetrics.storedRadiusToFwhm`: `fwhm_arcsec`
+  (and so `plotFocus` and `compat`'s `FWHM`) reads 23% larger; the run report, which also used 0.14 arcsec per
+  pixel where the plate scale gives 0.137, 21% (Run 30's median goes from 0.59 to 0.71 arcsec). `rms_pix` and
+  `sigma_pix` stay on the stored scale, which ics_agActor's focus calibration uses. `BAD_SHAPE` detections,
+  whose moments are unweighted, get no FWHM and are left out of `sigma_pix`: they were up to 3% of a month's
+  good matches before July 2026 (up to 12% of a night's camera-half rows change) and none since. Fetch a run
+  again before reporting on it: a `fetch` made before this holds the old `sigma_pix`. The report's header says
+  what its FWHM is. Needs pfs_utils 7.4.45 or later.
+
 ## [0.3.2] - 2026-11-16
 
 ### Changed

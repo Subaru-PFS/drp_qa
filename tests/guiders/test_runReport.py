@@ -61,6 +61,13 @@ def testReadAgRunBindsFlagValues(opdb):
         assert not re.search(literal, call.sql)
         assert call.params["goodMatch"] == int(SourceMatchingFlags.GOOD_MATCH)
         assert call.params["right"] == int(SourceDetectionFlags.RIGHT)
+    (cameras,) = [call for call in opdb.calls if "sigma_pix" in call.sql]
+    assert cameras.params["badShape"] == int(SourceDetectionFlags.BAD_SHAPE)
+    assert re.search(r"agc_data\.flags, 0\) & :badShape = 0\) AS sigma_pix", cameras.sql)
+    # sigma_pix is the radius storedRadiusToFwhm takes, sqrt((mxx + myy) / 2), and only it leaves BAD_SHAPE out.
+    assert re.search(r"moment_20_pix \+ agc_data\.central_image_moment_02_pix, 0\) / 2\)", cameras.sql)
+    assert re.search(r"FILTER \(WHERE agc_match\.flags = :goodMatch\) AS n_good", cameras.sql)
+    assert cameras.sql.count(":badShape") == 1
     # Negative control: the pattern finds the literals the SQL used to hold.
     assert re.search(literal, "FILTER (WHERE agc_match.flags = 1)")
     assert re.search(literal, "AS INTEGER)) & 1 AS right_half")
