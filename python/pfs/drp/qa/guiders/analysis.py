@@ -29,12 +29,12 @@ from pfs.drp.qa.guiders.coordinates import (
     mmToUm,
     offsetColumns,
     pfiToZenith,
-    pixToArcsec,
     radToArcsec,
     referenceColumns,
     umToMm,
     zenithToPfi,
 )
+from pfs.utils import agMetrics
 from pfs.utils.coordinates import Subaru_POPT2_PFS
 from pfs.utils.coordinates.transform import MeasureDistortion
 from pfs.utils.datamodel.ag import SourceCatalogFlags, SourceDetectionFlags, SourceMatchingFlags
@@ -74,7 +74,7 @@ __all__ = [
     "smoothAgcData",
 ]
 
-GAUSSIAN_FWHM_PER_SIGMA = 2 * np.sqrt(2 * np.log(2))
+GAUSSIAN_FWHM_PER_SIGMA = agMetrics.GAUSSIAN_FWHM_PER_SIGMA
 
 # ics_agActor's focus calibration (momentdifference2focuserror): the focus
 # error is FOCUS_PISTON_MM_PER_PIX2 times the difference of the 2-D second
@@ -1323,10 +1323,18 @@ def addImageSizes(agcData: pd.DataFrame, useTraceRadius: bool = True) -> pd.Data
     Returns
     -------
     agcData : `pandas.DataFrame`
-        A copy with ``rms_pix``, the 1-D rms size (NaN for impossible
-        moments); ``fwhm_arcsec``, the FWHM of a Gaussian of that rms; and
-        ``left``, whether the star is on the left half of its detector (its
-        detection isn't flagged RIGHT).
+        A copy with ``rms_pix``, the radius of the moments as stored (NaN
+        for impossible moments); ``fwhm_arcsec``, the stars' FWHM from
+        `pfs.utils.agMetrics.momentsToFwhm`; and ``left``, whether the star
+        is on the left half of its detector (its detection isn't flagged
+        RIGHT).
+
+    Notes
+    -----
+    ics_agccActor stores weighted moments, half the stars' variance, so
+    ``rms_pix`` is sqrt(2) below a star's sigma. It is kept on the stored
+    scale because ics_agActor's focus calibration is in those units
+    (`estimateFocusErrors`); ``fwhm_arcsec`` has the factor applied.
     """
     agcData = agcData.copy()
     mxx, myy, mxy = (agcData[column].to_numpy(dtype=float) for column in ("mxx", "myy", "mxy"))
@@ -1337,7 +1345,9 @@ def addImageSizes(agcData: pd.DataFrame, useTraceRadius: bool = True) -> pd.Data
         rms = np.where((mxx < 0) | (myy < 0) | (det < 0), np.nan, det) ** 0.25
 
     agcData["rms_pix"] = rms
-    agcData["fwhm_arcsec"] = pixToArcsec(GAUSSIAN_FWHM_PER_SIGMA * rms)
+    agcData["fwhm_arcsec"] = agMetrics.momentsToFwhm(
+        mxx, myy, mxy, radius="trace" if useTraceRadius else "determinant"
+    )
     agcData["left"] = (agcData.agc_data_flags & int(SourceDetectionFlags.RIGHT)) == 0
 
     return agcData

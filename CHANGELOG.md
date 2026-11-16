@@ -10,6 +10,16 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Changed
+
+- **AG image sizes come from `pfs.utils.agMetrics`, and the FWHM is sqrt(2) larger** (INSTRM-3069) —
+  `guiders.analysis.addImageSizes` (`fwhm_arcsec`) and the run report (`guiders.runAnalysis`) took the second
+  moments in `agc_data` as the stars' variance. ics_agccActor stores weighted moments, half the variance, so
+  every FWHM was sqrt(2) too small; the run report also used 0.14 arcsec per pixel where the plate scale gives
+  0.137. Both now call `agMetrics.momentsToFwhm`, and FWHM read about 40% larger than before (Run 30's median
+  goes from 0.59 to 0.82 arcsec). `rms_pix` and `sigma_pix` stay on the stored scale, which ics_agActor's
+  focus calibration uses. Needs a pfs_utils with `pfs.utils.agMetrics`.
+
 ## [0.3.2] - 2026-11-16
 
 ### Changed

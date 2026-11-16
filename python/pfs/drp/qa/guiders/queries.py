@@ -812,8 +812,9 @@ def readAgRun(
         ``cameras``
             One row per (``agc_exposure_id``, ``agc_camera_id``,
             ``right_half``) with a detection: ``n_spots`` detections,
-            ``n_good`` good matches, and the median Gaussian ``sigma_pix``
-            (from the second moments) of the good matches and median
+            ``n_good`` good matches, and the median ``sigma_pix`` (the
+            radius of the second moments as stored, sqrt(2) below the
+            stars' sigma) of the good matches and median
             ``background`` of the detections. ``right_half`` is 1 on the
             no-glass half.
         ``grid``

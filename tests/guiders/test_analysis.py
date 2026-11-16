@@ -809,13 +809,17 @@ def testAddImageSizes():
     )
     trace = addImageSizes(stars)
     np.testing.assert_allclose(trace.rms_pix, [2.0, np.sqrt(5.0), np.nan, np.nan])
+    # The stored moments are half the stars' variance, so the sigma is sqrt(2) rms_pix.
     fwhmPerPix = 2 * np.sqrt(2 * np.log(2)) * AGC_PIXEL_SIZE_UM / AGC_PLATE_SCALE_UM_PER_ARCSEC
-    np.testing.assert_allclose(trace.fwhm_arcsec, fwhmPerPix * trace.rms_pix)
-    np.testing.assert_allclose(trace.fwhm_arcsec[0], 0.6466, atol=1e-4)  # 2 pixels rms, in arcsec
+    np.testing.assert_allclose(trace.fwhm_arcsec, fwhmPerPix * np.sqrt(2) * trace.rms_pix)
+    np.testing.assert_allclose(trace.fwhm_arcsec[0], 0.9144, atol=1e-4)  # stored rms of 2 pixels, in arcsec
+    # Negative control: the FWHM of a Gaussian with the stored rms as its sigma is sqrt(2) too small.
+    assert not np.allclose(trace.fwhm_arcsec[:2], fwhmPerPix * trace.rms_pix[:2], rtol=0.25)
     assert list(trace.left) == [True, False, True, True]
 
     det = addImageSizes(stars, useTraceRadius=False)
     np.testing.assert_allclose(det.rms_pix, [2.0, 15.0**0.25, np.nan, np.nan])
+    np.testing.assert_allclose(det.fwhm_arcsec, fwhmPerPix * np.sqrt(2) * det.rms_pix)
     # Negative control: the last row's determinant is positive, though its moments are impossible.
     assert stars.mxx.iloc[-1] * stars.myy.iloc[-1] - stars.mxy.iloc[-1] ** 2 > 0
     assert "rms_pix" not in stars  # drp_stella's setImageSizes added it to its input

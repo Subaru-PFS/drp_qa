@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from pfs.utils import agMetrics
 from pfs.utils.datamodel.ag import GuideOffsetFlag
 
 __all__ = [
@@ -49,12 +50,6 @@ CAMERA_GROUPS = {"AG1/3/5": (0, 2, 4), "AG2/4/6": (1, 3, 5)}
 
 #: Sequence types whose guiding is judged.
 SCIENCE_TYPES = ("scienceObject", "scienceObject_windowed")
-
-#: 1 AG pixel is 0.14 arcsec.
-ARCSEC_PER_PIX = 0.14
-
-#: A Gaussian's FWHM over its sigma.
-FWHM_PER_SIGMA = 2.0 * np.sqrt(2.0 * np.log(2.0))
 
 
 class CameraState:
@@ -315,7 +310,8 @@ def prepareRun(tables: dict[str, pd.DataFrame], config: RunConfig | None = None)
         )
         frames[f"state{cid}"] = np.where(usable, state, CameraState.UNUSABLE)
 
-    cameras = cameras.assign(fwhm=cameras.sigma_pix * FWHM_PER_SIGMA * ARCSEC_PER_PIX).merge(
+    # sigma_pix is the radius of the moments as stored; momentsToFwhm takes the moments.
+    cameras = cameras.assign(fwhm=agMetrics.momentsToFwhm(cameras.sigma_pix**2, cameras.sigma_pix**2)).merge(
         frames[["agc_exposure_id", "night", "population"]], on="agc_exposure_id"
     )
     focus = tables["focus"].assign(night=lambda df: nightOf(df.created_at))
