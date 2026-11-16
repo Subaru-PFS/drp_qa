@@ -21,7 +21,7 @@ made, and earlier sections to the weekly tag alone.
   arcsec). `rms_pix` and `sigma_pix` stay on the stored scale, which ics_agActor's focus calibration uses.
   `BAD_SHAPE` detections, whose moments are unweighted, get no FWHM and are left out of `sigma_pix` (up to 3% of
   the good matches before July 2026, none since).
-  Needs a pfs_utils with `pfs.utils.agMetrics`.
+  Needs pfs_utils 7.4.45 or later.
 
 ## [0.3.2] - 2026-11-16
 
