@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-20
+
 ### Fixed
 
 - **The qadb tests refuse a database that is not a scratch one** (PIPE2D-2013) — with `PFS_QADB_TEST_DSN` set,
