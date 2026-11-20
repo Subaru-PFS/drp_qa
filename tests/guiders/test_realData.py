@@ -166,7 +166,7 @@ def testRealDataFocusScale(focusSweep):
     """The sweep's slope is within 10% of the constant the focus plots convert with.
 
     `GUIDER_FOCUS_UM_PER_M2_OFF3_MM` (650 µm/mm) is the median over the AG
-    focus sweeps of 2025-03 to 2026-09; this sweep, of Run 30, gives 612.
+    focus sweeps of 2025-03 to 2026-11; this sweep, of Run 30, gives 612.
     """
     slope, _ = fitFocusSlope(estimateFocusErrors(focusSweep, byCamera=False))
 

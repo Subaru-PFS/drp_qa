@@ -677,9 +677,9 @@ plots don't use.
 The focus plots convert between a guider focus error and M2_OFF3 at **650 µm per mm**
 (`coordinates.GUIDER_FOCUS_UM_PER_M2_OFF3_MM`), good to about 10%: the median slope of
 `analysis.estimateFocusErrors` against M2_OFF3 near best focus over the opdb's AG focus sweeps (`agFocusSweep`,
-2025-03 to 2026-09), which [`docs/guider-focus-slope.ipynb`](docs/guider-focus-slope.ipynb) measures with
+2025-03 to 2026-11), which [`docs/guider-focus-slope.ipynb`](docs/guider-focus-slope.ipynb) measures with
 `analysis.fitFocusSlope` (committed with outputs; rerun it on the opdb to add sweeps). The months' medians run from
-513 to 716 µm/mm and the cameras' from 606 to 765, and ics_agActor's own `guide_delta_z` gives 685.
+513 to 716 µm/mm and the cameras' from 629 to 768, and ics_agActor's own `guide_delta_z` gives 687.
 
 Coming from drp_stella ([`docs/guiders-migration.ipynb`](docs/guiders-migration.ipynb) runs each of its calls
 beside the replacement):

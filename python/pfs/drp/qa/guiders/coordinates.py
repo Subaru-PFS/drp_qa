@@ -83,7 +83,7 @@ AGC_PLATE_SCALE_UM_PER_ARCSEC = agMetrics.AG_PLATE_SCALE_UM_PER_ARCSEC
 
 # Guider focus error (microns) per mm of M2_OFF3, near best focus: the median
 # slope of `pfs.drp.qa.guiders.analysis.estimateFocusErrors` over the AG focus
-# sweeps of March 2025 to September 2026, measured in
+# sweeps of March 2025 to November 2026, measured in
 # docs/guider-focus-slope.ipynb. It is good to about 10%: the medians of the
 # observing runs and of the cameras each spread by more than that.
 GUIDER_FOCUS_UM_PER_M2_OFF3_MM = 650.0

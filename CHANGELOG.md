@@ -15,10 +15,10 @@ made, and earlier sections to the weekly tag alone.
 - **The guider focus plots convert at 650 µm of focus error per mm of M2_OFF3, not 800** (PIPE2D-1911) —
   `guiders.coordinates.GUIDER_FOCUS_UM_PER_M2_OFF3_MM`, which `guiderFocusToM2Off3` and `m2Off3ToGuiderFocus`
   use, was drp_stella's 800, of unrecorded origin. It is now the median slope of `estimateFocusErrors` against
-  M2_OFF3 over 222 AG focus sweeps (`agFocusSweep`, 2025-03 to 2026-09), measured in the new notebook
-  [`docs/guider-focus-slope.ipynb`](docs/guider-focus-slope.ipynb): 647 ± 8 µm/mm, with the months' medians
-  from 513 to 716 and the cameras' from 606 (AG1) to 765 (AG6), so good to about 10%. ics_agActor's
-  `guide_delta_z` gives 685. `plotFocus`'s ΔM2_OFF3 axis therefore reads 23% more for the same focus error, and
+  M2_OFF3 over 243 AG focus sweeps (`agFocusSweep`, 2025-03 to 2026-11), measured in the new notebook
+  [`docs/guider-focus-slope.ipynb`](docs/guider-focus-slope.ipynb): 653 ± 7 µm/mm, with the months' medians
+  from 513 to 716 and the cameras' from 629 (AG1) to 768 (AG6), so good to about 10%. ics_agActor's
+  `guide_delta_z` gives 687. `plotFocus`'s ΔM2_OFF3 axis therefore reads 23% more for the same focus error, and
   the focus error drawn about a clicked M2_OFF3 rises 19% less steeply. No stored number changes.
 
 ### Added
