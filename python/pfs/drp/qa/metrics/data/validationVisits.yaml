@@ -980,13 +980,144 @@ known_bad:
     metric: medianDeltaY
     reason: "Run27 before 140477, reduced against a detectorMap_calib built later (140502-140526): SM2 lines -3.15 px off in y, at drp_stella's 3 px line-search radius."
 
-  # TODO(PIPE2D-1922): find a saturated frame if one exists in the archive.
-  # This is the reference case for the real-saturation metric of PIPE2D-1922.
-  - placeholder: true
-    visit: null
-    expect: FAIL
-    metric: pctSaturatedPixels
-    reason: "Saturated exposure; peak pixels flagged SAT."
+  # ---- Run30 saturated IIS Kr arcs (PIPE2D-1922) ------------------------------
+  # The nightly "ImageQuality (Kr)" arc (85-88 s) saturates the r arm of every
+  # spectrograph, the same way each night: on Run30's 14 nights with the r arm
+  # (the 13 listed here and 149594; u/wtg/PIPE2D-1922/002 and /003), nSaturatedLines is 87-90 on r1, 196-201 on r2,
+  # 174-180 on r3 and 115-126 on r4, and pctSaturatedPixels 0.20-0.21, 0.54-0.57,
+  # 0.48-0.49 and 0.27-0.29 %; no b or n detector has a saturated line. On 148972,
+  # taken with the m arm in place of r, m1-m4 have 75, 160, 152 and 107 (0.18-0.56 %). Ten Run31
+  # nights (152765 to 153977) are the same, with 178-184 on r2. The frames stay known
+  # good for the other metrics (above): the IIS thresholds were derived from them.
+  # Recorded as bad so that these counts are what a shorter exposure is measured
+  # against. Saturation is not judged, so no check runs. 149594, whose night is left
+  # out above, is saturated alike and not listed.
+  - visit: 148549
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (87-201 lines, 0.20-0.57 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 148687
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (87-201 lines, 0.20-0.57 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 148829
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (87-201 lines, 0.20-0.57 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 148972
+    sequenceType: scienceArc
+    arms: [m]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every m-arm detector (75-160 lines, 0.18-0.56 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 149133
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (87-201 lines, 0.20-0.57 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 149321
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (87-201 lines, 0.20-0.57 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 149798
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (87-201 lines, 0.20-0.57 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 149941
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (87-201 lines, 0.20-0.57 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 150080
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (87-201 lines, 0.20-0.57 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 150227
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (87-201 lines, 0.20-0.57 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 150285
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (87-201 lines, 0.20-0.57 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 150472
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (87-201 lines, 0.20-0.57 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 150622
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (87-201 lines, 0.20-0.57 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
+  - visit: 150720
+    sequenceType: scienceArc
+    arms: [r]
+    spectrographs: [1, 2, 3, 4]
+    seqType: "ImageQuality (Kr)"
+    expect: WARN
+    metric: nSaturatedLines
+    reason: "IIS Kr arc, 87 s: KrI lines saturated on every r-arm detector (87-201 lines, 0.20-0.57 % of the lit fibers' aperture pixels)."
+    unchecked: "Saturation is not judged: no threshold is derived. This records the counts a shorter exposure is measured against."
 
   # Run27 nightly ImageQuality arcs where one spectrograph's lamp gave no light,
   # as noted in the run's calibration summary. That spectrograph's detectors have no lines; QA must not pass

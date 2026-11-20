@@ -97,7 +97,8 @@ the pipeline/config glue to run them.
   suggestions, and `readers` reads them from a
   Butler it is given. `registry` declares each metric once (direction, units, reference,
   populations); `gate` is the only gating path, judging metrics rows against a thresholds
-  file layered over the task config; `longFormat` holds `iqQaSpeciesMetrics`; `twilight`
+  file layered over the task config; `longFormat` holds `iqQaSpeciesMetrics`; `saturation` (the calexp's
+  `SAT` plane) and `lineFlux` (per-species flux of `lines`) are `imageQualityQa`'s unjudged measurements; `twilight`
   measures and judges twilight sequences, each exposure against the sequence's others. Read [`docs/qa-principles.md`](docs/qa-principles.md) (rules R1–R7,
   the metric checklist) before adding a metric or a threshold. The procedure is the
   notebook [`docs/qa-thresholds.ipynb`](docs/qa-thresholds.ipynb), from `pipetask` to

@@ -188,13 +188,18 @@ class TestCheckedInSet:
     def testPlaceholdersExcludedByDefault(self):
         """An unfilled entry must never silently validate a threshold."""
         assert not any(entry.placeholder for entry in loadValidationVisits())
-        assert any(entry.placeholder for entry in loadValidationVisits(includePlaceholders=True))
 
-    def testPlaceholdersCarryNoVisits(self):
-        visitSet = loadValidationVisits(includePlaceholders=True)
-        for entry in visitSet:
-            if entry.placeholder:
-                assert entry.visits == ()
+    def testPlaceholdersLoadOnlyWhenAskedFor(self, writeYaml):
+        """The checked-in set has none left, so the switch is tested on a document that has one."""
+        path = writeYaml(
+            "version: 1\nknown_bad:\n"
+            "  - {placeholder: true, visit: null, expect: FAIL, metric: medFwhm, reason: To find.}\n"
+        )
+        assert len(loadValidationVisits(path)) == 0
+        withPlaceholders = loadValidationVisits(path, includePlaceholders=True)
+        assert [entry.placeholder for entry in withPlaceholders] == [True]
+        assert [entry.visits for entry in withPlaceholders] == [()]  # a placeholder carries no visits
+        assert "### Placeholders" in formatTables(withPlaceholders)
 
 
 class TestRun30KnownBad:
@@ -489,11 +494,12 @@ class TestTables:
     def testSectionsAndRows(self):
         visitSet = loadValidationVisits(includePlaceholders=True)
         text = formatTables(visitSet)
-        for heading in ("### Known good", "### Known bad", "### Unconfirmed", "### Placeholders"):
+        for heading in ("### Known good", "### Known bad", "### Unconfirmed"):
             assert heading in text
+        assert "### Placeholders" not in text  # none in the checked-in set
         assert (
             sum(line.startswith("| ") and "---" not in line for line in text.splitlines())
-            == len(visitSet) + 4
+            == len(visitSet) + 3
         ), "one row per entry plus a header per table"
         assert "| 140005–140006 | 27 | scienceArc | r, n | 1 | Arc: Argon | FAIL | `medFwhm` |" in text
 

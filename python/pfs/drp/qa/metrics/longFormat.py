@@ -15,11 +15,14 @@ visit arm spectrograph description metric  value
 ``Trace`` for trace centroids, not the lamp (``species`` in
 `~pfs.drp.qa.metrics.calibration.addSpecies`).
 
-The values are drp_stella's own, read from the ``Stats for <species>`` lines
+Two sets of metrics share the table. The fit statistics (`STAT_METRICS`,
+`speciesFrame`) are drp_stella's own, read from the ``Stats for <species>`` lines
 ``fitDetectorMap`` logs during ``reduceExposure``, over the lines the fit used:
 the error-weighted RMS (``fitXRms``, ``fitYRms``) and the softening that brings
 chi^2/dof to 1 (``fitXSoften``, ``fitYSoften``). ``dmLineResiduals`` gives the
-robust RMS beside them, and does not recompute these.
+robust RMS beside them, and does not recompute these. The line fluxes
+(`pfs.drp.qa.metrics.lineFlux.FLUX_METRICS`, `metricsFrame`) are measured from
+``lines``: a species has rows of either set or both.
 """
 
 import re
@@ -27,7 +30,14 @@ from collections.abc import Mapping, Sequence
 
 import pandas as pd
 
-__all__ = ["SPECIES_COLUMNS", "STAT_METRICS", "parseSpeciesStats", "speciesFrame", "speciesStats"]
+__all__ = [
+    "SPECIES_COLUMNS",
+    "STAT_METRICS",
+    "metricsFrame",
+    "parseSpeciesStats",
+    "speciesFrame",
+    "speciesStats",
+]
 
 #: The columns of a per-species metrics table, in order, with their dtypes.
 SPECIES_COLUMNS = {
@@ -107,6 +117,38 @@ def speciesFrame(dataId: Mapping[str, object], stats: Mapping[str, Sequence[floa
     return pd.DataFrame(rows, columns=list(SPECIES_COLUMNS)).astype(SPECIES_COLUMNS)
 
 
+def metricsFrame(dataId: Mapping[str, object], values: Mapping[str, Mapping[str, float]]) -> pd.DataFrame:
+    """Return one quantum's per-species metrics, given by name, in long format.
+
+    Parameters
+    ----------
+    dataId : `Mapping`
+        The quantum's data ID, with ``visit``, ``arm`` and ``spectrograph``.
+    values : `Mapping` [`str`, `Mapping` [`str`, `float`]]
+        ``{species: {metric: value}}``.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        `SPECIES_COLUMNS`, one row per species and metric, sorted by species
+        with each species' metrics in the order given; empty, with the same
+        columns and dtypes, when ``values`` is.
+    """
+    rows = [
+        {
+            "visit": dataId["visit"],
+            "arm": dataId["arm"],
+            "spectrograph": dataId["spectrograph"],
+            "description": species,
+            "metric": metric,
+            "value": value,
+        }
+        for species in sorted(values)
+        for metric, value in values[species].items()
+    ]
+    return pd.DataFrame(rows, columns=list(SPECIES_COLUMNS)).astype(SPECIES_COLUMNS)
+
+
 def speciesStats(frame: pd.DataFrame) -> dict[str, tuple[float, float]]:
     """Return the ``{species: (xRms, yRms)}`` mapping of a `speciesFrame`'s lamp species.
 
@@ -119,9 +161,10 @@ def speciesStats(frame: pd.DataFrame) -> dict[str, tuple[float, float]]:
     -------
     `dict` [`str`, `tuple` [`float`, `float`]]
         Missing values are NaN. ``Trace`` is left out: ``imageQualityLogQa``
-        reports it from ``iqQaMetrics`` (``fitTraceXRms``).
+        reports it from ``iqQaMetrics`` (``fitTraceXRms``), and so is a
+        species with no fit statistic (line-flux rows alone).
     """
-    frame = frame[frame["description"] != "Trace"]
+    frame = frame[(frame["description"] != "Trace") & frame["metric"].isin(STAT_METRICS)]
     wide = frame.pivot(index="description", columns="metric", values="value")
     wide = wide.reindex(columns=list(STAT_METRICS[:2]))
     return {str(species): (float(row.iloc[0]), float(row.iloc[1])) for species, row in wide.iterrows()}
