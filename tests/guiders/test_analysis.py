@@ -14,7 +14,6 @@ import pytest
 
 from pfs.drp.qa.guiders import analysis
 from pfs.drp.qa.guiders.analysis import (
-    FOCUS_PISTON_MM_PER_PIX2,
     GuiderFitConfig,
     MeasureXYRot,
     addImageSizes,
@@ -45,6 +44,7 @@ from pfs.drp.qa.guiders.coordinates import (
     rotXY,
     zenithToPfi,
 )
+from pfs.utils import agMetrics
 from pfs.utils.datamodel.ag import SourceCatalogFlags, SourceDetectionFlags, SourceMatchingFlags
 
 VISITS = [120000, 120001, 120002]
@@ -809,14 +809,15 @@ def testAddImageSizes():
     )
     trace = addImageSizes(stars)
     np.testing.assert_allclose(trace.rms_pix, [2.0, np.sqrt(5.0), np.nan, np.nan])
-    # The stored moments are half the stars' variance (sigma = sqrt(2) rms_pix), and the FWHM of an AG
-    # spot is 2.05 sigma: 2.9 rms_pix.
-    fwhmPerPix = 2.05 * np.sqrt(2) * AGC_PIXEL_SIZE_UM / AGC_PLATE_SCALE_UM_PER_ARCSEC
+    # The moments are the stars' variance (sigma = rms_pix), and the FWHM of an AG spot is 2.05 sigma.
+    fwhmPerPix = 2.05 * AGC_PIXEL_SIZE_UM / AGC_PLATE_SCALE_UM_PER_ARCSEC
     np.testing.assert_allclose(trace.fwhm_arcsec, fwhmPerPix * trace.rms_pix)
-    np.testing.assert_allclose(trace.fwhm_arcsec[0], 0.7960, atol=1e-4)  # stored rms of 2 pixels, in arcsec
-    # Negative control: the FWHM of a Gaussian with the stored rms as its sigma is 19% smaller.
+    np.testing.assert_allclose(trace.fwhm_arcsec[0], 0.5628, atol=1e-4)  # a sigma of 2 pixels, in arcsec
+    # Negative controls: the moments read as half the variance, as ics_agccActor once stored them, give a
+    # FWHM sqrt(2) larger; a Gaussian of that sigma has a FWHM 15% larger.
+    assert not np.allclose(trace.fwhm_arcsec[:2], np.sqrt(2) * fwhmPerPix * trace.rms_pix[:2], rtol=0.25)
     gaussianPerPix = 2 * np.sqrt(2 * np.log(2)) * AGC_PIXEL_SIZE_UM / AGC_PLATE_SCALE_UM_PER_ARCSEC
-    assert not np.allclose(trace.fwhm_arcsec[:2], gaussianPerPix * trace.rms_pix[:2], rtol=0.15)
+    assert not np.allclose(trace.fwhm_arcsec[:2], gaussianPerPix * trace.rms_pix[:2], rtol=0.1)
     assert list(trace.left) == [True, False, True, True]
 
     det = addImageSizes(stars, useTraceRadius=False)
@@ -836,10 +837,20 @@ def testAddImageSizes():
 
 
 def testMomentDifferenceToPiston():
-    """ics_agActor's calibration: 0.0086 mm per pix^2 of 2-D moment difference, less 0.026 mm."""
-    assert momentDifferenceToPiston(1.0) == pytest.approx(2 * 0.0086)
-    assert momentDifferenceToPiston(1.0, includePistonCorrection=True) == pytest.approx(2 * 0.0086 - 0.026)
-    np.testing.assert_allclose(momentDifferenceToPiston([0.0, -1.0]), [0.0, -2 * FOCUS_PISTON_MM_PER_PIX2])
+    """ics_agActor's calibration: 0.0043 mm per pix^2 of 2-D moment difference, less 0.026 mm.
+
+    The moments are the stars' variance. On moments of half the variance the slope was 0.0086.
+    """
+    assert momentDifferenceToPiston(1.0) == pytest.approx(2 * 0.0043)
+    assert momentDifferenceToPiston(1.0, includePistonCorrection=True) == pytest.approx(2 * 0.0043 - 0.026)
+    # The same stars give the focus error they gave when their moments were stored at half the variance.
+    variance = np.array([9.0, 14.0])
+    np.testing.assert_allclose(momentDifferenceToPiston(variance), 2 * 0.0086 * (variance / 2))
+    # Negative control: the slope for halved moments, on the variance, doubles it.
+    assert not np.allclose(momentDifferenceToPiston(variance), 2 * 0.0086 * variance)
+    np.testing.assert_allclose(
+        momentDifferenceToPiston([0.0, -1.0]), [0.0, -2 * agMetrics.AG_FOCUS_MM_PER_PIX2]
+    )
 
 
 def testCorrectAgActorFocus(makeAgcData):
@@ -882,6 +893,7 @@ def makeFocusData(rms_pix):
                     "m2_off3": 0.1 * aid,
                     "m2_pos3": 0.0,
                     "agc_match_flags": 1,
+                    "agc_data_flags": 0 if left else int(SourceDetectionFlags.RIGHT),
                 }
             )
 
@@ -908,7 +920,7 @@ def testEstimateFocusErrors():
         (1, 2),
     ]
     expected = [
-        1e3 * 2 * 0.0086 * (left**2 - right**2) for left, right in [(2.1, 2.0), (2.0, 2.2), (2.4, 2.0)]
+        1e3 * 2 * 0.0043 * (left**2 - right**2) for left, right in [(2.1, 2.0), (2.0, 2.2), (2.4, 2.0)]
     ]
     np.testing.assert_allclose(byCamera.focus_error_um, expected)
     np.testing.assert_allclose(byCamera.focus_position_mm, 0.1)
@@ -927,6 +939,21 @@ def testEstimateFocusErrors():
     pd.testing.assert_frame_equal(withBad, byCamera)
     wrong = estimateFocusErrors(pd.concat([agcData, bad.assign(agc_match_flags=1)]))
     assert wrong.focus_error_um.iloc[0] != pytest.approx(byCamera.focus_error_um.iloc[0])
+
+    # Neither do BAD_SHAPE detections, whose moments are unweighted, on either half of a detector.
+    badShape = int(SourceDetectionFlags.BAD_SHAPE)
+    unweighted = makeFocusData({(1, 0, True): 9.0, (1, 0, False): 9.0}).assign(
+        agc_data_flags=lambda d: np.where(d.left, badShape, badShape | int(SourceDetectionFlags.RIGHT))
+    )
+    pd.testing.assert_frame_equal(estimateFocusErrors(pd.concat([agcData, unweighted])), byCamera)
+    pd.testing.assert_frame_equal(
+        estimateFocusErrors(pd.concat([agcData, unweighted]), byCamera=False), byExposure
+    )
+    # Negative control: another detection flag does not take a star out.
+    edge = unweighted.assign(agc_data_flags=int(SourceDetectionFlags.EDGE))
+    assert estimateFocusErrors(pd.concat([agcData, edge])).focus_error_um.iloc[0] != pytest.approx(
+        byCamera.focus_error_um.iloc[0]
+    )
 
 
 def testAverageByFocusPosition():

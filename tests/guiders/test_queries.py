@@ -21,6 +21,7 @@ from pfs.drp.qa.guiders.queries import (
     readSpSInfo,
     readTelStatus,
 )
+from pfs.utils.datamodel.ag import SourceDetectionFlags
 
 VISITS = [120000, 120001, 120002]
 
@@ -59,8 +60,35 @@ def testReadAgcDataOneQueryForAllVisits(makeOpdb):
 
     assert len(opdb.calls) == 3
     for call in opdb.calls:
-        assert call.params == {"visits": VISITS}
+        assert call.params["visits"] == VISITS
         checkBound(call, *VISITS)
+    assert [set(call.params) - {"visits"} for call in opdb.calls] == [
+        {"badShape", "halvedMoments"},
+        set(),
+        set(),
+    ]
+
+
+def testReadAgcDataMomentsAreTheVariance(makeOpdb):
+    """The moments are scaled to the stars' variance in the query, by what the exposure's agcc stored."""
+    opdb, _ = makeOpdb()
+    readAgcData(opdb, VISITS)
+
+    (call,) = [call for call in opdb.calls if "AS mxx" in call.sql]
+    # ics_agccActor stored half the variance while it wrote "git" as its version; BAD_SHAPE spots hold
+    # unweighted moments in any exposure.
+    assert call.params["halvedMoments"] == 2.0
+    assert call.params["badShape"] == int(SourceDetectionFlags.BAD_SHAPE) == 8
+    scale = (
+        r"CASE\s+WHEN agc_exposure\.version_actor = 'git' AND COALESCE\(agc_data\.flags, 0\) & :badShape = 0"
+        r"\s+THEN :halvedMoments ELSE 1\s+END"
+    )
+    for moment, name in (("20", "mxx"), ("02", "myy"), ("11", "mxy")):
+        assert re.search(rf"agc_data\.central_image_moment_{moment}_pix \* {scale} AS {name},", call.sql)
+        # Negative control: no moment is read as stored.
+        assert not re.search(rf"central_image_moment_{moment}_pix AS", call.sql)
+    # Negative control: nothing else is scaled.
+    assert call.sql.count(":halvedMoments") == 3
 
 
 def testReadAgcDataHardwareFrame(makeOpdb):

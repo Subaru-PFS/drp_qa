@@ -20,6 +20,7 @@ import zoneinfo
 from collections.abc import Sequence
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from pfs.drp.qa.comparison.runs import Period, loadPeriods
@@ -40,11 +41,15 @@ from pfs.drp.qa.guiders.runAnalysis import (
     summariseModelErrors,
 )
 from pfs.drp.qa.guiders.runPlotting import CAMERA_ORDER
+from pfs.utils import agMetrics
 
 __all__ = ["fetchRun", "loadRun", "main", "writeReport"]
 
 #: Tables an older fetch lacks; without them the report leaves out the checks that need them.
 OPTIONAL_TABLES = ("grid",)
+
+# What a fetch stamp's ``sigmaPix`` says when ``cameras.sigma_pix`` is the radius of the stars' variance.
+SIGMA_PIX_OF_VARIANCE = "variance"
 
 #: The run-wide figures of a report, by file name; each camera's follows, as ``camera-AG<n>``.
 FIGURES = {
@@ -99,6 +104,7 @@ def fetchRun(opdb, period: Period, dataDir: Path, magLimit: float = 20.0, now=No
         "fetchedAt": now.isoformat(timespec="seconds"),
         "readUntil": str(end),
         "magLimit": magLimit,
+        "sigmaPix": SIGMA_PIX_OF_VARIANCE,
         "rows": {name: len(table) for name, table in tables.items()},
     }
     stampPath.write_text(json.dumps(stamp, indent=1) + "\n")
@@ -111,7 +117,11 @@ def loadRun(period: Period, dataDir: Path) -> tuple[dict[str, pd.DataFrame], dic
     Returns
     -------
     tables : `dict` [`str`, `pandas.DataFrame`]
-        As `readAgRun` returned them.
+        As `readAgRun` returns them. A period fetched while ``sigma_pix`` was the radius of the
+        moments as stored (its stamp has no ``sigmaPix``), which were half the stars' variance,
+        has it rescaled to the radius of the variance. That is right for exposures ics_agccActor
+        wrote at half the variance; such a fetch that also holds later exposures must be fetched
+        again.
     stamp : `dict`
         When and how they were read.
 
@@ -131,6 +141,10 @@ def loadRun(period: Period, dataDir: Path) -> tuple[dict[str, pd.DataFrame], dic
         elif name not in OPTIONAL_TABLES:
             raise FileNotFoundError(f"{path} is missing: run fetch again")
     stamp["missing"] = sorted(set(paths) - set(tables))
+    if stamp.get("sigmaPix") != SIGMA_PIX_OF_VARIANCE:
+        tables["cameras"] = tables["cameras"].assign(
+            sigma_pix=lambda cameras: cameras.sigma_pix * np.sqrt(agMetrics.VARIANCE_PER_AGC_MOMENT)
+        )
     return tables, stamp
 
 
@@ -194,7 +208,7 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
     md = [
         f"# {title}: AG run report",
         "",
-        "1 AG pixel = 13 µm = 0.14″. FWHM is 2.9 × the radius of the stored second moments. "
+        "1 AG pixel = 13 µm = 0.14″. FWHM is 2.05 × the stars' sigma, the radius of their second moments. "
         "Offsets in arcsec, ΔRA on the sky (ΔRA cos Dec). Times HST. "
         f"{describePeriod(run)}.",
         "",

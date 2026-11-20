@@ -42,8 +42,6 @@ from pfs.utils.datamodel.ag import SourceCatalogFlags, SourceDetectionFlags, Sou
 __all__ = [
     "AGACTOR_FOCUS_FIX_VISIT",
     "AG_WAVELENGTH_UM",
-    "FOCUS_PISTON_MM_PER_PIX2",
-    "FOCUS_PISTON_OFFSET_MM",
     "GAUSSIAN_FWHM_PER_SIGMA",
     "GUIDE_STAR_EPOCH",
     "DriftFit",
@@ -75,12 +73,6 @@ __all__ = [
 ]
 
 GAUSSIAN_FWHM_PER_SIGMA = 2 * np.sqrt(2 * np.log(2))
-
-# ics_agActor's focus calibration (momentdifference2focuserror): the focus
-# error is FOCUS_PISTON_MM_PER_PIX2 times the difference of the 2-D second
-# moments of the two halves of a detector, less FOCUS_PISTON_OFFSET_MM.
-FOCUS_PISTON_MM_PER_PIX2 = 0.0086
-FOCUS_PISTON_OFFSET_MM = 0.026
 
 # ics_agActor's guide_delta_z* were 4 times too large, less the offset, before
 # this visit (INSTRM-2501, fixed on 2025-03-23).
@@ -1323,22 +1315,24 @@ def addImageSizes(agcData: pd.DataFrame, useTraceRadius: bool = True) -> pd.Data
     Returns
     -------
     agcData : `pandas.DataFrame`
-        A copy with ``rms_pix``, the radius of the moments as stored (NaN
-        for impossible moments); ``fwhm_arcsec``, the stars' FWHM from
-        `pfs.utils.agMetrics.storedRadiusToFwhm` (NaN for a ``BAD_SHAPE``
-        detection, whose moments are on another scale); and ``left``, whether the star
-        is on the left half of its detector (its detection isn't flagged
-        RIGHT).
+        A copy with ``rms_pix``, the radius of the moments, which is the
+        stars' sigma (NaN for impossible moments); ``fwhm_arcsec``, the
+        stars' FWHM from `pfs.utils.agMetrics.storedRadiusToFwhm` (NaN for
+        a ``BAD_SHAPE`` detection, whose moments are unweighted: another
+        measurement); and ``left``, whether the star is on the left half
+        of its detector (its detection isn't flagged RIGHT).
 
     Notes
     -----
-    ics_agccActor stores weighted moments, half the stars' variance, so
-    ``rms_pix`` is sqrt(2) below a star's sigma. It is kept on the stored
-    scale because ics_agActor's focus calibration is in those units
-    (`estimateFocusErrors`); ``fwhm_arcsec`` has the factor applied. Detections
-    from before ics_agccActor weighted the moments (December 2022) hold
-    unweighted ones without a ``BAD_SHAPE`` flag: their FWHM reads about
-    sqrt(2) too large.
+    The moments are the stars' variance, as `queries.readAgcData` returns
+    them for any exposure: it doubles those ics_agccActor stored at half
+    the variance. ics_agActor's focus calibration is in the same units
+    (`estimateFocusErrors`). The earliest exposures marked ``"git"``, from
+    before ics_agccActor measured adaptive moments (none has a
+    ``BAD_SHAPE`` flag before exposure 174776, 2023-04-20), hold
+    unweighted moments and are doubled all the same: their FWHM reads
+    about sqrt(2) too large. The 1,120 exposures of May 2022 without a
+    version are from then too and are not doubled.
     """
     agcData = agcData.copy()
     mxx, myy, mxy = (agcData[column].to_numpy(dtype=float) for column in ("mxx", "myy", "mxy"))
@@ -1349,10 +1343,11 @@ def addImageSizes(agcData: pd.DataFrame, useTraceRadius: bool = True) -> pd.Data
         rms = np.where((mxx < 0) | (myy < 0) | (det < 0), np.nan, det) ** 0.25
 
     agcData["rms_pix"] = rms
-    # A BAD_SHAPE detection keeps unweighted moments, twice the others': its radius is not on the
-    # scale the FWHM is defined for.
+    # A BAD_SHAPE detection keeps unweighted moments: its radius is not the one the FWHM is defined for.
     badShape = (agcData.agc_data_flags.to_numpy() & int(SourceDetectionFlags.BAD_SHAPE)) != 0
-    agcData["fwhm_arcsec"] = agMetrics.storedRadiusToFwhm(np.where(badShape, np.nan, rms))
+    agcData["fwhm_arcsec"] = agMetrics.storedRadiusToFwhm(
+        np.where(badShape, np.nan, rms), variancePerMoment=1
+    )
     agcData["left"] = (agcData.agc_data_flags & int(SourceDetectionFlags.RIGHT)) == 0
 
     return agcData
@@ -1370,16 +1365,16 @@ def momentDifferenceToPiston(deltaMxx_pix2: ArrayLike, includePistonCorrection: 
         The difference of a 1-D second moment (e.g. ``rms_pix**2``) between
         the left and right halves of a detector (pix^2).
     includePistonCorrection : `bool`
-        Subtract `FOCUS_PISTON_OFFSET_MM`, as ics_agActor does.
+        Subtract `pfs.utils.agMetrics.AG_FOCUS_OFFSET_MM`, as ics_agActor does.
 
     Returns
     -------
     piston : array-like
         The focus error (mm).
     """
-    piston = np.multiply(2 * FOCUS_PISTON_MM_PER_PIX2, deltaMxx_pix2)
+    piston = np.multiply(2 * agMetrics.AG_FOCUS_MM_PER_PIX2, deltaMxx_pix2)
     if includePistonCorrection:
-        piston = np.subtract(piston, FOCUS_PISTON_OFFSET_MM)
+        piston = np.subtract(piston, agMetrics.AG_FOCUS_OFFSET_MM)
 
     return piston
 
@@ -1425,9 +1420,12 @@ def estimateFocusErrors(
     Parameters
     ----------
     agcData : `pandas.DataFrame`
-        AG data with ``rms_pix`` and ``left`` (see `addImageSizes`), of the
-        stars to use (e.g. `selectIsolatedGaiaStars`). Only the valid matches
-        (`selectValidMatches`) are used.
+        AG data with ``rms_pix`` and ``left`` (see `addImageSizes`) and
+        ``agc_data_flags``, of the stars to use (e.g.
+        `selectIsolatedGaiaStars`). Only the valid matches
+        (`selectValidMatches`) are used, and of those only the detections
+        without ``BAD_SHAPE``, whose moments are unweighted: another
+        measurement, which ics_agActor's focus leaves out too.
     byCamera : `bool`
         Estimate the focus error of each camera, rather than of the
         exposure. Without it, disabled cameras (`selectEnabledCameras`) are
@@ -1445,6 +1443,7 @@ def estimateFocusErrors(
         ``focus_error_um`` and, with ``byCamera``, ``camera_enabled``.
     """
     use = selectValidMatches(agcData) if byCamera else selectFittedMatches(agcData)
+    use = use & ((agcData.agc_data_flags.to_numpy() & int(SourceDetectionFlags.BAD_SHAPE)) == 0)
     agcData = agcData[use].assign(camera_enabled=lambda d: selectEnabledCameras(d))
     halves = agcData.groupby(["agc_exposure_id", "agc_camera_id", "left"]).rms_pix.median()
     keys = ["agc_exposure_id", "agc_camera_id"] if byCamera else ["agc_exposure_id"]

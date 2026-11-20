@@ -22,6 +22,9 @@ They differ from the originals in that:
   plus each reader's own, so there are more of them.
 - ``FWHM`` is `pfs.drp.qa.guiders.analysis.addImageSizes`'s: 23% above
   drp_stella's, and NaN for a ``BAD_SHAPE`` detection.
+- ``mxx``, ``myy`` and ``mxy`` are the stars' variance and ``rms`` their sigma:
+  twice and sqrt(2) times drp_stella's for the exposures ics_agccActor stored
+  at half the variance.
 """
 
 import warnings
