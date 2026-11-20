@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-19
+
 ### Changed
 
 - **AG second moments are read as the stars' variance, for any exposure** (INSTRM-3114) — ics_agccActor stored
@@ -31,7 +33,7 @@ made, and earlier sections to the weekly tag alone.
   smaller and their focus slope term half what it was. A run fetched before this (its stamp has no `sigmaPix`) is
   rescaled when it is loaded, which is right while every exposure in it was stored at half the variance; fetch
   again a period that reaches past the ics_agccActor release. The fixtures in `tests/guiders/data` hold the
-  moments as `readAgcData` now returns them. Needs the pfs_utils release with `variancePerMoment`, set up
+  moments as `readAgcData` now returns them. Needs pfs_utils 7.4.47 or later, set up
   together with this: drp_qa 0.4.0 with that pfs_utils reports FWHM sqrt(2) too small.
 
 ## [0.4.0] - 2026-11-19
