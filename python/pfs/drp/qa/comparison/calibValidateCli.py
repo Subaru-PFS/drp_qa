@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-r"""Validate candidate detectorMap calibrations against each other on the same visits.
+r"""``drpQa.py calib validate``: validate candidate detectorMap calibrations against each other on the same visits.
 
 ``run`` reduces the chosen visits once per candidate, with the candidate's collection first in the
 inputs so its ``detectorMap_calib`` is the one used, through ``pipelines/qaThresholds.yaml``
@@ -8,10 +7,10 @@ inputs so its ``detectorMap_calib`` is the one used, through ``pipelines/qaThres
 (or ``--exports`` directories, one per candidate) and writes the Markdown comparison of
 `pfs.drp.qa.comparison.calibValidate` with a figure per detector.
 
-    python bin.src/calibValidate.py run --period run31 --data-dir ~/qa-comparison \\
+    drpQa.py calib validate run --period run31 --data-dir ~/qa-comparison \\
         --candidate asis= --candidate pick=u/wtg/pipe2d-1941/detectorMaps-pick \\
         --detectors b1 r2 --prefix u/wtg/pipe2d-1941/validate
-    python bin.src/calibValidate.py report ... -o validate-run31.md
+    drpQa.py calib validate report ... -o validate-run31.md
 
 The visits are the period's set-cadence arcs and traces plus its daily arcs and traces
 (the nightly Arc: Neon and Trace), or ``--visits FIRST LAST``.
@@ -26,10 +25,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from pfs.drp.qa.comparison.calibInputs import setVisits
+from pfs.drp.qa.comparison.calibInputs import lampsOf, setVisits
 from pfs.drp.qa.comparison.calibValidate import buildValidationReport, compareCalibrations
 from pfs.drp.qa.comparison.classify import classifyVisits
-from pfs.drp.qa.comparison.findings import lampsOf
 from pfs.drp.qa.comparison.reduction import drpActorConfig
 from pfs.drp.qa.comparison.runs import loadPeriods
 
@@ -135,7 +133,7 @@ def main(argv=None) -> int:
         "--exports",
         nargs="*",
         default=None,
-        help="report: exportMetrics.py directories, one per candidate in order",
+        help="report: directories of exportMetrics parquet files, one per candidate in order",
     )
     parser.add_argument("-j", "--jobs", type=int, default=8)
     parser.add_argument("--dry-run", action="store_true")
@@ -155,7 +153,7 @@ def main(argv=None) -> int:
     )
     if args.command == "run":
         if args.pipeline is None:
-            args.pipeline = str(Path(__file__).resolve().parents[1] / "pipelines" / "qaThresholds.yaml")
+            args.pipeline = str(Path(__file__).resolve().parents[5] / "pipelines" / "qaThresholds.yaml")
         failed = []
         for label, collection in cands.items():
             command = runCommand(args, label, collection, visits, args.detectors)
@@ -234,7 +232,3 @@ def main(argv=None) -> int:
     table.to_csv(out.with_suffix(".csv"), index=False)
     print(f"wrote {out}", flush=True)
     return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

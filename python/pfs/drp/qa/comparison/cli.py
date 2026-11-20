@@ -1,6 +1,6 @@
 """Command line of comparison mode: ``bin.src/qaComparison.py``.
 
-Four steps, each safe to repeat:
+Three steps, each safe to repeat:
 
 ``fetch``
     Read a period's visits and what describes them from the opdb, read-only, into parquet.
@@ -8,17 +8,19 @@ Four steps, each safe to repeat:
     Classify the visits, ask the Butler what it holds, and print the coverage and the
     ``pipetask`` commands that would complete it. Writes nothing to the Butler.
 ``run``
-    Plan, then run those commands; ``--dry-run`` only builds their graphs, and ``--pass`` picks
-    passes (``calibration``, ``sky``, ``unvalidated-calibration``).
+    Plan, then run those commands: reduce what is missing and run the QA tasks on it.
+    ``--dry-run`` only builds their graphs, and ``--pass`` picks passes (``calibration``, ``sky``,
+    ``unvalidated-calibration``).
+
+``run`` measures and gives no verdict: the QA tasks store numbers, and an image is judged when
+they are loaded into qadb (`pfs.drp.qa.metrics.gate`, ``drpQa.py load``).
 
 By default the reductions in ``drpActor/reductions`` are reused, each made with the pipeline of its
 day, and so are those an earlier drp_qa version's comparison of the period made beside them.
 ``--fresh`` reduces everything with the current pipeline instead, so that runs are compared on a
 level field. Its collection and files are named after that pipeline (`pipelineVersion`, from
 drp_stella's ``getPfsVersions``), and a later drp_qa version reuses the fresh reductions of the
-same pipeline. Either way the earlier collections' verdicts are judged again.
-``report``
-    Read the verdicts and write the period's report.
+same pipeline. Either way the QA tasks run again on the earlier collections' reductions.
 
 Files go under ``--data-dir``: the opdb reads in ``opdb/``, and everything for one drp_qa
 version in ``<run>/qa/<version>/``. A pre-run period's files sit with its run's.
@@ -129,9 +131,9 @@ def fetchSummary(
     Returns
     -------
     `str`
-        Visits, sequences and nights; what the gate will judge, by sequence
-        type and category; what it won't, and why; the sky visits' labels; the
-        designs and the notes.
+        Visits, sequences and nights; what the QA tasks will measure, by
+        sequence type and category; what they won't, and why; the sky visits'
+        labels; the designs and the notes.
     """
     visits = classifyVisits(
         frames["listing"], periods.values(), designKinds(frames["designs"]), frames["telStatus"]
@@ -144,7 +146,7 @@ def fetchSummary(
     ]
     for label, subset in (
         ("gated", visits[visits["validated"]]),
-        ("unvalidated (judged, no validated thresholds)", visits[visits["judged"] & ~visits["validated"]]),
+        ("unvalidated", visits[visits["judged"] & ~visits["validated"]]),
     ):
         lines.append(f"  {len(subset):,} {label}")
         kinds = subset.groupby(["category", "sequence_type", "cadence"]).size()
@@ -207,32 +209,28 @@ def loadFetched(period: Period, dataDir: Path) -> tuple[dict[str, pd.DataFrame],
 
 #: Paths that can't change what the pipeline writes: they don't name the output collection.
 RESULT_NEUTRAL_PATHS = (
-    # The comparison driver and its report, module by module: comparison/reduction.py configures
-    # the reduction and counts, as would any new module until listed here.
+    # The comparison driver, module by module: comparison/reduction.py configures the reduction
+    # and counts, as would any new module until listed here.
     *(
         f"python/pfs/drp/qa/comparison/{name}"
         for name in (
             "__init__.py",
             "butlerQueries.py",
             "calibInputs.py",
+            "calibInputsCli.py",
             "calibValidate.py",
+            "calibValidateCli.py",
             "classify.py",
             "cli.py",
             "data",
-            "findings.py",
-            "persistence.py",
             "plan.py",
             "queries.py",
-            "report.py",
-            "residuals.py",
             "runs.py",
         )
     ),
-    "python/pfs/drp/qa/plotting/comparison.py",
     "python/pfs/drp/qa/plotting/calibInputs.py",
     "bin.src/qaComparison.py",
-    "bin.src/calibInputsReport.py",
-    "bin.src/calibValidate.py",
+    "bin.src/drpQa.py",
     "tests",
     "docs",
     "examples",
@@ -246,9 +244,9 @@ def drpQaVersion(directory: Path | str | None = None) -> str:
 
     It is ``git describe`` of the last commit that could change what the
     pipeline writes: every path but `RESULT_NEUTRAL_PATHS`. Changing the
-    comparison driver or its report therefore keeps the collection, and its
-    finished quanta, while a change to a task, a threshold or the reduction's
-    configuration (`pfs.drp.qa.comparison.reduction`) starts a new one.
+    comparison driver therefore keeps the collection, and its finished quanta,
+    while a change to a task or the reduction's configuration
+    (`pfs.drp.qa.comparison.reduction`) starts a new one.
 
     Parameters
     ----------
@@ -295,7 +293,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"written to {paths['listing'].parent}")
         return 0
 
-    visits, frames, stamp = _classified(period, periods, dataDir)
+    visits, stamp = _classified(period, periods, dataDir)
     visits = selectCadences(visits, args.cadence)
     try:
         args.reductions, args.inputs = resolveCollections(args.fresh, args.raw, args.reductions, args.inputs)
@@ -317,9 +315,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"{period.name}: {len(visits)} visits read from the opdb up to {stamp['readUntil']}")
     print(f"output collection: {output}")
 
-    if args.command in ("plan", "run"):
-        return _plan(args, period, visits, output, workDir)
-    return _report(args, period, periods, visits, frames, stamp, output, version, workDir, dataDir)
+    return _plan(args, period, visits, output, workDir)
 
 
 def pipelineVersion(versions: dict[str, str] | None = None) -> str:
@@ -396,154 +392,12 @@ def resolveCollections(
 
 
 def _classified(period: Period, periods: dict[str, Period], dataDir: Path):
-    """Return a fetched period's classified visits, the fetched frames and their stamp."""
+    """Return a fetched period's classified visits and the stamp of their fetch."""
     frames, stamp = loadFetched(period, dataDir)
     visits = classifyVisits(
         frames["listing"], periods.values(), designKinds(frames["designs"]), frames["telStatus"]
     )
-    return visits[visits["period"] == period.name].reset_index(drop=True), frames, stamp
-
-
-def _report(args, period, periods, visits, frames, stamp, output, version, workDir, dataDir) -> int:
-    """Run the ``report`` command."""
-    from lsst.daf.butler import Butler
-
-    from pfs.drp.qa.comparison.butlerQueries import detectorHoldings
-    from pfs.drp.qa.comparison.findings import findings, judgeImages, taskPipelines, taskThresholds
-    from pfs.drp.qa.comparison.report import ReportInputs, buildReport, failedSummary, populations
-    from pfs.drp.qa.comparison.residuals import residualFindings
-    from pfs.drp.qa.metrics.gate import layerPipelineMismatch
-    from pfs.drp.qa.metrics.readers import readMetrics, readReductionPipelines
-    from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS
-
-    butler = Butler(args.butler, writeable=False)
-    judgedVisits = visits.loc[visits["judged"], "pfs_visit_id"]
-    earlier = _earlier(butler, args, period, output)
-    holdings = detectorHoldings(
-        butler,
-        judgedVisits,
-        raw=args.raw,
-        reductions=[*args.reductions, *earlier],
-        output=output,
-        inputs=[*earlier, *args.inputs],
-    )
-    failed = _failedImages(workDir, period)
-    detectors = coverage(visits, holdings, failed)
-    done = detectors.loc[detectors["status"] == "judged", "visit"].unique()
-    if not len(done):
-        raise SystemExit(f"Nothing judged yet in {output}: run 'run' first")
-    pending = detectors["status"].isin(["to judge", "to reduce"])
-    if pending.any():
-        byType = detectors[pending].groupby("sequence_type").size().sort_values(ascending=False)
-        listed = ", ".join(f"{n} {kind}" for kind, n in byType.items())
-        print(
-            f"!! INCOMPLETE: {pending.sum()} of {len(detectors)} detector images not judged yet ({listed});"
-            " the report covers the rest. Run 'run' (and check its failures) to complete it.",
-            file=sys.stderr,
-        )
-    from pfs.drp.qa.comparison.butlerQueries import ownRuns
-
-    # The output's own runs only: the chain also holds earlier versions' verdicts.
-    metrics = readMetrics(butler, done, collections=ownRuns(butler, output))
-    # The pipeline of each reduction judged, from the pfsArm in its calexp's RUN; unknown for
-    # metrics written before imageQualityQa recorded that RUN, until they are judged again.
-    print(f"reading the pipeline of {len(metrics)} reductions from their pfsArm headers", flush=True)
-    versions = readReductionPipelines(butler, metrics)
-    metrics = metrics.drop(columns=list(PIPELINE_COLUMNS.values()), errors="ignore").reset_index(drop=True)
-    metrics[list(PIPELINE_COLUMNS.values())] = versions.to_numpy(dtype=object)
-    metrics.to_parquet(workDir / f"iqQaMetrics-{period.name}.parquet")
-    config = butler.get("imageQualityQa_config", collections=[output])
-    judged = judgeImages(metrics, visits, taskThresholds(config))
-    # Provisional against the pipeline of the layer that judged each image: the Run25 and IIS
-    # thresholds files record different ones.
-    mismatch = layerPipelineMismatch(metrics, judged, taskPipelines(config))
-    for column in mismatch.columns:
-        metrics[column] = mismatch[column].to_numpy()
-    from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
-
-    found = findings(metrics, judged, visits, frames["notes"], visitSet=loadValidationVisits())
-    found.to_csv(workDir / f"findings-{period.name}.csv", index=False)
-    residualSummary, residualMetrics = _readResiduals(butler, done, ownRuns(butler, output))
-    residualFound = None
-    if residualSummary is not None:
-        from pfs.drp.qa.metrics.lineResiduals import addObsType
-
-        # Tables stored before obsType was a column take it from imageQualityQa's.
-        residualMetrics = addObsType(residualMetrics, metrics)
-        residualSummary = addObsType(residualSummary, metrics)
-        residualSummary.to_parquet(workDir / f"dmLineResidualSummary-{period.name}.parquet")
-        residualMetrics.to_parquet(workDir / f"dmLineResidualMetrics-{period.name}.parquet")
-        residualFound = residualFindings(residualMetrics, residualSummary, visits, frames["notes"])
-        residualFound.to_csv(workDir / f"lineResidualFindings-{period.name}.csv", index=False)
-    from pfs.drp.qa.comparison.persistence import armTimeline, lastLitBefore
-
-    lastLit = lastLitBefore(visits)
-    lastLit.to_csv(workDir / f"darksLastLit-{period.name}.csv", index=False)
-
-    reference, referenceResiduals = None, None
-    if args.reference and args.reference != period.name:
-        referencePeriod = periods[args.reference]
-        referenceVersion = args.reference_version or version
-        referenceDir = dataDir / referencePeriod.run / "qa" / referenceVersion / args.variant
-        cache = referenceDir / f"iqQaMetrics-{referencePeriod.name}.parquet"
-        if cache.exists():
-            referenceVisits, _, _ = _classified(referencePeriod, periods, dataDir)
-            reference = populations(pd.read_parquet(cache), referenceVisits)
-            residualCache = referenceDir / f"dmLineResidualMetrics-{referencePeriod.name}.parquet"
-            if residualCache.exists():
-                # The reference's gated images only: the scatter table compares like with like.
-                gatedVisits = referenceVisits.loc[referenceVisits["validated"].astype(bool), "pfs_visit_id"]
-                referenceResiduals = pd.read_parquet(residualCache)
-                referenceResiduals = referenceResiduals[referenceResiduals["visit"].isin(gatedVisits)]
-                referenceResiduals = addObsType(referenceResiduals, reference)
-        else:
-            print(f"No {args.reference} metrics at {cache}: report {args.reference} first", file=sys.stderr)
-
-    page = buildReport(
-        ReportInputs(
-            period=period.name,
-            version=version,
-            collection=output,
-            readUntil=stamp["readUntil"],
-            visits=visits,
-            summary=summarize(visits, detectors),
-            metrics=metrics,
-            judged=judged,
-            findings=found,
-            reference=reference,
-            referenceName=args.reference or "",
-            lastLit=lastLit,
-            timeline=armTimeline(visits),
-            failed=failedSummary(detectors, failed),
-            residualSummary=residualSummary,
-            residualMetrics=residualMetrics,
-            residualFindings=residualFound,
-            referenceResiduals=referenceResiduals,
-        )
-    )
-    path = workDir / f"report-{period.name}.html"
-    path.write_text(page)
-    print(f"report: {path}")
-    return 0
-
-
-def _readResiduals(butler, visits, collections: Sequence[str]):
-    """Return the ``dmLineResidualSummary`` and ``dmLineResidualMetrics`` rows of some visits.
-
-    `None` for both when the collections hold none: a collection judged
-    before ``dmLineResiduals`` joined the thresholds pipeline.
-    """
-    from pfs.drp.qa.metrics.readers import readMetrics
-
-    try:
-        summary = readMetrics(butler, visits, "dmLineResidualSummary", collections=collections)
-    except LookupError:
-        print(
-            "no dmLineResiduals output: judged before the task joined the pipeline",
-            file=sys.stderr,
-        )
-        return None, None
-    return summary, readMetrics(butler, visits, "dmLineResidualMetrics", collections=collections)
+    return visits[visits["period"] == period.name].reset_index(drop=True), stamp
 
 
 def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path) -> int:
@@ -596,8 +450,8 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
             print(f"!! {warning}", file=sys.stderr)
 
     outputExists = collectionExists(butler, output)
-    # Skip what this version has judged, in its own runs: skipping the output chain would also skip
-    # every image an earlier version in its inputs judged.
+    # Skip what this version has measured, in its own runs: skipping the output chain would also skip
+    # every image an earlier version in its inputs measured.
     skip = [*args.reductions, *(ownRuns(butler, output) if outputExists else [])]
     commands = []
     for item in passes(visits, detectors):
@@ -616,8 +470,8 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
             item,
             butler=args.butler,
             pipeline=args.pipeline,
-            # Earlier collections are inputs but not skipped: their imageQualityQa outputs are an
-            # older drp_qa's, to be judged again.
+            # Earlier collections are inputs but not skipped: their QA outputs are an older drp_qa's,
+            # to be measured again.
             inputs=[*earlier, *args.inputs],
             output=output,
             skipExistingIn=skip,
@@ -729,8 +583,8 @@ def unexpectedPipeline(
     """Say when a ``--fresh`` run would reduce a period again under a new pipeline label.
 
     Reductions are reused only under the same label, so a shell with another
-    stack set up plans the whole reduction again, silently, where a judge pass
-    was meant.
+    stack set up plans the whole reduction again, silently, where a pass of
+    the QA tasks alone was meant.
 
     Parameters
     ----------
@@ -777,10 +631,12 @@ def _qgraph(command: list[str]) -> list[str]:
 def _parser() -> argparse.ArgumentParser:
     drpQaDir = os.environ.get("DRP_QA_DIR", ".")
     parser = argparse.ArgumentParser(prog="qaComparison.py", description=__doc__.split("\n\n")[0])
-    parser.add_argument("command", choices=["fetch", "plan", "run", "report"])
+    parser.add_argument("command", choices=["fetch", "plan", "run"])
     parser.add_argument("--period", required=True, help="e.g. run30 or run30-pre")
     parser.add_argument(
-        "--data-dir", default="~/.cache/drp_qa/comparison", help="where opdb reads and reports are kept"
+        "--data-dir",
+        default="~/.cache/drp_qa/comparison",
+        help="where opdb reads and each run's files are kept",
     )
     parser.add_argument("--runs", default=None, help="the run table (default: the packaged one)")
     parser.add_argument("--host", default="pfsa-db", help="opdb host, for fetch")
@@ -818,10 +674,6 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--pipeline", default=f"{drpQaDir}/pipelines/qaThresholds.yaml", help="the reduction and QA pipeline"
     )
-    parser.add_argument("--reference", default="run25", help="the period to compare with, for report")
-    parser.add_argument(
-        "--reference-version", default=None, help="the drp_qa version of the reference (default: --version)"
-    )
     parser.add_argument("-j", "--jobs", type=int, default=8, help="pipetask processes")
     parser.add_argument(
         "--pass",
@@ -836,7 +688,7 @@ def _parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         choices=["set", "daily", "single"],
-        help="judge only the arcs and traces of this cadence, e.g. set for the calibration sets; repeatable",
+        help="measure only the arcs and traces of this cadence, e.g. set for the calibration sets; repeatable",
     )
     parser.add_argument(
         "--new-pipeline",

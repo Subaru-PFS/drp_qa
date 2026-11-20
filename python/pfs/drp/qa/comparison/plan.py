@@ -1,26 +1,27 @@
-"""Plan a comparison: what is judged, what still needs work, and the ``pipetask`` runs that do it.
+"""Plan a comparison: what is measured, what still needs work, and the ``pipetask`` runs that do it.
 
 Coverage is per detector image: the cameras opdb says took an exposure, joined with what the
-Butler holds (`pfs.drp.qa.comparison.butlerQueries.detectorHoldings`). Visits the gate doesn't
-judge are counted, not expanded.
+Butler holds (`pfs.drp.qa.comparison.butlerQueries.detectorHoldings`). Visits the QA tasks don't
+measure are counted, not expanded. A detector image is ``judged`` once the QA tasks have run on it:
+they store numbers, and the verdict is given when the numbers are loaded into qadb
+(`pfs.drp.qa.metrics.gate`), not here.
 
 The reductions are drp_stella's ``reduceExposure`` with the configuration ``drpActor`` uses for
 the sequence type (`drpActorConfig`), and ``cosmicray`` combines the exposures of one sequence
 only, as ``drpActor``, which reduces one sequence at a time. Reductions already in
-``drpActor/reductions`` and verdicts already in the output collection are reused through
+``drpActor/reductions`` and QA results already in the output collection are reused through
 ``--skip-existing-in``, so re-running a plan after more nights only adds quanta. Detector images
 whose reduction failed (`failedQuanta`, read from the ``pipetask`` logs) are ``failed``, not
 rescheduled: the same exposure fails the same way every time.
 """
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 import pandas as pd
 
 from pfs.drp.qa.comparison.reduction import cosmicrayConfig, cosmicrayGroups, drpActorConfig
-from pfs.drp.qa.metrics.validationVisits import visitExpression
 
 __all__ = [
     "JUDGE_TASKS",
@@ -35,13 +36,14 @@ __all__ = [
     "pipetaskCommand",
     "selectCadences",
     "summarize",
+    "visitExpression",
 ]
 
 #: Coverage of a judged visit's detector, from done to blocked.
 STATUS_ORDER = ("judged", "to judge", "to reduce", "failed", "no pfsConfig", "no raw", "raw not in opdb")
 
-#: The QA tasks of the pipeline, which a judge-only pass runs on reductions that exist: the gate,
-#: and the line residuals against the calibration and the visit's detectorMap.
+#: The QA tasks of the pipeline, which a judge-only pass runs on reductions that exist: the image
+#: quality, and the line residuals against the calibration and the visit's detectorMap.
 JUDGE_TASKS = ("imageQualityQa", "dmLineResiduals")
 
 #: A failed quantum in a ``pipetask`` log.
@@ -52,8 +54,42 @@ _DATA_ID_RE = re.compile(r"(\w+): '?([^,']*)'?")
 _CAMERA_RE = re.compile(r"^([brnm])([1-4])$")
 
 
+def visitExpression(visits: Iterable[int]) -> str:
+    """Return a Butler query expression selecting ``visits``.
+
+    Consecutive visits collapse into ``first..last`` ranges, so the expression
+    stays short enough to paste.
+
+    Parameters
+    ----------
+    visits : iterable of `int`
+        Visit numbers, in any order; duplicates are ignored.
+
+    Returns
+    -------
+    `str`
+        E.g. ``"visit IN (133025..133055, 149217)"``.
+
+    Raises
+    ------
+    ValueError
+        If there are no visits.
+    """
+    ordered = sorted(set(visits))
+    if not ordered:
+        raise ValueError("No visits")
+    ranges = [[ordered[0], ordered[0]]]
+    for visit in ordered[1:]:
+        if visit == ranges[-1][1] + 1:
+            ranges[-1][1] = visit
+        else:
+            ranges.append([visit, visit])
+    terms = [str(first) if first == last else f"{first}..{last}" for first, last in ranges]
+    return f"visit IN ({', '.join(terms)})"
+
+
 def selectCadences(visits: pd.DataFrame, cadences: Sequence[str]) -> pd.DataFrame:
-    """Judge only the arcs and traces of some cadences, e.g. the calibration sets.
+    """Measure only the arcs and traces of some cadences, e.g. the calibration sets.
 
     Parameters
     ----------
@@ -148,7 +184,7 @@ def coverage(
         From `pfs.drp.qa.comparison.butlerQueries.detectorHoldings`.
     failed : `pandas.DataFrame`, optional
         ``visit``, ``arm`` and ``spectrograph`` of images whose reduction or
-        judgement failed (`failedQuanta`); those not judged since are
+        QA task failed (`failedQuanta`); those not judged since are
         ``failed``.
 
     Returns
@@ -220,8 +256,8 @@ def summarize(visits: pd.DataFrame, detectors: pd.DataFrame) -> pd.DataFrame:
     `pandas.DataFrame`
         One row per ``sequence_type``, ``cadence`` and ``category``: the number of
         ``visits``, the ``reason`` (``gated``, ``unvalidated`` or why they
-        aren't judged), and one column per `STATUS_ORDER` counting the detector
-        images of judged visits.
+        aren't measured), and one column per `STATUS_ORDER` counting the detector
+        images of measured visits.
     """
     counts = (
         visits.assign(sequence_type=visits["sequence_type"].fillna("(none)"))
@@ -290,8 +326,8 @@ class Pass:
 def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
     """Group the visits with work left into passes, by configuration and whether they're gated.
 
-    The gated passes come first in the list, so the gate's visits are done before the
-    unvalidated ones, which can be many.
+    The gated passes come first in the list, so the calibration recipe's visits are done before
+    the unvalidated ones, which can be many.
 
     Each is split by sequence: a sequence with an image ``to reduce`` gets the whole pipeline, on
     every visit of the sequence so ``cosmicray`` combines all of it, and one whose images are all

@@ -15,6 +15,7 @@ from pfs.drp.qa.comparison.plan import (
     pipetaskCommand,
     selectCadences,
     summarize,
+    visitExpression,
 )
 
 
@@ -35,6 +36,35 @@ def testDrpActorConfig(sequenceType, adjust, quickCds, normalize):
         "isr:h4.quickCDS": quickCds,
         "cosmicray:doNormalizeChiRms": normalize,
     }
+
+
+def testVisitExpressionCollapsesRuns():
+    assert visitExpression([5, 1, 2, 3, 3, 9, 10]) == "visit IN (1..3, 5, 9..10)"
+    # Negative control: a gap of one visit is not bridged.
+    assert visitExpression([1, 3]) == "visit IN (1, 3)"
+    assert visitExpression([1, 3]) != "visit IN (1..3)"
+
+
+def testVisitExpressionCoversTheVisits():
+    """Every visit, and only those: expand the ranges back and compare."""
+    visits = [133025, 133026, 133027, 133055, 149217, 149218, 121949]
+    terms = visitExpression(visits).removeprefix("visit IN (").removesuffix(")").split(", ")
+    expanded = set()
+    for term in terms:
+        first, _, last = term.partition("..")
+        expanded.update(range(int(first), int(last or first) + 1))
+    assert expanded == set(visits)
+    # Negative control: ".." includes both ends, as the Butler's range does; a half-open reading loses visits.
+    halfOpen = set()
+    for term in terms:
+        first, _, last = term.partition("..")
+        halfOpen.update(range(int(first), int(last or int(first) + 1)))
+    assert halfOpen != set(visits)
+
+
+def testVisitExpressionWithoutVisitsRaises():
+    with pytest.raises(ValueError, match="No visits"):
+        visitExpression([])
 
 
 def testExpectedDetectors():
