@@ -10,6 +10,40 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Changed
+
+- **Frames are typed from their IIC sequence type, in one place** (PIPE2D-2015) — `metrics.registry.SEQUENCE_TYPES`
+  gives each sequence type (`W_SEQTYP`) its frame type, and `registry.frameType(seqType, seqName, illumination,
+  obsType)` replaces `frameType(obsType, illumination)`. Both tasks classify through the registry
+  (`registry.sequenceOf`, `registry.observationType`) and store the sequence type as read. On Run31's stored
+  numbers 5,640 of 18,340 images had no frame type and now none has: 3,885 are darks, 868 fiber-profile
+  exposures, 832 dot-roach exposures and 55 engineering exposures. What changes:
+  - *New frame types that are not judged*, each with its reason in `registry.NOT_JUDGED` and `EXCLUSIONS`:
+    `dark`, `bias`, `fiberProfile`, `dotRoach`, `throughFocus`, `dithered`, `engineering` (the IIC's plain
+    `arcs` and `flats`, binned or not), `domeFlat` and `windowed`. Their images stay `UNKNOWN`; `qa_reason` now
+    says what the frame is and why it is not judged, and for a frame with no type names the sequence type nobody
+    has classified. No image that had a frame type changes type or verdict.
+  - *New output columns.* `iqQaMetrics`: `seqType` (`W_SEQTYP` as read) and `lamps` (the lamps the lamp headers
+    say were lit, obs_pfs's names joined by `+`). `dmLineResidualSummary` and `dmLineResidualMetrics`: `seqType`.
+    qadb needs `seq_type` on `image_quality_qa` and `dm_line_residual_qa`, and `lamps` on `image_quality_qa`
+    (PIPE2D-2013). Rows stored without `seqType` are typed by `obsType`, as before.
+  - *Darks and biases measure nothing.* `darks`, `masterDarks`, `biases` and `masterBiases` take
+    `imageQualityQa`'s path for a dark (`obsType` `dark` or `bias`), which the task reserved for a `scienceDark`
+    sequence type the IIC never wrote. They were measured as `unknown` frames before: 880 of Run31's 1,412 n-arm
+    darks have a width and a trace-centre offset stored.
+  - *The raw header's sequence type stands.* A raw whose `W_SEQTYP` has no measurement of its own is `unknown`
+    whatever the pfsConfig header says; the pfsConfig is read only when the raw has no `W_SEQTYP`
+    (`lineResiduals.frameType`), and `imageQualityQa` reads the pfsConfig's when the calexp has none.
+  - *The lamp of a normal value comes from the header.* `registry.lampOf(seqName, lamps)` gives the lamp the
+    header says was lit, the sequence name's only for rows stored without `lamps`, under one spelling per lamp:
+    `selector` is `Ne`, `Ar`, `Kr`, `Xe`, `He` where it was `Neon`, `Argon`, `Krypton`, `Xenon`, `Helium`, and a
+    quartz frame's is empty (an engineering-fiber quartz had `Halogen`). The values themselves are unchanged
+    (Runs 25 to 30: 1,354 of 1,354; Run31: 242 of 242), but rows of `qa_normal_value` stored under the old
+    spellings no longer match and must be made again.
+  - *The visit summary counts frame types that are not judged apart.* `visitRollup.rollupVisits` adds
+    `frameType` to its columns, and `drpQa.py summary` prints how many `UNKNOWN` visits are of frame types that
+    are not judged, by type, and names the frame type on each `UNKNOWN` visit's line.
+
 ## [0.5.0] - 2026-11-19
 
 ### Changed

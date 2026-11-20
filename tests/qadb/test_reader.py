@@ -30,7 +30,7 @@ NUMBERS = ("iqQaMetrics", "dmLineResidualSummary", "dmLineResidualMetrics", "twi
 #: Normal widths of the fixture's images: r1's arc is +10 % (FAIL), b1's quartz +2.4 % (PASS) and r1's
 #: quartz +3.9 % (WARN).
 WIDTHS = {
-    ("medFwhm", "r1", "arc", "Argon"): 2.5,
+    ("medFwhm", "r1", "arc", "Ar"): 2.5,
     ("medFwhm", "b1", "quartz", ""): 3.1,
     ("medFwhm", "r1", "quartz", ""): 3.2,
 }
@@ -262,6 +262,58 @@ class TestJudgedAsAtLoad:
     def testWithoutNormalValues(self, butler, qadb):
         load(butler, qadb)
         assert self.compare(qadb)["qaStatus"].tolist() == ["PASS"] * 4
+
+    def testTheSequenceTypeAndLampsAreStoredAndTypeTheFrameAgain(
+        self, StubButler, fixtures, qadb, storeValues
+    ):
+        """``seq_type`` and ``lamps`` are read back, so qadb alone gives the frame types and lamps of the load."""
+        tables = {name: table.copy() for name, table in fixtures.items()}
+        arcs = tables["iqQaMetrics"]["visit"] == 133025
+        # The arc's name says nothing of its lamp; its header does. The other visit is a fiber-profile
+        # exposure that was measured as a quartz.
+        tables["iqQaMetrics"] = tables["iqQaMetrics"].assign(
+            seqType=arcs.map({True: "scienceArc", False: "fiberProfiles"}),
+            seqName=arcs.map({True: "LineCheck", False: "allHidden"}),
+            lamps=arcs.map({True: "Ar", False: "Quartz"}),
+        )
+        for name in ("dmLineResidualSummary", "dmLineResidualMetrics"):
+            isArc = tables[name]["visit"] == 133025
+            tables[name] = tables[name].assign(
+                seqType=isArc.map({True: "scienceArc", False: "fiberProfiles"})
+            )
+        storeValues(qadb, COLLECTION, WIDTHS, validFrom=133000)
+        load(StubButler(tables, datasets={"packages": {"drp_qa": "w.2026.44"}}), qadb)
+
+        stored = qadb.query_dataframe(
+            "SELECT q.seq_type, q.lamps, d.seq_type AS line_seq_type FROM image_quality_qa q"
+            " JOIN dm_line_residual_qa d USING (processing_id, pfs_visit_id, camera_name)"
+            " ORDER BY q.pfs_visit_id, q.camera_name"
+        )
+        assert stored["seq_type"].tolist() == stored["line_seq_type"].tolist()
+        assert stored["seq_type"].tolist() == ["scienceArc"] * 2 + ["fiberProfiles"] * 2
+        assert stored["lamps"].tolist() == ["Ar", "Ar", "Quartz", "Quartz"]
+        read = readQadb(qadb, COLLECTION)
+        assert set(read["dmLineResidualMetrics"]["seqType"]) == {"scienceArc", "fiberProfiles"}
+
+        atLoad = self.compare(qadb)
+        assert atLoad["frameType"].tolist() == ["arc", "arc", "fiberProfile", "fiberProfile"]
+        assert atLoad["qaStatus"].tolist() == ["PASS", "FAIL", "UNKNOWN", "UNKNOWN"]
+        assert atLoad.loc[1, "qaDecidedBy"] == "width"
+        assert set(atLoad.loc[2:, "qaReason"].str.split(":").str[0]) == {"fiberProfile frames are not judged"}
+        # Negative control: by its name alone the arc has no lamp, so its width finds no normal value...
+        unnamed = read["iqQaMetrics"].assign(lamps=None)
+        again = gate(
+            iq=unnamed, lines=read["dmLineResidualMetrics"], normalValues=readNormalValues(qadb, COLLECTION)
+        )
+        assert again["qaStatus"].tolist()[:2] == ["PASS", "PASS"]
+        # ...and by its obsType alone the fiber-profile exposure is judged as the quartz it is not.
+        asBefore = gate(
+            iq=read["iqQaMetrics"].drop(columns="seqType"),
+            lines=read["dmLineResidualMetrics"].drop(columns="seqType"),
+            normalValues=readNormalValues(qadb, COLLECTION),
+        )
+        assert asBefore["frameType"].tolist()[2:] == ["quartz", "quartz"]
+        assert asBefore["qaStatus"].tolist()[2:] == ["PASS", "WARN"]
 
     def testTwilights(self, twilight, fixtures, qadb, storeValues):
         """Lamp frames and a complete twilight sequence in one load: every kind of table read back."""

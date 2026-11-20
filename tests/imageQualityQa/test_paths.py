@@ -37,6 +37,8 @@ ARC_LINE_COLUMNS = [
     "obsType",
     "illumination",
     "seqName",
+    "seqType",
+    "lamps",
     "isrBadPixels",
     "isrTime",
     "cosmicRayCount",
@@ -219,14 +221,53 @@ def testTwilightIsNotMeasured(runTask, fakes):
         ("scienceDark", "Twilight sky", "dark"),
         ("scienceTrace", "Trace", "trace"),
         ("scienceArc", "Arc: HgCd", "arc"),
-        ("biases", "Bias", "unknown"),
+        ("darks", "Morning Dark", "dark"),
+        ("masterDarks", "", "dark"),
+        ("biases", "Bias", "bias"),
+        ("fiberProfiles", "allHidden", "unknown"),
+        ("dotRoach", "", "unknown"),
+        ("arcs_binned", "cplTest_ne_bin1", "unknown"),
+        ("rampObject", "", "unknown"),
     ],
 )
 def testClassifyVisit(iqqa, fakes, seqType, seqName, obsType):
-    """``W_SEQTYP`` sets the class; ``W_SEQNAM`` splits scienceObject."""
+    """``W_SEQTYP`` sets the class; ``W_SEQNAM`` splits scienceObject. Both are returned as read."""
     task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
     calexp = fakes.Exposure(np.zeros((2, 2)), fakes.header(seqType, seqName))
-    assert task._classifyVisit(calexp, None)[0] == obsType
+    classified = task._classifyVisit(calexp, None)
+    assert classified[0] == obsType
+    assert (classified[2], classified[3]) == (seqName, seqType)
+
+
+def testClassifyVisitReadsThePfsConfigWhenTheCalexpHasNoSequenceType(iqqa, fakes):
+    task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
+    pfsConfig = fakes.PfsConfig([1, 2])
+    pfsConfig.header = fakes.header("scienceTrace", "Trace")
+    bare = fakes.Exposure(np.zeros((2, 2)), {})
+    assert task._classifyVisit(bare, pfsConfig)[::3] == ("trace", "scienceTrace")
+    assert task._classifyVisit(None, pfsConfig)[::3] == ("trace", "scienceTrace")
+    # Negative control: a calexp that says is believed over the pfsConfig.
+    arc = fakes.Exposure(np.zeros((2, 2)), fakes.header("scienceArc", "Arc: Neon"))
+    assert task._classifyVisit(arc, pfsConfig)[::3] == ("arc", "scienceArc")
+    # With neither there is nothing to say.
+    assert task._classifyVisit(bare, None) == ("unknown", False, "", "", "")
+    assert task._classifyVisit(None, None) == ("unknown", False, "", "", "")
+
+
+@pytest.mark.parametrize("seqType", ["darks", "masterDarks", "biases"])
+def testARealDarkOrBiasMeasuresNothing(runTask, fakes, seqType):
+    """The IIC's dark and bias sequence types take the path that measures nothing, and say what they are."""
+    detectorMap = fakes.DetectorMap()
+    lines = fakes.arcLines(detectorMap, numPerFiber=30)
+    dark = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(seqType, "Morning Dark"))
+    metrics = runTask(lines, detectorMap=detectorMap, calexp=dark).iqQaMetrics.iloc[0]
+    assert metrics["obsType"] in ("dark", "bias") and metrics["seqType"] == seqType
+    assert np.isnan(metrics["medFwhm"]) and np.isnan(metrics["pctFlagged"])
+    # Negative control: a sequence type with no path of its own measures what its lines allow.
+    other = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header("fiberProfiles", "allHidden"))
+    metrics = runTask(lines, detectorMap=detectorMap, calexp=other).iqQaMetrics.iloc[0]
+    assert (metrics["obsType"], metrics["seqType"]) == ("unknown", "fiberProfiles")
+    assert metrics["medFwhm"] == 2.5
 
 
 def testRunQuantumRecordsTheCalexpRun(iqqa, monkeypatch):

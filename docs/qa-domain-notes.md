@@ -160,7 +160,8 @@ SM1-defocused quartz 140032 and 140139, and the test fixtures in `tests/imageQua
   has none. Trace centroids per fiber follow the illumination (b1: 691 on a Run25 neon set,
   609 fully lit and 473 on a shaka exposure in Run30), lamp lines per lit fiber do not.
 - `traceOnly`: True when falling back to fiber-profile widths; `medFwhm` is then not judged
-- `obsType` / `seqName`: visit classification and raw `W_SEQNAM`
+- `obsType` / `seqType` / `seqName` / `lamps`: which measurement was made, the raw `W_SEQTYP` and
+  `W_SEQNAM`, and the lamps the lamp headers say were lit
 - No verdict column: `pfs.drp.qa.metrics.gate` judges the numbers afterwards
 
 Additional columns are added dynamically: a per-status-bit flag breakdown

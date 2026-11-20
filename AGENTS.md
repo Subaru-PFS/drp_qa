@@ -97,7 +97,11 @@ the pipeline/config glue to run them.
   - `registry` declares each metric once (`METRIC_SPECS`: direction, units, reference) and holds
     every limit: `CHECKS`, 13 checks with a WARN and a FAIL each and the frame types they apply to,
     and `EXCLUSIONS`, what is measured but not judged, with the reason. Nothing else in the package
-    holds a limit.
+    holds a limit. It also says what a frame is, and nothing else does: `SEQUENCE_TYPES` gives each
+    IIC sequence type (`seqType`, `W_SEQTYP` as the tasks store it) its frame type, `frameType` adds
+    the sequence name and the illumination, and `NOT_JUDGED` names the frame types no check applies
+    to, with the reason. A sequence type missing from the table has no frame type. `lampOf` gives
+    the lamp a normal value is kept per, from the header's lamps (`lamps`) or else the sequence name.
   - `gate` is the only judging path (`measurements`, `judge`, `gate`): numbers, checks and normal
     values in, one verdict per image out.
   - `normalValues` makes each camera's normal values from a run's calibration frames (`candidates`),
@@ -472,7 +476,8 @@ drpQA.yaml#imageQualityQa            dims: (instrument, visit, arm, spectrograph
              fiberProfiles, detectorMap_calib (calibrations),
              calexp, pfsConfig (optional),
              isr_log, cosmicray_log, reduceExposure_log (optional)
-    → writes: iqQaMetrics, iqQaSpeciesMetrics; iqQaData only with doWriteLineData   (numbers, no verdict)
+    → writes: iqQaMetrics, iqQaSpeciesMetrics; iqQaData only with doWriteLineData   (numbers, no verdict;
+              seqType, seqName, illumination and lamps say what the frame is, as read)
 
 drpQA.yaml#dmLineResiduals           dims: (instrument, visit, arm, spectrograph)
     ← reads: lines, detectorMap, raw.metadata, detectorMap_calib (calibration), pfsConfig (optional)

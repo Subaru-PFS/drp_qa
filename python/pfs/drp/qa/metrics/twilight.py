@@ -79,7 +79,7 @@ import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-from pfs.drp.qa.metrics.lineResiduals import observationType
+from pfs.drp.qa.metrics.registry import observationType
 
 __all__ = [
     "FIBER_COLUMNS",
@@ -424,14 +424,14 @@ def _armMeanAndHalfDiff(residuals: list[pd.DataFrame]) -> pd.DataFrame:
 def isTwilightSequence(sequence: pd.DataFrame) -> bool:
     """Return whether an IIC sequence, as `pfs.drp.qa.comparison.queries.readSequenceOfVisit` returns it, is a twilight.
 
-    False for no rows (the visit is in no sequence). The test is `observationType`'s, on the
-    sequence's type and name, so the opdb and the raw header agree on what a twilight is.
+    False for no rows (the visit is in no sequence). The test is
+    `pfs.drp.qa.metrics.registry.observationType`'s, on the sequence's type and name, so the opdb and
+    the raw header agree on what a twilight is.
     """
     if sequence.empty:
         return False
     first = sequence.iloc[0]
-    header = {"W_SEQTYP": first["sequence_type"], "W_SEQNAM": first["sequence_name"]}
-    return observationType(header) == "twilight"
+    return observationType(first["sequence_type"], first["sequence_name"]) == "twilight"
 
 
 def sequenceReadiness(

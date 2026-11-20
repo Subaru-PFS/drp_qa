@@ -47,7 +47,7 @@ CREATE TABLE image_quality_qa (
     processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
     pfs_visit_id INTEGER REFERENCES pfs_visit,
     camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1), obs_type TEXT, seq_name TEXT,
-    illumination TEXT, trace_only BOOLEAN, med_fwhm DOUBLE PRECISION, med_dx_center DOUBLE PRECISION,
+    seq_type TEXT, illumination TEXT, lamps TEXT, trace_only BOOLEAN, med_fwhm DOUBLE PRECISION, med_dx_center DOUBLE PRECISION,
     dx_center_rms REAL, pct_flagged REAL, pct_low_sn REAL, pct_meas_fail REAL, n_lines INTEGER,
     lines_per_fiber DOUBLE PRECISION, n_lit_fibers INTEGER,
     n_fibers INTEGER, n_trace_rows INTEGER, n_saturated_lines INTEGER, pct_saturated_pixels REAL,
@@ -68,7 +68,7 @@ CREATE TABLE dm_line_residual_qa (
     processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
     pfs_visit_id INTEGER REFERENCES pfs_visit,
     camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1), camera_set TEXT, obs_type TEXT,
-    fitted BOOLEAN, n_species INTEGER, n_species_measured INTEGER, calib_id TEXT, calib_run TEXT,
+    seq_type TEXT, fitted BOOLEAN, n_species INTEGER, n_species_measured INTEGER, calib_id TEXT, calib_run TEXT,
     calib_created TIMESTAMP, calib_first_visit INTEGER, calib_last_visit INTEGER,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
 CREATE TABLE dm_line_residual_qa_metric (

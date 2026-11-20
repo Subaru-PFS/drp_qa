@@ -44,8 +44,12 @@ median.
 and the visit is reduced against the calibration unadjusted: every good line is
 then measured once, as ``UNFITTED``, and the summary's ``fitted`` is false.
 
-``obsType`` is the frame's observation type, from the ``W_SEQTYP`` header of
-the visit's pfsConfig as ``imageQualityQa`` classifies it (`observationType`:
+``seqType`` is the frame's IIC sequence type, the ``W_SEQTYP`` of the raw
+header or, when that lacks it, of the visit's pfsConfig
+(`pfs.drp.qa.metrics.registry.sequenceOf`), stored as it is read: what the
+frame is judged as is worked out from it afterwards
+(`pfs.drp.qa.metrics.registry.frameType`). ``obsType`` is the observation type
+the same registry gives it, as ``imageQualityQa`` stores it (`observationType`:
 ``trace`` for a quartz, ``arc``, ``twilight``, ...). It is a population column:
 trace centroids are measured on every frame, but on an arc the continuum is
 faint and they scatter two to three times more than on a quartz, so what is
@@ -66,6 +70,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+
+from pfs.drp.qa.metrics import registry
 
 __all__ = [
     "BAD_STATUS",
@@ -93,6 +99,7 @@ __all__ = [
     "observationType",
     "residualSummary",
     "robustRms",
+    "sequenceType",
     "speciesResiduals",
     "wideResiduals",
 ]
@@ -154,6 +161,7 @@ RESIDUAL_COLUMNS = {
     "spectrograph": "int64",
     "cameraSet": "string",
     "obsType": "string",
+    "seqType": "string",
     "reference": "string",
     "description": "string",
     "statusType": "string",
@@ -251,35 +259,25 @@ def observationType(header: Any) -> str | None:
     Returns
     -------
     `str` or `None`
-        ``arc``, ``trace`` (a quartz), ``dark``, ``twilight``, ``allsky`` or
-        ``science`` (``scienceObject`` by its sequence name), ``unknown`` when
-        ``W_SEQTYP`` is absent or unrecognised; `None` without a header. The
-        values of ``iqQaMetrics.obsType``, so one vocabulary of frame types
-        serves both tasks.
+        `pfs.drp.qa.metrics.registry.observationType` of the header's
+        sequence: ``arc``, ``trace`` (a quartz), ``dark``, ``bias``,
+        ``twilight``, ``allsky`` or ``science`` (``scienceObject`` by its
+        sequence name), ``unknown`` when ``W_SEQTYP`` is absent or has no
+        measurement of its own; `None` without a header. The values of
+        ``iqQaMetrics.obsType``: one classification serves both tasks.
     """
     if header is None:
         return None
-    seqType = str(header.get("W_SEQTYP") or "").strip()
-    seqName = str(header.get("W_SEQNAM") or "").strip().lower()
-    if seqType == "scienceArc":
-        return "arc"
-    if seqType == "scienceTrace":
-        return QUARTZ
-    if seqType == "scienceDark":
-        return "dark"
-    if seqType in ("scienceObject", "scienceObject_windowed"):
-        if seqName.startswith("twilight"):
-            return "twilight"
-        return "allsky" if seqName.startswith("sky") else "science"
-    return "unknown"
+    return registry.observationType(*registry.sequenceOf(header))
 
 
 def frameType(rawHeader: Any, pfsConfigHeader: Any) -> str | None:
     """Return the frame's observation type from the raw header, the pfsConfig's standing in.
 
     The raw header always carries ``W_SEQTYP``; Run25 and Run26 pfsConfigs do
-    not. The pfsConfig's type is used when the raw's is missing or
-    ``unknown`` and the pfsConfig's is known.
+    not. The pfsConfig's is read only when the raw header has none
+    (`pfs.drp.qa.metrics.registry.sequenceOf`): a raw whose sequence type has
+    no measurement of its own is ``unknown``, whatever the pfsConfig says.
 
     Parameters
     ----------
@@ -292,14 +290,14 @@ def frameType(rawHeader: Any, pfsConfigHeader: Any) -> str | None:
         As `observationType`: ``unknown`` when neither header says, `None`
         only when neither header is at hand.
     """
-    obsType = observationType(rawHeader)
-    if obsType not in (None, "unknown"):
-        return obsType
-    fallback = observationType(pfsConfigHeader)
-    if fallback not in (None, "unknown"):
-        return fallback
-    # Neither says: unknown when either header is at hand, None when neither is.
-    return obsType or fallback
+    if rawHeader is None and pfsConfigHeader is None:
+        return None
+    return registry.observationType(*registry.sequenceOf(rawHeader, pfsConfigHeader))
+
+
+def sequenceType(rawHeader: Any, pfsConfigHeader: Any) -> str | None:
+    """Return the frame's IIC sequence type, by the headers `frameType` reads; `None` when neither has one."""
+    return registry.sequenceOf(rawHeader, pfsConfigHeader)[0] or None
 
 
 def addObsType(metrics: pd.DataFrame, kinds: pd.DataFrame | None) -> pd.DataFrame:
@@ -728,6 +726,7 @@ def longResiduals(
     dataId: Mapping[str, Any],
     camera: str | None = None,
     obsType: str | None = None,
+    seqType: str | None = None,
 ) -> pd.DataFrame:
     """Return ``dmLineResidualMetrics``: one row per reference, species, ``statusType`` and metric.
 
@@ -746,6 +745,8 @@ def longResiduals(
         `cameraSet`.
     obsType : `str`, optional
         `observationType`.
+    seqType : `str`, optional
+        `sequenceType`.
 
     Returns
     -------
@@ -765,6 +766,7 @@ def longResiduals(
                     "spectrograph": dataId["spectrograph"],
                     "cameraSet": camera,
                     "obsType": obsType,
+                    "seqType": seqType,
                     "reference": reference,
                     "description": description,
                     "statusType": record["statusType"],

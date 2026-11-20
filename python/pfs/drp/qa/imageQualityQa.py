@@ -36,6 +36,7 @@ from pfs.datamodel import FiberStatus, PfsConfig, TargetType
 from pfs.drp.qa.crossDispersion import measureImageWidths, profileFwhm
 from pfs.drp.qa.metrics.lineFlux import speciesLineFlux
 from pfs.drp.qa.metrics.longFormat import metricsFrame, parseSpeciesStats, speciesFrame
+from pfs.drp.qa.metrics.registry import observationType, sequenceOf
 from pfs.drp.qa.metrics.saturation import measureSaturation
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
 from pfs.drp.stella.utils.quality import computeImageQuality
@@ -178,8 +179,12 @@ class ImageQualityQaConnections(
             " lines, or on a quartz trace centroids, per lit fiber), ``nLitFibers``"
             " and ``nFibers`` (the detector's fibers the pfsConfig lights, and"
             " those it lights or hides behind a black dot), ``nTraceRows`` (trace"
-            " centroids in ``lines``), ``traceOnly``, ``obsType``, ``illumination`` (``full``,"
-            " the science fibers, or ``iis``, the 16 engineering fibers), ``seqName``,"
+            " centroids in ``lines``), ``traceOnly``, ``obsType`` (which measurement was made),"
+            " ``illumination`` (``full``,"
+            " the science fibers, or ``iis``, the 16 engineering fibers), ``seqName`` and ``seqType``"
+            " (W_SEQNAM and W_SEQTYP as read: what the frame is judged as comes from them,"
+            " `pfs.drp.qa.metrics.registry.frameType`), ``lamps`` (the lamps the header says were lit,"
+            " obs_pfs's names joined by ``+``; empty when none),"
             " ``calexpRun`` (the RUN"
             " collection of the calexp measured, null without one)."
         ),
@@ -471,8 +476,11 @@ class ImageQualityQaTask(PipelineTask):
           ``config.minFluxstdGoodFrac``, FWHM is treated as sparse.
         * **Twilight** (``scienceObject``, ``W_SEQNAM`` "Twilight ..."): not
           measured; its FWHM would come from the sky lines.
-        * **Dark** (``scienceDark``): nothing to measure.
-        * **Unknown** (``W_SEQTYP`` absent): falls back to the original
+        * **Dark** and **bias** (``darks``, ``masterDarks``, ``biases``,
+          ``masterBiases``): nothing to measure.
+        * **Unknown** (``W_SEQTYP`` absent, or a sequence type with no
+          measurement of its own: fiber profiles, dot roaches, engineering
+          exposures, ...): falls back to the original
           heuristic based on ``n_good_arc`` and ``maxCalexpFlagRate``.
 
         A quantum with nothing to measure still writes its row: what could
@@ -511,7 +519,7 @@ class ImageQualityQaTask(PipelineTask):
             ``dxCenterRms``, ``pctFlagged``, ``nLines``, ``linesPerFiber``,
             ``nLitFibers``, ``nFibers``, ``nTraceRows``, ``nSaturatedLines``,
             ``pctSaturatedPixels``, ``traceOnly``,
-            ``obsType``, ``illumination``, ``seqName``, the log-derived columns,
+            ``obsType``, ``illumination``, ``seqName``, ``seqType``, ``lamps``, the log-derived columns,
             the flag breakdown (``pct<Bit>``), ``visit``, ``arm``,
             ``spectrograph``.  Numbers only: no verdict column.
         iqQaSpeciesMetrics : `pandas.DataFrame`
@@ -523,9 +531,17 @@ class ImageQualityQaTask(PipelineTask):
         # Classify the observation type from FITS header metadata so that the
         # task can route each visit to the correct measurement path explicitly
         # rather than relying on heuristics like the arc-line count.
-        obs_type, is_iis, seq_nam = self._classifyVisit(calexp, pfsConfig, dataId.get("spectrograph"))
+        obs_type, is_iis, seq_nam, seq_typ, lamps = self._classifyVisit(
+            calexp, pfsConfig, dataId.get("spectrograph")
+        )
         self.log.debug(
-            "Visit classification: obs_type=%r is_iis=%s seq_nam=%r for %s", obs_type, is_iis, seq_nam, dataId
+            "Visit classification: obs_type=%r is_iis=%s seq_typ=%r seq_nam=%r lamps=%r for %s",
+            obs_type,
+            is_iis,
+            seq_typ,
+            seq_nam,
+            lamps,
+            dataId,
         )
 
         als = addTraceLambdaToArclines(arcLines, detectorMap)
@@ -735,10 +751,10 @@ class ImageQualityQaTask(PipelineTask):
             force_sparse = True
             self.log.info("Twilight %s: FWHM is not measured on twilight frames.", dataId)
 
-        elif obs_type == "dark":
+        elif obs_type in ("dark", "bias"):
             # Nothing is illuminated: no metric of this task applies.
             force_sparse = True
-            self.log.info("Dark %s: nothing to measure.", dataId)
+            self.log.info("%s %s: nothing to measure.", obs_type.capitalize(), dataId)
 
         elif obs_type in ("science", "allsky"):
             # Science or all-sky plate: no arc lamp, fibers point at sky or
@@ -796,7 +812,7 @@ class ImageQualityQaTask(PipelineTask):
                 )
 
         else:
-            # obs_type == "unknown": W_SEQTYP header absent or unrecognised.
+            # obs_type == "unknown": W_SEQTYP header absent, or a sequence type with no path of its own.
             # Fall back to heuristic: try arc-line path; if too few good lines,
             # try calexp (FLUXSTD-filtered if pfsConfig is available), then
             # fiberProfiles.
@@ -998,6 +1014,8 @@ class ImageQualityQaTask(PipelineTask):
             "obsType": [obs_type],
             "illumination": [illumination],
             "seqName": [seq_nam],
+            "seqType": [seq_typ],
+            "lamps": [lamps],
             # Log-derived metrics
             "isrBadPixels": [logMetrics["isrBadPixels"]],
             "isrTime": [logMetrics["isrTime"]],
@@ -1225,11 +1243,13 @@ class ImageQualityQaTask(PipelineTask):
         calexp: lsst.afw.image.Exposure | None,
         pfsConfig: PfsConfig | None,
         spectrograph: int | None = None,
-    ) -> tuple[str, bool, str]:
+    ) -> tuple[str, bool, str, str, str]:
         """Classify the observation type from FITS header metadata.
 
-        Reads ``W_SEQTYP`` and ``W_SEQNAM`` from either ``calexp`` metadata or
-        ``pfsConfig.header``, and determines whether the illumination is IIS
+        Reads ``W_SEQTYP`` and ``W_SEQNAM`` from the ``calexp`` metadata, or
+        from ``pfsConfig.header`` when the calexp has no ``W_SEQTYP``
+        (`pfs.drp.qa.metrics.registry.sequenceOf`), and determines whether
+        the illumination is IIS
         (engineering fibers) or regular (all 600 science fibers) from the lamp
         headers (`~lsst.obs.pfs.utils.getLamps`) or the pfsConfig
         (`engineeringLit`), which decides when present.
@@ -1246,10 +1266,11 @@ class ImageQualityQaTask(PipelineTask):
         Returns
         -------
         obs_type : `str`
-            One of ``"arc"``, ``"trace"``, ``"science"``, ``"allsky"``
+            `pfs.drp.qa.metrics.registry.observationType` of the sequence:
+            ``"arc"``, ``"trace"``, ``"science"``, ``"allsky"``
             (``W_SEQNAM`` starting "sky"), ``"twilight"`` (starting
-            "twilight"), ``"dark"``, or ``"unknown"`` (when ``W_SEQTYP`` is
-            absent or unrecognised).
+            "twilight"), ``"dark"``, ``"bias"``, or ``"unknown"`` (when
+            ``W_SEQTYP`` is absent or has no measurement of its own).
         is_iis : `bool`
             True when the illumination comes from the 16 IIS engineering
             fibers. The pfsConfig decides when there is one (`engineeringLit`:
@@ -1259,38 +1280,29 @@ class ImageQualityQaTask(PipelineTask):
         seq_nam : `str`
             Raw ``W_SEQNAM`` header value (e.g. ``"Arc: HgCd"``), or an
             empty string when the header is absent.
+        seq_typ : `str`
+            Raw ``W_SEQTYP`` header value (e.g. ``"scienceArc"``), or an
+            empty string when no header has it.
+        lamps : `str`
+            The lamps the lamp headers say were lit, obs_pfs's names sorted
+            and joined by ``+`` (``"Ne"``, ``"Kr_eng"``); empty when none is
+            lit or the headers cannot be read.
         """
         # Prefer calexp metadata; fall back to pfsConfig header.
-        metadata = None
-        if calexp is not None:
-            metadata = calexp.getMetadata()
-        elif pfsConfig is not None and getattr(pfsConfig, "header", None) is not None:
-            metadata = pfsConfig.header
+        calexpHeader = calexp.getMetadata() if calexp is not None else None
+        configHeader = getattr(pfsConfig, "header", None) if pfsConfig is not None else None
+        metadata = calexpHeader if calexpHeader is not None else configHeader
 
         if metadata is None:
-            return "unknown", False, ""
+            return "unknown", False, "", "", ""
 
-        seq_typ = (metadata.get("W_SEQTYP") or "").strip()
-        seq_nam = (metadata.get("W_SEQNAM") or "").strip()
-
-        if seq_typ == "scienceArc":
-            obs_type = "arc"
-        elif seq_typ == "scienceTrace":
-            obs_type = "trace"
-        elif seq_typ == "scienceDark":
-            obs_type = "dark"
-        elif seq_typ in ("scienceObject", "scienceObject_windowed"):
-            name = seq_nam.lower()
-            if name.startswith("twilight"):
-                obs_type = "twilight"
-            elif name.startswith("sky"):
-                obs_type = "allsky"
-            else:
-                obs_type = "science"
-        else:
-            if seq_typ:
-                self.log.debug("Unrecognised W_SEQTYP=%r; using heuristic fallback.", seq_typ)
-            obs_type = "unknown"
+        seq_typ, seq_nam = sequenceOf(calexpHeader, configHeader)
+        if not seq_typ:
+            # No header has the sequence type; the name is kept as the header at hand gives it.
+            seq_nam = (metadata.get("W_SEQNAM") or "").strip()
+        obs_type = observationType(seq_typ, seq_nam)
+        if obs_type == "unknown" and seq_typ:
+            self.log.debug("W_SEQTYP=%r has no measurement of its own; using heuristic fallback.", seq_typ)
 
         # Distinguish IIS (engineering fiber) illumination from regular (all
         # 600 science fibers).  IIS lamp header names end with "_eng"
@@ -1299,11 +1311,13 @@ class ImageQualityQaTask(PipelineTask):
         # lamp headers, which hides an IIS quartz (W_IISQTH): the lamp headers
         # are read without DATA-TYP (PIPE2D-1953).
         is_iis = False
+        lamps = ""
         try:
             from lsst.obs.pfs.utils import getLamps
 
-            lamps = getLamps(_WithoutDataType(metadata))
-            is_iis = any(name.endswith("_eng") for name in lamps)
+            lit = getLamps(_WithoutDataType(metadata))
+            is_iis = any(name.endswith("_eng") for name in lit)
+            lamps = "+".join(sorted(lit))
         except Exception:
             pass  # obs_pfs unavailable or headers missing; assume regular
         # The pfsConfig is the witness reduceExposure goes by, so it decides which fibers
@@ -1320,7 +1334,7 @@ class ImageQualityQaTask(PipelineTask):
                 )
             is_iis = byConfig
 
-        return obs_type, is_iis, seq_nam
+        return obs_type, is_iis, seq_nam, seq_typ, lamps
 
     def _buildProfileData(self, fiberProfiles: FiberProfileSet, detectorMap: DetectorMap) -> pd.DataFrame:
         """Build an image-quality DataFrame from fiber profile trace widths.

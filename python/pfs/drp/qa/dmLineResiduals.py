@@ -42,6 +42,7 @@ from pfs.drp.qa.metrics.lineResiduals import (
     lineTable,
     longResiduals,
     residualSummary,
+    sequenceType,
     speciesResiduals,
 )
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
@@ -72,7 +73,8 @@ class DmLineResidualsConnections(
     rawMetadata = InputConnection(
         name="raw.metadata",
         doc=(
-            "The raw exposure's header: the frame's observation type (obsType) from W_SEQTYP and W_SEQNAM."
+            "The raw exposure's header: the frame's sequence type (seqType, W_SEQTYP as it is read) and the"
+            " observation type it gives with W_SEQNAM (obsType)."
             " The pfsConfig header stands in when the raw's lacks them; Run25 and Run26 pfsConfigs carry"
             " neither, so the raw's is read first."
         ),
@@ -107,7 +109,8 @@ class DmLineResidualsConnections(
             "Line residuals in long format, one row per reference, line species, line set and metric:"
             " ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``obsType`` (the frame's observation type"
             " as imageQualityQa classifies it, from the raw or the pfsConfig header: ``trace`` for a quartz,"
-            " ``arc``, ``twilight``, ...; ``unknown`` when neither header says), ``reference`` (``calib``:"
+            " ``arc``, ``twilight``, ...; ``unknown`` when neither header says), ``seqType`` (the IIC"
+            " sequence type, W_SEQTYP as read; null when neither header has it), ``reference`` (``calib``:"
             " detectorMap_calib; ``visit``: the visit's adjusted detectorMap), ``description``,"
             " ``statusType`` (``BOTH``, ``USED``, ``RESERVED`` lines of the visit's detectorMap fit, or"
             " ``UNFITTED``, every good line, when the fit marked none), ``metric`` (``nLines``,"
@@ -122,7 +125,8 @@ class DmLineResidualsConnections(
     dmLineResidualSummary = OutputConnection(
         name="dmLineResidualSummary",
         doc=(
-            "One row per detector: ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``obsType``, ``fitted``"
+            "One row per detector: ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``obsType``,"
+            " ``seqType``, ``fitted``"
             " (false when the visit's detectorMap fit marked no line, so it is reduced against the"
             " calibration unadjusted),"
             " ``nSpecies`` (species with a line against the calibration), ``nSpeciesMeasured`` (those with"
@@ -248,11 +252,13 @@ class DmLineResidualsTask(PipelineTask):
         lit, _ = litFibers(pfsConfig, np.asarray(detectorMapCalib.fiberId))
         species = speciesResiduals(residuals, self.config.minLines, lit)
         camera = cameraSet(pfsConfig, dataId.get("arm"))
-        obsType = frameType(rawMetadata, getattr(pfsConfig, "header", None))
+        headers = (rawMetadata, getattr(pfsConfig, "header", None))
+        obsType, seqType = frameType(*headers), sequenceType(*headers)
         measured = residualSummary(species, self.config.minLines)
 
         summary = {key: dataId.get(key) for key in ("visit", "arm", "spectrograph")}
-        summary |= {"cameraSet": camera, "obsType": obsType} | measured | _calibProvenance(detectorMapCalib)
+        summary |= {"cameraSet": camera, "obsType": obsType, "seqType": seqType}
+        summary |= measured | _calibProvenance(detectorMapCalib)
         self.log.info(
             "DM line residuals %s%s (%s, %s): %s",
             dataId.get("arm"),
@@ -262,7 +268,7 @@ class DmLineResidualsTask(PipelineTask):
             _describe(species) or "no lines",
         )
         return Struct(
-            dmLineResidualMetrics=longResiduals(species, dataId, camera, obsType),
+            dmLineResidualMetrics=longResiduals(species, dataId, camera, obsType, seqType),
             dmLineResidualSummary=pd.DataFrame([summary]),
             dmLineResidualData=lineTable(residuals, dataId, self.config.maxTraceRowsPerFiber),
         )

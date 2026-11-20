@@ -35,6 +35,7 @@ from pfs.drp.qa.metrics.lineResiduals import (
     observationType,
     residualSummary,
     robustRms,
+    sequenceType,
     speciesResiduals,
     wideResiduals,
 )
@@ -314,7 +315,7 @@ def testLinesPerFiberIsPerLitFiber():
 def testLongFormat():
     calib = FakeCalib()
     _, _, full = measure(makeLines(calib, dx=0.2), calib)
-    long = longResiduals(full, DATA_ID, "brn", QUARTZ)
+    long = longResiduals(full, DATA_ID, "brn", QUARTZ, "scienceTrace")
     assert list(long.columns) == list(RESIDUAL_COLUMNS)
     assert list(RESIDUAL_COLUMNS) == [
         "visit",
@@ -322,6 +323,7 @@ def testLongFormat():
         "spectrograph",
         "cameraSet",
         "obsType",
+        "seqType",
         "reference",
         "description",
         "statusType",
@@ -329,6 +331,9 @@ def testLongFormat():
         "value",
     ]
     assert long.dtypes.astype(str).tolist() == list(RESIDUAL_COLUMNS.values())
+    assert set(long["seqType"]) == {"scienceTrace"} and set(long["obsType"]) == {QUARTZ}
+    # Without a header the sequence type is null, not a guess.
+    assert longResiduals(full, DATA_ID, "brn")["seqType"].isna().all()
     trace = long[(long["description"] == TRACE) & (long["statusType"] == BOTH)]
     trace = trace[trace["reference"] == CALIB].set_index("metric")
     assert trace.loc["medianDeltaX", "value"] == pytest.approx(0.2)
@@ -391,6 +396,9 @@ class Header(dict):
         ({"W_SEQTYP": "scienceObject_windowed", "W_SEQNAM": "sky test"}, "allsky"),
         ({"W_SEQTYP": "scienceObject", "W_SEQNAM": "field"}, "science"),
         ({"W_SEQTYP": "scienceDark"}, "dark"),
+        ({"W_SEQTYP": "darks", "W_SEQNAM": "Morning Dark"}, "dark"),
+        ({"W_SEQTYP": "biases"}, "bias"),
+        ({"W_SEQTYP": "fiberProfiles", "W_SEQNAM": "allHidden"}, "unknown"),
         ({"W_SEQTYP": " scienceTrace ", "W_SEQNAM": None}, QUARTZ),  # padded, as a FITS card can be
         ({"W_SEQNAM": "Trace"}, "unknown"),
         ({"W_SEQTYP": "ditheredFlats"}, "unknown"),
@@ -410,7 +418,8 @@ def testObservationType(header, expected):
         ({"W_SEQTYP": "scienceTrace"}, {}, QUARTZ),  # a Run25/26 pfsConfig lacks the card
         ({}, {"W_SEQTYP": "scienceArc"}, "arc"),  # the pfsConfig stands in for a raw without it
         (None, {"W_SEQTYP": "scienceArc"}, "arc"),
-        ({"W_SEQTYP": "ditheredFlats"}, {"W_SEQTYP": "scienceArc"}, "arc"),
+        # A raw whose sequence type has no measurement of its own is not read as what the pfsConfig says.
+        ({"W_SEQTYP": "ditheredFlats"}, {"W_SEQTYP": "scienceArc"}, "unknown"),
         ({}, {}, "unknown"),
         (None, {}, "unknown"),
         ({}, None, "unknown"),
@@ -418,11 +427,27 @@ def testObservationType(header, expected):
     ],
 )
 def testFrameTypeReadsTheRawFirst(raw, config, expected):
-    """The raw header's type, the pfsConfig's when the raw's is missing or unknown."""
+    """The raw header's type, the pfsConfig's when the raw has none."""
     assert frameType(*(None if header is None else Header(header) for header in (raw, config))) == expected
     # Negative control: when both say, the raw wins over the pfsConfig.
     both = frameType(Header({"W_SEQTYP": "scienceArc"}), Header({"W_SEQTYP": "scienceTrace"}))
     assert both == "arc" and both != QUARTZ
+
+
+@pytest.mark.parametrize(
+    "raw, config, expected",
+    [
+        ({"W_SEQTYP": "fiberProfiles"}, {}, "fiberProfiles"),
+        ({}, {"W_SEQTYP": " scienceArc "}, "scienceArc"),
+        (None, {"W_SEQTYP": "darks"}, "darks"),
+        ({"W_SEQTYP": "rampObject"}, {"W_SEQTYP": "scienceArc"}, "rampObject"),  # as read, classified or not
+        ({}, {}, None),
+        (None, None, None),
+    ],
+)
+def testSequenceTypeIsStoredAsRead(raw, config, expected):
+    """``seqType`` is the header's ``W_SEQTYP`` itself, by the headers `frameType` reads; null without one."""
+    assert sequenceType(*(None if header is None else Header(header) for header in (raw, config))) == expected
 
 
 def testRegistry():
@@ -898,7 +923,9 @@ def testWideResiduals():
         *_longRows(11, "b", 1, None, CALIB, "NeI", UNFITTED, neon),  # no pfsConfig: null camera set
         *_longRows(12, "b", 1, "brn", CALIB, "NeI", BOTH, neon),
     ]
-    metrics = pd.DataFrame(rows).astype(RESIDUAL_COLUMNS)
+    # A table stored before ``seqType`` was a column: it is pivoted as it is.
+    stored = {name: dtype for name, dtype in RESIDUAL_COLUMNS.items() if name != "seqType"}
+    metrics = pd.DataFrame(rows).astype(stored)
     summary = pd.DataFrame(
         {
             "visit": [10, 11, 12],

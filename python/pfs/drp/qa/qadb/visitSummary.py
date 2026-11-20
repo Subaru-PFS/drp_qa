@@ -22,6 +22,7 @@ from typing import Any
 import pandas as pd
 
 from pfs.drp.qa.comparison.queries import readVisitCameras
+from pfs.drp.qa.metrics.registry import NOT_JUDGED
 from pfs.drp.qa.metrics.visitRollup import exitCode, rollupVisits
 from pfs.drp.qa.qadb.reader import FIRST_VISIT, LAST_VISIT, collectionLoaded, readGate
 
@@ -94,16 +95,29 @@ def visitSummary(
 
 
 def formatSummary(rollup: pd.DataFrame, unjudged: Sequence[int] = ()) -> str:
-    """Return a rollup as text: a line of counts, then a line per visit."""
+    """Return a rollup as text: a line of counts, then a line per visit.
+
+    The ``UNKNOWN`` visits whose frame type is not judged
+    (`pfs.drp.qa.metrics.registry.NOT_JUDGED`) are counted on a line of their
+    own, by frame type: the rest of the ``UNKNOWN`` are the ones to look at.
+    """
     counts = rollup["qaStatus"].value_counts()
     head = ", ".join(
         f"{int(counts.get(status, 0))} {status}" for status in ("FAIL", "WARN", "PASS", "UNKNOWN")
     )
     lines = [f"{len(rollup)} visits judged: {head}"]
+    byDesign = rollup.loc[
+        (rollup["qaStatus"] == "UNKNOWN") & rollup["frameType"].isin(NOT_JUDGED), "frameType"
+    ]
+    if len(byDesign):
+        kinds = ", ".join(f"{count} {kind}" for kind, count in byDesign.value_counts().items())
+        lines.append(f"{len(byDesign)} of the UNKNOWN are of frame types that are not judged: {kinds}")
     if unjudged:
         lines.append(f"{len(unjudged)} visits with SpS exposures have no verdict")
     for row in rollup.itertuples(index=False):
         text = f"{row.visit} {row.qaStatus:7s} {row.nImages:2d} images"
+        if row.qaStatus == "UNKNOWN" and row.frameType:
+            text += f" {row.frameType}"
         if row.qaStatus in ("WARN", "FAIL"):
             text += f" (F{row.nFail} W{row.nWarn} P{row.nPass} U{row.nUnknown})"
             text += f" {row.decidedByCamera} {row.qaDecidedBy}"
