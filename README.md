@@ -865,7 +865,9 @@ python bin.src/drpQa.py load -c qaActor/reductions --visits 150001 150002 --opdb
 verdict.
 
 The tests (`tests/qadb/`) run the writer's statements on SQLite through SQLAlchemy, whose `ON CONFLICT` and
-`RETURNING` match PostgreSQL's; set `PFS_QADB_TEST_DSN` to a scratch PostgreSQL to run them there too. The
+`RETURNING` match PostgreSQL's; set `PFS_QADB_TEST_DSN` to a scratch PostgreSQL to run them there too. They
+empty its QA tables, so they refuse a database whose name does not end in `_test` or `_tests`: run them on a copy
+(`CREATE DATABASE qadb_tests TEMPLATE qadb`). The
 schema the tests create (`tests/qadb/conftest.py`) is the one `spt_qa_database`'s migration follows: change both
 together.
 
