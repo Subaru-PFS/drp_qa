@@ -77,6 +77,7 @@ from pfs.drp.qa.metrics.registry import (
     UNJUDGED_SPECIES,
     Check,
     frameType,
+    lampName,
     lampOf,
     specFor,
     whyNotJudged,
@@ -125,6 +126,15 @@ NORMAL_KEYS = ("metric", "camera", "frameType", "selector")
 #: The sky species whose held-back lines give an arm's residual in km/s.
 SKY_LINE = {"b": "OI", "r": "OH", "n": "OH", "m": "OH"}
 
+#: The normal values kept per lamp: metric and frame type of the checks whose ``by`` names the lamp.
+_PER_LAMP = frozenset(
+    (metric, kind)
+    for check in CHECKS.values()
+    if "lamp" in check.by
+    for metric in check.metrics
+    for kind in check.frames
+)
+
 #: Line species of the night sky, and the description of trace centroids, in ``dmLineResidualMetrics``.
 _SKY_SPECIES = ("OH", "O2", "OI", "NaI")
 _TRACE = "Trace"
@@ -162,6 +172,20 @@ def _frameTypes(table: pd.DataFrame) -> list[str | None]:
     """Return the frame type of each row, from the columns that say what the frame is."""
     columns = (_column(table, name) for name in ("seqType", "seqName", "illumination", "obsType"))
     return [frameType(*row) for row in zip(*columns, strict=True)]
+
+
+def _lampKeys(table: pd.DataFrame) -> pd.Series:
+    """Return the selectors of normal values, the lamps among them under the names `measurements` gives.
+
+    A value stored under another spelling of its lamp (``Neon``, or ``Halogen`` for a quartz, whose value is
+    kept with no lamp) still judges the frames it was made for.
+    """
+    selector = table["selector"].fillna("").astype(str)
+    perLamp = pd.Series(
+        [key in _PER_LAMP for key in zip(table["metric"], table["frameType"], strict=True)], index=table.index
+    )
+    quartz = table["frameType"].isin([QUARTZ, IIS_QUARTZ])
+    return selector.where(~perLamp, selector.map(lampName).mask(quartz, ""))
 
 
 def _empty() -> pd.DataFrame:
@@ -351,6 +375,7 @@ def _inForce(rows: pd.DataFrame, normalValues: pd.DataFrame | None, value: str =
         return result
     keys = list(NORMAL_KEYS)
     table = normalValues[normalValues["count"] >= MIN_NORMAL_FRAMES]
+    table = table.assign(selector=_lampKeys(table))
     table = table.assign(
         validFrom=table["validFrom"].astype("int64"),
         **{key: table[key].fillna("").astype(str) for key in keys},
@@ -545,6 +570,11 @@ def gate(
     # The first table that gives an image a type gives its type: iqQaMetrics knows the illumination, the line
     # residuals do not. A table that cannot type it (a header without the sequence type) does not hide another's.
     images = pd.concat(images, ignore_index=True)
+    # Likewise its sequence type, named when the image has no frame type: the first table that has one.
+    named = images["_seqType"].where(
+        images["_seqType"].map(lambda value: isinstance(value, str) and value != "")
+    )
+    images["_seqType"] = named.groupby([images[key] for key in keys]).transform("first")
     images = (
         images.assign(_untyped=images["frameType"].isna())
         .sort_values("_untyped", kind="stable")

@@ -38,8 +38,8 @@ made, and earlier sections to the weekly tag alone.
     header says was lit, the sequence name's only for rows stored without `lamps`, under one spelling per lamp:
     `selector` is `Ne`, `Ar`, `Kr`, `Xe`, `He` where it was `Neon`, `Argon`, `Krypton`, `Xenon`, `Helium`, and a
     quartz frame's is empty (an engineering-fiber quartz had `Halogen`). The values themselves are unchanged
-    (Runs 25 to 30: 1,354 of 1,354; Run31: 242 of 242), but rows of `qa_normal_value` stored under the old
-    spellings no longer match and must be made again.
+    (Runs 25 to 30: 1,354 of 1,354; Run31: 242 of 242). A row of `qa_normal_value` stored under an old spelling
+    still judges the frames it was made for: the gate reads its lamp under the new one (`registry.lampName`).
   - *The visit summary counts frame types that are not judged apart.* `visitRollup.rollupVisits` adds
     `frameType` to its columns, and `drpQa.py summary` prints how many `UNKNOWN` visits are of frame types that
     are not judged, by type, and names the frame type on each `UNKNOWN` visit's line.

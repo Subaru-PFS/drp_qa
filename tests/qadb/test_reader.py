@@ -54,6 +54,23 @@ def butler(StubButler, fixtures):
     return StubButler(fixtures, datasets={"packages": {"drp_qa": "w.2026.44"}})
 
 
+def testAQadbWithoutTheSequenceTypeReadsAndJudgesAsBefore(StubButler, fixtures, SqliteQaDB):
+    """Rows of a qadb from before ``seq_type`` was a column are read, and typed by ``obsType``."""
+    qadb = SqliteQaDB()
+    load(StubButler(fixtures, datasets={"packages": {"drp_qa": "w.2026.44"}}), qadb)
+    atLoad = readGate(qadb, COLLECTION)
+    with qadb.connection() as conn:
+        for table in ("image_quality_qa", "dm_line_residual_qa"):
+            conn.exec_driver_sql(f"ALTER TABLE {table} DROP COLUMN seq_type")
+        conn.exec_driver_sql("ALTER TABLE image_quality_qa DROP COLUMN lamps")
+    tables = readQadb(qadb, COLLECTION)
+    assert "seqType" not in tables["dmLineResidualMetrics"] and "seqType" not in tables["iqQaMetrics"]
+    assert set(tables["dmLineResidualMetrics"]["obsType"]) == {"arc", "trace"}
+    again = gate(iq=tables["iqQaMetrics"], lines=tables["dmLineResidualMetrics"])
+    assert again["frameType"].tolist() == atLoad["frameType"].tolist() == ["arc", "arc", "quartz", "quartz"]
+    assert again["qaStatus"].tolist() == atLoad["qaStatus"].tolist()
+
+
 def byImage(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.sort_values(IMAGE).reset_index(drop=True)
 

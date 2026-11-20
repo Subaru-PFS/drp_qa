@@ -571,6 +571,15 @@ class TestSequenceType:
         )
         assert quartz["qaStatus"] == "FAIL" and quartz["qaReason"].count(";") == 2
 
+    def testTheReasonNamesTheSequenceTypeWhicheverTableHasIt(self):
+        """An image no table types is named by the first table that read its sequence type."""
+        iq = frame(iqRow(obsType="unknown", seqType=""))
+        lines = frame(lineRow("medianDeltaX", 0.1, obsType="unknown", seqType="rampObject"))
+        assert verdict(iq=iq, lines=lines)["qaReason"] == "no frame type for sequence type rampObject"
+        assert verdict(iq=iq.drop(columns="seqType"), lines=lines)["qaReason"].endswith("rampObject")
+        # Negative control: with no table saying, none is named.
+        assert verdict(iq=iq, lines=lines.assign(seqType=None))["qaReason"] == "no frame type"
+
     def testTheSequenceTypeDecidesNotTheObservationType(self):
         """``obsType`` says how the frame was measured; with a sequence type stored it types nothing."""
         measuredAsTrace = iqRow(obsType="trace", seqType="fiberProfiles", medFwhm=9.0, linesPerFiber=1.0)
@@ -637,6 +646,28 @@ class TestLamp:
         # Negative control: another lamp's header finds none.
         other = iqRow(seqName="x", lamps="Ar", medFwhm=2.0, linesPerFiber=80.0)
         assert verdict(iq=frame(other), normalValues=normal)["qaStatus"] == "UNKNOWN"
+
+    def testAValueStoredUnderAnotherSpellingStillJudges(self):
+        """Normal values stored as ``Neon`` or, for a quartz, ``Halogen`` judge the frames they were made for."""
+        stored = frame(
+            normalRow("medFwhm", "r1", "arc", "Neon", 2.0),
+            normalRow("linesPerFiber", "r", "arc", "Neon", 80.0),
+            normalRow("medFwhm", "r1", "iisQuartz", "Halogen", 3.0),
+        )
+        arc = verdict(iq=frame(iqRow(medFwhm=2.2, linesPerFiber=30.0)), normalValues=stored)
+        assert arc["qaStatus"] == "FAIL" and arc["qaReason"].count(";") == 1
+        quartz = iqRow(obsType="trace", illumination="iis", seqName="ImageQuality (Halogen)", medFwhm=3.2)
+        assert verdict(iq=frame(quartz), normalValues=stored)["qaDecidedBy"] == "width"
+        # Negative control: another lamp's value, however spelled, judges neither number.
+        other = stored.assign(selector=["Argon", "Ar", "Halogen"])
+        unjudged = verdict(iq=frame(iqRow(medFwhm=2.2, linesPerFiber=30.0)), normalValues=other)
+        assert (unjudged["qaStatus"], unjudged["qaReason"]) == ("UNKNOWN", "no normal value")
+        # A species, the key of a scatter check, is not a lamp and is matched as it is spelled.
+        lines = frame(lineRow("robustRmsDeltaX", 0.2, "H", "visit", "RESERVED", obsType="arc"))
+        byName = frame(normalRow("robustRmsDeltaX", "r1", "arc", "Hydrogen", 0.1))
+        assert verdict(iq=frame(iqRow()), lines=lines, normalValues=byName)["qaStatus"] == "UNKNOWN"
+        bySpecies = frame(normalRow("robustRmsDeltaX", "r1", "arc", "H", 0.1))
+        assert verdict(iq=frame(iqRow()), lines=lines, normalValues=bySpecies)["qaStatus"] == "FAIL"
 
     def testAQuartzIsKeptPerCameraWhateverItsLampSays(self):
         for lamps in ({}, {"lamps": "Quartz"}):

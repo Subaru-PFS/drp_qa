@@ -58,7 +58,7 @@ The 13 checks, as `CHECKS` holds them:
 | `scatterX` | line scatter in x | `robustRmsDeltaX` | arcs, quartz | all | +20 % | +50 % | normal value per camera and species |
 | `scatterY` | line scatter in y | `robustRmsDeltaY` | arcs | all | +50 % | +150 % | normal value per camera and species |
 | `linesPerFiberArc` | lines per lit fiber | `linesPerFiber` | arcs, engineering-fiber arcs | all | −25 % | −50 % | normal value per arm and lamp |
-| `linesPerFiberQuartz` | lines per lit fiber | `linesPerFiber` | quartz, engineering-fiber quartz | all | −2.5 % | −5 % | normal value per arm and lamp |
+| `linesPerFiberQuartz` | lines per lit fiber | `linesPerFiber` | quartz, engineering-fiber quartz | all | −2.5 % | −5 % | normal value per arm |
 
 The frame types that are judged are `science`, `allsky`, `arc`, `quartz`, `twilight`, `iisArc` and `iisQuartz`.
 The last two are lit through the 16 engineering fibers of each spectrograph by the IIS lamps.
@@ -73,7 +73,7 @@ A frame type either has checks or is named in `registry.NOT_JUDGED`, with the re
 
 | Frame type | Sequence types | Why it is not judged |
 | --- | --- | --- |
-| `dark` | `darks`, `masterDarks` | No lamp or sky is exposed. |
+| `dark` | `darks`, `masterDarks` (and `scienceDark`, which the IIC does not write) | No lamp or sky is exposed. |
 | `bias` | `biases`, `masterBiases` | No lamp or sky is exposed. |
 | `fiberProfile` | `fiberProfiles` | The slit is dithered in x between the exposures, and one group of fibers is lit at a time. |
 | `dotRoach` | `dotRoach`, `dotRoachInit`, `dotRoachNew`, `dotScan` | Cobras are moved between the exposures, so the fibers lit change within the sequence. |
@@ -158,7 +158,8 @@ why.
 - The lamp of an arc is the one its header says was lit (`iqQaMetrics.lamps`), under one spelling per lamp
   (`registry.lampOf`: `Ne` for `Ne`, `Ne_eng` and `Neon`). A row stored without `lamps` takes it from the sequence
   name (`Arc: Neon`, `ImageQuality (Kr)`), which says nothing for a sequence named otherwise. A quartz has one
-  lamp, so its values are kept per camera or arm alone.
+  lamp, so its values are kept per camera or arm alone. A value stored under another spelling of its lamp
+  (`Neon`, or `Halogen` on a quartz) is read under the one above (`registry.lampName`).
 - A frame is judged by the latest accepted row at or before its visit, so the previous run's values stay in force
   until the run's own are accepted.
 - Normal values belong to a collection. A frame is judged by its own collection's values; in a collection with

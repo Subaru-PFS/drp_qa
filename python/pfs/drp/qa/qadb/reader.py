@@ -194,8 +194,10 @@ def readQadb(
         tables[source] = frame.reset_index(drop=True)
     keys = list(IMAGE_KEYS)
     summary = tables["dmLineResidualSummary"]
+    # A qadb from before ``seq_type`` was a column has none to give: its rows are typed by ``obsType``.
+    carried = [column for column in ("cameraSet", "obsType", "seqType") if column in summary]
     tables["dmLineResidualMetrics"] = tables["dmLineResidualMetrics"].merge(
-        summary[[*keys, "cameraSet", "obsType", "seqType"]].drop_duplicates(keys), on=keys, how="left"
+        summary[[*keys, *carried]].drop_duplicates(keys), on=keys, how="left"
     )
     visits = sorted({int(visit) for table in tables.values() for visit in table["visit"]})
     times = (

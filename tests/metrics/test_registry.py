@@ -29,6 +29,7 @@ from pfs.drp.qa.metrics.registry import (
     WINDOWED,
     Check,
     frameType,
+    lampName,
     lampOf,
     observationType,
     sequenceOf,
@@ -313,10 +314,33 @@ def testWhyNotJudged():
         ("Bootstrap", "HgAr_eng", "HgAr"),
         ("x", "Ne+HgAr", "HgAr+Ne"),
         ("x", " Quartz_eng ", "Quartz"),
+        ("x", "Kr_eng + Ne_eng", "Kr+Ne"),
+        # Several lamps in a name are one key with the header's, whatever their order and spelling.
+        ("Arc: Neon+Krypton", None, "Kr+Ne"),
+        ("Arc: Ne+HgAr", "", "HgAr+Ne"),
     ],
 )
 def testLampOf(seqName, lamps, lamp):
     assert lampOf(seqName, lamps) == lamp
+
+
+@pytest.mark.parametrize(
+    "spelled, name",
+    [
+        ("Neon", "Ne"),
+        ("Ne_eng", "Ne"),
+        (" argon ", "Ar"),
+        ("Halogen", "Quartz"),
+        ("HgAr+Neon", "HgAr+Ne"),
+        ("SM1", "SM1"),
+        ("", ""),
+        (None, ""),
+        (float("nan"), ""),
+    ],
+)
+def testLampName(spelled, name):
+    assert lampName(spelled) == name
+    assert lampName(lampName(spelled)) == name
 
 
 def testLampOfGivesOneNamePerLamp():

@@ -67,6 +67,7 @@ __all__ = [
     "addSpecies",
     "checkFor",
     "frameType",
+    "lampName",
     "lampOf",
     "observationType",
     "sequenceOf",
@@ -358,25 +359,39 @@ def lampOf(seqName: object, lamps: object = None) -> str:
     Returns
     -------
     `str`
-        One spelling per lamp whatever the source (``Ne`` for ``Neon``,
-        ``Ne_eng`` and ``Ne``), several joined by ``+`` in order. The
-        engineering-fiber suffix is dropped: the frame type says it. A part of
-        a name that is no known lamp is returned as it is.
+        `lampName` of the header's lamps, else of the part of the sequence
+        name.
     """
-    header = sorted({_lamp(part.removesuffix("_eng")) for part in _text(lamps).split("+") if part.strip()})
+    header = lampName(lamps)
     if header:
-        return "+".join(header)
+        return header
     name = _text(seqName)
     if ":" in name:
-        return _lamp(name.split(":", 1)[-1])
+        return lampName(name.split(":", 1)[-1])
     match = re.search(r"\(([^()]+)\)\s*$", name)
-    return _lamp(match.group(1)) if match else ""
+    return lampName(match.group(1)) if match else ""
 
 
-def _lamp(name: str) -> str:
-    """Return the one spelling of a lamp name; the name itself, stripped, when it is not a known lamp."""
-    name = name.strip()
-    return _LAMPS.get(name.lower(), name)
+def lampName(lamps: object) -> str:
+    """Return lamps under the names a normal value is kept by, whichever way they are spelled.
+
+    Parameters
+    ----------
+    lamps : `str`
+        One lamp or several joined by ``+``, as a header, a sequence name or
+        a stored normal value spells them.
+
+    Returns
+    -------
+    `str`
+        One spelling per lamp whatever the source (``Ne`` for ``Neon``,
+        ``Ne_eng`` and ``Ne``), several sorted and joined by ``+``. The
+        engineering-fiber suffix is dropped: the frame type says it. A part
+        that is no known lamp is returned as it is, stripped. Empty for
+        `None`, NaN or an empty string.
+    """
+    parts = (part.strip().removesuffix("_eng") for part in _text(lamps).split("+"))
+    return "+".join(sorted({_LAMPS.get(part.lower(), part) for part in parts if part}))
 
 
 def addSpecies(metrics):
