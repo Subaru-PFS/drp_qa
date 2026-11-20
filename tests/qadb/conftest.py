@@ -5,7 +5,9 @@ The database is SQLite in memory through SQLAlchemy, behind the same
 `pfs.utils.database.db.DB`: the ``INSERT ... ON CONFLICT DO UPDATE ...
 RETURNING`` statements the writer builds run unchanged on both. ``DDL`` below
 is the schema the code here writes to: numbers tables without a verdict, one
-``qa_gate`` row per image, and ``qa_normal_value``. It is the proposal
+``qa_gate`` row per image, and ``qa_normal_value``. The numbers the gate reads
+are ``DOUBLE PRECISION``, so a number judged again from qadb is the one judged
+at load. It is the proposal
 ``spt_qa_database``'s migration follows; change both together. Set
 ``PFS_QADB_TEST_DSN`` (``dbname=... user=... host=... port=...``) to run the
 same tests against a scratch PostgreSQL through
@@ -45,8 +47,9 @@ CREATE TABLE image_quality_qa (
     processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
     pfs_visit_id INTEGER REFERENCES pfs_visit,
     camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1), obs_type TEXT, seq_name TEXT,
-    illumination TEXT, trace_only BOOLEAN, med_fwhm REAL, med_dx_center REAL, dx_center_rms REAL, pct_flagged REAL,
-    pct_low_sn REAL, pct_meas_fail REAL, n_lines INTEGER, lines_per_fiber REAL, n_lit_fibers INTEGER,
+    illumination TEXT, trace_only BOOLEAN, med_fwhm DOUBLE PRECISION, med_dx_center DOUBLE PRECISION,
+    dx_center_rms REAL, pct_flagged REAL, pct_low_sn REAL, pct_meas_fail REAL, n_lines INTEGER,
+    lines_per_fiber DOUBLE PRECISION, n_lit_fibers INTEGER,
     n_fibers INTEGER, n_trace_rows INTEGER, n_saturated_lines INTEGER, pct_saturated_pixels REAL,
     calexp_run TEXT, isr_bad_pixels INTEGER, isr_time REAL, cosmic_ray_count INTEGER,
     cosmic_ray_pixels INTEGER, cosmic_ray_time REAL, reduce_exposure_time REAL, fit_chi2 REAL,
@@ -70,7 +73,7 @@ CREATE TABLE dm_line_residual_qa (
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
 CREATE TABLE dm_line_residual_qa_metric (
     processing_id INTEGER, pfs_visit_id INTEGER, camera_name VARCHAR(2), reference TEXT, description TEXT,
-    status_type TEXT, metric TEXT, value REAL,
+    status_type TEXT, metric TEXT, value DOUBLE PRECISION,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name, reference, description, status_type, metric),
     FOREIGN KEY (processing_id, pfs_visit_id, camera_name)
         REFERENCES dm_line_residual_qa (processing_id, pfs_visit_id, camera_name) ON DELETE CASCADE);
@@ -85,8 +88,9 @@ CREATE TABLE twilight_qa (
     pfs_visit_id INTEGER REFERENCES pfs_visit,
     camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1), iic_sequence_id INTEGER, seq_name TEXT,
     n_exposures INTEGER, snr REAL, brightness REAL, too_faint BOOLEAN, n_reference INTEGER, noise REAL,
-    sat_fraction REAL, n_measured INTEGER, twilight_level_offset REAL, twilight_resid_rms REAL,
-    twilight_patch REAL, twilight_arm_mean REAL, twilight_arm_half_diff REAL,
+    sat_fraction REAL, n_measured INTEGER, twilight_level_offset DOUBLE PRECISION,
+    twilight_resid_rms DOUBLE PRECISION, twilight_patch DOUBLE PRECISION, twilight_arm_mean REAL,
+    twilight_arm_half_diff REAL,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
 CREATE TABLE qa_normal_value (
     normal_value_id INTEGER PRIMARY KEY AUTOINCREMENT, collection_name TEXT NOT NULL, metric TEXT NOT NULL,
