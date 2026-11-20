@@ -247,9 +247,9 @@ class TestRelative:
     """Checks against the camera's normal value."""
 
     NORMAL = frame(
-        normalRow("medFwhm", "r1", "arc", "Neon", 2.0),
+        normalRow("medFwhm", "r1", "arc", "Ne", 2.0),
         normalRow("medFwhm", "r1", "quartz", "", 3.0),
-        normalRow("linesPerFiber", "r", "arc", "Neon", 80.0),
+        normalRow("linesPerFiber", "r", "arc", "Ne", 80.0),
         normalRow("linesPerFiber", "r", "quartz", "", 4000.0),
         normalRow("robustRmsDeltaX", "r1", "arc", "NeI", 0.05),
         normalRow("robustRmsDeltaX", "r1", "quartz", "Trace", 0.02),
@@ -338,30 +338,30 @@ class TestRelative:
         assert row["qaStatus"] == "UNKNOWN" and row["qaReason"] == "no normal value"
         # Another camera's, lamp's or frame type's value is none.
         for wrong in (
-            normalRow("medFwhm", "r2", "arc", "Neon", 2.0),
-            normalRow("medFwhm", "r1", "arc", "Argon", 2.0),
-            normalRow("medFwhm", "r1", "iisArc", "Neon", 2.0),
-            normalRow("medFwhm", "r", "arc", "Neon", 2.0),
+            normalRow("medFwhm", "r2", "arc", "Ne", 2.0),
+            normalRow("medFwhm", "r1", "arc", "Ar", 2.0),
+            normalRow("medFwhm", "r1", "iisArc", "Ne", 2.0),
+            normalRow("medFwhm", "r", "arc", "Ne", 2.0),
         ):
             assert verdict(iq=iq, normalValues=frame(wrong))["qaStatus"] == "UNKNOWN", wrong
         assert (
-            verdict(iq=iq, normalValues=frame(normalRow("medFwhm", "r1", "arc", "Neon", 2.0)))["qaStatus"]
+            verdict(iq=iq, normalValues=frame(normalRow("medFwhm", "r1", "arc", "Ne", 2.0)))["qaStatus"]
             == "FAIL"
         )
 
     def testTooFewFramesIsNoNormalValue(self):
         iq = frame(iqRow(medFwhm=9.0, linesPerFiber=80.0))
-        few = frame(normalRow("medFwhm", "r1", "arc", "Neon", 2.0, count=MIN_NORMAL_FRAMES - 1))
+        few = frame(normalRow("medFwhm", "r1", "arc", "Ne", 2.0, count=MIN_NORMAL_FRAMES - 1))
         assert verdict(iq=iq, normalValues=few)["qaStatus"] == "UNKNOWN"
-        enough = frame(normalRow("medFwhm", "r1", "arc", "Neon", 2.0, count=MIN_NORMAL_FRAMES))
+        enough = frame(normalRow("medFwhm", "r1", "arc", "Ne", 2.0, count=MIN_NORMAL_FRAMES))
         assert verdict(iq=iq, normalValues=enough)["qaStatus"] == "FAIL"
 
     def testLatestValueAtOrBeforeTheVisit(self):
         """The previous run's value stays in force until the new one is valid."""
         normal = frame(
-            normalRow("medFwhm", "r1", "arc", "Neon", 2.0, validFrom=500),
-            normalRow("medFwhm", "r1", "arc", "Neon", 2.2, validFrom=VISIT),
-            normalRow("medFwhm", "r1", "arc", "Neon", 3.0, validFrom=VISIT + 1),
+            normalRow("medFwhm", "r1", "arc", "Ne", 2.0, validFrom=500),
+            normalRow("medFwhm", "r1", "arc", "Ne", 2.2, validFrom=VISIT),
+            normalRow("medFwhm", "r1", "arc", "Ne", 3.0, validFrom=VISIT + 1),
         )
         rows = [iqRow(medFwhm=2.2, linesPerFiber=80.0, visit=visit) for visit in (499, 999, VISIT, VISIT + 1)]
         result = gate(iq=frame(*rows), normalValues=normal).set_index("visit")["qaStatus"]
@@ -374,7 +374,7 @@ class TestRelative:
         """b-arm Argon: under 5 lines per lit fiber the width rests on a handful of lines."""
         sparse = frame(iqRow(medFwhm=9.0, linesPerFiber=4.9))
         normal = pd.concat(
-            [self.NORMAL, frame(normalRow("linesPerFiber", "r", "arc", "Neon", 4.0))], ignore_index=True
+            [self.NORMAL, frame(normalRow("linesPerFiber", "r", "arc", "Ne", 4.0))], ignore_index=True
         )
         normal = normal.drop(index=2)
         row = verdict(iq=sparse, normalValues=normal)
@@ -462,13 +462,28 @@ class TestImage:
             assert text in row["qaReason"]
 
     def testNoFrameTypeIsUnknownNeverPass(self):
-        for obsType in ("unknown", "dark", None):
+        for obsType in ("unknown", None):
             row = verdict(
                 iq=frame(iqRow(obsType=obsType, medFwhm=2.0, linesPerFiber=80.0)),
                 normalValues=TestRelative.NORMAL,
             )
             assert row["qaStatus"] == "UNKNOWN" and row["qaReason"] == "no frame type"
             assert row["frameType"] is None
+
+    def testAnUnclassifiedSequenceTypeIsNamedInTheReason(self):
+        """A sequence type the registry lacks is untyped, and the reason says which it is."""
+        row = verdict(
+            iq=frame(iqRow(obsType="unknown", seqType="rampObject", medFwhm=2.0, linesPerFiber=80.0)),
+            normalValues=TestRelative.NORMAL,
+        )
+        assert (row["frameType"], row["qaStatus"]) == (None, "UNKNOWN")
+        assert row["qaReason"] == "no frame type for sequence type rampObject"
+        # Negative control: it is not judged as the arc its numbers would pass for.
+        asArc = verdict(
+            iq=frame(iqRow(seqType="scienceArc", medFwhm=2.0, linesPerFiber=80.0)),
+            normalValues=TestRelative.NORMAL,
+        )
+        assert asArc["qaStatus"] == "PASS" != row["qaStatus"]
 
     def testTheFirstTableThatGivesATypeGivesIt(self):
         """A table whose header cannot type the frame does not leave a judged image without a frame type."""
@@ -498,6 +513,169 @@ class TestImage:
         iq.index = [7]
         normal = TestRelative.NORMAL.astype({"validFrom": "float64"})
         assert verdict(iq=iq, normalValues=normal)["qaStatus"] == "FAIL"
+
+
+class TestSequenceType:
+    """What a frame is comes from its sequence type; a frame type that is not judged says why."""
+
+    #: A dark as Run31 stored them: the pfsConfig's engineering fibers GOOD, a width and a trace-centre offset.
+    DARK = {  # noqa: RUF012
+        "obsType": "unknown",
+        "seqType": "darks",
+        "seqName": "Morning Dark",
+        "illumination": "iis",
+        "medFwhm": 15.0,
+        "medDxCenter": 6.0,
+    }
+
+    def testADarkIsNamedAndNotJudged(self):
+        row = verdict(iq=frame(iqRow(**self.DARK)), normalValues=TestRelative.NORMAL)
+        assert (row["frameType"], row["qaStatus"], row["qaDecidedBy"]) == ("dark", "UNKNOWN", "")
+        assert row["qaReason"] == "dark frames are not judged: No lamp or sky is exposed."
+        # Negative control: the same numbers on an engineering-fiber quartz fail its trace-centre check, so it
+        # is the type that keeps the dark from a verdict, not the numbers.
+        quartz = verdict(iq=frame(iqRow(**self.DARK | {"seqType": "scienceTrace"})))
+        assert (quartz["frameType"], quartz["qaStatus"], quartz["qaDecidedBy"]) == (
+            "iisQuartz",
+            "FAIL",
+            "traceCentreOffset",
+        )
+
+    @pytest.mark.parametrize(
+        "seqType, kind",
+        [
+            ("fiberProfiles", "fiberProfile"),
+            ("dotRoach", "dotRoach"),
+            ("dotRoach_continued", "dotRoach"),
+            ("slitThroughFocus", "throughFocus"),
+            ("flats_binned", "engineering"),
+            ("scienceTrace_windowed", "windowed"),
+        ],
+    )
+    def testAFrameThatDiffersByDesignIsNotJudgedAsAQuartz(self, seqType, kind):
+        """Dithered, refocused, binned or part-read frames get no quartz verdict, whatever was measured on them."""
+        lines = frame(lineRow("medianDeltaX", 2.5, obsType="unknown", seqType=seqType))
+        iq = frame(iqRow(obsType="unknown", seqType=seqType, seqName="x", medFwhm=9.0, linesPerFiber=1.0))
+        normal = frame(
+            normalRow("medFwhm", "r1", "quartz", "", 3.2),
+            normalRow("linesPerFiber", "r", "quartz", "", 4000.0),
+        )
+        row = verdict(iq=iq, lines=lines, normalValues=normal)
+        assert (row["frameType"], row["qaStatus"]) == (kind, "UNKNOWN")
+        assert row["qaReason"].startswith(f"{kind} frames are not judged: ")
+        # Negative control: as a quartz the same numbers fail three checks.
+        quartz = verdict(
+            iq=iq.assign(seqType="scienceTrace"),
+            lines=lines.assign(seqType="scienceTrace", obsType="trace"),
+            normalValues=normal,
+        )
+        assert quartz["qaStatus"] == "FAIL" and quartz["qaReason"].count(";") == 2
+
+    def testTheReasonNamesTheSequenceTypeWhicheverTableHasIt(self):
+        """An image no table types is named by the first table that read its sequence type."""
+        iq = frame(iqRow(obsType="unknown", seqType=""))
+        lines = frame(lineRow("medianDeltaX", 0.1, obsType="unknown", seqType="rampObject"))
+        assert verdict(iq=iq, lines=lines)["qaReason"] == "no frame type for sequence type rampObject"
+        assert verdict(iq=iq.drop(columns="seqType"), lines=lines)["qaReason"].endswith("rampObject")
+        # Negative control: with no table saying, none is named.
+        assert verdict(iq=iq, lines=lines.assign(seqType=None))["qaReason"] == "no frame type"
+
+    def testTheSequenceTypeDecidesNotTheObservationType(self):
+        """``obsType`` says how the frame was measured; with a sequence type stored it types nothing."""
+        measuredAsTrace = iqRow(obsType="trace", seqType="fiberProfiles", medFwhm=9.0, linesPerFiber=1.0)
+        assert verdict(iq=frame(measuredAsTrace))["frameType"] == "fiberProfile"
+        heuristic = iqRow(obsType="unknown", seqType="scienceArc", medFwhm=2.0, linesPerFiber=80.0)
+        row = verdict(iq=frame(heuristic), normalValues=TestRelative.NORMAL)
+        assert (row["frameType"], row["qaStatus"]) == ("arc", "PASS")
+
+    def testRowsStoredWithoutASequenceTypeKeepTheirType(self):
+        """Rows from before ``seqType`` was a column, or with it null, are typed by ``obsType`` as they were."""
+        for missing in ({}, {"seqType": None}, {"seqType": ""}, {"seqType": float("nan")}):
+            row = verdict(
+                iq=frame(iqRow(medFwhm=2.0, linesPerFiber=80.0, **missing)), normalValues=TestRelative.NORMAL
+            )
+            assert (row["frameType"], row["qaStatus"]) == ("arc", "PASS")
+
+    def testALineTableTellsATwilightFromScienceWithoutTheName(self):
+        """The line residuals carry no sequence name: their ``obsType``, made from it, splits a science sequence."""
+        twilight = frame(lineRow("medianDeltaX", 0.7, seqType="scienceObject", obsType="twilight"))
+        row = verdict(lines=twilight)
+        assert (row["frameType"], row["qaStatus"]) == ("twilight", "UNKNOWN")
+        # Negative control: a science frame with the same offset is judged on it.
+        science = verdict(lines=frame(lineRow("medianDeltaX", 0.7, seqType="scienceObject")))
+        assert (science["frameType"], science["qaStatus"]) == ("science", "WARN")
+
+
+class TestLamp:
+    """The lamp a normal value is kept per: the header's when stored, the sequence name's otherwise."""
+
+    NORMAL = frame(
+        normalRow("medFwhm", "r1", "iisArc", "Kr", 2.0),
+        normalRow("medFwhm", "r1", "iisArc", "Ne", 1.0),
+        normalRow("medFwhm", "r1", "quartz", "", 3.2),
+    )
+
+    def iis(self, **values):
+        return iqRow(illumination="iis", seqName="ImageQuality", medFwhm=2.0, linesPerFiber=80.0, **values)
+
+    def testTheHeaderLampJudgesAFrameWhoseNameHasNone(self):
+        row = verdict(iq=frame(self.iis(lamps="Kr_eng")), normalValues=self.NORMAL)
+        assert (row["frameType"], row["qaStatus"]) == ("iisArc", "PASS")
+        # Negative control: the same width against the other lamp's normal value fails, so the lamp matters...
+        assert verdict(iq=frame(self.iis(lamps="Ne_eng")), normalValues=self.NORMAL)["qaStatus"] == "FAIL"
+        # ...and with neither a header lamp nor one in the name there is no normal value to judge by.
+        for lamps in ({}, {"lamps": ""}, {"lamps": None}):
+            unnamed = verdict(iq=frame(self.iis(**lamps)), normalValues=self.NORMAL)
+            assert (unnamed["qaStatus"], unnamed["qaReason"]) == ("UNKNOWN", "no normal value")
+
+    def testTheHeaderLampWinsOverTheName(self):
+        named = self.iis(lamps="Kr_eng") | {"seqName": "ImageQuality (Ne)"}
+        assert verdict(iq=frame(named), normalValues=self.NORMAL)["qaStatus"] == "PASS"
+        # Negative control: by its name alone the frame is judged as Neon, and fails.
+        byName = self.iis() | {"seqName": "ImageQuality (Ne)"}
+        assert verdict(iq=frame(byName), normalValues=self.NORMAL)["qaStatus"] == "FAIL"
+
+    def testEitherSpellingOfALampIsOneKey(self):
+        """``Arc: Neon`` and a header's ``Ne`` find the same normal value."""
+        normal = frame(normalRow("medFwhm", "r1", "arc", "Ne", 2.0))
+        for row in (
+            iqRow(medFwhm=2.0, linesPerFiber=80.0),
+            iqRow(seqName="x", lamps="Ne", medFwhm=2.0, linesPerFiber=80.0),
+        ):
+            assert verdict(iq=frame(row), normalValues=normal)["qaStatus"] == "PASS"
+        # Negative control: another lamp's header finds none.
+        other = iqRow(seqName="x", lamps="Ar", medFwhm=2.0, linesPerFiber=80.0)
+        assert verdict(iq=frame(other), normalValues=normal)["qaStatus"] == "UNKNOWN"
+
+    def testAValueStoredUnderAnotherSpellingStillJudges(self):
+        """Normal values stored as ``Neon`` or, for a quartz, ``Halogen`` judge the frames they were made for."""
+        stored = frame(
+            normalRow("medFwhm", "r1", "arc", "Neon", 2.0),
+            normalRow("linesPerFiber", "r", "arc", "Neon", 80.0),
+            normalRow("medFwhm", "r1", "iisQuartz", "Halogen", 3.0),
+        )
+        arc = verdict(iq=frame(iqRow(medFwhm=2.2, linesPerFiber=30.0)), normalValues=stored)
+        assert arc["qaStatus"] == "FAIL" and arc["qaReason"].count(";") == 1
+        quartz = iqRow(obsType="trace", illumination="iis", seqName="ImageQuality (Halogen)", medFwhm=3.2)
+        assert verdict(iq=frame(quartz), normalValues=stored)["qaDecidedBy"] == "width"
+        # Negative control: another lamp's value, however spelled, judges neither number.
+        other = stored.assign(selector=["Argon", "Ar", "Halogen"])
+        unjudged = verdict(iq=frame(iqRow(medFwhm=2.2, linesPerFiber=30.0)), normalValues=other)
+        assert (unjudged["qaStatus"], unjudged["qaReason"]) == ("UNKNOWN", "no normal value")
+        # A species, the key of a scatter check, is not a lamp and is matched as it is spelled.
+        lines = frame(lineRow("robustRmsDeltaX", 0.2, "H", "visit", "RESERVED", obsType="arc"))
+        byName = frame(normalRow("robustRmsDeltaX", "r1", "arc", "Hydrogen", 0.1))
+        assert verdict(iq=frame(iqRow()), lines=lines, normalValues=byName)["qaStatus"] == "UNKNOWN"
+        bySpecies = frame(normalRow("robustRmsDeltaX", "r1", "arc", "H", 0.1))
+        assert verdict(iq=frame(iqRow()), lines=lines, normalValues=bySpecies)["qaStatus"] == "FAIL"
+
+    def testAQuartzIsKeptPerCameraWhateverItsLampSays(self):
+        for lamps in ({}, {"lamps": "Quartz"}):
+            quartz = iqRow(obsType="trace", seqName="Trace", medFwhm=3.2, **lamps)
+            assert verdict(iq=frame(quartz), normalValues=self.NORMAL)["qaStatus"] == "PASS"
+        # Negative control: an arc's lamp is part of its key, so a lamp it has no value for is not judged.
+        arc = iqRow(seqName="x", lamps="Quartz", medFwhm=3.2, linesPerFiber=80.0)
+        assert verdict(iq=frame(arc), normalValues=self.NORMAL)["qaStatus"] == "UNKNOWN"
 
 
 def testLongLines():

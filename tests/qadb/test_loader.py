@@ -41,7 +41,7 @@ NUMBERS = (
 #: Normal widths of the fixture's images (measured 2.76, 3.18 and 3.33 px): r1's arc is +10 % (FAIL), b1's
 #: quartz +2.4 % (PASS) and r1's quartz +3.9 % (WARN).
 WIDTHS = {
-    ("medFwhm", "r1", "arc", "Argon"): 2.5,
+    ("medFwhm", "r1", "arc", "Ar"): 2.5,
     ("medFwhm", "b1", "quartz", ""): 3.1,
     ("medFwhm", "r1", "quartz", ""): 3.2,
 }

@@ -16,20 +16,35 @@ it.
 
 `EXCLUSIONS` names what is measured and stored but not judged, with the reason.
 
+What a frame is comes from its IIC sequence, here and nowhere else:
+`SEQUENCE_TYPES` gives each sequence type its frame type, and `frameType` adds
+the sequence name and the illumination. A frame type either has checks or is
+in `NOT_JUDGED` with the reason it has none. A sequence type the table lacks
+gives no frame type, so a new one shows up as untyped instead of being judged
+as something it is not.
+
 Nothing here imports the LSST stack.
 """
 
 import math
 import re
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
 __all__ = [
     "ALLSKY",
     "ARC",
+    "BIAS",
     "CHECKS",
+    "DARK",
+    "DITHERED",
+    "DOME_FLAT",
+    "DOT_ROACH",
+    "ENGINEERING",
     "EXCLUSIONS",
+    "FIBER_PROFILE",
     "FIXED",
     "FRAME_TYPES",
     "IIS_ARC",
@@ -38,22 +53,30 @@ __all__ = [
     "MIN_LINES_PER_FIBER",
     "MIN_NORMAL_FRAMES",
     "M_ARM_OFFSETS",
+    "NOT_JUDGED",
     "QUARTZ",
     "RELATIVE",
     "SCIENCE",
+    "SEQUENCE_TYPES",
+    "THROUGH_FOCUS",
     "TWILIGHT",
     "UNJUDGED_SPECIES",
+    "WINDOWED",
     "Check",
     "MetricSpec",
     "addSpecies",
     "checkFor",
     "frameType",
+    "lampName",
     "lampOf",
+    "observationType",
+    "sequenceOf",
     "specFor",
+    "whyNotJudged",
 ]
 
-#: Frame types a `Check` names. ``IIS_ARC`` and ``IIS_QUARTZ`` are lit through the 16 engineering fibers of each
-#: spectrograph by the IIS lamps; the others through the science fibers.
+#: Frame types a `Check` names: the judged ones. ``IIS_ARC`` and ``IIS_QUARTZ`` are lit through the 16
+#: engineering fibers of each spectrograph by the IIS lamps; the others through the science fibers.
 SCIENCE, ALLSKY, ARC, QUARTZ, TWILIGHT, IIS_ARC, IIS_QUARTZ = (
     "science",
     "allsky",
@@ -64,6 +87,108 @@ SCIENCE, ALLSKY, ARC, QUARTZ, TWILIGHT, IIS_ARC, IIS_QUARTZ = (
     "iisQuartz",
 )
 FRAME_TYPES = (SCIENCE, ALLSKY, ARC, QUARTZ, TWILIGHT, IIS_ARC, IIS_QUARTZ)
+
+#: Frame types that are named and not judged, each with the reason no check applies to it.
+DARK, BIAS, FIBER_PROFILE, DOT_ROACH, THROUGH_FOCUS, DITHERED, ENGINEERING, DOME_FLAT, WINDOWED = (
+    "dark",
+    "bias",
+    "fiberProfile",
+    "dotRoach",
+    "throughFocus",
+    "dithered",
+    "engineering",
+    "domeFlat",
+    "windowed",
+)
+NOT_JUDGED = {
+    DARK: "No lamp or sky is exposed.",
+    BIAS: "No lamp or sky is exposed.",
+    FIBER_PROFILE: (
+        "The slit is dithered in x between the exposures of the sequence, and one group of fibers is lit at a "
+        "time."
+    ),
+    DOT_ROACH: "Cobras are moved between the exposures of the sequence, so the fibers lit change within it.",
+    THROUGH_FOCUS: "The focus is stepped between the exposures of the sequence.",
+    DITHERED: "The slit is dithered between the exposures of the sequence.",
+    ENGINEERING: (
+        "Taken with the IIC's plain expose command, with any lamp, exposure time, cameras and row binning: no "
+        "normal value is kept for it."
+    ),
+    DOME_FLAT: "No normal value is kept for a dome flat.",
+    WINDOWED: "Only part of the detector is read.",
+}
+
+#: The frame type each IIC sequence type gives (``W_SEQTYP``, the opdb's ``iic_sequence.sequence_type``),
+#: before the sequence name and the illumination are read (`frameType`). A type missing here has no frame type.
+SEQUENCE_TYPES = {
+    "scienceObject": SCIENCE,
+    "scienceObject_windowed": SCIENCE,
+    "scienceArc": ARC,
+    "scienceTrace": QUARTZ,
+    "darks": DARK,
+    "masterDarks": DARK,
+    "scienceDark": DARK,
+    "biases": BIAS,
+    "masterBiases": BIAS,
+    "fiberProfiles": FIBER_PROFILE,
+    "dotRoach": DOT_ROACH,
+    "dotRoachInit": DOT_ROACH,
+    "dotRoachNew": DOT_ROACH,
+    "dotScan": DOT_ROACH,
+    "detThroughFocus": THROUGH_FOCUS,
+    "fpaThroughFocus": THROUGH_FOCUS,
+    "slitThroughFocus": THROUGH_FOCUS,
+    "defocusedArcs": THROUGH_FOCUS,
+    "ditheredArcs": DITHERED,
+    "ditheredFlats": DITHERED,
+    "arcs": ENGINEERING,
+    "arcs_binned": ENGINEERING,
+    "flats": ENGINEERING,
+    "flats_binned": ENGINEERING,
+    "domeFlat": DOME_FLAT,
+    "scienceTrace_windowed": WINDOWED,
+}
+
+#: The suffix the IIC adds to the type of a sequence that resumes another: the same kind of frame.
+_CONTINUED = "_continued"
+
+#: ``obsType``, the measurement the tasks make on a frame, for the frame types that have one of their own.
+#: Any other frame is ``unknown``: the tasks measure what its lines allow.
+_OBS_TYPES = {
+    SCIENCE: "science",
+    ALLSKY: "allsky",
+    TWILIGHT: "twilight",
+    ARC: "arc",
+    QUARTZ: "trace",
+    DARK: "dark",
+    BIAS: "bias",
+}
+
+#: Frame types lit through the science fibers unless the illumination says the engineering fibers.
+_LIT = (SCIENCE, ALLSKY, TWILIGHT, ARC, QUARTZ)
+
+#: Spellings of a lamp, in sequence names and lamp headers, by the one name a normal value is kept under.
+_LAMPS = {
+    "ne": "Ne",
+    "neon": "Ne",
+    "ar": "Ar",
+    "argon": "Ar",
+    "kr": "Kr",
+    "krypton": "Kr",
+    "xe": "Xe",
+    "xenon": "Xe",
+    "hgcd": "HgCd",
+    "hgar": "HgAr",
+    "he": "He",
+    "helium": "He",
+    "h": "H",
+    "hydrogen": "H",
+    "d": "D",
+    "deuterium": "D",
+    "quartz": "Quartz",
+    "halogen": "Quartz",
+    "qth": "Quartz",
+}
 
 #: Kinds of `Check`: limits in the metric's own units, or in per cent from the normal value.
 FIXED, RELATIVE = "fixed", "relative"
@@ -82,51 +207,200 @@ UNJUDGED_SPECIES = ("HgI", "CdI")
 M_ARM_OFFSETS = {"mArmOffsetX": "b", "mArmOffsetY": "n"}
 
 
-def frameType(obsType: object, illumination: object = None) -> str | None:
+def _text(value: object) -> str:
+    """Return a header or table value as stripped text; empty for `None`, NaN or anything not a string."""
+    return value.strip() if isinstance(value, str) else ""
+
+
+def sequenceOf(*headers: Any) -> tuple[str, str]:
+    """Return the sequence type and name of a frame from its headers.
+
+    Parameters
+    ----------
+    *headers : mapping or `None`
+        Headers in order of trust, the raw exposure's (or the calexp's, which
+        copies it) first and the pfsConfig's after: Run25 and Run26 pfsConfigs
+        lack ``W_SEQTYP``, and so do raws from before the IIC wrote it.
+
+    Returns
+    -------
+    seqType, seqName : `str`
+        ``W_SEQTYP`` and ``W_SEQNAM`` of the first header that has a
+        ``W_SEQTYP``, stripped; two empty strings when none has.
+    """
+    for header in headers:
+        if header is None:
+            continue
+        seqType = _text(header.get("W_SEQTYP"))
+        if seqType:
+            return seqType, _text(header.get("W_SEQNAM"))
+    return "", ""
+
+
+def _sequenceKind(seqType: object, seqName: object = None) -> str | None:
+    """Return the frame type a sequence gives before its illumination is read, or `None`."""
+    name = _text(seqType)
+    while name.endswith(_CONTINUED):
+        name = name[: -len(_CONTINUED)]
+    kind = SEQUENCE_TYPES.get(name)
+    if kind == SCIENCE:
+        # Twilights and all-sky frames are taken as science sequences; only the name tells them apart.
+        named = _text(seqName).lower()
+        if named.startswith("twilight"):
+            return TWILIGHT
+        if named.startswith("sky"):
+            return ALLSKY
+    return kind
+
+
+def observationType(seqType: object, seqName: object = None) -> str:
+    """Return ``obsType``: which measurement the tasks make on a frame of this sequence.
+
+    Parameters
+    ----------
+    seqType, seqName : `str`
+        The sequence type and name (`sequenceOf`).
+
+    Returns
+    -------
+    `str`
+        ``arc``, ``trace`` (a quartz), ``science``, ``allsky``, ``twilight``,
+        ``dark`` or ``bias`` (nothing is measured on either), else
+        ``unknown``: the sequence type is missing, not in `SEQUENCE_TYPES`,
+        or of a frame type the tasks have no measurement of their own for.
+        It says how a frame was measured, not what it is judged as: that is
+        `frameType`.
+    """
+    return _OBS_TYPES.get(_sequenceKind(seqType, seqName), "unknown")
+
+
+def frameType(
+    seqType: object = None, seqName: object = None, illumination: object = None, obsType: object = None
+) -> str | None:
     """Return the frame type of an image, or `None` when it has none.
 
     Parameters
     ----------
-    obsType : `str`
-        ``imageQualityQa``'s or ``dmLineResiduals``' observation type:
-        ``science``, ``allsky``, ``arc``, ``trace``, ``twilight``, ...
+    seqType : `str`, optional
+        The IIC sequence type, as the tasks store it (``seqType``).
+    seqName : `str`, optional
+        The sequence name: it tells a twilight and an all-sky frame from
+        science. A table without it (the line residuals) gives ``obsType``,
+        which the tasks made from the name, and that tells them apart.
     illumination : `str`, optional
-        ``full`` or ``iis``; anything else is taken as ``full``.
+        ``full`` or ``iis``; anything else is taken as ``full``. Read only for
+        the frame types a lamp or the sky lights: a dark has none, whatever
+        its pfsConfig says of the engineering fibers.
+    obsType : `str`, optional
+        The tasks' ``obsType``, read when there is no ``seqType`` (rows stored
+        before it was a column), and for a science sequence with no
+        ``seqName``.
 
     Returns
     -------
     `str` or `None`
-        One of `FRAME_TYPES`; `None` for ``dark``, ``unknown`` or a missing type.
+        One of `FRAME_TYPES` or of `NOT_JUDGED`. `None` when the sequence type
+        is not in `SEQUENCE_TYPES`, when there is neither a sequence type nor
+        a known ``obsType``, and for a science, all-sky or twilight frame with
+        the engineering fibers lit.
     """
-    kind = {"science": SCIENCE, "allsky": ALLSKY, "arc": ARC, "trace": QUARTZ, "twilight": TWILIGHT}.get(
-        obsType if isinstance(obsType, str) else ""
-    )
-    if illumination == "iis":
+    stored = {name: kind for kind, name in _OBS_TYPES.items()}.get(_text(obsType))
+    if _text(seqType):
+        kind = _sequenceKind(seqType, seqName)
+        if kind == SCIENCE and not _text(seqName) and stored in (ALLSKY, TWILIGHT):
+            kind = stored
+    else:
+        kind = stored
+    if illumination == "iis" and kind in _LIT:
         return {ARC: IIS_ARC, QUARTZ: IIS_QUARTZ}.get(kind)
     return kind
 
 
-def lampOf(seqName: object) -> str:
-    """Return the lamp a sequence name gives, or an empty string.
+def whyNotJudged(kind: object, seqType: object = None) -> str:
+    """Return why an image with no judged check has none: what it is, and the reason.
 
-    The part of ``W_SEQNAM`` after the colon (``"Arc: HgCd"`` gives
-    ``"HgCd"``), else the part in trailing parentheses (the IIS sequences:
-    ``"ImageQuality (Ne)"`` gives ``"Ne"``).
+    Parameters
+    ----------
+    kind : `str` or `None`
+        The image's `frameType`.
+    seqType : `str`, optional
+        Its sequence type, named when the image has no frame type.
+
+    Returns
+    -------
+    `str`
+        For a frame type of `NOT_JUDGED`, its name and reason; for no frame
+        type, that, with the sequence type when there is one; empty for a
+        frame type that has checks.
     """
-    name = seqName if isinstance(seqName, str) else ""
+    if isinstance(kind, str) and kind in NOT_JUDGED:
+        return f"{kind} frames are not judged: {NOT_JUDGED[kind]}"
+    if isinstance(kind, str) and kind:
+        return ""
+    named = _text(seqType)
+    return f"no frame type for sequence type {named}" if named else "no frame type"
+
+
+def lampOf(seqName: object, lamps: object = None) -> str:
+    """Return the lamp of a frame, under the name a normal value is kept by, or an empty string.
+
+    Parameters
+    ----------
+    seqName : `str`
+        The sequence name, read when ``lamps`` is empty: the part of
+        ``W_SEQNAM`` after the colon (``"Arc: Neon"`` gives ``"Ne"``), else
+        the part in trailing parentheses (``"ImageQuality (Kr)"`` gives
+        ``"Kr"``). A sequence can be named anything, so this is the fallback.
+    lamps : `str`, optional
+        The lamps the image's header says were lit, as the tasks store them
+        (``lamps``): obs_pfs's names joined by ``+``, e.g. ``"Kr_eng"`` or
+        ``"HgAr+Ne"``.
+
+    Returns
+    -------
+    `str`
+        `lampName` of the header's lamps, else of the part of the sequence
+        name.
+    """
+    header = lampName(lamps)
+    if header:
+        return header
+    name = _text(seqName)
     if ":" in name:
-        return name.split(":", 1)[-1].strip()
+        return lampName(name.split(":", 1)[-1])
     match = re.search(r"\(([^()]+)\)\s*$", name)
-    return match.group(1).strip() if match else ""
+    return lampName(match.group(1)) if match else ""
+
+
+def lampName(lamps: object) -> str:
+    """Return lamps under the names a normal value is kept by, whichever way they are spelled.
+
+    Parameters
+    ----------
+    lamps : `str`
+        One lamp or several joined by ``+``, as a header, a sequence name or
+        a stored normal value spells them.
+
+    Returns
+    -------
+    `str`
+        One spelling per lamp whatever the source (``Ne`` for ``Neon``,
+        ``Ne_eng`` and ``Ne``), several sorted and joined by ``+``. The
+        engineering-fiber suffix is dropped: the frame type says it. A part
+        that is no known lamp is returned as it is, stripped. Empty for
+        `None`, NaN or an empty string.
+    """
+    parts = (part.strip().removesuffix("_eng") for part in _text(lamps).split("+"))
+    return "+".join(sorted({_LAMPS.get(part.lower(), part) for part in parts if part}))
 
 
 def addSpecies(metrics):
-    """Return ``metrics`` with a ``species`` column, the `lampOf` its ``seqName``.
+    """Return ``metrics`` with a ``species`` column, the `lampOf` each row.
 
     Parameters
     ----------
     metrics : `pandas.DataFrame`
-        Metrics with a ``seqName`` column.
+        Metrics with a ``seqName`` column, and ``lamps`` when stored.
 
     Returns
     -------
@@ -135,7 +409,8 @@ def addSpecies(metrics):
     """
     if "seqName" not in metrics.columns:
         return metrics
-    return metrics.assign(species=metrics["seqName"].map(lampOf))
+    lamps = metrics["lamps"] if "lamps" in metrics.columns else [None] * len(metrics)
+    return metrics.assign(species=[lampOf(n, lit) for n, lit in zip(metrics["seqName"], lamps, strict=True)])
 
 
 @dataclass(frozen=True)
@@ -603,7 +878,12 @@ EXCLUSIONS = (
         "Saturation (nSaturatedLines, pctSaturatedPixels) and line flux",
         "Stored for cross-visit comparison; no limit has been set.",
     ),
-    ("Frames with no frame type, darks and biases", "No check applies; the image is UNKNOWN, never PASS."),
+    *((f"Every number measured on {kind} frames", reason) for kind, reason in NOT_JUDGED.items()),
+    (
+        "Frames with no frame type",
+        "Their sequence type is missing or not in SEQUENCE_TYPES, so nobody has said what they are. No check "
+        "applies; the image is UNKNOWN, never PASS.",
+    ),
 )
 
 

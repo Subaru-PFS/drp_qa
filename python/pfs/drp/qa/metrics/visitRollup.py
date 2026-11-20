@@ -14,6 +14,11 @@ A camera that exposed but has no gate row is reported (``missingCameras``), not
 judged: the visit's verdict is the worst of the images that were judged. A visit
 with no judged image at all is ``UNKNOWN``; it is listed only when the expected
 cameras are given, since the gate alone cannot know of it.
+
+An ``UNKNOWN`` visit is one of two things, and ``frameType`` tells them apart:
+a frame type that is not judged (`pfs.drp.qa.metrics.registry.NOT_JUDGED`: a
+dark, a fiber-profile exposure), which needs nobody's attention, or a frame
+that should have been judged and was not.
 """
 
 from collections.abc import Iterable
@@ -43,6 +48,7 @@ EXIT_NO_DATA = 3
 #: Columns of `rollupVisits`, in order.
 ROLLUP_COLUMNS = (
     "visit",
+    "frameType",
     "qaStatus",
     "nImages",
     "nPass",
@@ -78,8 +84,8 @@ def rollupVisits(gate: pd.DataFrame, expected: pd.DataFrame | None = None) -> pd
     gate : `pandas.DataFrame`
         One row per judged image (`pfs.drp.qa.qadb.reader.readGate`): ``visit``,
         ``arm``, ``spectrograph``, ``qaStatus``, and where known
-        ``qaDecidedBy`` (the check that decided), ``qaReason`` and
-        ``decidedAt``.
+        ``frameType``, ``qaDecidedBy`` (the check that decided), ``qaReason``
+        and ``decidedAt``.
     expected : `pandas.DataFrame`, optional
         The cameras that exposed: ``visit`` and ``camera`` (``b1``), one row per
         image (`pfs.drp.qa.comparison.queries.readVisitCameras`). Without it
@@ -88,7 +94,9 @@ def rollupVisits(gate: pd.DataFrame, expected: pd.DataFrame | None = None) -> pd
     Returns
     -------
     `pandas.DataFrame`
-        `ROLLUP_COLUMNS`, sorted by visit. ``qaStatus`` is the worst of the
+        `ROLLUP_COLUMNS`, sorted by visit. ``frameType`` is the frame type
+        most of the visit's images have, empty when none has one (a visit's
+        spectrographs can differ in illumination). ``qaStatus`` is the worst of the
         visit's images by `pfs.drp.qa.metrics.gate.STATUS_ORDER` (``UNKNOWN``
         when none was judged); ``decidedByCamera``, ``qaDecidedBy`` and
         ``qaReason`` are those of the first image, by spectrograph then arm,
@@ -97,7 +105,7 @@ def rollupVisits(gate: pd.DataFrame, expected: pd.DataFrame | None = None) -> pd
         gate row; ``decidedAt`` is the latest of the images'.
     """
     gate = gate.copy()
-    for column in ("qaDecidedBy", "qaReason", "decidedAt"):
+    for column in ("frameType", "qaDecidedBy", "qaReason", "decidedAt"):
         if column not in gate:
             gate[column] = None
     gate["camera"] = [
@@ -112,7 +120,7 @@ def rollupVisits(gate: pd.DataFrame, expected: pd.DataFrame | None = None) -> pd
     for visit in sorted(set(judged) | set(wanted)):
         rows = judged.get(visit)
         record: dict[str, Any] = dict.fromkeys(ROLLUP_COLUMNS)
-        record.update(visit=visit, qaStatus="UNKNOWN", nImages=0)
+        record.update(visit=visit, frameType="", qaStatus="UNKNOWN", nImages=0)
         record.update(dict.fromkeys(_COUNTS.values(), 0))
         record.update(decidedByCamera="", qaDecidedBy="", qaReason="")
         seen: list[str] = []
@@ -121,6 +129,9 @@ def rollupVisits(gate: pd.DataFrame, expected: pd.DataFrame | None = None) -> pd
             statuses = [s if s in STATUS_ORDER else "UNKNOWN" for s in rows["qaStatus"]]
             status = worst(statuses)
             record.update(qaStatus=status, nImages=len(rows))
+            kinds = rows["frameType"].map(_text)
+            kinds = kinds[kinds != ""]
+            record["frameType"] = kinds.mode().iloc[0] if len(kinds) else ""
             for counted, column in _COUNTS.items():
                 record[column] = statuses.count(counted)
             if status in ("WARN", "FAIL"):

@@ -178,7 +178,7 @@ def readQadb(
         ``iqQaMetrics``, ``dmLineResidualSummary``, ``dmLineResidualMetrics``
         and ``twilightMetrics`` with their columns (those qadb stores),
         `PROCESSING_ID` and ``decidedAt``; the line-residual rows carry their
-        image's ``cameraSet`` and ``obsType``, as the Butler table does, so
+        image's ``cameraSet``, ``obsType`` and ``seqType``, as the Butler table does, so
         `pfs.drp.qa.metrics.gate.gate` reads them as they are. And
         ``visitTimes``, qadb's visit listing in the opdb listing's columns
         (``pfs_visit_id``, ``time_exp_start``, ``iic_sequence_id``, the last
@@ -194,8 +194,10 @@ def readQadb(
         tables[source] = frame.reset_index(drop=True)
     keys = list(IMAGE_KEYS)
     summary = tables["dmLineResidualSummary"]
+    # A qadb from before ``seq_type`` was a column has none to give: its rows are typed by ``obsType``.
+    carried = [column for column in ("cameraSet", "obsType", "seqType") if column in summary]
     tables["dmLineResidualMetrics"] = tables["dmLineResidualMetrics"].merge(
-        summary[[*keys, "cameraSet", "obsType"]].drop_duplicates(keys), on=keys, how="left"
+        summary[[*keys, *carried]].drop_duplicates(keys), on=keys, how="left"
     )
     visits = sorted({int(visit) for table in tables.values() for visit in table["visit"]})
     times = (

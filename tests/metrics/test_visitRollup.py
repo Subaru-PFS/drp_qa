@@ -94,6 +94,23 @@ def testTheRollupNamesNoTaskAndNoProvisionalVerdict():
     pd.testing.assert_frame_equal(rollup, rollupVisits(GATE))
 
 
+def testTheRollupNamesTheVisitsFrameType():
+    """A visit's frame type tells an UNKNOWN that is not judged by design from one to look at."""
+    typed = gate(
+        image(200, "b1", "UNKNOWN") | {"frameType": "dark"},
+        image(200, "n1", "UNKNOWN") | {"frameType": "dark"},
+        image(201, "b1", "PASS") | {"frameType": "iisArc"},
+        image(201, "r1", "PASS") | {"frameType": "iisArc"},
+        image(201, "r2", "PASS") | {"frameType": "arc"},
+        image(202, "b1", "UNKNOWN") | {"frameType": None},
+    )
+    rollup = rollupVisits(typed)
+    assert rollup["frameType"].tolist() == ["dark", "iisArc", ""]
+    assert rollup["qaStatus"].tolist() == ["UNKNOWN", "PASS", "UNKNOWN"]
+    # A gate table without frame types (a hand-built one) rolls up with none.
+    assert rollupVisits(GATE)["frameType"].tolist() == ["", "", ""]
+
+
 def testWithoutExpectedCamerasNothingIsCalledMissing():
     rollup = rollupVisits(GATE)
     assert rollup["nExpected"].isna().all() and rollup["missingCameras"].isna().all()

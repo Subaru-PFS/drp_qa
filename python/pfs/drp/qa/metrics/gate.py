@@ -9,8 +9,11 @@ its worst check; one with no check judged is ``UNKNOWN``, never ``PASS``.
 The numbers come as up to three tables, as the Butler or qadb holds them:
 
 ``iq``
-    ``iqQaMetrics``: one row per image, with ``obsType``, ``illumination``
-    and ``seqName``.
+    ``iqQaMetrics``: one row per image, with ``seqType``, ``seqName``,
+    ``illumination`` and ``lamps``, which say what the frame is
+    (`pfs.drp.qa.metrics.registry.frameType`) and which lamp lit it
+    (`pfs.drp.qa.metrics.registry.lampOf`); ``obsType`` stands in for rows
+    stored without ``seqType``.
 ``lines``
     ``dmLineResidualMetrics``: one row per image, reference, species,
     ``statusType`` and metric.
@@ -45,6 +48,11 @@ A frame's type needs its illumination, which only ``iqQaMetrics`` records. An
 arc or quartz with line residuals and no ``iqQaMetrics`` row is not judged on
 them: lit through the engineering fibers, it would be judged as a full slit.
 
+An image with no judged check says why in its reason: its frame type is one
+that is not judged (`pfs.drp.qa.metrics.registry.NOT_JUDGED`), it has no frame
+type, with the sequence type nobody has classified, or nothing a check reads
+was measured.
+
 Nothing here imports the LSST stack.
 """
 
@@ -59,6 +67,7 @@ from pfs.drp.qa.metrics.registry import (
     CHECKS,
     FIXED,
     IIS_ARC,
+    IIS_QUARTZ,
     M_ARM_OFFSETS,
     MIN_LINES_PER_FIBER,
     MIN_NORMAL_FRAMES,
@@ -68,8 +77,10 @@ from pfs.drp.qa.metrics.registry import (
     UNJUDGED_SPECIES,
     Check,
     frameType,
+    lampName,
     lampOf,
     specFor,
+    whyNotJudged,
 )
 
 __all__ = [
@@ -115,6 +126,15 @@ NORMAL_KEYS = ("metric", "camera", "frameType", "selector")
 #: The sky species whose held-back lines give an arm's residual in km/s.
 SKY_LINE = {"b": "OI", "r": "OH", "n": "OH", "m": "OH"}
 
+#: The normal values kept per lamp: metric and frame type of the checks whose ``by`` names the lamp.
+_PER_LAMP = frozenset(
+    (metric, kind)
+    for check in CHECKS.values()
+    if "lamp" in check.by
+    for metric in check.metrics
+    for kind in check.frames
+)
+
 #: Line species of the night sky, and the description of trace centroids, in ``dmLineResidualMetrics``.
 _SKY_SPECIES = ("OH", "O2", "OI", "NaI")
 _TRACE = "Trace"
@@ -141,6 +161,31 @@ def longLines(wide: pd.DataFrame) -> pd.DataFrame:
     metrics = [name for name in _LINE_METRICS if name in wide.columns]
     keys = [column for column in wide.columns if column not in _LINE_METRICS]
     return wide.melt(id_vars=keys, value_vars=metrics, var_name="metric", value_name="value")
+
+
+def _column(table: pd.DataFrame, name: str) -> pd.Series:
+    """Return a column of ``table``, all `None` when it has none."""
+    return table[name] if name in table else pd.Series(None, index=table.index, dtype=object)
+
+
+def _frameTypes(table: pd.DataFrame) -> list[str | None]:
+    """Return the frame type of each row, from the columns that say what the frame is."""
+    columns = (_column(table, name) for name in ("seqType", "seqName", "illumination", "obsType"))
+    return [frameType(*row) for row in zip(*columns, strict=True)]
+
+
+def _lampKeys(table: pd.DataFrame) -> pd.Series:
+    """Return the selectors of normal values, the lamps among them under the names `measurements` gives.
+
+    A value stored under another spelling of its lamp (``Neon``, or ``Halogen`` for a quartz, whose value is
+    kept with no lamp) still judges the frames it was made for.
+    """
+    selector = table["selector"].fillna("").astype(str)
+    perLamp = pd.Series(
+        [key in _PER_LAMP for key in zip(table["metric"], table["frameType"], strict=True)], index=table.index
+    )
+    quartz = table["frameType"].isin([QUARTZ, IIS_QUARTZ])
+    return selector.where(~perLamp, selector.map(lampName).mask(quartz, ""))
 
 
 def _empty() -> pd.DataFrame:
@@ -183,11 +228,10 @@ def _rows(frame: pd.DataFrame, check: str, metric: str, part, selector, value, w
 def _iqRows(iq: pd.DataFrame) -> list[pd.DataFrame]:
     """Return the measurements ``iqQaMetrics`` gives: width, lines per lit fiber, trace centre offset."""
     iq = iq.reset_index(drop=True)
-    illumination = iq["illumination"] if "illumination" in iq else pd.Series(None, index=iq.index)
-    iq = iq.assign(
-        frameType=[frameType(o, i) for o, i in zip(iq["obsType"], illumination, strict=True)],
-        lamp=iq["seqName"].map(lampOf) if "seqName" in iq else "",
-    )
+    iq = iq.assign(frameType=_frameTypes(iq))
+    lamp = [lampOf(n, lit) for n, lit in zip(_column(iq, "seqName"), _column(iq, "lamps"), strict=True)]
+    # A quartz has one lamp: its normal value is kept per camera alone, whatever the frame says of the lamp.
+    iq = iq.assign(lamp=pd.Series(lamp, index=iq.index).mask(iq["frameType"].isin([QUARTZ, IIS_QUARTZ]), ""))
     frames = []
 
     def column(name: str) -> pd.Series:
@@ -208,17 +252,16 @@ def _lineRows(lines: pd.DataFrame, iq: pd.DataFrame | None) -> list[pd.DataFrame
     """Return the measurements ``dmLineResidualMetrics`` gives: offsets, scatter, sky-line residuals."""
     lines = lines.reset_index(drop=True)
     keys = list(IMAGE_KEYS)
-    kind = lines["obsType"].map(lambda obsType: frameType(obsType))
+    kind = pd.Series(_frameTypes(lines.drop(columns="illumination", errors="ignore")), index=lines.index)
     # Lamp frames need their illumination, which only iqQaMetrics records.
     lamp = kind.isin([ARC, QUARTZ])
     if iq is not None and len(iq):
-        illumination = iq["illumination"] if "illumination" in iq else pd.Series(None, index=iq.index)
         known = pd.DataFrame(
             {
                 "visit": iq["visit"].to_numpy(),
                 "arm": iq["arm"].to_numpy(),
                 "spectrograph": iq["spectrograph"].to_numpy(),
-                "_iqType": [frameType(o, i) for o, i in zip(iq["obsType"], illumination, strict=True)],
+                "_iqType": _frameTypes(iq),
                 "_inIq": True,
             }
         ).drop_duplicates(keys)
@@ -332,6 +375,7 @@ def _inForce(rows: pd.DataFrame, normalValues: pd.DataFrame | None, value: str =
         return result
     keys = list(NORMAL_KEYS)
     table = normalValues[normalValues["count"] >= MIN_NORMAL_FRAMES]
+    table = table.assign(selector=_lampKeys(table))
     table = table.assign(
         validFrom=table["validFrom"].astype("int64"),
         **{key: table[key].fillna("").astype(str) for key in keys},
@@ -518,21 +562,19 @@ def gate(
         if table is None or not len(table):
             continue
         image = table[keys].copy()
-        if kind is not None:
-            image["frameType"] = kind
-        else:
-            illumination = (
-                table["illumination"] if "illumination" in table else pd.Series(None, index=table.index)
-            )
-            image["frameType"] = [
-                frameType(o, i) for o, i in zip(table["obsType"], illumination, strict=True)
-            ]
+        image["frameType"] = kind if kind is not None else _frameTypes(table)
+        image["_seqType"] = _column(table, "seqType")
         images.append(image)
     if not images:
         return pd.DataFrame(columns=list(VERDICT_COLUMNS))
     # The first table that gives an image a type gives its type: iqQaMetrics knows the illumination, the line
     # residuals do not. A table that cannot type it (a header without the sequence type) does not hide another's.
     images = pd.concat(images, ignore_index=True)
+    # Likewise its sequence type, named when the image has no frame type: the first table that has one.
+    named = images["_seqType"].where(
+        images["_seqType"].map(lambda value: isinstance(value, str) and value != "")
+    )
+    images["_seqType"] = named.groupby([images[key] for key in keys]).transform("first")
     images = (
         images.assign(_untyped=images["frameType"].isna())
         .sort_values("_untyped", kind="stable")
@@ -564,12 +606,16 @@ def gate(
     unknown = result["qaStatus"].isna()
     result["qaStatus"] = result["qaStatus"].fillna("UNKNOWN")
     result["qaDecidedBy"] = result["qaDecidedBy"].fillna("")
-    noType = result["frameType"].isna()
+    # Why nothing was judged: what the frame is when that is the reason, else what its checks lacked.
+    byType = pd.Series(
+        [whyNotJudged(k, s) for k, s in zip(result["frameType"], result["_seqType"], strict=True)],
+        index=result.index,
+    )
     why = (
         result["_whyNot"]
         .fillna("")
         .where(result["_whyNot"].fillna("") != "", "nothing to judge was measured")
     )
-    why = why.where(~noType, "no frame type")
+    why = why.where(byType == "", byType)
     result["qaReason"] = result["qaReason"].fillna("").where(~unknown, why)
     return result[list(VERDICT_COLUMNS)].sort_values(keys, kind="stable", ignore_index=True)

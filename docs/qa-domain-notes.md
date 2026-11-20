@@ -36,19 +36,21 @@ descending preference order:
 
 ### Visit classification (`_classifyVisit`)
 
-The task classifies each visit by reading FITS headers from either `calexp` metadata or
-`pfsConfig.header`:
+The task classifies each visit by reading FITS headers from the `calexp` metadata, or from
+`pfsConfig.header` when the calexp has no `W_SEQTYP` (`pfs.drp.qa.metrics.registry.sequenceOf`):
 
 | Header | Meaning |
 |---|---|
-| `W_SEQTYP` | Observation type: `scienceArc`, `scienceTrace`, `scienceObject`, `scienceObject_windowed`, `scienceDark` |
+| `W_SEQTYP` | The IIC sequence type: `scienceArc`, `scienceTrace`, `scienceObject`, `scienceObject_windowed`, `darks`, `fiberProfiles`, ... (`pfs.drp.qa.metrics.registry.SEQUENCE_TYPES`) |
 | `W_SEQNAM` | Human-readable name, e.g. `"Arc: HgCd"`, `"Arc: Ne"`, `"Quartz"` |
 | `W_SEQCMN` | Command name (rarely needed) |
 
-Returns `(obs_type, is_iis, seq_nam)`:
+Returns `(obs_type, is_iis, seq_nam, seq_typ, lamps)`:
 
-- `obs_type`: one of `"arc"`, `"trace"`, `"science"`, `"allsky"` (`W_SEQNAM` starting
-  "sky"), `"twilight"` (starting "twilight"), `"dark"` (`scienceDark`), `"unknown"`
+- `obs_type`: `pfs.drp.qa.metrics.registry.observationType` of the sequence, which says which
+  measurement is made: one of `"arc"`, `"trace"`, `"science"`, `"allsky"` (`W_SEQNAM` starting
+  "sky"), `"twilight"` (starting "twilight"), `"dark"` (`darks`, `masterDarks`), `"bias"`
+  (`biases`, `masterBiases`), `"unknown"` (any other sequence type, or none)
 - `is_iis`: `True` when illuminated by the 16 IIS engineering fibers (lamp header names
   from `getLamps()` end with `"_eng"`, e.g. `"Ar_eng"`). The headers are read without
   `DATA-TYP`: `getLamps()` answered `{"Quartz"}` for any `FLAT` before reading them, which took
@@ -60,7 +62,11 @@ Returns `(obs_type, is_iis, seq_nam)`:
   Needed: 7 of Run30's 180 n-arm IIS images (148829 n4, 148973 n4, 149134 n2 and n4, 149322 n2
   and n4, 149799 n4) have calexps without the IIS lamp headers, and by the headers alone they took
   the full-slit path (`u/wtg/qa-iis/002`; `reports/PIPE2D-1954/checkHeaders.py`).
-- `seq_nam`: raw `W_SEQNAM` string
+- `seq_nam`, `seq_typ`: raw `W_SEQNAM` and `W_SEQTYP` strings; what the frame is judged as comes
+  from them afterwards (`pfs.drp.qa.metrics.registry.frameType`)
+- `lamps`: the lamps the lamp headers say were lit, joined by `+` (`"Ne"`, `"Kr_eng"`); the
+  images above whose calexps lack the IIS lamp headers have none, and their normal value is
+  looked up by the lamp in the sequence name
 
 **IIS vs regular** (PIPE2D-1954): an IIS frame lights the 16 engineering fibers of each
 spectrograph, not the science fibers. drp_stella's `reduceExposure` detects it from the
@@ -160,7 +166,8 @@ SM1-defocused quartz 140032 and 140139, and the test fixtures in `tests/imageQua
   has none. Trace centroids per fiber follow the illumination (b1: 691 on a Run25 neon set,
   609 fully lit and 473 on a shaka exposure in Run30), lamp lines per lit fiber do not.
 - `traceOnly`: True when falling back to fiber-profile widths; `medFwhm` is then not judged
-- `obsType` / `seqName`: visit classification and raw `W_SEQNAM`
+- `obsType` / `seqType` / `seqName` / `lamps`: which measurement was made, the raw `W_SEQTYP` and
+  `W_SEQNAM`, and the lamps the lamp headers say were lit
 - No verdict column: `pfs.drp.qa.metrics.gate` judges the numbers afterwards
 
 Additional columns are added dynamically: a per-status-bit flag breakdown

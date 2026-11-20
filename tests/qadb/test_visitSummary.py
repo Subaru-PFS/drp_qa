@@ -16,6 +16,7 @@ from pfs.drp.qa.metrics.visitRollup import (
     EXIT_WARN,
     ROLLUP_COLUMNS,
     exitCode,
+    rollupVisits,
 )
 from pfs.drp.qa.qadb import visitSummary as module
 from pfs.drp.qa.qadb.loader import loadCollection
@@ -38,7 +39,7 @@ IMAGE = ["visit", "arm", "spectrograph"]
 #: Normal widths of the fixture's images: r1's arc is +10 % (FAIL), b1's quartz +2.4 % (PASS) and r1's
 #: quartz +3.9 % (WARN).
 WIDTHS = {
-    ("medFwhm", "r1", "arc", "Argon"): 2.5,
+    ("medFwhm", "r1", "arc", "Ar"): 2.5,
     ("medFwhm", "b1", "quartz", ""): 3.1,
     ("medFwhm", "r1", "quartz", ""): 3.2,
 }
@@ -148,6 +149,30 @@ def testSummaryWithoutOpdb(judged):
     assert rollup["qaDecidedBy"].tolist() == ["width", "width"]
     assert rollup.loc[0, "qaReason"] == "width 2.76 px is +10.3 % from normal 2.50 px, limit +5 %"
     assert exitCode(rollup) == EXIT_FAIL
+
+
+def testFormatSummaryCountsTheFrameTypesThatAreNotJudged():
+    """Darks and fiber-profile exposures are UNKNOWN by design: they are counted apart from the rest."""
+    rows = [
+        {"visit": visit, "arm": "b", "spectrograph": 1, "qaStatus": status, "frameType": kind}
+        for visit, status, kind in (
+            (1, "UNKNOWN", "dark"),
+            (2, "UNKNOWN", "dark"),
+            (3, "UNKNOWN", "fiberProfile"),
+            (4, "UNKNOWN", "arc"),
+            (5, "UNKNOWN", None),
+            (6, "PASS", "arc"),
+        )
+    ]
+    lines = formatSummary(rollupVisits(pd.DataFrame(rows))).splitlines()
+    assert lines[0] == "6 visits judged: 0 FAIL, 0 WARN, 1 PASS, 5 UNKNOWN"
+    assert lines[1] == "3 of the UNKNOWN are of frame types that are not judged: 2 dark, 1 fiberProfile"
+    assert lines[2] == "1 UNKNOWN  1 images dark" and lines[5] == "4 UNKNOWN  1 images arc"
+    # Negative control: an arc that could not be judged, and a frame with no type, are not among them.
+    assert "arc" not in lines[1] and lines[6] == "5 UNKNOWN  1 images"
+    # With none there is no such line.
+    judgedOnly = formatSummary(rollupVisits(pd.DataFrame(rows[3:]))).splitlines()
+    assert not any("not judged" in line for line in judgedOnly)
 
 
 def testFormatSummaryNamesTheCameraAndTheCheck(judged):

@@ -85,13 +85,13 @@ class TestCandidates:
         width = made[made["metric"] == "medFwhm"].set_index(["camera", "frameType", "selector"])
         assert width["value"].to_dict() == pytest.approx(
             {
-                ("r1", "arc", "Neon"): 2.15,
-                ("r2", "arc", "Neon"): 3.1,
-                ("r1", "arc", "Argon"): 2.6,
+                ("r1", "arc", "Ne"): 2.15,
+                ("r2", "arc", "Ne"): 3.1,
+                ("r1", "arc", "Ar"): 2.6,
                 ("r1", "quartz", ""): 3.4,
             }
         )
-        row = width.loc[("r1", "arc", "Neon")]
+        row = width.loc[("r1", "arc", "Ne")]
         assert (row["count"], row["firstVisit"], row["lastVisit"], row["sourceVisits"]) == (
             4,
             100,
@@ -100,8 +100,8 @@ class TestCandidates:
         )
         # Lines per lit fiber are kept per arm: the two spectrographs' images together, over four exposures.
         perFiber = made[made["metric"] == "linesPerFiber"].set_index(["camera", "frameType", "selector"])
-        assert perFiber.loc[("r", "arc", "Neon"), "count"] == 4
-        assert set(perFiber.index) == {("r", "arc", "Neon"), ("r", "arc", "Argon"), ("r", "quartz", "")}
+        assert perFiber.loc[("r", "arc", "Ne"), "count"] == 4
+        assert set(perFiber.index) == {("r", "arc", "Ne"), ("r", "arc", "Ar"), ("r", "quartz", "")}
 
     def testCountIsExposuresNotImages(self):
         """One exposure of four spectrographs is one frame: no per-arm normal value comes from it."""
@@ -129,7 +129,7 @@ class TestCandidates:
         )
         made = candidates(iq)
         assert made[made["metric"] == "medFwhm"].empty
-        assert set(made["selector"]) == {"Neon", "Argon", "Xenon"}  # their lines per lit fiber
+        assert set(made["selector"]) == {"Ne", "Ar", "Xe"}  # their lines per lit fiber
 
     def testExcludedImagesAreLeftOut(self):
         iq = iqRows([2.0, 2.2, 2.1, 9.0])
@@ -238,7 +238,7 @@ class TestMArmOffsets:
 
 class TestCompare:
     @staticmethod
-    def inForce(value=2.0, metric="medFwhm", camera="r1", selector="Neon", validFrom=1, count=10):
+    def inForce(value=2.0, metric="medFwhm", camera="r1", selector="Ne", validFrom=1, count=10):
         return pd.DataFrame(
             [
                 {

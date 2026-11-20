@@ -58,11 +58,36 @@ The 13 checks, as `CHECKS` holds them:
 | `scatterX` | line scatter in x | `robustRmsDeltaX` | arcs, quartz | all | +20 % | +50 % | normal value per camera and species |
 | `scatterY` | line scatter in y | `robustRmsDeltaY` | arcs | all | +50 % | +150 % | normal value per camera and species |
 | `linesPerFiberArc` | lines per lit fiber | `linesPerFiber` | arcs, engineering-fiber arcs | all | −25 % | −50 % | normal value per arm and lamp |
-| `linesPerFiberQuartz` | lines per lit fiber | `linesPerFiber` | quartz, engineering-fiber quartz | all | −2.5 % | −5 % | normal value per arm and lamp |
+| `linesPerFiberQuartz` | lines per lit fiber | `linesPerFiber` | quartz, engineering-fiber quartz | all | −2.5 % | −5 % | normal value per arm |
 
-The frame types are `science`, `allsky`, `arc`, `quartz`, `twilight`, `iisArc` and `iisQuartz`
-(`registry.frameType`, from `iqQaMetrics`' `obsType` and `illumination`). The last two are lit through the 16
-engineering fibers of each spectrograph by the IIS lamps.
+The frame types that are judged are `science`, `allsky`, `arc`, `quartz`, `twilight`, `iisArc` and `iisQuartz`.
+The last two are lit through the 16 engineering fibers of each spectrograph by the IIS lamps.
+
+What a frame is comes from its IIC sequence type (`W_SEQTYP`, stored as `seqType`): `registry.SEQUENCE_TYPES`
+gives each sequence type its frame type, and `registry.frameType` adds the sequence name, which tells a twilight
+and an all-sky frame from science, and the illumination. A row stored without `seqType` is typed by the tasks'
+`obsType`, as before. Nothing else in the package decides what a frame is; both tasks read the same table for
+the measurement they make (`registry.observationType`).
+
+A frame type either has checks or is named in `registry.NOT_JUDGED`, with the reason no check applies to it:
+
+| Frame type | Sequence types | Why it is not judged |
+| --- | --- | --- |
+| `dark` | `darks`, `masterDarks` (and `scienceDark`, which the IIC does not write) | No lamp or sky is exposed. |
+| `bias` | `biases`, `masterBiases` | No lamp or sky is exposed. |
+| `fiberProfile` | `fiberProfiles` | The slit is dithered in x between the exposures, and one group of fibers is lit at a time. |
+| `dotRoach` | `dotRoach`, `dotRoachInit`, `dotRoachNew`, `dotScan` | Cobras are moved between the exposures, so the fibers lit change within the sequence. |
+| `throughFocus` | `detThroughFocus`, `fpaThroughFocus`, `slitThroughFocus`, `defocusedArcs` | The focus is stepped between the exposures. |
+| `dithered` | `ditheredArcs`, `ditheredFlats` | The slit is dithered between the exposures. |
+| `engineering` | `arcs`, `flats`, and their `_binned` forms | Taken with the IIC's plain expose command, with any lamp, exposure time, cameras and row binning. |
+| `domeFlat` | `domeFlat` | No normal value is kept for a dome flat. |
+| `windowed` | `scienceTrace_windowed` | Only part of the detector is read. |
+
+Their images are `UNKNOWN`, with the frame type and its reason as the verdict's reason. A sequence type the table
+lacks gives no frame type, and the reason names it (`no frame type for sequence type rampObject`), so a new
+sequence type shows up as untyped instead of being judged as something it is not. A sequence that resumes another
+(`dotRoach_continued`) is the same kind of frame. To classify a sequence type, add it to `SEQUENCE_TYPES`; to name
+a new kind that is not judged, add it to `NOT_JUDGED` with its reason.
 
 What each check reads (`gate.measurements`):
 
@@ -100,7 +125,8 @@ but not judged, each with its reason:
 - Flagged-line rate (`pctFlagged`). It is a property of the line list and the fit's flags, not of the frame.
 - Saturation (`nSaturatedLines`, `pctSaturatedPixels`) and line flux. Stored for cross-visit comparison; no limit
   has been set.
-- Frames with no frame type, darks and biases. No check applies.
+- Every number measured on a frame type of `registry.NOT_JUDGED` (the table above), for the reason given there.
+- Frames with no frame type. Their sequence type is missing or not in `SEQUENCE_TYPES`.
 
 A width read back from the `fiberProfiles` calibration (`traceOnly`) counts as not measured.
 
@@ -129,6 +155,11 @@ the frames a run's calibrations are built from. Each row of `qa_normal_value` al
 rests on, the collection, the visit it is valid from, the visits it was made from, and who accepted it, when and
 why.
 
+- The lamp of an arc is the one its header says was lit (`iqQaMetrics.lamps`), under one spelling per lamp
+  (`registry.lampOf`: `Ne` for `Ne`, `Ne_eng` and `Neon`). A row stored without `lamps` takes it from the sequence
+  name (`Arc: Neon`, `ImageQuality (Kr)`), which says nothing for a sequence named otherwise. A quartz has one
+  lamp, so its values are kept per camera or arm alone. A value stored under another spelling of its lamp
+  (`Neon`, or `Halogen` on a quartz) is read under the one above (`registry.lampName`).
 - A frame is judged by the latest accepted row at or before its visit, so the previous run's values stay in force
   until the run's own are accepted.
 - Normal values belong to a collection. A frame is judged by its own collection's values; in a collection with
@@ -257,9 +288,9 @@ to these lines, whose `RESERVED` lines test how well it predicts lines it was no
 frame. The lines are those the visit's detectorMap fit marked `DETECTORMAP_USED` or `DETECTORMAP_RESERVED`, less
 `BAD` ones, with no other selection or clipping; trace centroids are kept on arcs. When the fit marked none, every
 good line is measured, as `UNFITTED`. Trace centroids measure x, lamp and sky lines x and y, measured minus reference.
-Each row carries the frame's observation type (`obsType`, from the raw header's `W_SEQTYP` as `imageQualityQa`
-classifies it: `trace` for a quartz, `arc`, `twilight`, ...; the pfsConfig header stands in when the raw's lacks the
-card) and the arms the visit read (`cameraSet`).
+Each row carries the frame's sequence type as read (`seqType`, the raw header's `W_SEQTYP`; the pfsConfig header
+stands in when the raw's lacks the card), the observation type it gives (`obsType`, as `imageQualityQa` classifies
+it: `trace` for a quartz, `arc`, `twilight`, ...) and the arms the visit read (`cameraSet`).
 
 Per reference, line species and line set (`statusType`: `BOTH`, `USED`, `RESERVED`, or `UNFITTED`): the median and
 robust RMS of the x and y residuals in pixels, the median y residual in km/s (`medianDeltaYKms`), `nLines` and
@@ -287,8 +318,8 @@ It also runs in `pipelines/qaThresholds.yaml` beside `imageQualityQa`, behind dr
 
 | DataSet Type            | Dimensions                             | Description                                                                                                       |
 |-------------------------|----------------------------------------|-------------------------------------------------------------------------------------------------------------------|
-| `dmLineResidualMetrics` | `instrument, visit, arm, spectrograph` | Long format: one row per reference, species, `statusType` and metric, with `cameraSet` and `obsType`.             |
-| `dmLineResidualSummary` | `instrument, visit, arm, spectrograph` | One row: `cameraSet`, `obsType`, `fitted`, `nSpecies`, `nSpeciesMeasured`, and the calibration used.              |
+| `dmLineResidualMetrics` | `instrument, visit, arm, spectrograph` | Long format: one row per reference, species, `statusType` and metric, with `cameraSet`, `obsType` and `seqType`.  |
+| `dmLineResidualSummary` | `instrument, visit, arm, spectrograph` | One row: `cameraSet`, `obsType`, `seqType`, `fitted`, `nSpecies`, `nSpeciesMeasured`, and the calibration used.   |
 | `dmLineResidualData`    | `instrument, visit, arm, spectrograph` | One row per line measured (`USED` and `RESERVED` traces sampled), with `dxCalib`, `dyCalib`, `dxVisit`, `dyVisit` in pixels and `dyKmsCalib`, `dyKmsVisit` in km/s. |
 
 ##### Coming from `dmResiduals`
@@ -411,9 +442,13 @@ width, a Gaussian fitted to the profile understates it by 8–10 %, and drp_stel
   values reflect the calibration epoch, not the current visit, so `medFwhm` then counts as not measured: it is
   not judged and enters no normal value. `pctFlagged` is `NaN`. A quartz falls back to them whenever its calexp
   gives no usable measurement.
-- **`obsType`** / **`seqName`** / **`illumination`** — Visit classification (`arc`, `trace`, `science`, `allsky`,
-  `twilight`, `dark`, `unknown`), the raw `W_SEQNAM` string (e.g. `"Arc: HgCd"`) it was derived from, and `full`
-  (the science fibers) or `iis` (the 16 engineering fibers). Twilight and dark frames are not measured.
+- **`obsType`** / **`seqType`** / **`seqName`** / **`illumination`** / **`lamps`** — Which measurement was made
+  (`arc`, `trace`, `science`, `allsky`, `twilight`, `dark`, `bias`, or `unknown` for a frame with no measurement of
+  its own), the raw `W_SEQTYP` and `W_SEQNAM` strings (e.g. `"scienceArc"`, `"Arc: HgCd"`) it was derived from,
+  `full` (the science fibers) or `iis` (the 16 engineering fibers), and the lamps the lamp headers say were lit
+  (obs_pfs's names joined by `+`: `Ne`, `Kr_eng`; empty when none). Twilight, dark and bias frames are not
+  measured. The gate works out the frame type from `seqType`, `seqName` and `illumination`, and the lamp of a
+  normal value from `lamps`, so a change of classification is applied to stored rows without the tasks.
 
 ##### Options
 
@@ -437,7 +472,8 @@ width, a Gaussian fitted to the profile understates it by 8–10 %, and drp_stel
 
 `iqQaMetrics` columns, by group:
 
-- **Identity** — `visit`, `arm`, `spectrograph`, `obsType`, `illumination`, `seqName`, `calexpRun` (the RUN
+- **Identity** — `visit`, `arm`, `spectrograph`, `obsType`, `illumination`, `seqName`, `seqType`, `lamps`,
+  `calexpRun` (the RUN
   collection of the calexp measured, whose `pfsArm` records the reducing pipeline; null without a calexp)
 - **Image quality** — `medFwhm`, `medDxCenter`, `dxCenterRms`, `pctFlagged`, `nLines`, `linesPerFiber`,
   `nLitFibers`, `nFibers`, `nTraceRows`, `traceOnly`

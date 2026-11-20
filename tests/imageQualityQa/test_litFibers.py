@@ -167,6 +167,13 @@ def testIisQuartzIsClassifiedFromItsLampHeaders(iqqa, fakes, oldGetLamps):
     task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
     assert task._classifyVisit(fakes.Exposure(np.zeros((2, 2)), iis), None)[:2] == ("trace", True)
     assert task._classifyVisit(fakes.Exposure(np.zeros((2, 2)), slit), None)[:2] == ("trace", False)
+    # The lamps are stored as the lamp headers give them, which a normal value is then looked up by.
+    assert task._classifyVisit(fakes.Exposure(np.zeros((2, 2)), iis), None)[4] == "Quartz_eng"
+    assert task._classifyVisit(fakes.Exposure(np.zeros((2, 2)), slit), None)[4] == "Quartz"
+    both = {"DATA-TYP": "COMPARISON", "W_AITNEO": True, "W_IISNEO": True, **fakes.header(*IIS_ARC)}
+    assert task._classifyVisit(fakes.Exposure(np.zeros((2, 2)), both), None)[4] == "Ne+Ne_eng"
+    dark = {"DATA-TYP": "DARK", **fakes.header("darks", "Morning Dark")}
+    assert task._classifyVisit(fakes.Exposure(np.zeros((2, 2)), dark), None)[4] == ""
     # Negative control: getLamps on the header as it is takes the IIS quartz for a science-fiber one.
     assert _getLamps(iis) == {"Quartz"}
 
