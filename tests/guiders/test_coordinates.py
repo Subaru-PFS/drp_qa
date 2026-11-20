@@ -23,8 +23,8 @@ from pfs.utils.coordinates.Subaru_POPT2_PFS import PFS
         (coords.pixToArcsec, 94.7 / 13, 1),
         (coords.radToArcsec, np.pi / 180, 3600),
         (coords.arcsecToRad, 3600, np.pi / 180),
-        (coords.guiderFocusToM2Off3, 800, 1),
-        (coords.m2Off3ToGuiderFocus, -0.25, -200),
+        (coords.guiderFocusToM2Off3, 650, 1),
+        (coords.m2Off3ToGuiderFocus, -0.2, -130),
     ],
 )
 def testUnitConversions(func, value, expected):

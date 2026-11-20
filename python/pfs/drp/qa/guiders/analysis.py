@@ -58,6 +58,7 @@ __all__ = [
     "estimateFocusErrors",
     "estimateGuideErrors",
     "fitDriftRate",
+    "fitFocusSlope",
     "fitGlobalModel",
     "fitGuiderModel",
     "fitTransform",
@@ -1463,6 +1464,57 @@ def estimateFocusErrors(
     focusErrors["focus_error_um"] = mmToUm(momentDifferenceToPiston(deltaMxx))
 
     return focusErrors.reset_index()
+
+
+def fitFocusSlope(
+    focusErrors: pd.DataFrame, halfRange_mm: float = 0.2, column: str = "focus_error_um"
+) -> tuple[float, float]:
+    """Fit the focus error per mm of focus position near best focus.
+
+    The focus error is linear in the focus position only near best focus
+    (within about 0.2 mm), and saturates beyond. A Theil-Sen line through
+    every exposure gives the best focus, where the line crosses 0; the line
+    is then fitted to the exposures within ``halfRange_mm`` of it, twice, so
+    that the range settles.
+    `pfs.drp.qa.guiders.coordinates.GUIDER_FOCUS_UM_PER_M2_OFF3_MM` is the
+    median of this slope over many focus sweeps.
+
+    Parameters
+    ----------
+    focusErrors : `pandas.DataFrame`
+        The focus errors of one focus sweep, from `estimateFocusErrors`:
+        ``focus_position_mm`` and ``column``. Rows with NaN in either are
+        ignored.
+    halfRange_mm : `float`
+        Fit the exposures within this of best focus (mm).
+    column : `str`
+        The focus error to fit (microns).
+
+    Returns
+    -------
+    slope : `float`
+        The focus error per mm of focus position (microns per mm).
+    bestFocus_mm : `float`
+        The focus position at which the line crosses 0 (mm).
+
+    Both are NaN if the focus error doesn't rise with the focus position, or
+    the exposures to fit are at fewer than three focus positions (to a
+    micron).
+    """
+    points = focusErrors[["focus_position_mm", column]].dropna()
+    x, y = points.focus_position_mm.to_numpy(dtype=float), points[column].to_numpy(dtype=float)
+    near = np.ones(len(x), dtype=bool)
+    slope = bestFocus = np.nan
+    for _ in range(3):
+        if len(np.unique(np.round(x[near], 3))) < 3:
+            return np.nan, np.nan
+        slope, intercept, _, _ = scipy.stats.theilslopes(y[near], x[near])
+        if not slope > 0:
+            return np.nan, np.nan
+        bestFocus = -intercept / slope
+        near = np.abs(x - bestFocus) <= halfRange_mm
+
+    return float(slope), float(bestFocus)
 
 
 def averageByFocusPosition(

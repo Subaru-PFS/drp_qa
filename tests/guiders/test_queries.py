@@ -15,6 +15,7 @@ from pfs.drp.qa.guiders.queries import (
     find_W_M2OFF3,
     readAgcData,
     readAGCStars,
+    readFocusSweepVisits,
     readInstPa,
     readPfsDesign,
     readRawMetadata,
@@ -395,6 +396,22 @@ def testReadPfsDesign(FakeOpDB):
     pd.testing.assert_frame_equal(readPfsDesign(opdb, 120000), design)
     assert opdb.calls[0].params == {"pfs_visit_id": 120000}
     checkBound(opdb.calls[0], 120000)
+
+
+def testReadFocusSweepVisits(FakeOpDB):
+    """The visits of the agFocusSweep sequences, as Python ints in order; the sequence type is bound."""
+    sweeps = pd.DataFrame({"pfs_visit_id": np.array([121272, 148262, 150724])})
+    opdb = FakeOpDB({"sweeps": sweeps}, patterns={"sweeps": r"FROM iic_sequence\s+JOIN visit_set"})
+
+    visits = readFocusSweepVisits(opdb)
+
+    assert visits == [121272, 148262, 150724]
+    assert all(type(visit) is int for visit in visits)  # psycopg can't bind NumPy integers
+    assert opdb.calls[0].params == {"sequenceType": "agFocusSweep"}
+    assert "agFocusSweep" not in opdb.calls[0].sql
+    assert "ORDER BY visit_set.pfs_visit_id" in opdb.calls[0].sql
+    with pytest.raises(TypeError, match="opdb must be"):
+        readFocusSweepVisits("opdb")
 
 
 def testReadTelStatus(FakeOpDB):

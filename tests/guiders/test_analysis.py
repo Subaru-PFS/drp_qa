@@ -23,6 +23,7 @@ from pfs.drp.qa.guiders.analysis import (
     estimateFocusErrors,
     estimateGuideErrors,
     fitDriftRate,
+    fitFocusSlope,
     fitGlobalModel,
     fitGuiderModel,
     fitTransform,
@@ -954,6 +955,52 @@ def testEstimateFocusErrors():
     assert estimateFocusErrors(pd.concat([agcData, edge])).focus_error_um.iloc[0] != pytest.approx(
         byCamera.focus_error_um.iloc[0]
     )
+
+
+def makeFocusSweep(slope=650.0, bestFocus_mm=3.25, saturation_um=150.0) -> pd.DataFrame:
+    """Return the focus errors of a sweep, three exposures at each of 25 positions, saturating far from focus."""
+    position = np.repeat(np.round(np.arange(2.65, 3.86, 0.05), 3), 3)
+    noise = np.tile([-5.0, 0.0, 5.0], len(position) // 3)
+    error = np.clip(slope * (position - bestFocus_mm), -saturation_um, saturation_um) + noise
+
+    return pd.DataFrame({"focus_position_mm": position, "focus_error_um": error})
+
+
+def testFitFocusSlope():
+    """The slope is that of the exposures near best focus, whatever happens far from it."""
+    sweep = makeFocusSweep()
+    slope, bestFocus = fitFocusSlope(sweep)
+    assert slope == pytest.approx(650, rel=0.02)
+    assert bestFocus == pytest.approx(3.25, abs=0.005)
+
+    # Negative control: a line through the whole sweep, saturated ends included, is shallower.
+    whole, _ = np.polyfit(sweep.focus_position_mm, sweep.focus_error_um, 1)
+    assert whole < 0.95 * 650
+    wide, _ = fitFocusSlope(sweep, halfRange_mm=1)
+    assert wide < 0.95 * 650
+
+    # An exposure with a wild focus error, and one with none, change little.
+    wild = sweep.copy()
+    wild.loc[36, "focus_error_um"] = 2000.0  # at best focus
+    wild.loc[39, "focus_error_um"] = np.nan
+    assert fitFocusSlope(wild)[0] == pytest.approx(650, rel=0.05)
+
+    # Another column, e.g. ics_agActor's focus error.
+    actor = sweep.assign(ag_actor_focus_error_um=2 * sweep.focus_error_um)
+    assert fitFocusSlope(actor, column="ag_actor_focus_error_um")[0] == pytest.approx(1300, rel=0.02)
+
+    pd.testing.assert_frame_equal(sweep, makeFocusSweep())  # the input is left alone
+
+
+def testFitFocusSlopeNoFit():
+    """With too few focus positions near focus, or a focus error that falls, there is no slope."""
+    sweep = makeFocusSweep()
+
+    twoPositions = sweep[sweep.focus_position_mm.isin([3.2, 3.3])]
+    assert np.isnan(fitFocusSlope(twoPositions)).all()
+    assert np.isnan(fitFocusSlope(sweep, halfRange_mm=0.04)).all()  # only 3.25 mm is that near focus
+    assert np.isnan(fitFocusSlope(sweep.assign(focus_error_um=-sweep.focus_error_um))).all()
+    assert np.isnan(fitFocusSlope(sweep.iloc[:0])).all()
 
 
 def testAverageByFocusPosition():

@@ -22,6 +22,7 @@ from pfs.drp.qa.guiders.analysis import (
     comparePfsUtilsPositions,
     estimateFocusErrors,
     fitDriftRate,
+    fitFocusSlope,
     fitGuiderModel,
     guideErrorsByExposure,
     selectValidMatches,
@@ -29,8 +30,10 @@ from pfs.drp.qa.guiders.analysis import (
 )
 from pfs.drp.qa.guiders.coordinates import (
     AGC_CAMERA_CENTERS_MM,
+    GUIDER_FOCUS_UM_PER_M2_OFF3_MM,
     addOffsets,
     addReferencePositions,
+    m2Off3ToGuiderFocus,
     opdbToHardware,
 )
 from pfs.drp.qa.guiders.queries import AGC_DATA_COLUMNS
@@ -44,9 +47,8 @@ NAMES = ["focusSweep", "raster", "allSky"]
 RASTER_CENTER_VISITS = [148284, 148291]
 RASTER_HEXAGON_VISITS = list(range(148285, 148291))
 
-# M2_OFF3 near best focus (mm), and the range about it in which the focus error is linear.
+# M2_OFF3 near best focus (mm).
 BEST_FOCUS_MM = 3.29
-LINEAR_FOCUS_RANGE_MM = 0.2
 
 
 def rms(values) -> float:
@@ -131,21 +133,12 @@ def focusSweep(realAgcData) -> pd.DataFrame:
     return addImageSizes(realAgcData("focusSweep"))
 
 
-def fitFocusLine(focusErrors: pd.DataFrame, column: str = "focus_error_um") -> tuple[float, float]:
-    """Fit a line to the focus errors near best focus; return its slope (µm/mm) and zero (mm)."""
-    near = focusErrors[(focusErrors.focus_position_mm - BEST_FOCUS_MM).abs() <= LINEAR_FOCUS_RANGE_MM]
-    near = near.dropna(subset=column)
-    slope, intercept = np.polyfit(near.focus_position_mm, near[column], 1)
-
-    return float(slope), float(-intercept / slope)
-
-
 def testRealDataFocusSweep(focusSweep):
     """The focus error rises through focus, as the AG actor's does.
 
     The median focus error at each M2_OFF3 rises from -466 µm at 2.725 mm to
-    277 µm at 3.55 mm, linearly within 0.2 mm of focus: 606 µm/mm, zero at
-    3.278 mm. The AG actor's give 673 µm/mm and 3.291 mm.
+    277 µm at 3.55 mm, linearly within 0.2 mm of focus: 612 µm/mm, zero at
+    3.277 mm. The AG actor's give 660 µm/mm and 3.283 mm.
     """
     focusErrors = estimateFocusErrorsWithAgActor(focusSweep)
     medians = focusErrors.groupby(focusErrors.focus_position_mm.round(3)).focus_error_um.median()
@@ -153,18 +146,35 @@ def testRealDataFocusSweep(focusSweep):
     assert medians.is_monotonic_increasing
     assert medians.iloc[0] < -300 and medians.iloc[-1] > 200
 
-    slope, bestFocus = fitFocusLine(focusErrors)
+    slope, bestFocus = fitFocusSlope(focusErrors)
     assert 500 < slope < 750
     assert bestFocus == pytest.approx(BEST_FOCUS_MM, abs=0.04)
 
-    agActorSlope, agActorBestFocus = fitFocusLine(focusErrors, "ag_actor_focus_error_um")
+    agActorSlope, agActorBestFocus = fitFocusSlope(focusErrors, column="ag_actor_focus_error_um")
     assert slope == pytest.approx(agActorSlope, rel=0.2)
     assert bestFocus == pytest.approx(agActorBestFocus, abs=0.03)
 
-    # Negative control: with the detectors' halves swapped, the slope has the wrong sign.
+    # Negative control: with the detectors' halves swapped the focus error falls through focus, and no
+    # slope is fitted.
     swapped = estimateFocusErrors(focusSweep.assign(left=~focusSweep.left), byCamera=False)
-    swappedSlope, _ = fitFocusLine(swapped)
-    assert swappedSlope < -500
+    assert np.isnan(fitFocusSlope(swapped)).all()
+    swappedMedians = swapped.groupby(swapped.focus_position_mm.round(3)).focus_error_um.median()
+    assert swappedMedians.iloc[0] > 300 and swappedMedians.iloc[-1] < -200
+
+
+def testRealDataFocusScale(focusSweep):
+    """The sweep's slope is within 10% of the constant the focus plots convert with.
+
+    `GUIDER_FOCUS_UM_PER_M2_OFF3_MM` (650 µm/mm) is the median over the AG
+    focus sweeps of 2025-03 to 2026-11; this sweep, of Run 30, gives 612.
+    """
+    slope, _ = fitFocusSlope(estimateFocusErrors(focusSweep, byCamera=False))
+
+    assert slope == pytest.approx(GUIDER_FOCUS_UM_PER_M2_OFF3_MM, rel=0.1)
+    np.testing.assert_allclose(m2Off3ToGuiderFocus(1.0), GUIDER_FOCUS_UM_PER_M2_OFF3_MM)
+
+    # Negative control: drp_stella's 800 µm/mm, of unrecorded origin, is more than 20% from this sweep.
+    assert abs(slope - 800) > 0.2 * 800
 
 
 def testRealDataFocusPairing(focusSweep):

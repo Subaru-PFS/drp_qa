@@ -30,6 +30,7 @@ __all__ = [
     "readAGCStars",
     "readAgRun",
     "readAgcData",
+    "readFocusSweepVisits",
     "readInstPa",
     "readPfsDesign",
     "readRawMetadata",
@@ -688,6 +689,39 @@ def readTelStatus(opdb, pfs_visit_id: int | Iterable[int]) -> pd.DataFrame:
     """
 
     return opdb.query_dataframe(sql, params={"visits": _visitList(pfs_visit_id)}).reset_index(drop=True)
+
+
+def readFocusSweepVisits(opdb) -> list[int]:
+    """Read the visits of every AG focus sweep.
+
+    An AG focus sweep is an IIC sequence of type ``agFocusSweep``: one visit
+    whose AG exposures step M2_OFF3 through focus (seven positions, three
+    exposures at each). The first is from 2025-03-20.
+
+    Parameters
+    ----------
+    opdb : `pfs.utils.database.opdb.OpDB`
+        The operational database.
+
+    Returns
+    -------
+    visits : `list` [`int`]
+        The sweeps' ``pfs_visit_id`` values, in order; `readAgcData` reads
+        their AG data.
+    """
+    _checkOpdb(opdb)
+    sql = """
+    SELECT DISTINCT visit_set.pfs_visit_id
+    FROM iic_sequence
+    JOIN visit_set ON visit_set.iic_sequence_id = iic_sequence.iic_sequence_id
+    WHERE iic_sequence.sequence_type = :sequenceType
+    ORDER BY visit_set.pfs_visit_id
+    """
+
+    return [
+        int(visit)
+        for visit in opdb.query_dataframe(sql, params={"sequenceType": "agFocusSweep"}).pfs_visit_id
+    ]
 
 
 # The flag values the readAgRun SQL compares with, bound rather than written into it.

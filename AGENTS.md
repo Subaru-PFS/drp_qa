@@ -81,6 +81,9 @@ the pipeline/config glue to run them.
   update its section and rerun it (`jupyter nbconvert --to notebook --execute --inplace`).
   `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its replacement
   (needs the opdb; committed without outputs): keep it in step with renamed arguments.
+  `docs/guider-focus-slope.ipynb` (needs the opdb; committed with outputs) measures
+  `coordinates.GUIDER_FOCUS_UM_PER_M2_OFF3_MM` on every AG focus sweep: rerun it, and update the
+  constant and the numbers quoted in `README.md`, when the value is revisited.
   The end-of-run report adds `queries.readAgRun` (aggregates over a period's AG
   exposures), `runAnalysis` (stack-free: per-exposure camera states, dropouts, settled jitter,
   clusters of rejected matches, position-model errors, flags), `runPlotting` (figures from an `AgRun`) and `runReport` (fetch to parquet, then the
