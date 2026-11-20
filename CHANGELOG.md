@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-19
+
 ### Changed
 
 - **Tasks write numbers; one gate gives the verdict** (PIPE2D-2012) — `imageQualityQa` and `dmLineResiduals` no
