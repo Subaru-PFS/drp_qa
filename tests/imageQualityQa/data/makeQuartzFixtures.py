@@ -16,7 +16,7 @@ drp_stella and drp_qa set up. Run from the top of drp_qa, e.g.::
         --butler /work/datastore --collections u/$USER/qa-thresholds/004,PFS/defaults
 
 The collections must hold the visits' ``calexp`` and ``detectorMap`` (a
-``docs/qa-thresholds.ipynb`` run does) and the calibrations. Each file is about
+``pipelines/qaThresholds.yaml`` run does) and the calibrations. Each file is about
 0.3 MB.
 """
 

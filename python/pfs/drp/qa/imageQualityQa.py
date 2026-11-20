@@ -1,8 +1,9 @@
 """Image quality QA pipeline task.
 
-Produces per-detector FWHM and image-shape QA plots from arc-line
+Measures per-detector FWHM and image shape from arc-line
 second-moment measurements, cross-dispersion trace widths measured on the
 calexp (`pfs.drp.qa.crossDispersion`), or fiber profile calibrations.
+It writes numbers only: `pfs.drp.qa.metrics.gate` gives the verdicts.
 """
 
 import re
@@ -11,7 +12,7 @@ from typing import Any
 import lsst.afw.image
 import numpy as np
 import pandas as pd
-from lsst.pex.config import DictField, Field, ListField
+from lsst.pex.config import Field
 from lsst.pipe.base import (
     InputQuantizedConnection,
     OutputQuantizedConnection,
@@ -33,14 +34,6 @@ from lsst.pipe.base.connectionTypes import (
 
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
 from pfs.drp.qa.crossDispersion import measureImageWidths, profileFwhm
-from pfs.drp.qa.metrics.gate import (
-    configThresholds,
-    gate,
-    loadThresholds,
-    taskThresholdsRecord,
-    thresholdsNames,
-    thresholdsPath,
-)
 from pfs.drp.qa.metrics.lineFlux import speciesLineFlux
 from pfs.drp.qa.metrics.longFormat import metricsFrame, parseSpeciesStats, speciesFrame
 from pfs.drp.qa.metrics.saturation import measureSaturation
@@ -176,7 +169,8 @@ class ImageQualityQaConnections(
     iqQaMetrics = OutputConnection(
         name="iqQaMetrics",
         doc=(
-            "Per-quantum summary metrics (one row)."
+            "Per-quantum summary metrics (one row): numbers and what identifies the frame, no verdict"
+            " (`pfs.drp.qa.metrics.gate` judges them afterwards)."
             " Columns: ``visit``, ``arm``, ``spectrograph``, ``medFwhm``,"
             " ``medDxCenter``, ``dxCenterRms``, ``pctFlagged``,"
             " ``pctLowSN``, ``pctMeasFail``,"
@@ -184,15 +178,10 @@ class ImageQualityQaConnections(
             " lines, or on a quartz trace centroids, per lit fiber), ``nLitFibers``"
             " and ``nFibers`` (the detector's fibers the pfsConfig lights, and"
             " those it lights or hides behind a black dot), ``nTraceRows`` (trace"
-            " centroids in ``lines``), ``traceOnly``, ``illumination`` (``full``,"
-            " the science fibers, or ``iis``, the 16 engineering fibers), ``qaStatus``"
-            " (``PASS``, ``WARN``, ``FAIL``, or ``UNKNOWN`` when no metric was"
-            " judged), ``qaDecidedBy``, ``qaReason``, ``thresholdsFiles`` and"
-            " ``thresholdsSha256`` (the thresholds layers judged with, the files then"
-            " the config's fields as ``imageQualityQa.config``, and their content"
-            " then, comma-separated: `pfs.drp.qa.metrics.gate.taskThresholdsRecord`),"
+            " centroids in ``lines``), ``traceOnly``, ``obsType``, ``illumination`` (``full``,"
+            " the science fibers, or ``iis``, the 16 engineering fibers), ``seqName``,"
             " ``calexpRun`` (the RUN"
-            " collection of the calexp judged, null without one)."
+            " collection of the calexp measured, null without one)."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -218,7 +207,7 @@ class ImageQualityQaConnections(
         doc=(
             "Fiber profile shapes; their widths stand in for the trace FWHM when"
             " neither arc lines nor the calexp give a usable measurement. A"
-            " calibration, not a measurement: such a FWHM is not judged."
+            " calibration, not a measurement: ``traceOnly`` marks such a FWHM."
         ),
         storageClass="FiberProfileSet",
         dimensions=("instrument", "arm", "spectrograph"),
@@ -312,7 +301,7 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
         doc=(
             "Write the per-line measurements (``iqQaData``)? About 21 MB per detector for an arc and"
             " 80 MB for a twilight, mostly unsampled trace centroids, and nothing reads them back;"
-            " gating and threshold derivation read ``iqQaMetrics``."
+            " the gate and the normal values read ``iqQaMetrics``."
         ),
     )
 
@@ -387,126 +376,12 @@ class ImageQualityQaConfig(PipelineTaskConfig, pipelineConnections=ImageQualityQ
             " stars are faint (sky frames with low S/N), fewer than 10 % of"
             " sampled positions reach S/N threshold and the resulting FWHM"
             " estimate is unreliable.  In that case the FWHM is treated as"
-            " sparse (NaN) and no pass/fail status is assigned.  On bright-star"
+            " sparse (NaN).  On bright-star"
             " or arc frames where FLUXSTD fibers are well-lit, the good fraction"
             " is typically > 10 % and the FWHM estimate is used.  The"
             " pctFlagged metric is always suppressed (NaN) when the FLUXSTD"
             " path is active, because the flag rate for stellar fibers reflects"
             " exposure depth rather than optical quality."
-        ),
-    )
-    fwhmWarnThreshold = Field(
-        dtype=float,
-        default=3.2,
-        doc=(
-            "Median FWHM (pixels) above which the per-quantum status is set to"
-            " WARN.  Values above ``fwhmFailThreshold`` take priority and yield"
-            " FAIL.  Set to a large value (e.g. 999) to disable."
-        ),
-    )
-    fwhmFailThreshold = Field(
-        dtype=float,
-        default=3.5,
-        doc=(
-            "Median FWHM (pixels) above which the per-quantum status is set to"
-            " FAIL.  Tuned for arm-b (400–650 nm); adjust for other arms."
-            " Set to a large value (e.g. 999) to disable."
-        ),
-    )
-    flagRateWarnThreshold = DictField(
-        keytype=str,
-        itemtype=float,
-        default={
-            "b": 50.0,
-            "r": 15.0,
-            "n": 15.0,
-            "m": 15.0,
-            "b:HgCd": 15.0,
-            "b:Neon": 50.0,
-            "b:Krypton": 55.0,
-            "b:Xenon": 85.0,
-            "b:Argon": 93.0,
-        },
-        doc=(
-            "Percentage of flagged lines above which the per-quantum status"
-            " is set to WARN.  Values above ``flagRateFailThreshold`` yield"
-            " FAIL.  Keys can be an arm name (``b``) or ``arm:species``"
-            " (``b:HgCd``) for lamp-specific overrides.  The species is"
-            " extracted from W_SEQNAM (e.g. 'Arc: HgCd' → 'HgCd')."
-            " Lookup order: ``arm:species`` → ``arm`` → 15.0."
-            " Set to 100 to disable."
-        ),
-    )
-    flagRateFailThreshold = DictField(
-        keytype=str,
-        itemtype=float,
-        default={
-            "b": 60.0,
-            "r": 20.0,
-            "n": 20.0,
-            "m": 20.0,
-            "b:HgCd": 25.0,
-            "b:Neon": 60.0,
-            "b:Krypton": 65.0,
-            "b:Xenon": 92.0,
-            "b:Argon": 97.0,
-        },
-        doc=(
-            "Percentage of flagged lines above which the per-quantum status"
-            " is set to FAIL.  Keys can be an arm name (``b``) or"
-            " ``arm:species`` (``b:HgCd``) for lamp-specific overrides."
-            " Lookup order: ``arm:species`` → ``arm`` → 20.0."
-            " Set to 100 to disable."
-        ),
-    )
-    thresholdsFile = Field(
-        dtype=str,
-        default="iqQaThresholds-run25.yaml",
-        doc=(
-            "Thresholds file written by ``pfs.drp.qa.metrics.calibration.writeThresholds``,"
-            " judged before the threshold fields of this config: a population with no"
-            " entry in the file is judged by the fields. An absolute path, or one relative"
-            " to the files shipped in ``pfs/drp/qa/metrics/data``; empty for the fields alone."
-            " The default holds the thresholds derived 2026-10-19 from the validation visits"
-            " reduced afresh (collection u/wtg/qa-thresholds/010; the file records the pipeline),"
-            " as adopted by"
-            " ``makeRun25Thresholds.py`` beside it: medFwhm 3/5 % above each detector and lamp's"
-            " reference median (Run25; Run29 for b2 and n4 quartz; b-arm Argon not judged),"
-            " per-arm medFwhm where there is none, linesPerFiber 25/50 % (arcs) and 2.5/5 % (quartz)"
-            " below each arm and sequence's Run25 median, and no pctFlagged; each entry carries"
-            " its provenance."
-        ),
-    )
-    extraThresholdsFiles = ListField(
-        dtype=str,
-        default=["iqQaThresholds-iis-run30.yaml"],
-        doc=(
-            "Further thresholds files, judged after ``thresholdsFile`` and before the config fields, named as"
-            " it is. The default is the IIS frames' file: every entry names"
-            " ``illumination: iis``, so it judges IIS frames alone, and an entry of any file that doesn't name"
-            " the column is for full-slit frames (`pfs.drp.qa.metrics.gate.DEFAULT_POPULATION`). Derived by"
-            " ``makeIisThresholds.py`` beside it from Run30's nightly IIS frames reduced afresh"
-            " (u/wtg/qa-iis/003b): medFwhm 3/5 % above each detector and lamp's median (the n-arm Ne arc and the"
-            " m arm not judged), linesPerFiber 25/50 % (arcs) and 2.5/5 % (quartz) below each arm and sequence's"
-            " median, medDxCenter at the config's 1/2 px, no pctFlagged."
-        ),
-    )
-    dxCenterWarnThreshold = Field(
-        dtype=float,
-        default=1.0,
-        doc=(
-            "Median absolute spatial offset |dxCenter| (pixels) between"
-            " the static calibration detectorMap and measured fiber"
-            " positions above which the per-quantum status is set to WARN."
-        ),
-    )
-    dxCenterFailThreshold = Field(
-        dtype=float,
-        default=2.0,
-        doc=(
-            "Median absolute spatial offset |dxCenter| (pixels) between"
-            " the static calibration detectorMap and measured fiber"
-            " positions above which the per-quantum status is set to FAIL."
         ),
     )
 
@@ -518,22 +393,13 @@ class ImageQualityQaTask(PipelineTask):
     them with wavelength and trace-position information from the
     ``detectorMap``, and computes Gaussian-equivalent FWHM and flexure
     metrics.
+
+    The task measures and stores numbers; it gives no verdict and holds no
+    limit. `pfs.drp.qa.metrics.gate` judges ``iqQaMetrics`` afterwards.
     """
 
     ConfigClass = ImageQualityQaConfig
     _DefaultName = "imageQualityQa"
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # Highest priority first; see pfs.drp.qa.metrics.gate.
-        names = thresholdsNames(self.config)
-        self.thresholds = [
-            *loadThresholds([thresholdsPath(name) for name in names]),
-            configThresholds(self.config),
-        ]
-        # Which layers judged, by content, for qadb: the loader's drp_qa may ship other files, and the
-        # config's fields are a layer of their own there (`pfs.drp.qa.metrics.gate.configLayerName`).
-        self.thresholdsRecord = taskThresholdsRecord("imageQualityQa", names, self.thresholds[-1])
 
     def runQuantum(
         self,
@@ -553,8 +419,8 @@ class ImageQualityQaTask(PipelineTask):
             # Unexpected exceptions are left to propagate.
             self.log.error("ImageQualityQaTask failed for %s: %s", dataId, e)
         else:
-            # The RUN of the calexp judged: its pfsArm, written beside it, records the pipeline
-            # that reduced it, which the gate checks against the thresholds'.
+            # The RUN of the calexp measured: its pfsArm, written beside it, records the pipeline
+            # that reduced it.
             calexpRef = getattr(inputRefs, "calexp", None)
             outputs.iqQaMetrics["calexpRun"] = calexpRef.run if calexpRef is not None else None
             if self.config.doWriteLineData:
@@ -575,7 +441,7 @@ class ImageQualityQaTask(PipelineTask):
         cosmicrayLog: Any = None,
         reduceExposureLog: Any = None,
     ) -> Struct:
-        """Compute image quality metrics and generate QA plots.
+        """Compute image quality metrics.
 
         The measurement path is chosen based on the observation type derived
         from ``W_SEQTYP`` and lamp headers (see `_classifyVisit`):
@@ -588,12 +454,12 @@ class ImageQualityQaTask(PipelineTask):
           16 engineering fibers per spectrograph that reduceExposure measures
           lines on; the pfsConfig says whether it did
           (`engineeringLit`), the lamp headers without one. ``illumination`` is
-          ``iis``, and only a threshold naming it judges the frame
-          (`pfs.drp.qa.metrics.gate`).
+          ``iis``, which makes it a frame type of its own
+          (`pfs.drp.qa.metrics.registry.frameType`).
         * **Regular trace/quartz** (``scienceTrace``, all fibers): calexp
           trace widths are the primary path. When they are absent
           or unusable, the fiber profile calibration widths are reported with
-          ``traceOnly``, and neither ``medFwhm`` nor ``pctFlagged`` is judged.
+          ``traceOnly``, and ``pctFlagged`` is null.
         * **IIS trace/quartz** (``scienceTrace``, the IIS halogen lamp): as a
           regular quartz, the calexp widths and the trace centroids taken on
           the engineering fibers.
@@ -609,7 +475,9 @@ class ImageQualityQaTask(PipelineTask):
         * **Unknown** (``W_SEQTYP`` absent): falls back to the original
           heuristic based on ``n_good_arc`` and ``maxCalexpFlagRate``.
 
-        A quantum with no metric judged gets ``qaStatus`` ``UNKNOWN``.
+        A quantum with nothing to measure still writes its row: what could
+        not be measured is null, and the identifying columns say what the
+        frame is.
 
         Parameters
         ----------
@@ -643,10 +511,9 @@ class ImageQualityQaTask(PipelineTask):
             ``dxCenterRms``, ``pctFlagged``, ``nLines``, ``linesPerFiber``,
             ``nLitFibers``, ``nFibers``, ``nTraceRows``, ``nSaturatedLines``,
             ``pctSaturatedPixels``, ``traceOnly``,
-            ``obsType``, ``illumination``, ``seqName``, ``qaStatus``, ``qaDecidedBy``,
-            ``qaReason``, ``visit``, ``arm``, ``spectrograph``.  The verdict
-            is `pfs.drp.qa.metrics.gate.gate` with ``self.thresholds``;
-            ``UNKNOWN`` when no metric was judged.
+            ``obsType``, ``illumination``, ``seqName``, the log-derived columns,
+            the flag breakdown (``pct<Bit>``), ``visit``, ``arm``,
+            ``spectrograph``.  Numbers only: no verdict column.
         iqQaSpeciesMetrics : `pandas.DataFrame`
             Per-species fit statistics and line fluxes in long format
             (`pfs.drp.qa.metrics.longFormat`).
@@ -684,9 +551,9 @@ class ImageQualityQaTask(PipelineTask):
         n_good_arc = int(good_arc.sum())
         # nLines counts the rows of ``lines`` (lines and trace centroids found by
         # fitDetectorMap), whichever path measures the FWHM. linesPerFiber is the
-        # judged count: the measurements per lit fiber of what the
+        # count that compares between frames: the measurements per lit fiber of what the
         # frame is for, lamp lines on an arc and trace centroids on a quartz. Per
-        # lit fiber, so that a design lighting one fiber group is judged like a full
+        # lit fiber, so that a design lighting one fiber group reads like a full
         # slit; without the trace centroids an arc also records, whose number
         # follows the illumination and the pipeline rather than the lamp.
         n_lines = len(data)
@@ -840,8 +707,8 @@ class ImageQualityQaTask(PipelineTask):
             # The fiber profile widths are the fallback whenever the calexp gave
             # no usable measurement, whether or not a calexp exists. They are a
             # calibration, not a measurement of this exposure: ``traceOnly``
-            # marks them, and medFwhm is then neither judged nor used to derive
-            # thresholds (`pfs.drp.qa.metrics.registry`).
+            # marks them, and medFwhm then counts as not measured
+            # (`pfs.drp.qa.metrics.registry`).
             if not dense_data and fiberProfiles is not None:
                 # At the level of the problem it resolves, so that an operator
                 # filtering at WARNING who saw the failure also sees the outcome.
@@ -1168,31 +1035,14 @@ class ImageQualityQaTask(PipelineTask):
             if key in dataId:
                 metrics[key] = dataId[key]
 
-        # UNKNOWN, not PASS, when no metric was judged: a quantum where nothing
-        # could be measured is unassessed, and PASS would vouch for it.
-        verdict = gate(metrics, self.thresholds, default="UNKNOWN")
-        if verdict["qaStatus"].iloc[0] == "UNKNOWN":
-            verdict.loc[:, "qaReason"] = (
-                "FWHM read from the fiberProfiles calibration; no metric measured"
-                if using_profile_widths
-                else "no metric measured"
-            )
-        position = metrics.columns.get_loc("seqName") + 1
-        for offset, column in enumerate(verdict.columns):
-            metrics.insert(position + offset, column, verdict[column].to_numpy())
-        metrics = metrics.assign(**self.thresholdsRecord)
-        qa_status, reason = verdict["qaStatus"].iloc[0], verdict["qaReason"].iloc[0]
-
         dxStr = f"{medDxCenter:+.3f}px" if np.isfinite(medDxCenter) else "NaN"
         self.log.info(
-            "IQ QA %-4s  %s  %-22s  medFWHM=%.2fpx  dxCenter=%s  pctFlagged=%s  [%s]",
-            qa_status,
+            "IQ QA  %s  %-22s  medFWHM=%.2fpx  dxCenter=%s  pctFlagged=%s",
             title,
             seq_nam,
             med_fwhm,
             dxStr,
             f"{pct_flagged:.1f}%" if np.isfinite(pct_flagged) else "NaN",
-            reason or "all metrics nominal",
         )
 
         # Empty frames are left out of the concatenation: pandas would let them decide the dtypes.
@@ -1272,8 +1122,7 @@ class ImageQualityQaTask(PipelineTask):
         re_cr = re.compile(r"(?:Found|Identified) (\d+) cosmic rays (?:\(|covering )(\d+) pixels")
         # Newer drp_stella prefixes its fit summary messages with the detector
         # they belong to ("Final result: arm=b spectrograph=1 chi2=...").  The
-        # prefix is optional so that both log formats parse; see
-        # ``bin.src/fitDetectorMapLogQa.py``, which does the same.
+        # prefix is optional so that both log formats parse.
         armSpec = r"(?:arm=\S+ spectrograph=\d+ )?"
         re_fit_result = re.compile(
             r"Final result: "

@@ -142,12 +142,15 @@ def testNoCalexpGivesNoSaturation(runTask, fakes):
     assert longValue(species, "NeI", "medLineFlux") == pytest.approx(1000.0)
 
 
-def testNeitherMetricIsJudged(runTask, fakes):
-    """A wholly saturated frame keeps the verdict its other metrics give: no threshold exists yet."""
+def testSaturationLeavesTheOtherMetricsAsMeasured(runTask, fakes):
+    """A wholly saturated frame records its saturation; the arc-line metrics are what a clean frame gives."""
     detectorMap, lines, calexp = makeInputs(fakes, numPerFiber=30)
     clean = runTask(lines, detectorMap=detectorMap, calexp=calexp).iqQaMetrics.iloc[0]
     calexp.mask.array[:] |= SAT
     saturated = runTask(lines, detectorMap=detectorMap, calexp=calexp).iqQaMetrics.iloc[0]
     assert saturated["pctSaturatedPixels"] == pytest.approx(100.0)
     assert saturated["nSaturatedLines"] == len(lines)
-    assert (saturated["qaStatus"], saturated["qaReason"]) == (clean["qaStatus"], clean["qaReason"])
+    others = ["medFwhm", "pctFlagged", "nLines"]
+    assert saturated[others].tolist() == clean[others].tolist()
+    # Negative control: the saturation columns do tell the two frames apart.
+    assert (clean["pctSaturatedPixels"], clean["nSaturatedLines"]) == (0.0, 0)

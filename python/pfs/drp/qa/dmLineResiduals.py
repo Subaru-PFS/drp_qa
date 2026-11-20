@@ -2,9 +2,10 @@
 
 Per detector: has the instrument moved away from the calibration the visit is
 reduced against, and how well does the visit's adjusted detectorMap predict
-the lines it was not fitted to? The measurement and the verdict are
-stack-free, in `pfs.drp.qa.metrics.lineResiduals`; this module binds them to
-the Butler. It replaces ``dmResiduals`` and ``dmCombinedResiduals``.
+the lines it was not fitted to? The task stores numbers only: the measurement
+is stack-free, in `pfs.drp.qa.metrics.lineResiduals`, and this module binds it
+to the Butler. The verdict is given afterwards, by `pfs.drp.qa.metrics.gate`.
+It replaces ``dmResiduals`` and ``dmCombinedResiduals``.
 """
 
 from contextlib import suppress
@@ -28,7 +29,6 @@ from lsst.pipe.base.connectionTypes import PrerequisiteInput as PrerequisiteConn
 
 from pfs.datamodel import PfsConfig
 from pfs.drp.qa.imageQualityQa import litFibers
-from pfs.drp.qa.metrics.gate import taskThresholdsRecord, thresholdsNames
 from pfs.drp.qa.metrics.lineResiduals import (
     BOTH,
     CALIB,
@@ -41,8 +41,7 @@ from pfs.drp.qa.metrics.lineResiduals import (
     lineResiduals,
     lineTable,
     longResiduals,
-    residualTaskThresholds,
-    residualVerdict,
+    residualSummary,
     speciesResiduals,
 )
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
@@ -113,9 +112,8 @@ class DmLineResidualsConnections(
             " ``statusType`` (``BOTH``, ``USED``, ``RESERVED`` lines of the visit's detectorMap fit, or"
             " ``UNFITTED``, every good line, when the fit marked none), ``metric`` (``nLines``,"
             " ``linesPerFiber``; ``medianDeltaX``, ``robustRmsDeltaX`` for every species;"
-            " ``medianDeltaY``, ``robustRmsDeltaY`` for lamp lines), ``value``, ``status`` (the"
-            " metric's verdict; empty when not judged: only calib BOTH or UNFITTED rows and visit"
-            " RESERVED robust RMS are)."
+            " ``medianDeltaY``, ``robustRmsDeltaY`` in pixels and ``medianDeltaYKms`` in km/s for lamp and"
+            " sky lines), ``value``. No verdict: `pfs.drp.qa.metrics.gate` judges the rows afterwards."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -127,15 +125,11 @@ class DmLineResidualsConnections(
             "One row per detector: ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``obsType``, ``fitted``"
             " (false when the visit's detectorMap fit marked no line, so it is reduced against the"
             " calibration unadjusted),"
-            " ``nSpecies``, ``nSpeciesMeasured``, ``qaStatus`` (``UNKNOWN`` when no species"
-            " has ``minLines`` good lines), ``qaDecidedBy``, ``qaReason``, ``recommendedAction``"
-            " (``NOMINAL``, ``APPLY_SHIFT``, ``RECALIBRATE``, ``INSUFFICIENT_DATA``, ``UNJUDGED``), and"
-            " the calibration: ``calibId`` and ``calibRun`` (look up its validity range with"
-            " `pfs.drp.qa.metrics.readers.readCalibValidity`), ``calibCreated``,"
-            " ``calibFirstVisit`` and ``calibLastVisit`` (the visits it was made from); and the thresholds"
-            " layers judged with, ``thresholdsFiles`` and ``thresholdsSha256`` (the file, then the config's"
-            " fields as ``dmLineResiduals.config``, and their content then, comma-separated:"
-            " `pfs.drp.qa.metrics.gate.taskThresholdsRecord`)."
+            " ``nSpecies`` (species with a line against the calibration), ``nSpeciesMeasured`` (those with"
+            " ``minLines`` good lines), and"
+            " the calibration: ``calibCreated``, ``calibFirstVisit`` and ``calibLastVisit`` (the visits it"
+            " was made from), ``calibId`` and ``calibRun`` (look up its validity range with"
+            " `pfs.drp.qa.metrics.readers.readCalibValidity`). No verdict."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -148,7 +142,9 @@ class DmLineResidualsConnections(
             " later (pfs.drp.qa.plotting): ``visit``, ``arm``,"
             " ``spectrograph``, ``fiberId``, ``wavelength``, ``x``, ``y``, ``xErr``, ``yErr``,"
             " ``description``, ``statusType``, and the residual against each reference, measured minus"
-            " reference: ``dxCalib``, ``dyCalib``, ``dxVisit``, ``dyVisit`` (``dy`` NaN for traces)."
+            " reference: ``dxCalib``, ``dyCalib``, ``dxVisit``, ``dyVisit`` in pixels, then ``dyKmsCalib``,"
+            " ``dyKmsVisit``, ``dy`` in km/s by that reference's dispersion at the line (``dy`` NaN for"
+            " traces)."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -182,103 +178,13 @@ class DmLineResidualsConfig(PipelineTaskConfig, pipelineConnections=DmLineResidu
             " RESERVED trace rows were ~80% of a quartz or twilight visit's table before they were sampled."
         ),
     )
-    thresholdsFile = Field(
-        dtype=str,
-        default="dmLineResidualThresholds-run25.yaml",
-        doc=(
-            "Thresholds file (`pfs.drp.qa.metrics.calibration.writeThresholds`), judged before the"
-            " threshold fields: an absolute path, or one relative to ``pfs/drp/qa/metrics/data``;"
-            " empty for the fields alone. Entries may name ``reference``, ``statusType``, ``arm``,"
-            " ``spectrograph``, ``description``, ``cameraSet`` and ``obsType``; an entry that leaves"
-            " ``reference`` null applies to both references. The default holds the robust RMS of RESERVED"
-            " lines against the visit's detectorMap, derived from the validation visits reduced afresh"
-            " (u/wtg/qa-thresholds/010) and adopted by"
-            " ``makeLineResidualThresholds.py`` beside it: trace centroids on quartz frames (obsType"
-            " ``trace``) and the Ar, Kr, Ne and Xe lines judged in x per detector, WARN 20 % and FAIL 50 %"
-            " above the detector's known-good median, and the lamp lines in y at WARN 50 % and FAIL 150 %."
-            " Not judged: the mercury and cadmium lines, whose y scatter is intrinsically variable; trace"
-            " centroids on arcs and"
-            " twilights, whose faint continuum scatters them two to three times more; and sky-line species"
-            " on twilights. The median offsets from detectorMap_calib stay with the fields below."
-        ),
-    )
-    xWarnThreshold = Field(
-        dtype=float,
-        default=1.0,
-        doc=(
-            "|medianDeltaX| (pixels) of trace centroids against detectorMap_calib at or above which it is"
-            " WARN (APPLY_SHIFT): the calibration no longer matches, though the visit's adjustment absorbs a"
-            " shift. A third of the 3 px capture radius (FAIL); above Run25's known-good offsets, which"
-            " reach 0.57 px (b read with m) and 0.33 px otherwise (u/wtg/qa-thresholds/006)."
-            " Lamp lines' x offset is not judged by it. NaN to disable."
-        ),
-    )
-    xFailThreshold = Field(
-        dtype=float,
-        default=2.0,
-        doc=(
-            "|medianDeltaX| (pixels) at or above which it is FAIL (RECALIBRATE). A physical limit: drp_stella"
-            " finds lines within 3 px of the calibration's prediction (centroidLines.peakSearch,"
-            " centroidTraces.searchRadius); 2 px leaves room for the scatter (known-good robust RMS up to"
-            " 0.22 px) and the line width. NaN to disable."
-        ),
-    )
-    yWarnThreshold = Field(
-        dtype=float,
-        default=1.0,
-        doc=(
-            "|medianDeltaY| (pixels) of a lamp species against detectorMap_calib at or above which it is"
-            " WARN (APPLY_SHIFT); as xWarnThreshold. Run25 after its calibration block sits up to 1.5 px"
-            " off in y on SM3, so those visits WARN; the validation set records them as unconfirmed"
-            " NaN to disable."
-        ),
-    )
-    yFailThreshold = Field(
-        dtype=float,
-        default=2.0,
-        doc="|medianDeltaY| (pixels) at or above which it is FAIL (RECALIBRATE); as xFailThreshold.",
-    )
-    xRmsWarnThreshold = Field(
-        dtype=float,
-        default=float("nan"),
-        doc=(
-            "robustRmsDeltaX (pixels) of a species' RESERVED lines against the visit's detectorMap at or"
-            " above which it is WARN (RECALIBRATE): scatter the adjustment leaves on lines it was not"
-            " fitted to. NaN, not judged, until derived from the validation set."
-        ),
-    )
-    xRmsFailThreshold = Field(
-        dtype=float,
-        default=float("nan"),
-        doc="robustRmsDeltaX (pixels) at or above which it is FAIL; as xRmsWarnThreshold.",
-    )
-    yRmsWarnThreshold = Field(
-        dtype=float,
-        default=float("nan"),
-        doc="robustRmsDeltaY (pixels) of lamp lines at or above which it is WARN; as xRmsWarnThreshold.",
-    )
-    yRmsFailThreshold = Field(
-        dtype=float,
-        default=float("nan"),
-        doc="robustRmsDeltaY (pixels) at or above which it is FAIL; as xRmsWarnThreshold.",
-    )
 
 
 class DmLineResidualsTask(PipelineTask):
-    """Measure each line species' residuals from the calibration and the visit's detectorMap, and judge them."""
+    """Measure each line species' residuals from the calibration and the visit's detectorMap."""
 
     ConfigClass = DmLineResidualsConfig
     _DefaultName = "dmLineResiduals"
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        # Highest priority first; see pfs.drp.qa.metrics.gate.
-        self.thresholds = residualTaskThresholds(self.config)
-        # Which layers judged, by content, for qadb: the loader's drp_qa may ship another file, and the
-        # config's fields are a layer of their own there (`pfs.drp.qa.metrics.gate.configLayerName`).
-        self.thresholdsRecord = taskThresholdsRecord(
-            "dmLineResiduals", thresholdsNames(self.config), self.thresholds[-1]
-        )
 
     def runQuantum(
         self,
@@ -310,7 +216,7 @@ class DmLineResidualsTask(PipelineTask):
         pfsConfig: PfsConfig | None = None,
         rawMetadata: Any = None,
     ) -> Struct:
-        """Measure and judge the line residuals of one detector.
+        """Measure the line residuals of one detector.
 
         Parameters
         ----------
@@ -343,31 +249,27 @@ class DmLineResidualsTask(PipelineTask):
         species = speciesResiduals(residuals, self.config.minLines, lit)
         camera = cameraSet(pfsConfig, dataId.get("arm"))
         obsType = frameType(rawMetadata, getattr(pfsConfig, "header", None))
-        judged, verdict = residualVerdict(
-            species, dataId, self.thresholds, self.config.minLines, camera, obsType
-        )
+        measured = residualSummary(species, self.config.minLines)
 
         summary = {key: dataId.get(key) for key in ("visit", "arm", "spectrograph")}
-        summary |= {"cameraSet": camera, "obsType": obsType} | verdict | _calibProvenance(detectorMapCalib)
-        summary |= self.thresholdsRecord
+        summary |= {"cameraSet": camera, "obsType": obsType} | measured | _calibProvenance(detectorMapCalib)
         self.log.info(
-            "DM line residuals %-7s %s%s %s: %s [%s]",
-            verdict["qaStatus"],
+            "DM line residuals %s%s (%s, %s): %s",
             dataId.get("arm"),
             dataId.get("spectrograph"),
-            verdict["recommendedAction"],
+            obsType,
+            "fitted" if measured["fitted"] else "unfitted",
             _describe(species) or "no lines",
-            verdict["qaReason"] or "nominal",
         )
         return Struct(
-            dmLineResidualMetrics=longResiduals(species, judged, dataId, camera, obsType),
+            dmLineResidualMetrics=longResiduals(species, dataId, camera, obsType),
             dmLineResidualSummary=pd.DataFrame([summary]),
             dmLineResidualData=lineTable(residuals, dataId, self.config.maxTraceRowsPerFiber),
         )
 
 
 def _describe(species: pd.DataFrame) -> str:
-    """Return the judged statistics of each species for the log line."""
+    """Return, for the log line, each species' offset from the calibration and scatter on RESERVED lines."""
     calib = species[(species["reference"] == CALIB) & species["statusType"].isin((BOTH, UNFITTED))]
     visit = species[(species["reference"] == VISIT) & (species["statusType"] == RESERVED)]
     rms = {row.description: row for row in visit.itertuples()}

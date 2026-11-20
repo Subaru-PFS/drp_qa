@@ -11,7 +11,7 @@ no other test sees them; with the stack present the real modules are used.
 ``computeImageQuality`` and ``addTraceLambdaToArclines`` are drp_stella code
 the tests replace with `monkeypatch`, so the arc-line table is given directly.
 
-Needs numpy, pandas, pyyaml and scipy (for ``pfs.drp.qa.metrics``); CI runs
+Needs numpy, pandas and scipy (for ``pfs.drp.qa.crossDispersion``); CI runs
 these tests in the ``deps`` job.
 """
 
@@ -25,8 +25,7 @@ from types import ModuleType, SimpleNamespace
 import numpy as np
 import pandas as pd
 import pytest
-import scipy  # noqa: F401 (pfs.drp.qa.metrics needs it; listed so the directory is skipped without it)
-import yaml  # noqa: F401 (pfs.drp.qa.metrics needs it; listed so the directory is skipped without it)
+import scipy  # noqa: F401 (pfs.drp.qa.crossDispersion needs it; listed so the directory is skipped without it)
 
 TASK_MODULE = "pfs.drp.qa.imageQualityQa"
 
@@ -54,7 +53,7 @@ def _module(name: str, **attributes) -> ModuleType:
 
 
 class _Field:
-    """Stand-in for ``lsst.pex.config.Field``, ``DictField`` and ``ListField``: a default."""
+    """Stand-in for ``lsst.pex.config.Field``: a default."""
 
     def __init__(self, default=None, **kwargs):
         self.default = default
@@ -133,7 +132,7 @@ def _standIns() -> dict[str, ModuleType]:
             connectionTypes=connectionTypes,
         )
         afwImage = _module("lsst.afw.image", Exposure=object)
-        pexConfig = _module("lsst.pex.config", Field=_Field, DictField=_Field, ListField=_Field)
+        pexConfig = _module("lsst.pex.config", Field=_Field)
         modules |= {
             "lsst": _module(
                 "lsst",
@@ -337,22 +336,13 @@ def runTask(iqqa, monkeypatch):
     """Return a function that runs the task on fakes and returns its outputs.
 
     It takes the arc-line table ``lines``, the dataId's ``arm``, and the
-    task's other inputs as keywords; ``thresholds``, when given, replaces the
-    task's threshold tables (highest priority first). Otherwise the task
-    judges by its config fields alone: these tests are about paths, not the
-    shipped thresholds file. ``config``, when given, is the task's config.
+    task's other inputs as keywords. ``config``, when given, is the task's config.
     """
 
-    def run(lines: pd.DataFrame, arm: str = "r", thresholds=None, config=None, **inputs):
+    def run(lines: pd.DataFrame, arm: str = "r", config=None, **inputs):
         monkeypatch.setattr(iqqa, "addTraceLambdaToArclines", lambda arcLines, detectorMap: arcLines)
         monkeypatch.setattr(iqqa, "computeImageQuality", lambda arcLines: arcLines.copy())
-        if config is None:
-            config = iqqa.ImageQualityQaConfig()
-            config.thresholdsFile = ""
-            config.extraThresholdsFiles = []
-        task = iqqa.ImageQualityQaTask(config=config)
-        if thresholds is not None:
-            task.thresholds = thresholds
+        task = iqqa.ImageQualityQaTask(config=config if config is not None else iqqa.ImageQualityQaConfig())
         defaults = {
             "detectorMap": FakeDetectorMap(),
             "fiberProfiles": None,
