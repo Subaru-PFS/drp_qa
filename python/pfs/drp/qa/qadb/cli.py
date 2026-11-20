@@ -34,9 +34,9 @@ def _qadb(args: argparse.Namespace):
 
 def _visitRange(text: str) -> tuple[int, int]:
     """Return ``"133025-133041"`` (or one visit) as first and last visit."""
-    first, _, last = text.partition("-")
+    first, dash, last = text.partition("-")
     try:
-        visits = int(first), int(last or first)
+        visits = int(first), int(last if dash else first)
     except ValueError:
         raise argparse.ArgumentTypeError(f"{text!r} is not a visit or FIRST-LAST") from None
     if visits[0] > visits[1]:

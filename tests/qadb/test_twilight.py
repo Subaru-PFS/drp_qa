@@ -253,7 +253,7 @@ class TestLoad:
         assert TWILIGHT_FLUX not in {datasetType for datasetType, _ in butler.queries}
         assert "twilight_qa" not in counts and qadb.count("twilight_qa") == 0
         assert counts["qa_gate"] == 48 and set(gateOf(qadb)["qa_status"]) == {"UNKNOWN"}
-        assert "twilight: 4 twilight visit(s) not judged: no opdb to find their sequence in" in messages
+        assert "twilight: 4 twilight visit(s) not measured: no opdb to find their sequence in" in messages
         # Negative control: the same load with an opdb judges them.
         load(twilight.butler(), qadb, opdb=twilight.OpDB(), readSequence=twilight.Sequences())
         assert set(gateOf(qadb)["qa_status"]) == {"PASS", "FAIL", "UNKNOWN"}
@@ -319,6 +319,156 @@ class TestLoad:
         assert gateIds == set(qadb.query_scalars("SELECT DISTINCT processing_id FROM twilight_qa"))
         assert gateIds == set(qadb.query_scalars("SELECT DISTINCT processing_id FROM image_quality_qa"))
         assert len(gateIds) == 1
+
+
+class TestLoadedAgainWithoutItsSequence:
+    """A twilight visit loaded again when its sequence cannot be measured keeps the verdict of its stored metrics.
+
+    QaActor's backfill, or a load without an opdb, reads the visit's ``iqQaMetrics`` again; the sequence's
+    metrics are in ``twilight_qa`` from the load that judged it, and the visit is judged on those.
+    """
+
+    STORED = "twilight: 1 visit(s) judged on the metrics qadb holds for them"
+
+    @pytest.fixture
+    def judged(self, twilight, qadb):
+        """Return the database with the whole sequence loaded and judged: 503 r2 fails."""
+        load(twilight.butler(), qadb, opdb=twilight.OpDB(), readSequence=twilight.Sequences())
+        return qadb
+
+    @staticmethod
+    def twilightRows(qadb) -> pd.DataFrame:
+        return qadb.query_dataframe("SELECT * FROM twilight_qa ORDER BY pfs_visit_id, camera_name")
+
+    @staticmethod
+    def verdicts(qadb, visit) -> pd.DataFrame:
+        rows = gateOf(qadb)
+        columns = ["camera_name", "frame_type", "qa_status", "qa_decided_by", "qa_reason", "processing_id"]
+        return rows.loc[rows["pfs_visit_id"] == visit, columns].reset_index(drop=True)
+
+    def check(self, twilight, qadb, **how):
+        """Load 503 again as ``how`` says; assert its verdicts and the stored metrics are as they were."""
+        metrics, verdicts, others = (
+            self.twilightRows(qadb),
+            self.verdicts(qadb, 503),
+            self.verdicts(qadb, 502),
+        )
+        failed = verdicts[verdicts["qa_status"] == "FAIL"]
+        assert failed["camera_name"].tolist() == ["r2"] and failed["qa_decided_by"].tolist() == [
+            "twilightLevel"
+        ]
+
+        butler = twilight.butler()
+        counts, messages = load(butler, qadb, [503], now=LATER, **how)
+        # The visit's numbers were loaded again, and it was judged again: on what qadb holds for it.
+        assert counts["image_quality_qa"] == 12 and counts["qa_gate"] == 12
+        assert self.STORED in messages
+        rows = gateOf(qadb)
+        assert (
+            pd.to_datetime(rows.loc[rows["pfs_visit_id"] == 503, "decided_at"]) == pd.Timestamp(LATER)
+        ).all()
+        pd.testing.assert_frame_equal(self.verdicts(qadb, 503), verdicts)
+        assert len(rows) == 48
+        # Nothing was measured: no per-fiber table read, no row of twilight_qa written or changed.
+        assert "twilight_qa" not in counts
+        assert TWILIGHT_FLUX not in {ref.datasetType for ref in butler.read}
+        pd.testing.assert_frame_equal(self.twilightRows(qadb), metrics)
+        # The other visits were not touched.
+        pd.testing.assert_frame_equal(self.verdicts(qadb, 502), others)
+        assert (
+            pd.to_datetime(rows.loc[rows["pfs_visit_id"] != 503, "decided_at"]) == pd.Timestamp(NOW)
+        ).all()
+        return messages
+
+    @pytest.fixture
+    def twilight(self, twilight):
+        """Return the kit with butlers that record what is read from them."""
+        make = twilight.butler
+
+        def butler(*args, **kwargs):
+            stub = make(*args, **kwargs)
+            stub.read = []
+            get = stub.get
+            stub.get = lambda ref, **kw: (
+                (stub.read.append(ref) if not isinstance(ref, str) else None) or get(ref, **kw)
+            )
+            return stub
+
+        twilight.butler = butler
+        return twilight
+
+    def testWithoutAnOpdb(self, twilight, judged):
+        sequences = twilight.Sequences()
+        messages = self.check(twilight, judged, readSequence=sequences)
+        assert sequences.calls == []
+        assert "twilight: 1 twilight visit(s) not measured: no opdb to find their sequence in" in messages
+
+    def testWithASequenceNotReady(self, twilight, judged):
+        """An opdb is given, and says the sequence is still running: the stored metrics judge all the same."""
+        sequences = twilight.Sequences(twilight.sequence(finished=None))
+        messages = self.check(twilight, judged, opdb=twilight.OpDB(), readSequence=sequences)
+        assert sequences.calls == [503]
+        assert any(f"sequence {SEQUENCE} has not finished" in m for m in messages)
+
+    @pytest.mark.parametrize("how", ["no opdb", "not ready"])
+    def testWithNoStoredMetricsItIsUnknown(self, twilight, qadb, how):
+        """Negative control: the same loads of a visit qadb holds no twilight metrics for give no verdict."""
+        arguments = {"readSequence": twilight.Sequences(twilight.sequence(finished=None))}
+        if how == "not ready":
+            arguments["opdb"] = twilight.OpDB()
+        counts, messages = load(twilight.butler(), qadb, [503], **arguments)
+        assert counts["qa_gate"] == 12 and "twilight_qa" not in counts
+        rows = gateOf(qadb)
+        assert set(rows["qa_status"]) == {"UNKNOWN"}
+        assert set(rows["qa_reason"]) == {"nothing to judge was measured"}
+        assert not any("judged on the metrics qadb holds" in m for m in messages)
+        assert qadb.count("twilight_qa") == 0
+
+    def testTheVerdictIsTheStoredMetricsNotTheOldRows(self, twilight, judged):
+        """It is judged again from ``twilight_qa``: a stored number changed, the verdict follows it."""
+        judged.commit(
+            "UPDATE twilight_qa SET twilight_level_offset = 0.1"
+            " WHERE pfs_visit_id = 503 AND camera_name = 'r2'"
+        )
+        judged.commit(
+            "UPDATE twilight_qa SET twilight_level_offset = 2.5"
+            " WHERE pfs_visit_id = 503 AND camera_name = 'b1'"
+        )
+        load(twilight.butler(), judged, [503], now=LATER)
+        rows = gateOf(judged).set_index(["pfs_visit_id", "camera_name"])
+        assert rows.loc[(503, "r2"), "qa_status"] == "PASS"
+        assert rows.loc[(503, "b1"), "qa_status"] == "WARN"
+        assert rows.loc[(503, "b1"), "qa_reason"] == "level offset +2.50 %, limit 2 %"
+        # Negative control: a visit not loaded again keeps the verdict it had, whatever is stored now.
+        judged.commit("UPDATE twilight_qa SET twilight_level_offset = 9 WHERE pfs_visit_id = 502")
+        load(twilight.butler(), judged, [503], now=LATER)
+        assert set(gateOf(judged).set_index("pfs_visit_id").loc[502, "qa_status"]) == {"PASS", "UNKNOWN"}
+
+    def testOnlyTheVisitsNotMeasuredUseStoredMetrics(self, twilight, judged, expected):
+        """A load that does measure the sequence judges on what it measured, and says nothing of stored metrics."""
+        judged.commit("UPDATE twilight_qa SET twilight_level_offset = 0.1 WHERE pfs_visit_id = 503")
+        counts, messages = load(
+            twilight.butler(),
+            judged,
+            [503],
+            opdb=twilight.OpDB(),
+            readSequence=twilight.Sequences(),
+            now=LATER,
+        )
+        assert counts["twilight_qa"] == 48
+        assert not any("judged on the metrics qadb holds" in m for m in messages)
+        assert gateOf(judged)["qa_status"].tolist() == expected["qaStatus"].tolist()  # 503 r2 fails again
+        step = judged.query_scalar(
+            "SELECT twilight_level_offset FROM twilight_qa WHERE pfs_visit_id = 503 AND camera_name = 'r2'"
+        )
+        assert step == pytest.approx(-10.0, abs=0.5)
+
+    def testADryRunHasNoStoredMetricsToRead(self, twilight, judged, tmp_path):
+        """Without a database there is nothing held: a dry run of the same load leaves the twilight UNKNOWN."""
+        counts, messages = load(twilight.butler(), None, [503], dryRun=tmp_path)
+        stored = pd.read_parquet(tmp_path / "qa_gate.parquet")
+        assert counts["qa_gate"] == 12 and set(stored["qa_status"]) == {"UNKNOWN"}
+        assert not any("judged on the metrics qadb holds" in m for m in messages)
 
 
 class TestFluxInAnotherRun:

@@ -229,6 +229,13 @@ RESULT_NEUTRAL_PATHS = (
         )
     ),
     "python/pfs/drp/qa/plotting/calibInputs.py",
+    # The tasks write numbers only: the limits and the judging cannot change them.
+    "python/pfs/drp/qa/metrics/registry.py",
+    "python/pfs/drp/qa/metrics/gate.py",
+    "python/pfs/drp/qa/metrics/normalValues.py",
+    "python/pfs/drp/qa/metrics/visitRollup.py",
+    "python/pfs/drp/qa/qadb",
+    "python/pfs/drp/qa/cli.py",
     "bin.src/qaComparison.py",
     "bin.src/drpQa.py",
     "tests",

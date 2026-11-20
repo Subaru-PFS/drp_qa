@@ -530,10 +530,14 @@ def gate(
         images.append(image)
     if not images:
         return pd.DataFrame(columns=list(VERDICT_COLUMNS))
-    # The first table naming an image gives its type: iqQaMetrics knows the illumination, the line residuals do not.
+    # The first table that gives an image a type gives its type: iqQaMetrics knows the illumination, the line
+    # residuals do not. A table that cannot type it (a header without the sequence type) does not hide another's.
+    images = pd.concat(images, ignore_index=True)
     images = (
-        pd.concat(images, ignore_index=True)
+        images.assign(_untyped=images["frameType"].isna())
+        .sort_values("_untyped", kind="stable")
         .drop_duplicates(keys)
+        .drop(columns="_untyped")
         .astype({"visit": "int64", "spectrograph": "int64"})
     )
 

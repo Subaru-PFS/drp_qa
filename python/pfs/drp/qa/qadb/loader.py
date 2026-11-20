@@ -16,7 +16,9 @@ loaded is a twilight, its IIC sequence is looked up in the opdb; once the
 sequence has finished and every visit of it has its ``twilightFiberFlux``, the
 whole sequence is measured (`pfs.drp.qa.metrics.twilight.sequenceConsistency`),
 stored in ``twilight_qa`` and judged, the visits loaded earlier included. Until
-then, and without an opdb, a twilight image is ``UNKNOWN``.
+then, and without an opdb, a twilight image is ``UNKNOWN``; a twilight visit
+loaded again when its sequence cannot be measured (no opdb is given, say) is
+judged on the numbers ``twilight_qa`` already holds for it.
 """
 
 import time
@@ -30,7 +32,7 @@ import pandas as pd
 from pfs.drp.qa.metrics.gate import gate
 from pfs.drp.qa.metrics.readers import datasetDetectors, readMetrics, readReductionPipelines
 from pfs.drp.qa.metrics.twilight import isTwilightSequence, sequenceConsistency, sequenceReadiness
-from pfs.drp.qa.qadb.reader import PROCESSING_ID, readGate, readNormalValues
+from pfs.drp.qa.qadb.reader import PROCESSING_ID, readGate, readNormalValues, readTwilight
 from pfs.drp.qa.qadb.tables import (
     IMAGE_KEYS,
     IMAGE_QUALITY,
@@ -354,7 +356,7 @@ def loadCollection(
     twilight = pd.DataFrame(columns=[*IMAGE_KEYS, "run"])
     if twilightVisits and opdb is None:
         log(
-            f"twilight: {len(twilightVisits)} twilight visit(s) not judged: no opdb to find their sequence in"
+            f"twilight: {len(twilightVisits)} twilight visit(s) not measured: no opdb to find their sequence in"
         )
     elif twilightVisits:
         twilight = twilightMetrics(
@@ -427,8 +429,18 @@ def loadCollection(
     # table loaded (imageQualityQa's, then dmLineResiduals', then the twilight's), so a later load replaces it.
     if normalValues is None and sink is None:
         normalValues = readNormalValues(qadb, collection)
+    # A twilight visit not measured in this load keeps the numbers qadb holds for it: loading it again
+    # without its sequence must not undo its verdict.
+    judgedTwilight = twilight
+    unmeasured = sorted(set(twilightVisits) - set(twilight.get("visit", pd.Series(dtype="int64"))))
+    if sink is None and unmeasured:
+        held = readTwilight(qadb, collection, unmeasured[0], unmeasured[-1])
+        held = held[held["visit"].isin(unmeasured)]
+        if len(held):
+            log(f"twilight: {held['visit'].nunique()} visit(s) judged on the metrics qadb holds for them")
+            judgedTwilight = pd.concat([twilight, held], ignore_index=True)
     verdicts = gate(
-        iq=iq, lines=tables["dmLineResidualMetrics"], twilight=twilight, normalValues=normalValues
+        iq=iq, lines=tables["dmLineResidualMetrics"], twilight=judgedTwilight, normalValues=normalValues
     )
     verdicts = verdicts.merge(imageRuns(iq, summary, twilight), on=list(IMAGE_KEYS), how="left")
     orphans = verdicts["run"].isna()

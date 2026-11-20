@@ -7,14 +7,16 @@ median: a PASS, a FAIL and a WARN of the width check once that median is the
 normal value.
 """
 
+import re
 from datetime import datetime
 
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.gate import gate
+from pfs.drp.qa.metrics.gate import VERDICT_COLUMNS, gate
 from pfs.drp.qa.metrics.normalValues import NORMAL_COLUMNS
 from pfs.drp.qa.metrics.registry import CHECKS, MIN_NORMAL_FRAMES
+from pfs.drp.qa.qadb import judge as judgeModule
 from pfs.drp.qa.qadb.judge import judgeStored, makeValues, storedNumbers
 from pfs.drp.qa.qadb.loader import loadCollection
 from pfs.drp.qa.qadb.reader import PROCESSING_ID, readGate, readNormalValues
@@ -55,7 +57,7 @@ def gateOf(qadb) -> pd.DataFrame:
         " WHERE p.collection_name = :c ORDER BY g.pfs_visit_id, g.camera_name",
         params={"c": COLLECTION},
     )
-    return rows.assign(decided_at=pd.to_datetime(rows["decided_at"]))
+    return rows.assign(decided_at=pd.to_datetime(rows["decided_at"], format="mixed"))
 
 
 def statusOf(qadb) -> dict:
@@ -96,10 +98,44 @@ class TestStoredNumbers:
         numbers = storedNumbers(loaded, COLLECTION, [(101, 102), (107, 107)])
         assert sorted(set(numbers["iq"]["visit"])) == [101, 102, 107]
         assert sorted(set(numbers["lines"]["visit"])) == [101, 102, 107]
-        # Negative control: the span of the ranges is not what is read, only the ranges.
+        assert len(numbers["iq"]) == 6 and len(numbers["lines"]) == 12
+        # Negative control: what lies between the ranges is stored, and one range over their span returns it.
         assert 104 not in set(numbers["iq"]["visit"])
+        assert 104 in set(storedNumbers(loaded, COLLECTION, [(101, 107)])["iq"]["visit"])
         blue = storedNumbers(loaded, COLLECTION, [(101, 108)], arms=["b"])
         assert set(blue["iq"]["arm"]) == {"b"} and set(blue["lines"]["arm"]) == {"b"} and len(blue["iq"]) == 8
+        # Negative control: without arms the r arm's images are there too.
+        assert set(storedNumbers(loaded, COLLECTION, [(101, 108)])["iq"]["arm"]) == {"b", "r"}
+        both = storedNumbers(loaded, COLLECTION, [(101, 102), (107, 107)], arms=["r"])
+        assert sorted(set(both["iq"]["visit"])) == [101, 102, 107] and set(both["lines"]["arm"]) == {"r"}
+
+    def testNothingBetweenTwoRangesIsRead(self, loaded, monkeypatch):
+        """Each range is its own read: the database is never asked for the span of two ranges."""
+        asked = []
+        query = loaded.query_dataframe
+
+        def recording(sql, /, **kwargs):
+            params = kwargs.get("params") or {}
+            if "first" in params:
+                asked.append((params["first"], params["last"]))
+            return query(sql, **kwargs)
+
+        monkeypatch.setattr(loaded, "query_dataframe", recording)
+        storedNumbers(loaded, COLLECTION, [(101, 102), (107, 107)])
+        assert set(asked) == {(101, 102), (107, 107)}
+        # Negative control: the span would have been asked for as one read, and is by a single range.
+        assert (101, 107) not in asked
+        asked.clear()
+        storedNumbers(loaded, COLLECTION, [(101, 107)])
+        assert set(asked) == {(101, 107)}
+
+    def testOverlappingRangesGiveEachImageOnce(self, loaded):
+        numbers = storedNumbers(loaded, COLLECTION, [(101, 103), (102, 104)])
+        assert (
+            len(numbers["iq"]) == 8 and not numbers["iq"].duplicated(["visit", "arm", "spectrograph"]).any()
+        )
+        keys = ["visit", "arm", "spectrograph", "reference", "description", "statusType", "metric"]
+        assert len(numbers["lines"]) == 16 and not numbers["lines"].duplicated(keys).any()
 
 
 class TestMakeValues:
@@ -393,7 +429,8 @@ class TestJudgeStored:
         # The verdicts it would write come back: the FAIL is there.
         key = (verdicts["visit"] == 107) & (verdicts["arm"] == "b")
         assert verdicts.loc[key, "qaStatus"].tolist() == ["FAIL"]
-        assert messages == ["6 images judged, nothing written: 4 PASS, 1 WARN, 1 FAIL"]
+        assert messages[0] == f"judging 3 visits of {COLLECTION}, 106 to 108, in 1 read(s), writing nothing"
+        assert messages[-1] == "6 images judged, nothing written: 4 PASS, 1 WARN, 1 FAIL"
         pd.testing.assert_frame_equal(gateOf(judged), before)
         assert statusOf(judged)[(107, "b1")] == "PASS"
         # Negative control: without dryRun the same call does write it.
@@ -432,10 +469,79 @@ class TestJudgeStored:
         assert status[(108, "b1")] == "PASS"
 
     def testNoNumbers(self, judged):
+        before = gateOf(judged)
         messages = []
         verdicts = judgeStored(judged, COLLECTION, 900, 999, log=messages.append)
         assert verdicts.empty and messages == [f"no numbers for visits 900 to 999 in {COLLECTION}"]
-        assert judgeStored(judged, "u/test/typo", 101, log=quiet).empty
+        # An empty answer has the verdicts' columns, so a caller can read it as any other.
+        assert list(verdicts.columns) == list(VERDICT_COLUMNS)
+        other = judgeStored(judged, "u/test/typo", 101, log=quiet)
+        assert other.empty and list(other.columns) == list(VERDICT_COLUMNS)
+        pd.testing.assert_frame_equal(gateOf(judged), before)
+        # Negative control: a range with frames loaded says how many it judges instead.
+        messages.clear()
+        assert len(judgeStored(judged, COLLECTION, 106, 108, dryRun=True, log=messages.append)) == 6
+        assert not any("no numbers" in m for m in messages)
+
+    @pytest.mark.parametrize(("perRead", "reads"), [(1, 8), (3, 3), (8, 1)])
+    def testInSeveralReadsAsInOne(self, judged, monkeypatch, perRead, reads):
+        """Judging a few visits at a time gives the verdicts and the gate rows of judging them all at once."""
+        assert judgeModule.VISITS_PER_READ >= 8  # the eight visits here are one read by default
+        atOnce = judgeStored(judged, COLLECTION, 101, log=quiet, now=lambda: LATER)
+        rowsAtOnce = gateOf(judged)
+        assert set(rowsAtOnce["qa_status"]) == {"PASS", "WARN", "FAIL"}
+        # Undo it, so the rows compared below are the ones the reads in parts write.
+        judged.commit(
+            "UPDATE qa_gate SET qa_status = 'UNKNOWN', qa_decided_by = '', qa_reason = 'lost', mode = 'lost'"
+            " WHERE pfs_visit_id BETWEEN 101 AND 108"
+        )
+        assert set(gateOf(judged)["qa_status"]) == {"UNKNOWN"}
+
+        monkeypatch.setattr(judgeModule, "VISITS_PER_READ", perRead)
+        messages = []
+        inParts = judgeStored(judged, COLLECTION, 101, log=messages.append, now=lambda: LATER)
+        pd.testing.assert_frame_equal(inParts, atOnce)
+        pd.testing.assert_frame_equal(gateOf(judged), rowsAtOnce)
+        # A first line saying how much, a line per read with done/total, and the counts last.
+        assert messages[0] == f"judging 8 visits of {COLLECTION}, 101 to 108, in {reads} read(s)"
+        progress = [m for m in messages if m.startswith("judged ")]
+        assert len(progress) == reads == len(messages) - 2
+        done = [re.fullmatch(r"judged (\d+)/8 visits, \d+ s elapsed, about \d+ s left", m) for m in progress]
+        assert all(done)
+        assert [int(match.group(1)) for match in done] == [
+            min(8, perRead * (index + 1)) for index in range(reads)
+        ]
+        assert messages[-1] == "16 images judged again in qa_gate: 14 PASS, 1 WARN, 1 FAIL"
+
+    def testADryRunInSeveralReadsWritesNothing(self, judged, monkeypatch):
+        monkeypatch.setattr(judgeModule, "VISITS_PER_READ", 2)
+        before = gateOf(judged)
+        messages = []
+        verdicts = judgeStored(judged, COLLECTION, 101, dryRun=True, log=messages.append, now=lambda: LATER)
+        assert len(verdicts) == 16 and set(verdicts["qaStatus"]) == {"PASS", "WARN", "FAIL"}
+        assert messages[0].endswith("in 4 read(s), writing nothing")
+        assert messages[-1] == "16 images judged, nothing written: 14 PASS, 1 WARN, 1 FAIL"
+        pd.testing.assert_frame_equal(gateOf(judged), before)
+
+    def testVisitsWithoutNumbersBetweenAreNotCounted(self, StubButler, quartzFrames, qadb, monkeypatch):
+        """The reads are of the visits that have a gate row: a gap in the visit numbers is not a read."""
+        visits = [101, 150, 151, 900]
+        load(StubButler(quartzFrames(visits, width=WIDTH | {None: 3.30})), qadb, visits)
+        monkeypatch.setattr(judgeModule, "VISITS_PER_READ", 2)
+        messages = []
+        verdicts = judgeStored(qadb, COLLECTION, 101, log=messages.append, now=lambda: LATER)
+        assert messages[0] == f"judging 4 visits of {COLLECTION}, 101 to 900, in 2 read(s)"
+        assert sorted(set(verdicts["visit"])) == visits and len(verdicts) == 8
+        assert (gateOf(qadb)["decided_at"] == pd.Timestamp(LATER)).all()
+
+    def testJudgedTwiceByTheClock(self, judged):
+        """With the real clock: a range judged in part, then whole, as the command line does it."""
+        judgeStored(judged, COLLECTION, 107, 107, log=quiet)
+        verdicts = judgeStored(judged, COLLECTION, 106, 108, log=quiet)
+        assert len(verdicts) == 6
+        status = statusOf(judged)
+        assert [status[(visit, "b1")] for visit in FRAMES] == ["PASS", "FAIL", "WARN"]
+        assert len(readGate(judged, COLLECTION)) == 16
 
     def testModeIsRecorded(self, judged):
         judgeStored(judged, COLLECTION, 106, 106, mode="comparison", log=quiet, now=lambda: LATER)

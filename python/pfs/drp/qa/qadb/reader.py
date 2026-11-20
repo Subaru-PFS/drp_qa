@@ -38,6 +38,8 @@ __all__ = [
     "readGate",
     "readNormalValues",
     "readQadb",
+    "readTwilight",
+    "visitsJudged",
 ]
 
 #: The widest visit range: every visit.
@@ -81,6 +83,11 @@ SELECT * FROM latest WHERE n = 1 ORDER BY pfs_visit_id, camera_name
 """
 
 _COLLECTION_SQL = "SELECT COUNT(*) FROM data_processing_pipe2d WHERE collection_name = :collection"
+
+_VISITS_JUDGED_SQL = """
+SELECT DISTINCT g.pfs_visit_id FROM qa_gate g JOIN data_processing_pipe2d p ON p.processing_id = g.processing_id
+WHERE p.collection_name = :collection AND g.pfs_visit_id BETWEEN :first AND :last ORDER BY g.pfs_visit_id
+"""
 
 #: Columns of `readGate`: the image, then ``qa_gate`` in camelCase, then the Butler RUN it was measured in.
 GATE_COLUMNS = (
@@ -201,6 +208,20 @@ def readQadb(
     return tables
 
 
+def readTwilight(qadb: Any, collection: str, first: int, last: int) -> pd.DataFrame:
+    """Read the twilight metrics qadb holds for a visit range of a collection, as `readQadb` returns them."""
+    params = {"collection": collection, "first": int(first), "last": int(last)}
+    rows = qadb.query_dataframe(_tableSql(TWILIGHT_QA.name, False), params=params)
+    return _butlerFrame(rows, TWILIGHT_QA).rename(columns={"decided_at": "decidedAt"}).reset_index(drop=True)
+
+
+def visitsJudged(qadb: Any, collection: str, first: int = FIRST_VISIT, last: int = LAST_VISIT) -> list[int]:
+    """Return the visits of a collection with a gate row in a visit range, sorted."""
+    params = {"collection": collection, "first": int(first), "last": int(last)}
+    rows = qadb.query_dataframe(_VISITS_JUDGED_SQL, params=params)
+    return [int(visit) for visit in rows["pfs_visit_id"]]
+
+
 def readNormalValues(qadb: Any, collection: str) -> pd.DataFrame:
     """Read a collection's normal values.
 
@@ -273,5 +294,6 @@ def readGate(qadb: Any, collection: str, first: int = FIRST_VISIT, last: int = L
     frame["arm"] = camera.str[0]
     frame["spectrograph"] = pd.to_numeric(camera.str[1:]).astype("int64")
     frame["visit"] = frame["visit"].astype("int64")
-    frame["decidedAt"] = pd.to_datetime(frame["decidedAt"])
+    # A database that returns times as text writes the fraction of a second only when there is one.
+    frame["decidedAt"] = pd.to_datetime(frame["decidedAt"], format="mixed")
     return frame.reindex(columns=list(GATE_COLUMNS)).reset_index(drop=True)

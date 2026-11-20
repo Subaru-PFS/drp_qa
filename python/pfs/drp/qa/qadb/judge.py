@@ -14,19 +14,30 @@ Butler, and no LSST stack.
 Nothing here imports the LSST stack.
 """
 
+import time
 from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import Any
 
 import pandas as pd
 
-from pfs.drp.qa.metrics.gate import IMAGE_KEYS, gate, judge, measurements
+from pfs.drp.qa.metrics.gate import IMAGE_KEYS, VERDICT_COLUMNS, gate, judge, measurements
 from pfs.drp.qa.metrics.normalValues import accepted, candidates, compare, fixedFailures
-from pfs.drp.qa.qadb.reader import LAST_VISIT, PROCESSING_ID, readGate, readNormalValues, readQadb
+from pfs.drp.qa.qadb.reader import (
+    LAST_VISIT,
+    PROCESSING_ID,
+    readGate,
+    readNormalValues,
+    readQadb,
+    visitsJudged,
+)
 from pfs.drp.qa.qadb.tables import NORMAL_VALUE_KEYS, QA_GATE, gateRows, normalValueRows
 from pfs.drp.qa.qadb.writer import upsert
 
-__all__ = ["judgeStored", "makeValues", "storedNumbers"]
+__all__ = ["VISITS_PER_READ", "judgeStored", "makeValues", "storedNumbers"]
+
+#: Visits whose numbers `judgeStored` reads and judges at a time.
+VISITS_PER_READ = 500
 
 
 def storedNumbers(
@@ -51,22 +62,16 @@ def storedNumbers(
         ``iq``, ``lines`` and ``twilight``, each with
         `pfs.drp.qa.qadb.reader.PROCESSING_ID`.
     """
-    first, last = min(lo for lo, _ in visitRanges), max(hi for _, hi in visitRanges)
-    tables = readQadb(qadb, collection, first, last)
+    names = {"iq": "iqQaMetrics", "lines": "dmLineResidualMetrics", "twilight": "twilightMetrics"}
+    # One read per range: what lies between two ranges is not read.
+    reads = [readQadb(qadb, collection, int(lo), int(hi)) for lo, hi in visitRanges]
 
-    def select(table: pd.DataFrame) -> pd.DataFrame:
-        keep = pd.Series(False, index=table.index)
-        for lo, hi in visitRanges:
-            keep |= table["visit"].between(int(lo), int(hi))
-        if arms is not None:
-            keep &= table["arm"].isin(list(arms))
-        return table[keep].reset_index(drop=True)
+    def select(source: str) -> pd.DataFrame:
+        table = pd.concat([read[source] for read in reads], ignore_index=True)
+        table = table.drop_duplicates().reset_index(drop=True) if len(reads) > 1 else table
+        return table[table["arm"].isin(list(arms))].reset_index(drop=True) if arms is not None else table
 
-    return {
-        "iq": select(tables["iqQaMetrics"]),
-        "lines": select(tables["dmLineResidualMetrics"]),
-        "twilight": select(tables["twilightMetrics"]),
-    }
+    return {name: select(source) for name, source in names.items()}
 
 
 def judgeStored(
@@ -103,31 +108,48 @@ def judgeStored(
     `pandas.DataFrame`
         `pfs.drp.qa.metrics.gate.gate`'s verdicts, one row per image.
     """
-    numbers = storedNumbers(qadb, collection, [(int(first), int(last))])
-    verdicts = gate(**numbers, normalValues=readNormalValues(qadb, collection))
-    if verdicts.empty:
+    visits = visitsJudged(qadb, collection, first, last)
+    if not visits:
         log(f"no numbers for visits {first} to {last} in {collection}")
-        return verdicts
-    # The verdict replaces the image's latest gate row, the one readers take; an image with none gets its
-    # first table's processing, as the loader gives it.
+        return pd.DataFrame(columns=list(VERDICT_COLUMNS))
+    normalValues = readNormalValues(qadb, collection)
+    chunks = [visits[start : start + VISITS_PER_READ] for start in range(0, len(visits), VISITS_PER_READ)]
+    log(
+        f"judging {len(visits)} visits of {collection}, {visits[0]} to {visits[-1]}, in {len(chunks)} read(s)"
+        + (", writing nothing" if dryRun else "")
+    )
+    start, done, parts = time.monotonic(), 0, []
     keys = list(IMAGE_KEYS)
-    processing = pd.concat(
-        [
-            readGate(qadb, collection, first, last)[[*keys, PROCESSING_ID]],
-            *(table[[*keys, PROCESSING_ID]] for table in numbers.values() if len(table)),
-        ],
-        ignore_index=True,
-    ).drop_duplicates(keys)
-    keyed = verdicts.merge(processing.rename(columns={PROCESSING_ID: "run"}), on=keys, how="left")
-    ids = {int(value): int(value) for value in keyed["run"].unique()}
-    rows = gateRows(keyed.assign(run=keyed["run"].astype(int)), ids, mode, now())
+    for chunk in chunks:
+        numbers = storedNumbers(qadb, collection, [(chunk[0], chunk[-1])])
+        verdicts = gate(**numbers, normalValues=normalValues)
+        # The verdict replaces the image's latest gate row, the one readers take; an image with none gets
+        # its first table's processing, as the loader gives it.
+        processing = pd.concat(
+            [
+                readGate(qadb, collection, chunk[0], chunk[-1])[[*keys, PROCESSING_ID]],
+                *(table[[*keys, PROCESSING_ID]] for table in numbers.values() if len(table)),
+            ],
+            ignore_index=True,
+        ).drop_duplicates(keys)
+        keyed = verdicts.merge(processing.rename(columns={PROCESSING_ID: "run"}), on=keys, how="left")
+        ids = {int(value): int(value) for value in keyed["run"].unique()}
+        rows = gateRows(keyed.assign(run=keyed["run"].astype(int)), ids, mode, now())
+        if not dryRun and len(rows):
+            upsert(qadb, "qa_gate", rows, list(QA_GATE[:3]))
+        parts.append(verdicts)
+        done += len(chunk)
+        elapsed = time.monotonic() - start
+        remaining = elapsed / done * (len(visits) - done)
+        log(f"judged {done}/{len(visits)} visits, {elapsed:.0f} s elapsed, about {remaining:.0f} s left")
+    verdicts = pd.concat(parts, ignore_index=True)
     tally = verdicts["qaStatus"].value_counts().to_dict()
     counts = ", ".join(f"{tally[s]} {s}" for s in ("PASS", "WARN", "FAIL", "UNKNOWN") if s in tally)
-    if dryRun:
-        log(f"{len(rows)} images judged, nothing written: {counts}")
-        return verdicts
-    upsert(qadb, "qa_gate", rows, list(QA_GATE[:3]))
-    log(f"qa_gate: {len(rows)} images judged again: {counts}")
+    log(
+        f"{len(verdicts)} images judged"
+        + (", nothing written" if dryRun else " again in qa_gate")
+        + f": {counts}"
+    )
     return verdicts
 
 
@@ -185,6 +207,10 @@ def makeValues(
     if store and not acceptedBy:
         raise ValueError("Storing normal values needs the name of who accepts them")
     validFrom = max(hi for _, hi in visitRanges) + 1 if validFrom is None else int(validFrom)
+    log(
+        f"reading the calibration frames of {collection}: visits "
+        + ", ".join(f"{lo} to {hi}" for lo, hi in visitRanges)
+    )
     numbers = storedNumbers(qadb, collection, visitRanges, arms)
     inForce = readNormalValues(qadb, collection)
     # The calibration frames are first judged by the values in force: the start-of-run check. A frame that

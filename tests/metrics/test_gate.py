@@ -470,6 +470,18 @@ class TestImage:
             assert row["qaStatus"] == "UNKNOWN" and row["qaReason"] == "no frame type"
             assert row["frameType"] is None
 
+    def testTheFirstTableThatGivesATypeGivesIt(self):
+        """A table whose header cannot type the frame does not leave a judged image without a frame type."""
+        iq = frame(iqRow(obsType="unknown"))
+        lines = frame(lineRow("medianDeltaX", 0.7))
+        row = verdict(iq=iq, lines=lines)
+        assert (row["frameType"], row["qaStatus"], row["qaDecidedBy"]) == ("science", "WARN", "skyOffset")
+        # Negative control: when iqQaMetrics does type the frame, its type stands, illumination included.
+        typed = verdict(
+            iq=frame(iqRow(illumination="iis")), lines=frame(lineRow("medianDeltaX", 0.7, obsType="arc"))
+        )
+        assert (typed["frameType"], typed["qaStatus"]) == ("iisArc", "UNKNOWN")
+
     def testOneRowPerImageOfAnyTable(self):
         iq = frame(iqRow(spectrograph=1), iqRow(spectrograph=2, medFwhm=2.0, linesPerFiber=80.0))
         lines = frame(

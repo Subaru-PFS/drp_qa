@@ -346,6 +346,21 @@ class TestReadGate:
         # Negative control: the earlier rows' processing is another, and lower.
         assert set(first[PROCESSING_ID]) != {newId} and first[PROCESSING_ID].max() < newId
 
+    def testTimesWithAndWithoutAFractionOfASecond(self, butler, qadb):
+        """Rows decided on the whole second and rows decided between seconds read back together.
+
+        SQLite returns the times as text, with the fraction only when there is one; a visit judged again
+        by the clock beside one loaded at a whole second is such a mix.
+        """
+        between = datetime(2026, 10, 26, 12, 5, 0, 250000)
+        load(butler, qadb)
+        load(butler, qadb, visits=[133040], now=between)
+        rows = readGate(qadb, COLLECTION)
+        assert rows["decidedAt"].tolist() == [pd.Timestamp(NOW)] * 2 + [pd.Timestamp(between)] * 2
+        assert rows["decidedAt"].dtype.kind == "M"
+        # Negative control: the fraction is kept, not rounded away to make the two alike.
+        assert rows["decidedAt"].iloc[-1].microsecond == 250000
+
     def testCollectionLoaded(self, butler, qadb):
         assert not collectionLoaded(qadb, COLLECTION)
         load(butler, qadb)

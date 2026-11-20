@@ -18,6 +18,7 @@ The visits are the period's set-cadence arcs and traces plus its daily arcs and 
 
 import argparse
 import datetime
+import os
 import shlex
 import subprocess
 import sys
@@ -153,7 +154,8 @@ def main(argv=None) -> int:
     )
     if args.command == "run":
         if args.pipeline is None:
-            args.pipeline = str(Path(__file__).resolve().parents[5] / "pipelines" / "qaThresholds.yaml")
+            checkout = os.environ.get("DRP_QA_DIR") or Path(__file__).resolve().parents[5]
+            args.pipeline = str(Path(checkout) / "pipelines" / "qaThresholds.yaml")
         failed = []
         for label, collection in cands.items():
             command = runCommand(args, label, collection, visits, args.detectors)
