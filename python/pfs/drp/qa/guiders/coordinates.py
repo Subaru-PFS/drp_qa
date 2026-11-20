@@ -81,9 +81,12 @@ AGC_RING_RADIUS_MM = float(np.mean(np.hypot(*np.array(list(AGC_CAMERA_CENTERS_MM
 AGC_PIXEL_SIZE_UM = agMetrics.AG_PIXEL_SIZE_UM
 AGC_PLATE_SCALE_UM_PER_ARCSEC = agMetrics.AG_PLATE_SCALE_UM_PER_ARCSEC
 
-# Guider focus offset (microns) per mm of M2_OFF3. Origin unrecorded; it
-# should come from pfs_utils.
-GUIDER_FOCUS_UM_PER_M2_OFF3_MM = 800.0
+# Guider focus error (microns) per mm of M2_OFF3, near best focus: the median
+# slope of `pfs.drp.qa.guiders.analysis.estimateFocusErrors` over the AG focus
+# sweeps of March 2025 to September 2026, measured in
+# docs/guider-focus-slope.ipynb. It is good to about 10%: the medians of the
+# observing runs and of the cameras each spread by more than that.
+GUIDER_FOCUS_UM_PER_M2_OFF3_MM = 650.0
 
 # The opdb columns whose sign differs from hardware coordinates.
 OPDB_Y_COLUMNS = ("agc_center_y_mm", "agc_nominal_y_mm")
