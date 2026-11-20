@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-20
+
 ### Changed
 
 - **Frames are typed from their IIC sequence type, in one place** (PIPE2D-2015) — `metrics.registry.SEQUENCE_TYPES`
