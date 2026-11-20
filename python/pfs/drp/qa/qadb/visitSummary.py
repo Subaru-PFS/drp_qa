@@ -1,4 +1,4 @@
-"""Summarize a collection's QA verdicts per visit, from qadb: ``bin.src/qaVisitSummary.py``.
+"""Summarize a collection's QA verdicts per visit, from qadb: ``drpQa.py summary``.
 
 Reads each image's gate verdict (`pfs.drp.qa.qadb.reader.readGate`) and rolls
 them up to one row per visit (`pfs.drp.qa.metrics.visitRollup.rollupVisits`).
@@ -106,9 +106,9 @@ def formatSummary(rollup: pd.DataFrame, unjudged: Sequence[int] = ()) -> str:
         text = f"{row.visit} {row.qaStatus:7s} {row.nImages:2d} images"
         if row.qaStatus in ("WARN", "FAIL"):
             text += f" (F{row.nFail} W{row.nWarn} P{row.nPass} U{row.nUnknown})"
-            text += f" {row.decidedByCamera} {row.decidedByTask}: {row.qaReason or row.qaDecidedBy}"
-        if row.provisional:
-            text += " [provisional]"
+            text += f" {row.decidedByCamera} {row.qaDecidedBy}"
+            if row.qaReason:
+                text += f": {row.qaReason}"
         if isinstance(row.missingCameras, str) and row.missingCameras:
             text += f" missing {row.missingCameras}"
         lines.append(text)
@@ -165,7 +165,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             Path(args.json).write_text(json.dumps(document, indent=2))
     except Exception as error:
         # Whatever stopped the read or the write, the caller must not take the status for a verdict.
-        print(f"qaVisitSummary: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
+        print(f"{parser.prog}: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
         return EXIT_ERROR
     print(text, flush=True)
     return exitCode(rollup)

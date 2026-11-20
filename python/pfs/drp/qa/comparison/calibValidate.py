@@ -1,8 +1,8 @@
 """Compare candidate calibrations on the same visits: the verdict after a build.
 
 Each candidate is a collection holding ``detectorMap_calib`` (a certified calibration, or a
-rebuild from the go/no-go pick). The same visits are reduced against each (`bin.src/calibValidate.py
-run`), and `dmLineResiduals` measures, per detector image and species, the offsets and scatter
+rebuild from the go/no-go pick). The same visits are reduced against each (``drpQa.py calib validate
+run``), and `dmLineResiduals` measures, per detector image and species, the offsets and scatter
 against that calibration and the reserved-line scatter against the visit's own adjusted map. This
 module lays the results side by side: a tidy table, a summary per detector and calibration, and a
 Markdown report. Stack-free: DataFrames in, text out.

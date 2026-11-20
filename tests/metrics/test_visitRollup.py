@@ -13,16 +13,15 @@ from pfs.drp.qa.metrics.visitRollup import (
 )
 
 
-def image(visit, camera, status, task="", by="", reason="", provisional=False, at="2026-10-26 12:00"):
+def image(visit, camera, status, by="", reason="", at="2026-10-26 12:00"):
+    """Return a gate row: the image, its verdict, the check that decided it and why."""
     return {
         "visit": visit,
         "arm": camera[0],
         "spectrograph": int(camera[1:]),
         "qaStatus": status,
-        "decidedByTask": task or None,
         "qaDecidedBy": by or None,
         "qaReason": reason or None,
-        "provisional": provisional,
         "decidedAt": pd.Timestamp(at),
     }
 
@@ -36,13 +35,15 @@ def expect(pairs):
 
 
 GATE = gate(
-    image(100, "r2", "FAIL", "dmLineResiduals", "medianDeltaX", "medianDeltaX=0.9 > 0.5"),
-    image(100, "b1", "WARN", "imageQualityQa", "medFwhm", "medFwhm=3.1 > 3.0"),
+    image(100, "r2", "FAIL", "calibOffset", "x offset +2.10 px, limit 2 px"),
+    image(100, "b1", "WARN", "width", "width 3.10 px is +3.3 % from normal 3.00 px, limit +3 %"),
     image(100, "r1", "PASS", at="2026-10-26 12:07"),
     image(101, "b1", "PASS"),
-    image(101, "r1", "UNKNOWN"),
-    image(102, "n1", "WARN", "imageQualityQa", "pctFlagged", "pctFlagged=12 > 10", provisional=True),
-    image(102, "b1", "WARN", "imageQualityQa", "medFwhm", "medFwhm=3.2 > 3.0"),
+    image(101, "r1", "UNKNOWN", reason="no normal value"),
+    image(
+        102, "n1", "WARN", "scatterX", "NeI x scatter 0.050 px is +25.0 % from normal 0.040 px, limit +20 %"
+    ),
+    image(102, "b1", "WARN", "width", "width 3.20 px is +3.2 % from normal 3.10 px, limit +3 %"),
 )
 
 
@@ -62,26 +63,35 @@ def testWorstImageDecidesTheVisit():
     failed = row(rollup, 100)
     assert (failed["nImages"], failed["nFail"], failed["nWarn"], failed["nPass"]) == (3, 1, 1, 1)
     assert failed["decidedByCamera"] == "r2"
-    assert failed["decidedByTask"] == "dmLineResiduals"
-    assert failed["qaDecidedBy"] == "medianDeltaX"
-    assert failed["qaReason"] == "medianDeltaX=0.9 > 0.5"
+    assert failed["qaDecidedBy"] == "calibOffset"
+    assert failed["qaReason"] == "x offset +2.10 px, limit 2 px"
     assert failed["decidedAt"] == pd.Timestamp("2026-10-26 12:07")
 
 
 def testUnknownImageDoesNotHideAPass():
-    """An image no task could judge is counted, and the visit is still as good as its judged images."""
+    """An image no check could judge is counted, and the visit is still as good as its judged images."""
     passed = row(rollupVisits(GATE), 101)
     assert passed["qaStatus"] == "PASS" and passed["nUnknown"] == 1
-    assert passed["decidedByCamera"] == "" and passed["qaReason"] == ""
+    # Why the unjudged image has no verdict is its own row's business: a passed visit names no decider.
+    assert passed["decidedByCamera"] == "" and passed["qaDecidedBy"] == "" and passed["qaReason"] == ""
 
 
 def testDecidingImageIsFirstBySpectrographThenArm():
     warned = row(rollupVisits(GATE), 102)
-    assert warned["decidedByCamera"] == "b1" and warned["qaDecidedBy"] == "medFwhm"
+    assert warned["decidedByCamera"] == "b1" and warned["qaDecidedBy"] == "width"
     # Negative control: not the row that happens to come first in the gate.
-    assert GATE[GATE["visit"] == 102].iloc[0]["arm"] == "n"
-    assert bool(warned["provisional"]) is True
-    assert bool(row(rollupVisits(GATE), 100)["provisional"]) is False
+    first = GATE[GATE["visit"] == 102].iloc[0]
+    assert first["arm"] == "n" and first["qaDecidedBy"] != warned["qaDecidedBy"]
+
+
+def testTheRollupNamesNoTaskAndNoProvisionalVerdict():
+    """One gate decides, by a check: the rollup has no column for a deciding task or a provisional verdict."""
+    assert not {"decidedByTask", "provisional"} & set(ROLLUP_COLUMNS)
+    # A gate table that still carries them (an old export) is rolled up all the same, without them.
+    old = GATE.assign(decidedByTask="imageQualityQa", provisional=True)
+    rollup = rollupVisits(old)
+    assert list(rollup.columns) == list(ROLLUP_COLUMNS)
+    pd.testing.assert_frame_equal(rollup, rollupVisits(GATE))
 
 
 def testWithoutExpectedCamerasNothingIsCalledMissing():
@@ -126,7 +136,7 @@ def testMinimalColumns():
     """The verdict columns alone suffice (a hand-built table)."""
     rollup = rollupVisits(GATE[["visit", "arm", "spectrograph", "qaStatus"]])
     assert rollup["qaStatus"].tolist() == ["FAIL", "PASS", "WARN"]
-    assert row(rollup, 100)["decidedByTask"] == ""
+    assert row(rollup, 100)["decidedByCamera"] == "r2" and row(rollup, 100)["qaDecidedBy"] == ""
 
 
 def testExitCodeIsTheWorstVisit():
@@ -149,19 +159,3 @@ def testMediumResolutionCamerasAreNotMissing():
     assert row(rollup, 200)["missingCameras"] == ""
     # Negative control: the red camera is another camera, and is missed.
     assert row(rollupVisits(gate, expect([(200, "b1"), (200, "r1")])), 200)["missingCameras"] == "r1"
-
-
-def testNullProvisionalIsNotProvisional():
-    gate = pd.DataFrame(
-        {
-            "visit": [300, 300, 301],
-            "arm": ["b", "r", "b"],
-            "spectrograph": [1, 1, 1],
-            "qaStatus": ["PASS"] * 3,
-            "provisional": pd.array([pd.NA, False, True], dtype="boolean"),
-        }
-    )
-    rollup = rollupVisits(gate)
-    assert not row(rollup, 300)["provisional"]
-    # Negative control: a set flag still shows.
-    assert row(rollup, 301)["provisional"]

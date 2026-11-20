@@ -1,7 +1,7 @@
 """pipelines/qaThresholds.yaml imports labels that exist.
 
 Standard library only: the labels are read as text. Building the pipeline needs
-the stack, and the notebook's ``pipetask qgraph`` step does that.
+the stack.
 """
 
 import re

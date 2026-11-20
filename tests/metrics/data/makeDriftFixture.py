@@ -1,23 +1,24 @@
 r"""Make ``dmDriftMetrics-validation.parquet``, the line-residual test fixture.
 
-The judged rows of ``dmLineResidualMetrics`` for the validation visits, one row per detector,
-reference and species: against the calibration (``statusType`` ``BOTH`` or ``UNFITTED``), the
-drift, and against the visit's detectorMap (``RESERVED``), the scatter; with the calibration's
-input visits from ``dmLineResidualSummary`` and the sequence from ``iqQaMetrics-validation.parquet``.
+The rows of ``dmLineResidualMetrics`` the gate reads (`pfs.drp.qa.metrics.gate`), for the visits of
+``iqQaMetrics-validation.parquet``, in the wide form (`wideResiduals`): one row per detector,
+reference and species, a column per statistic, no verdict. Against the calibration (``statusType``
+``BOTH`` or ``UNFITTED``), the offset; against the visit's detectorMap (``RESERVED``), what the
+adjusted map leaves on the lines held back; with the calibration's input visits from
+``dmLineResidualSummary`` and the sequence from ``iqQaMetrics-validation.parquet``.
 All are engineering and calibration visits.
 
-The tables come from the thresholds notebook's cache: section 5 of ``docs/qa-thresholds.ipynb``
-writes ``dmLineResidualMetrics-<run>.parquet`` and ``dmLineResidualSummary-<run>.parquet`` under
-``~/.cache/drp_qa``, the run being the collection with ``/`` made ``_``. ``bin.src/exportMetrics.py``
-names its files the same way, so its output directory serves too.
+The inputs are the collection's ``dmLineResidualMetrics`` and ``dmLineResidualSummary`` exported to
+parquet (`pfs.drp.qa.metrics.readers.exportMetrics`), named
+``<datasetType>-<collection with / as _>.parquet``. A collection reduced before a statistic was
+measured gives it as a NaN column: ``medianDeltaYKms``, for one reduced before the residuals were
+stored in km/s.
 
     PYTHONPATH=python uv run --no-project --with pandas --with pyarrow --with numpy --with pyyaml --with scipy \\
         python tests/metrics/data/makeDriftFixture.py [RUN [DIR]]
 
 ``RUN`` is the collection (default ``u/wtg/qa-thresholds/010``), ``DIR`` the directory (default
-``~/Projects/Subaru/PFS/reports/PIPE2D-1938``, where ``makeGateFixtures.py`` reads the same run). The fixture before this one, from ``u/wtg/qa-thresholds/008`` and
-``dmDriftMonitor``, held rows against the calibration only, with no ``reference`` column; the test
-adds it when missing.
+``~/Projects/Subaru/PFS/reports/PIPE2D-1938``, where ``makeGateFixtures.py`` reads the same run).
 """
 
 import sys

@@ -30,7 +30,11 @@ _DATA_ID_KEYS = ("visit", "arm", "spectrograph")
 
 
 def datasetDetectors(
-    butler, datasetType: str, visits: Iterable[int], instrument: str = "PFS"
+    butler,
+    datasetType: str,
+    visits: Iterable[int],
+    instrument: str = "PFS",
+    collections: str | Iterable[str] | None = None,
 ) -> dict[int, set[str]]:
     """Return, per visit, the cameras (``b1``, ``r3``, ...) with a ``datasetType`` dataset.
 
@@ -39,17 +43,21 @@ def datasetDetectors(
     Parameters
     ----------
     butler : `lsst.daf.butler.Butler`
-        A Butler with its collections set.
+        A Butler, with its collections set unless ``collections`` is given.
     datasetType : `str`
         The dataset type, per (visit, arm, spectrograph).
     visits : iterable of `int`
         The visits.
     instrument : `str`, optional
         Instrument name. Default is ``PFS``.
+    collections : `str` or iterable of `str`, optional
+        The collections to search; default the Butler's own.
     """
     visits = tuple(sorted({int(visit) for visit in visits}))
+    where = {} if collections is None else {"collections": collections}
     refs = butler.query_datasets(
         datasetType,
+        **where,
         where="instrument = instrumentName AND visit IN (visits)",
         bind={"instrumentName": instrument, "visits": visits},
         find_first=True,
@@ -84,7 +92,7 @@ def readMetrics(
     butler : `lsst.daf.butler.Butler`
         A Butler; read-only is enough.
     visits : iterable of `int`, optional
-        The visits to read, e.g. ``ValidationVisitSet.visits``.
+        The visits to read.
     datasetType : `str`, optional
         The dataset type. Default is ``iqQaMetrics``.
     collections : `str` or iterable of `str`, optional

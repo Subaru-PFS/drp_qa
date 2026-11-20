@@ -13,7 +13,7 @@ visit arm spectrograph description metric  value
 
 ``description`` is the line species of the line list (``HgI``, ``NeI``), or
 ``Trace`` for trace centroids, not the lamp (``species`` in
-`~pfs.drp.qa.metrics.calibration.addSpecies`).
+`~pfs.drp.qa.metrics.registry.addSpecies`).
 
 Two sets of metrics share the table. The fit statistics (`STAT_METRICS`,
 `speciesFrame`) are drp_stella's own, read from the ``Stats for <species>`` lines
@@ -160,9 +160,9 @@ def speciesStats(frame: pd.DataFrame) -> dict[str, tuple[float, float]]:
     Returns
     -------
     `dict` [`str`, `tuple` [`float`, `float`]]
-        Missing values are NaN. ``Trace`` is left out: ``imageQualityLogQa``
-        reports it from ``iqQaMetrics`` (``fitTraceXRms``), and so is a
-        species with no fit statistic (line-flux rows alone).
+        Missing values are NaN. ``Trace`` is left out: ``iqQaMetrics``
+        holds it (``fitTraceXRms``), and so is a species with no fit
+        statistic (line-flux rows alone).
     """
     frame = frame[(frame["description"] != "Trace") & frame["metric"].isin(STAT_METRICS)]
     wide = frame.pivot(index="description", columns="metric", values="value")

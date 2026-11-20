@@ -1,4 +1,4 @@
-"""Line residuals against the calibration and the visit's detectorMap: measurement and verdict.
+"""Line residuals against the calibration and the visit's detectorMap: the measurement.
 
 ``dmLineResiduals`` measures every line of ``lines`` against two references
 (``reference``):
@@ -24,10 +24,20 @@ whatever the lamp.
 
 Residuals are measured minus reference, the sign of drp_stella's. Per
 reference, species (``description``, R7) and ``statusType``, the median and
-robust RMS of ``dx`` and ``dy``, ``nLines`` and ``linesPerFiber`` (per lit
-fiber, so a design lighting one fiber group is not read as sparse).
-A species with fewer than ``minLines`` lines gets NaN
+robust RMS of ``dx`` and ``dy``, the median of ``dy`` in km/s, ``nLines`` and
+``linesPerFiber`` (per lit fiber, so a design lighting one fiber group is not
+read as sparse). A species with fewer than ``minLines`` lines gets NaN
 statistics: not measured. The components are kept apart, never combined.
+
+In km/s (``medianDeltaYKms``, and ``dyKms<Ref>`` per line), each line's ``dy``
+is multiplied by ``c * dispersion / wavelength``, with the dispersion (nm per
+pixel) of the reference detectorMap at that line, before the median is taken:
+a pixel is a different velocity on each arm, and along it. The dispersion is
+signed, the wavelength gained per pixel of y, so the value is the velocity of
+the line as measured from where the reference puts it, positive to the red; it
+has the sign of ``dy`` where wavelength increases with y. Trace centroids have
+none, and a line the detectorMap gives no dispersion for is left out of the
+median.
 
 ``statusType`` is ``BOTH`` (``USED`` and ``RESERVED`` together), ``USED`` or
 ``RESERVED``. When the visit's fit marked no line, it did not run or failed,
@@ -38,22 +48,17 @@ then measured once, as ``UNFITTED``, and the summary's ``fitted`` is false.
 the visit's pfsConfig as ``imageQualityQa`` classifies it (`observationType`:
 ``trace`` for a quartz, ``arc``, ``twilight``, ...). It is a population column:
 trace centroids are measured on every frame, but on an arc the continuum is
-faint and they scatter two to three times more than on a quartz, so a
-threshold on their scatter is derived and judged per frame type.
+faint and they scatter two to three times more than on a quartz, so what is
+normal for their scatter depends on the frame type.
 
-Judged (`JUDGED`), everything else stored as a diagnostic:
-
-- against ``calib``, over ``BOTH`` (or ``UNFITTED``) lines: the drift. The
-  config judges the median x offset of trace centroids and the median y
-  offset of lamp lines; lamp lines' x offset is stored, and judged only where
-  a thresholds file names it.
-- against ``visit``, over ``RESERVED`` lines: the robust RMS, the scatter the
-  adjusted map leaves on lines it was not fitted to. The weighted RMS and the
-  softening are not recomputed here: ``imageQualityQa`` reads drp_stella's own
-  from the ``reduceExposure`` log (``iqQaMetrics``, ``iqQaSpeciesMetrics``).
+Nothing is judged here: every number is stored, with no verdict. Which of
+them are judged, on which frames and against what, is described in
+`pfs.drp.qa.metrics.gate`. The weighted RMS and the softening are not
+recomputed either: ``imageQualityQa`` reads drp_stella's own from the
+``reduceExposure`` log (``iqQaMetrics``, ``iqQaSpeciesMetrics``).
 
 Stack-free: the detectorMaps are duck-typed (``fiberId``, ``getXCenter``,
-``findPoint``), so it is tested with fakes.
+``findPoint``, ``getDispersion``), so it is tested with fakes.
 """
 
 from collections.abc import Mapping, Sequence
@@ -62,16 +67,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from pfs.drp.qa.metrics.gate import STATUS_ORDER, judge, loadThresholds, thresholdsNames, thresholdsPath
-
 __all__ = [
     "BAD_STATUS",
     "BOTH",
     "CALIB",
-    "JUDGED",
     "LINE_COLUMNS",
     "QUARTZ",
-    "RECOMMENDED_ACTIONS",
     "REFERENCES",
     "RESERVED",
     "RESIDUAL_COLUMNS",
@@ -86,15 +87,11 @@ __all__ = [
     "addObsType",
     "cameraSet",
     "frameType",
-    "judgedRows",
     "lineResiduals",
     "lineTable",
     "longResiduals",
     "observationType",
-    "residualConfigThresholds",
-    "residualTaskThresholds",
-    "residualThresholds",
-    "residualVerdict",
+    "residualSummary",
     "robustRms",
     "speciesResiduals",
     "wideResiduals",
@@ -124,45 +121,33 @@ STATUS_TYPES = (BOTH, USED, RESERVED)
 #: ``statusType`` of every good line of a detector whose fit marked none.
 UNFITTED = "UNFITTED"
 
-#: The residual statistics, with the component each comes from.
+#: The residual statistics, with the component each comes from. ``medianDeltaYKms`` is in km/s, the others
+#: in pixels.
 RESIDUAL_METRICS = {
     "medianDeltaX": "x",
     "robustRmsDeltaX": "x",
     "medianDeltaY": "y",
     "robustRmsDeltaY": "y",
+    "medianDeltaYKms": "y",
 }
 
-#: What is judged: per reference, the ``statusType`` values and the metrics.
-#: Any other row, or metric, is stored without a verdict.
-JUDGED = {
-    CALIB: ((BOTH, UNFITTED), tuple(RESIDUAL_METRICS)),
-    VISIT: ((RESERVED,), ("robustRmsDeltaX", "robustRmsDeltaY")),
+#: The per-line column each statistic is taken over, less the reference's suffix (``dyKmsVisit``, ...).
+_LINE_VALUES = {
+    "medianDeltaX": "dx",
+    "robustRmsDeltaX": "dx",
+    "medianDeltaY": "dy",
+    "robustRmsDeltaY": "dy",
+    "medianDeltaYKms": "dyKms",
 }
+
+#: The speed of light, km/s.
+_C_KMS = 299792.458
 
 #: The counts reported for every species.
 _COUNT_METRICS = ("nLines", "linesPerFiber")
 
-#: The operator's actions, least to most severe (`recommendedAction`). A
-#: detector takes the most severe of its crossed metrics' actions:
-#:
-#: - a median offset from the calibration at WARN: ``APPLY_SHIFT``. The
-#:   calibration no longer matches, but the visit's first-order detectorMap
-#:   adjustment absorbs a shift;
-#: - a median offset at FAIL: ``RECALIBRATE``. The offset nears the 3 px radius
-#:   within which drp_stella finds lines (``centroidLines.peakSearch``,
-#:   ``centroidTraces.searchRadius``), so the adjustment cannot be trusted;
-#: - a robust RMS at WARN or FAIL, against either reference: ``RECALIBRATE``.
-#:   Scatter is change a shift cannot absorb;
-#: - any crossing on ``UNFITTED`` lines: ``RECALIBRATE``. No adjustment was
-#:   applied, so the offset is in the reduced data.
-#:
-#: ``INSUFFICIENT_DATA`` when nothing was measurable; `residualVerdict` also
-#: gives ``UNJUDGED`` when lines were measured but no threshold applies.
-RECOMMENDED_ACTIONS = ("NOMINAL", "APPLY_SHIFT", "RECALIBRATE")
-
 #: Columns of ``dmLineResidualMetrics``, in order, with their dtypes: one row
-#: per detector, reference, species, ``statusType`` and metric, with the
-#: metric's verdict (empty when not judged).
+#: per detector, reference, species, ``statusType`` and metric.
 RESIDUAL_COLUMNS = {
     "visit": "int64",
     "arm": "string",
@@ -174,12 +159,12 @@ RESIDUAL_COLUMNS = {
     "statusType": "string",
     "metric": "string",
     "value": "float64",
-    "status": "string",
 }
 
 #: Columns of ``dmLineResidualData``, in order, with their dtypes: one row per
-#: line measured, with its residual against each reference (NaN where that
-#: reference predicts nothing, and ``dy`` for trace centroids).
+#: line measured, with its residual against each reference in pixels, then
+#: ``dy`` in km/s (NaN where that reference predicts nothing, and ``dy`` for
+#: trace centroids).
 LINE_COLUMNS = {
     "visit": "int64",
     "arm": "string",
@@ -193,18 +178,11 @@ LINE_COLUMNS = {
     "description": "string",
     "statusType": "string",
     **{f"d{c}{ref.capitalize()}": "float64" for ref in REFERENCES for c in "xy"},
+    **{f"dyKms{ref.capitalize()}": "float64" for ref in REFERENCES},
 }
 
-#: Columns of ``dmLineResidualSummary`` set by `residualVerdict`.
-SUMMARY_COLUMNS = (
-    "fitted",
-    "nSpecies",
-    "nSpeciesMeasured",
-    "qaStatus",
-    "qaDecidedBy",
-    "qaReason",
-    "recommendedAction",
-)
+#: Columns of ``dmLineResidualSummary`` set by `residualSummary`.
+SUMMARY_COLUMNS = ("fitted", "nSpecies", "nSpeciesMeasured")
 
 #: Arms in the order camera sets are named (``brn``, ``bmn``, ``bm``).
 _ARM_ORDER = "brmn"
@@ -276,8 +254,8 @@ def observationType(header: Any) -> str | None:
         ``arc``, ``trace`` (a quartz), ``dark``, ``twilight``, ``allsky`` or
         ``science`` (``scienceObject`` by its sequence name), ``unknown`` when
         ``W_SEQTYP`` is absent or unrecognised; `None` without a header. The
-        values of ``iqQaMetrics.obsType``, so one thresholds population
-        vocabulary serves both tasks.
+        values of ``iqQaMetrics.obsType``, so one vocabulary of frame types
+        serves both tasks.
     """
     if header is None:
         return None
@@ -368,8 +346,9 @@ def lineResiduals(
     references : mapping [`str`, `pfs.drp.stella.DetectorMap` or `None`]
         The detectorMaps by `REFERENCES` name; one that is absent or `None`
         gives NaN residuals. Duck-typed: ``fiberId``, vectorised
-        ``getXCenter(fiberId, y)`` and ``findPoint(fiberId, wavelength)``
-        (an ``(N, 2)`` array).
+        ``getXCenter(fiberId, y)``, ``findPoint(fiberId, wavelength)``
+        (an ``(N, 2)`` array) and ``getDispersion(fiberId, wavelength)``
+        (nm per pixel; one without it gives NaN in km/s).
     badStatus : `int`, optional
         Status bits that exclude a line, as ``fitDetectorMap``'s ``lineFlags``.
 
@@ -384,8 +363,9 @@ def lineResiduals(
         ``fiberId``, ``wavelength``, ``x``, ``y``, ``xErr``, ``yErr``,
         ``description``, ``statusType`` (``USED``, ``RESERVED`` or
         `UNFITTED`), and ``dx<Ref>``, ``dy<Ref>`` per reference
-        (``dxCalib``, ``dyVisit``, ...), measured minus reference; ``dy`` is
-        NaN for trace centroids.
+        (``dxCalib``, ``dyVisit``, ...), measured minus reference, in pixels;
+        then ``dyKms<Ref>``, ``dy<Ref>`` in km/s by that reference's
+        dispersion at the line. ``dy`` is NaN for trace centroids.
     """
     num = len(lines)
     fiberId = lines["fiberId"].to_numpy(dtype=np.int32)
@@ -403,11 +383,13 @@ def lineResiduals(
     good &= isTrace | np.isfinite(wavelength)
 
     columns: dict[str, np.ndarray] = {}
+    velocities: dict[str, np.ndarray] = {}
     measured = np.zeros(num, dtype=bool)
     for name in REFERENCES:
-        dx, dy = _residuals(references.get(name), fiberId, x, y, wavelength, isTrace, good)
+        dx, dy, dyKms = _residuals(references.get(name), fiberId, x, y, wavelength, isTrace, good)
         columns[f"dx{name.capitalize()}"] = dx
         columns[f"dy{name.capitalize()}"] = dy
+        velocities[f"dyKms{name.capitalize()}"] = dyKms
         # The component a line measures: a NaN prediction would count as a line with no value.
         measured |= np.where(isTrace, np.isfinite(dx), np.isfinite(dy))
     good &= measured
@@ -433,6 +415,7 @@ def lineResiduals(
         "description": description,
         "statusType": statusType,
         **columns,
+        **velocities,
     }
     return pd.DataFrame({key: value[good] for key, value in frame.items()})
 
@@ -445,12 +428,16 @@ def _residuals(
     wavelength: np.ndarray,
     isTrace: np.ndarray,
     good: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Return ``(dx, dy)`` of the ``good`` lines from one detectorMap; NaN elsewhere."""
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return ``(dx, dy, dyKms)`` of the ``good`` lines from one detectorMap; NaN elsewhere.
+
+    ``dx`` and ``dy`` are in pixels; ``dyKms`` is ``dy`` in km/s, by the detectorMap's dispersion at each line.
+    """
     dx = np.full(len(fiberId), np.nan)
     dy = np.full(len(fiberId), np.nan)
+    dyKms = np.full(len(fiberId), np.nan)
     if detectorMap is None:
-        return dx, dy
+        return dx, dy, dyKms
     # getXCenter raises on a fiber a splined detectorMap lacks.
     use = good & np.isin(fiberId, np.asarray(detectorMap.fiberId))
     traces = use & isTrace
@@ -469,7 +456,26 @@ def _residuals(
         )
         dx[lamps] = x[lamps] - points[:, 0]
         dy[lamps] = y[lamps] - points[:, 1]
-    return dx, dy
+        dyKms[lamps] = dy[lamps] * _kmsPerPixel(detectorMap, fiberId[lamps], wavelength[lamps])
+    return dx, dy, dyKms
+
+
+def _kmsPerPixel(detectorMap: Any, fiberId: np.ndarray, wavelength: np.ndarray) -> np.ndarray:
+    """Return the velocity a pixel of y spans at each line, km/s: ``c * dispersion / wavelength``.
+
+    The dispersion is the detectorMap's ``getDispersion(fiberId, wavelength)``, nm per pixel: the wavelength
+    gained per pixel of y, so negative where wavelength falls with y. NaN where there is none: a detectorMap
+    without ``getDispersion``, or a line at which it predicts nothing.
+    """
+    getDispersion = getattr(detectorMap, "getDispersion", None)
+    if getDispersion is None:
+        return np.full(len(fiberId), np.nan)
+    dispersion = np.asarray(
+        getDispersion(np.ascontiguousarray(fiberId), np.ascontiguousarray(wavelength)), dtype=float
+    )
+    with np.errstate(divide="ignore", invalid="ignore"):
+        scale = _C_KMS * dispersion / wavelength
+    return np.where(np.isfinite(scale), scale, np.nan)
 
 
 def lineTable(
@@ -558,6 +564,9 @@ def speciesResiduals(
         measures: x for trace centroids, y for lamp lines), ``linesPerFiber``
         (of those, the lines on lit fibers per lit fiber), and the
         `RESIDUAL_METRICS`; the y statistics are NaN for trace centroids.
+        ``medianDeltaYKms`` is the median of the lines' ``dyKms<Ref>``, NaN
+        when fewer than ``minLines`` of them have one, or when ``residuals``
+        lacks the column (a ``dmLineResidualData`` stored before it).
     """
     rows = []
     unfitted = (residuals["statusType"] == UNFITTED).any()
@@ -583,11 +592,14 @@ def speciesResiduals(
                 if litFibers:
                     row["linesPerFiber"] = float(lines["fiberId"].isin(litFibers).sum()) / len(litFibers)
                 for metric, component in RESIDUAL_METRICS.items():
-                    values = lines[f"d{component}{suffix}"]
-                    if nLines < minLines or (isTrace and component == "y"):
+                    column = f"{_LINE_VALUES[metric]}{suffix}"
+                    values = lines[column].to_numpy(dtype=float) if column in lines.columns else np.empty(0)
+                    values = values[np.isfinite(values)]
+                    # Too few lines, or too few with a value: a line with no dispersion has no km/s.
+                    if values.size < max(minLines, 1) or (isTrace and component == "y"):
                         row[metric] = np.nan
                     elif metric.startswith("median"):
-                        row[metric] = float(np.nanmedian(values)) if values.notna().any() else np.nan
+                        row[metric] = float(np.median(values))
                     else:
                         row[metric] = robustRms(values)
                 rows.append(row)
@@ -595,241 +607,31 @@ def speciesResiduals(
     return pd.DataFrame(rows, columns=columns).astype({"nLines": "int64"})
 
 
-def residualThresholds(
-    xWarn: float,
-    xFail: float,
-    yWarn: float,
-    yFail: float,
-    xRmsWarn: float = np.nan,
-    xRmsFail: float = np.nan,
-    yRmsWarn: float = np.nan,
-    yRmsFail: float = np.nan,
-    source: str = "dmLineResiduals config",
-) -> pd.DataFrame:
-    """Return the config's thresholds as a `gate` table.
-
-    - ``medianDeltaX`` of trace centroids and ``medianDeltaY``, against
-      ``calib``, judged on their absolute value: the drift;
-    - ``robustRmsDeltaX`` and ``robustRmsDeltaY`` of ``RESERVED`` lines
-      against ``visit``: the scatter the adjusted map leaves.
-
-    The population columns are ``reference``, ``description`` and
-    ``statusType``; an entry matches any value of a column it leaves null. A
-    NaN threshold is not applied; an entry with both NaN is not judged, and
-    stops the search for that population (`pfs.drp.qa.metrics.gate`).
-    """
-    rows = []
-    for metric, warn, fail, name, population in (
-        ("medianDeltaX", xWarn, xFail, "xWarn/FailThreshold", {"reference": CALIB, "description": TRACE}),
-        ("medianDeltaY", yWarn, yFail, "yWarn/FailThreshold", {"reference": CALIB}),
-        (
-            "robustRmsDeltaX",
-            xRmsWarn,
-            xRmsFail,
-            "xRmsWarn/FailThreshold",
-            {"reference": VISIT, "statusType": RESERVED},
-        ),
-        (
-            "robustRmsDeltaY",
-            yRmsWarn,
-            yRmsFail,
-            "yRmsWarn/FailThreshold",
-            {"reference": VISIT, "statusType": RESERVED},
-        ),
-    ):
-        rows.append(
-            {
-                "metric": metric,
-                "reference": None,
-                "description": None,
-                "statusType": None,
-                **population,
-                "warn": float(warn),
-                "fail": float(fail),
-                "higherIsWorse": True,
-                "absolute": metric.startswith("median"),
-                "provenance": f"{source} {name}.",
-            }
-        )
-    return pd.DataFrame(rows).astype({"reference": object, "description": object, "statusType": object})
-
-
-def residualConfigThresholds(config: Any) -> pd.DataFrame:
-    """Return the thresholds a ``dmLineResiduals`` config's fields give: the task's last layer.
-
-    Parameters
-    ----------
-    config : `Any`
-        A ``DmLineResidualsConfig``, or any object with its threshold fields
-        (``xWarnThreshold`` ... ``yRmsFailThreshold``); duck-typed so this is
-        tested without the stack, and so the qadb loader rebuilds the layer
-        from a RUN's stored config.
-
-    Returns
-    -------
-    `pandas.DataFrame`
-        `residualThresholds` of the fields.
-    """
-    return residualThresholds(
-        config.xWarnThreshold,
-        config.xFailThreshold,
-        config.yWarnThreshold,
-        config.yFailThreshold,
-        config.xRmsWarnThreshold,
-        config.xRmsFailThreshold,
-        config.yRmsWarnThreshold,
-        config.yRmsFailThreshold,
-    )
-
-
-def residualTaskThresholds(config: Any) -> list[pd.DataFrame]:
-    """Return the thresholds a ``dmLineResiduals`` config judges with, as the task builds them.
-
-    Parameters
-    ----------
-    config : `Any`
-        A ``DmLineResidualsConfig``, or any object with its ``thresholdsFile``
-        and threshold fields; duck-typed so this is tested without the stack.
-
-    Returns
-    -------
-    `list` [`pandas.DataFrame`]
-        The thresholds file's table, if any, then the config's
-        (`residualConfigThresholds`), highest priority first.
-    """
-    files = [thresholdsPath(name) for name in thresholdsNames(config)]
-    return [*loadThresholds(files), residualConfigThresholds(config)]
-
-
-def judgedRows(species: pd.DataFrame) -> pd.DataFrame:
-    """Return the rows `residualVerdict` judges, with the metrics it does not judge on them NaN.
-
-    Parameters
-    ----------
-    species : `pandas.DataFrame`
-        Rows with ``reference``, ``statusType`` and the `RESIDUAL_METRICS`
-        present: `speciesResiduals`, or `wideResiduals` of either reference.
-
-    Returns
-    -------
-    `pandas.DataFrame`
-        The rows of each reference whose ``statusType`` `JUDGED` names,
-        reindexed from 0; a metric `JUDGED` leaves out for the reference is
-        NaN, so no thresholds file can give it a verdict.
-    """
-    keep = np.zeros(len(species), dtype=bool)
-    for reference, (statusTypes, _) in JUDGED.items():
-        keep |= (species["reference"] == reference).to_numpy() & species["statusType"].isin(
-            statusTypes
-        ).to_numpy()
-    rows = species[keep].reset_index(drop=True)
-    for reference, (_, metrics) in JUDGED.items():
-        blank = [metric for metric in RESIDUAL_METRICS if metric not in metrics and metric in rows]
-        rows.loc[rows["reference"] == reference, blank] = np.nan
-    return rows
-
-
-def residualVerdict(
-    species: pd.DataFrame,
-    dataId: Mapping[str, Any],
-    thresholds: pd.DataFrame | Sequence[pd.DataFrame],
-    minLines: int,
-    camera: str | None = None,
-    obsType: str | None = None,
-) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Judge the `JUDGED` rows and metrics of each species, and the detector.
+def residualSummary(species: pd.DataFrame, minLines: int) -> dict[str, Any]:
+    """Return what a detector's ``dmLineResidualSummary`` row says of the measurement: no verdict.
 
     Parameters
     ----------
     species : `pandas.DataFrame`
         `speciesResiduals`.
-    dataId : mapping
-        ``visit``, ``arm``, ``spectrograph``.
-    thresholds : `pandas.DataFrame` or a sequence of them
-        Threshold tables, highest priority first (`pfs.drp.qa.metrics.gate`).
-        Population columns may name ``reference``, ``statusType``, ``arm``,
-        ``spectrograph``, ``description``, ``cameraSet`` and ``obsType``.
     minLines : `int`
-        As given to `speciesResiduals`; for the reason string.
-    camera : `str`, optional
-        `cameraSet`.
-    obsType : `str`, optional
-        `observationType`.
+        As given to `speciesResiduals`.
 
     Returns
     -------
-    judged : `pandas.DataFrame`
-        `pfs.drp.qa.metrics.gate.judge` of the judged rows, with
-        ``reference``, ``description`` and ``statusType``. A metric `JUDGED`
-        leaves out for a reference is judged as NaN: no verdict, whatever the
-        thresholds.
-    summary : `dict`
+    `dict`
         `SUMMARY_COLUMNS`. ``fitted`` is false when the visit's fit marked
-        no line (`UNFITTED`). ``nSpecies`` and ``nSpeciesMeasured`` count
-        species against the calibration. ``qaStatus`` is the worst verdict, or
-        ``UNKNOWN`` when no judged row, against either reference, has
-        ``minLines`` good lines: not
-        measurable, never measured but not combinable. ``qaDecidedBy`` is
-        ``"<reference> <description> <metric>"``.
+        no line (`UNFITTED`). ``nSpecies`` counts the species with a line
+        against the calibration (its ``BOTH`` or ``UNFITTED`` rows), and
+        ``nSpeciesMeasured`` those of them with ``minLines`` lines: 0 when
+        nothing against the calibration was measurable.
     """
-    wide = judgedRows(species).assign(
-        visit=dataId["visit"],
-        arm=dataId["arm"],
-        spectrograph=dataId["spectrograph"],
-        cameraSet=camera,
-        obsType=obsType,
-    )
-    judged = judge(wide, thresholds)
-    rows = judged["row"].to_numpy(dtype=int)
-    for column in ("reference", "description", "statusType"):
-        judged[column] = wide[column].to_numpy()[rows]
-
-    calib = wide[wide["reference"] == CALIB]
-    measured = int((calib["nLines"] >= minLines).sum())
-    summary: dict[str, Any] = {
+    calib = species[(species["reference"] == CALIB) & species["statusType"].isin((BOTH, UNFITTED))]
+    return {
         "fitted": not (species["statusType"] == UNFITTED).any(),
         "nSpecies": len(calib),
-        "nSpeciesMeasured": measured,
-        "qaStatus": "UNKNOWN",
-        "qaDecidedBy": "",
-        "qaReason": "",
-        "recommendedAction": "INSUFFICIENT_DATA",
+        "nSpeciesMeasured": int((calib["nLines"] >= minLines).sum()),
     }
-    # Measurable against either reference: the visit's map can predict lines the calibration cannot.
-    if not (wide["nLines"] >= minLines).any():
-        summary["qaReason"] = (
-            f"fewer than {minLines} good lines in every species" if len(calib) else "no good lines"
-        )
-        return judged, summary
-    verdicts = judged[judged["status"] != ""]
-    if verdicts.empty:
-        summary["qaReason"] = "lines measured, but no threshold applies"
-        summary["recommendedAction"] = "UNJUDGED"
-        return judged, summary
-    rank = verdicts["status"].map(STATUS_ORDER.index)
-    worst = STATUS_ORDER[int(rank.max())]
-    summary["qaStatus"] = worst
-    summary["recommendedAction"] = max(
-        (_action(row) for row in verdicts.itertuples()), key=RECOMMENDED_ACTIONS.index
-    )
-    if worst != "PASS":
-        decider = verdicts.loc[rank.idxmax()]
-        summary["qaDecidedBy"] = f"{decider['reference']} {decider['description']} {decider['metric']}"
-        crossed = verdicts[verdicts["reason"] != ""]
-        summary["qaReason"] = "; ".join(
-            f"{ref} {d}: {r}"
-            for ref, d, r in zip(crossed["reference"], crossed["description"], crossed["reason"], strict=True)
-        )
-    return judged, summary
-
-
-def _action(verdict: Any) -> str:
-    """Return the `RECOMMENDED_ACTIONS` entry for one judged metric (a `judge` row)."""
-    if verdict.status == "PASS":
-        return "NOMINAL"
-    if verdict.statusType == UNFITTED or not verdict.metric.startswith("median"):
-        return "RECALIBRATE"
-    return "APPLY_SHIFT" if verdict.status == "WARN" else "RECALIBRATE"
 
 
 def wideResiduals(
@@ -842,9 +644,9 @@ def wideResiduals(
 ) -> pd.DataFrame:
     """Return ``dmLineResidualMetrics`` rows of one reference as one row per detector and species.
 
-    The long table pivoted on ``metric``, for deriving thresholds
-    (`pfs.drp.qa.metrics.calibration.calibrate` takes a column per metric) and
-    for the test fixtures made from the validation visits.
+    The long table pivoted on ``metric``: a column per statistic, the form
+    of the test fixtures made from stored tables.
+    `pfs.drp.qa.metrics.gate.longLines` turns it back.
 
     Parameters
     ----------
@@ -863,10 +665,9 @@ def wideResiduals(
         ``calibFirstVisit``, ``calibLastVisit``, those present).
     kinds : `pandas.DataFrame`, optional
         A table with ``visit``, ``arm``, ``spectrograph`` and ``obsType`` or
-        ``seqName``, e.g. ``iqQaMetrics``: adds ``seqName``, so that the
-        validation set's ``seqType`` selectors match the rows, and fills
-        ``obsType`` where the stored rows lack it (`addObsType`: tables made
-        before it was a column).
+        ``seqName``, e.g. ``iqQaMetrics``: adds ``seqName``, which names the
+        lamp of an arc, and fills ``obsType`` where the stored rows lack it
+        (`addObsType`: tables made before it was a column).
     excludeCalibInputs : `bool`, optional
         Drop the detectors whose visit lies within the input visits of the
         calibration they were measured against (``calibFirstVisit`` to
@@ -880,8 +681,9 @@ def wideResiduals(
         ``visit``, ``arm``, ``spectrograph``, ``cameraSet``, ``obsType`` (when
         stored), ``reference``, ``description``, ``statusType``, a column per
         metric (``nLines``, ``linesPerFiber`` and `RESIDUAL_METRICS`, NaN
-        where the species measures no such component), then the calibration
-        and kind columns; sorted by detector and species.
+        where the species measures no such component, or the stored table
+        has no such metric: one made before ``medianDeltaYKms``), then the
+        calibration and kind columns; sorted by detector and species.
 
     Raises
     ------
@@ -923,7 +725,6 @@ def wideResiduals(
 
 def longResiduals(
     species: pd.DataFrame,
-    judged: pd.DataFrame,
     dataId: Mapping[str, Any],
     camera: str | None = None,
     obsType: str | None = None,
@@ -931,15 +732,14 @@ def longResiduals(
     """Return ``dmLineResidualMetrics``: one row per reference, species, ``statusType`` and metric.
 
     Each has rows for ``nLines``, ``linesPerFiber`` and the statistics of the
-    components the species measures (x for trace centroids, x and y for lamp
-    lines), NaN when it has too few lines. Only `JUDGED` rows carry a verdict.
+    components the species measures (x for trace centroids; x and y, with
+    ``medianDeltaYKms``, for lamp and sky lines), NaN when it has too few
+    lines. No row carries a verdict: `pfs.drp.qa.metrics.gate` judges them.
 
     Parameters
     ----------
     species : `pandas.DataFrame`
         `speciesResiduals`.
-    judged : `pandas.DataFrame`
-        From `residualVerdict`.
     dataId : mapping
         ``visit``, ``arm``, ``spectrograph``.
     camera : `str`, optional
@@ -952,17 +752,6 @@ def longResiduals(
     `pandas.DataFrame`
         `RESIDUAL_COLUMNS`; empty, with the same columns, when there are no species.
     """
-    status = {
-        (ref, d, t, m): s
-        for ref, d, t, m, s in zip(
-            judged["reference"],
-            judged["description"],
-            judged["statusType"],
-            judged["metric"],
-            judged["status"],
-            strict=True,
-        )
-    }
     rows = []
     for record in species.to_dict("records"):
         reference, description = record["reference"], record["description"]
@@ -981,7 +770,6 @@ def longResiduals(
                     "statusType": record["statusType"],
                     "metric": metric,
                     "value": float(record[metric]),
-                    "status": status.get((reference, description, record["statusType"], metric), ""),
                 }
             )
     return pd.DataFrame(rows, columns=list(RESIDUAL_COLUMNS)).astype(RESIDUAL_COLUMNS)

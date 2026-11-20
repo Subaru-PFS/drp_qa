@@ -1,7 +1,7 @@
 """Observing runs and their pre-run calibration periods.
 
 A *period* is a run's nights, or the nights before it when its calibrations were taken
-(``run29-pre``). Comparison mode reads and gates one period at a time. The periods are listed
+(``run29-pre``). Comparison mode reads and measures one period at a time. The periods are listed
 in ``data/observingRuns.yaml``, package data.
 
 Times are HST, as the opdb stores them. A night runs from noon to noon and is named by its

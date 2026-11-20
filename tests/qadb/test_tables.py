@@ -1,4 +1,4 @@
-"""Tests for shaping the QA tasks' Butler tables as qadb rows."""
+"""Tests for shaping the QA numbers, the gate's verdicts and the normal values as qadb rows."""
 
 from datetime import datetime
 
@@ -6,33 +6,31 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.calibration import readThresholds
-from pfs.drp.qa.metrics.gate import THRESHOLD_FIELDS
+from pfs.drp.qa.metrics.gate import NORMAL_KEYS, STATUS_ORDER, VERDICT_COLUMNS, gate
+from pfs.drp.qa.metrics.normalValues import NORMAL_COLUMNS
 from pfs.drp.qa.qadb.tables import (
-    GATE_ORDER,
     IMAGE_QUALITY,
     IMAGE_QUALITY_SPECIES,
     KEYS,
     LINE_RESIDUAL,
     LINE_RESIDUAL_METRIC,
+    NORMAL_VALUE,
+    NORMAL_VALUE_KEYS,
     QA_GATE,
-    QA_PROCESSING_THRESHOLDS,
-    QA_THRESHOLD_ENTRY,
-    QA_THRESHOLDS,
-    TASK_TABLES,
     TWILIGHT_QA,
     cameraName,
     gateRows,
     imageRows,
-    populationKey,
-    processingTasks,
-    processingThresholdsRows,
+    normalValueFrame,
+    normalValueRows,
     snakeCase,
-    thresholdRows,
-    worstStatus,
 )
 
 NOW = datetime(2026, 10, 26, 12, 0, 0)
+SPECS = (IMAGE_QUALITY, IMAGE_QUALITY_SPECIES, LINE_RESIDUAL, LINE_RESIDUAL_METRIC, TWILIGHT_QA)
+
+#: Columns a numbers table had when each task gave its own verdict.
+VERDICTS = {"qa_status", "qa_decided_by", "qa_reason", "recommended_action", "status", "provisional"}
 
 
 @pytest.mark.parametrize(
@@ -45,6 +43,8 @@ NOW = datetime(2026, 10, 26, 12, 0, 0)
         ("nLines", "n_lines"),
         ("calexpRun", "calexp_run"),
         ("medDxCenter", "med_dx_center"),
+        ("nSaturatedLines", "n_saturated_lines"),
+        ("pctSaturatedPixels", "pct_saturated_pixels"),
         ("already_snake", "already_snake"),
         ("value", "value"),
     ],
@@ -62,29 +62,39 @@ def testCameraName():
 
 
 def testSpecsMatchTheSchema(ddlColumns):
-    """Every spec's columns are exactly its qadb table's, in order (the DDL mirrors spt_qa_database)."""
-    for spec in (IMAGE_QUALITY, IMAGE_QUALITY_SPECIES, LINE_RESIDUAL, LINE_RESIDUAL_METRIC, TWILIGHT_QA):
+    """Every spec's columns are exactly its qadb table's, in order."""
+    for spec in SPECS:
         assert list(spec.qadbColumns) == ddlColumns[spec.name], spec.name
         assert spec.keys[:3] == KEYS
-    assert list(QA_THRESHOLDS) == ddlColumns["qa_thresholds"]
-    assert list(QA_THRESHOLD_ENTRY) == ddlColumns["qa_threshold_entry"]
     assert list(QA_GATE) == ddlColumns["qa_gate"]
-    assert list(QA_PROCESSING_THRESHOLDS) == ddlColumns["qa_processing_thresholds"]
+    # The normal values have a surrogate key the code never writes: the database numbers the rows.
+    assert ddlColumns["qa_normal_value"] == ["normal_value_id", *NORMAL_VALUE]
+    assert set(NORMAL_VALUE_KEYS) <= set(NORMAL_VALUE)
     # Negative control: a column the schema lacks is caught.
     assert "fit_trace_x_rms" not in ddlColumns["image_quality_qa"]
     assert "fitTraceXRms" not in IMAGE_QUALITY.columns
 
 
-def testTaskTablesNameTheSpecs():
-    sources = {
-        IMAGE_QUALITY.source,
-        IMAGE_QUALITY_SPECIES.source,
-        LINE_RESIDUAL.source,
-        LINE_RESIDUAL_METRIC.source,
-        TWILIGHT_QA.source,
-    }
-    # A task may have no long table (None): the twilight check writes its per-image verdict alone.
-    assert {table for pair in TASK_TABLES.values() for table in pair if table is not None} == sources
+def testNoNumbersTableHoldsAVerdict(ddlColumns):
+    """The tasks store numbers only: the verdict is ``qa_gate``'s, and nowhere else."""
+    for spec in SPECS:
+        assert not VERDICTS & set(spec.qadbColumns), spec.name
+        assert not VERDICTS & set(ddlColumns[spec.name]), spec.name
+    assert {"qa_status", "qa_decided_by", "qa_reason", "frame_type"} <= set(QA_GATE)
+    # What went with the thresholds files is gone from the gate row and from the schema.
+    assert not {"decided_by_task", "provisional"} & set(QA_GATE)
+    assert not {"qa_thresholds", "qa_threshold_entry", "qa_processing_thresholds"} & set(ddlColumns)
+    # Negative control: the check finds a verdict column where there is one.
+    assert VERDICTS & set(QA_GATE)
+
+
+def testSaturationIsStored():
+    """The saturation numbers follow ``nTraceRows``, as the schema has them."""
+    columns = list(IMAGE_QUALITY.columns)
+    at = columns.index("nTraceRows")
+    assert columns[at + 1 : at + 3] == ["nSaturatedLines", "pctSaturatedPixels"]
+    assert IMAGE_QUALITY.columns["nSaturatedLines"] == "int"
+    assert IMAGE_QUALITY.columns["pctSaturatedPixels"] == "float"
 
 
 class TestImageRows:
@@ -97,10 +107,16 @@ class TestImageRows:
         assert rows["camera_name"].tolist() == ["b1", "r1", "b1", "r1"]
         # Columns the fixture lacks are null; the ones it has are Python scalars of the declared type.
         assert rows["fit_chi2"].isna().all()
-        assert all(isinstance(v, int) for v in rows["n_lit_fibers"])  # stored as float 585.0 in the fixture
+        assert all(isinstance(v, int) for v in rows["n_lit_fibers"])
         assert all(isinstance(v, float) for v in rows["med_fwhm"])
         assert all(isinstance(v, bool) for v in rows["trace_only"])
-        assert set(rows["qa_status"]) <= set(GATE_ORDER)
+
+    def testAVerdictColumnInTheButlerTableIsNotCopied(self, fixtures):
+        """A table written when the tasks still judged carries ``qaStatus``; none of it reaches qadb."""
+        old = fixtures["iqQaMetrics"].assign(qaStatus="FAIL", qaDecidedBy="medFwhm", qaReason="then")
+        rows = imageRows(old, IMAGE_QUALITY, 7)
+        assert list(rows.columns) == list(IMAGE_QUALITY.qadbColumns)
+        pd.testing.assert_frame_equal(rows, imageRows(fixtures["iqQaMetrics"], IMAGE_QUALITY, 7))
 
     def testDatetime(self):
         frame = pd.DataFrame(
@@ -117,8 +133,8 @@ class TestImageRows:
         assert not isinstance(rows.loc[0, "calib_created"], str)
 
     def testListsAreJoined(self):
-        frame = pd.DataFrame({"visit": [1], "arm": ["b"], "spectrograph": [1], "qaReason": [["a", "b"]]})
-        assert imageRows(frame, IMAGE_QUALITY, 1).loc[0, "qa_reason"] == "a,b"
+        frame = pd.DataFrame({"visit": [1], "arm": ["b"], "spectrograph": [1], "seqName": [["a", "b"]]})
+        assert imageRows(frame, IMAGE_QUALITY, 1).loc[0, "seq_name"] == "a,b"
 
     def testNanBecomesNull(self):
         frame = pd.DataFrame(
@@ -128,13 +144,13 @@ class TestImageRows:
                 "spectrograph": [1],
                 "medFwhm": [np.nan],
                 "nLines": [np.nan],
-                "qaReason": [""],
+                "seqName": [""],
             }
         )
         rows = imageRows(frame, IMAGE_QUALITY, 1)
         assert rows.loc[0, "med_fwhm"] is None
         assert rows.loc[0, "n_lines"] is None
-        assert rows.loc[0, "qa_reason"] == ""  # an empty reason is a value, not a null
+        assert rows.loc[0, "seq_name"] == ""  # an empty name is a value, not a null
 
     def testProcessingByRun(self, fixtures):
         frame = fixtures["iqQaMetrics"].assign(run=["r1", "r1", "r2", "r2"])
@@ -150,195 +166,155 @@ class TestImageRows:
         assert len(rows) == 128
         assert not rows.duplicated(list(LINE_RESIDUAL_METRIC.keys)).any()
         assert set(rows["reference"]) == {"calib", "visit"}
-        assert "" in set(rows["status"])  # unjudged rows keep an empty status
+        assert all(isinstance(v, float) for v in rows["value"])
 
     def testSummary(self, fixtures):
         rows = imageRows(fixtures["dmLineResidualSummary"], LINE_RESIDUAL, 3)
         assert rows["calib_first_visit"].tolist() == [133025] * 4
         assert all(isinstance(v, datetime) for v in rows["calib_created"])
         assert all(isinstance(v, bool) for v in rows["fitted"])
-        assert (
-            rows["recommended_action"]
-            .isin(["NOMINAL", "APPLY_SHIFT", "RECALIBRATE", "INSUFFICIENT_DATA", "UNJUDGED"])
-            .all()
+        assert set(rows["camera_set"]) == {"brn"} and set(rows["obs_type"]) == {"arc", "trace"}
+
+    def testTwilightSequenceIsRenamed(self):
+        """The metrics' ``sequence`` is qadb's ``iic_sequence_id``; an infinite level offset is a null."""
+        frame = pd.DataFrame(
+            {
+                "visit": [5, 5],
+                "arm": ["b", "r"],
+                "spectrograph": [1, 1],
+                "sequence": [54787, 54787],
+                "tooFaint": [False, True],
+                "twilightLevelOffset": [np.inf, 0.4],
+            }
         )
-
-
-class TestThresholdRows:
-    def testIqThresholds(self, thresholdsFiles):
-        metadata, table = readThresholds(thresholdsFiles["imageQualityQa"])
-        header, entries = thresholdRows(metadata, table, 5, "iqQaThresholds-run25.yaml", "ab" * 32, NOW)
-        assert list(header.columns) == list(QA_THRESHOLDS)
-        assert header.loc[0, "thresholds_id"] == 5
-        assert header.loc[0, "reference_runs"] == "25,29"
-        assert header.loc[0, "derived_on"] == datetime(2026, 10, 19)
-        assert header.loc[0, "drp_stella_version"] == metadata["pipelineVersions"]["drp_stella"]
-        assert header.loc[0, "n_entries"] == len(table) == len(entries)
-        assert list(entries.columns) == list(QA_THRESHOLD_ENTRY)
-        assert not entries.duplicated(["thresholds_id", "metric", "population"]).any()
-        first = entries.iloc[0]
-        assert first["population"] == "arm=b obsType=arc"
-        assert first["arm"] == "b" and first["obs_type"] == "arc"
-        assert isinstance(first["warn"], float) and first["warn"] < first["fail"]
-        # Negative control: the population has no spectrograph, so the column is null, not 0.
-        assert first["spectrograph"] is None
-
-    def testDmThresholdsKeepUnjudgedEntries(self, thresholdsFiles):
-        metadata, table = readThresholds(thresholdsFiles["dmLineResiduals"])
-        _, entries = thresholdRows(metadata, table, 6, "dm.yaml", "cd" * 32, NOW)
-        assert len(entries) == len(table)
-        assert entries["warn"].isna().any()  # "Not judged" entries have null thresholds
-        assert set(entries["reference"].dropna()) <= {"calib", "visit"}
-        assert "statusType" not in entries.columns and "status_type" in entries.columns
-
-    def testIisPopulation(self):
-        from pfs.drp.qa.metrics.gate import thresholdsPath
-
-        metadata, table = readThresholds(thresholdsPath("iqQaThresholds-iis-run30.yaml"))
-        _, entries = thresholdRows(metadata, table, 9, "iis.yaml", "ef" * 32, NOW)
-        assert (entries["illumination"] == "iis").all()
-        assert entries["population"].str.contains("illumination=iis").all()
-
-    def testPopulationKey(self):
-        assert populationKey({"obsType": "arc", "arm": "b", "spectrograph": None}) == "arm=b obsType=arc"
-        assert populationKey({"spectrograph": 2}) == "spectrograph=2"
-        assert set(THRESHOLD_FIELDS) >= {"warn", "fail", "method", "provenance"}
+        rows = imageRows(frame, TWILIGHT_QA, 7)
+        assert list(rows.columns) == list(TWILIGHT_QA.qadbColumns)
+        assert "iic_sequence_id" in rows and "sequence" not in rows
+        assert rows["iic_sequence_id"].tolist() == [54787, 54787]
+        assert rows["twilight_level_offset"].tolist() == [None, 0.4]
+        assert rows["too_faint"].tolist() == [False, True]
+        # Negative control: the value really was infinite, not already missing.
+        assert np.isinf(frame.loc[0, "twilightLevelOffset"])
 
 
 class TestGateRows:
     @staticmethod
-    def task(rows):
-        return pd.DataFrame(
-            rows, columns=["visit", "arm", "spectrograph", "qaStatus", "qaDecidedBy", "qaReason"]
-        )
+    def verdicts(rows):
+        return pd.DataFrame(rows, columns=list(VERDICT_COLUMNS))
 
-    def testWorstVerdictWins(self):
-        iq = self.task(
+    def testOneRowPerImageAsTheGateGaveIt(self):
+        verdicts = self.verdicts(
             [
-                (1, "b", 1, "PASS", "", ""),
-                (1, "r", 1, "FAIL", "medFwhm", "medFwhm 3.5 > 3.0"),
-                (2, "b", 1, "UNKNOWN", "", "no metric measured"),
-                (3, "b", 1, "UNKNOWN", "", ""),
-                (4, "b", 1, "WARN", "pctFlagged", "flags"),
+                (1, "b", 1, "arc", "PASS", "", ""),
+                (1, "r", 1, "arc", "FAIL", "width", "width 3.50 px is +16.7 % from normal 3.00 px"),
+                (2, "b", 1, "quartz", "WARN", "calibOffset", "x offset +1.20 px, limit 1 px"),
+                (3, "n", 2, None, "UNKNOWN", "", "no frame type"),
             ]
         )
-        dm = self.task(
-            [
-                (1, "b", 1, "WARN", "robustRmsDeltaX", "ArI scatter"),
-                (1, "r", 1, "WARN", "robustRmsDeltaX", "scatter"),
-                (2, "b", 1, "PASS", "", ""),
-                (4, "b", 1, "FAIL", "medianDeltaX", "offset"),
-            ]
-        )
-        gate = gateRows({"imageQualityQa": iq, "dmLineResiduals": dm}, 9, "comparison", NOW)
-        assert list(gate.columns) == list(QA_GATE)
-        assert gate["camera_name"].tolist() == ["b1", "r1", "b1", "b1", "b1"]
-        assert gate["qa_status"].tolist() == ["WARN", "FAIL", "PASS", "UNKNOWN", "FAIL"]
-        assert gate["decided_by_task"].tolist() == [
-            "dmLineResiduals",
-            "imageQualityQa",
-            "dmLineResiduals",
-            "imageQualityQa",
-            "dmLineResiduals",
-        ]
-        assert gate["qa_decided_by"].tolist() == ["robustRmsDeltaX", "medFwhm", "", "", "medianDeltaX"]
-        assert gate.loc[1, "qa_reason"] == "imageQualityQa: medFwhm 3.5 > 3.0; dmLineResiduals: scatter"
-        assert gate.loc[2, "qa_reason"] == "imageQualityQa: no metric measured"
-        assert (gate["mode"] == "comparison").all()
-        assert gate["provisional"].isna().all()  # neither task said
-        assert (gate["decided_at"] == NOW).all()
-        # Negative control: alphabetical order would call image r1 "WARN", not FAIL.
-        assert max(["FAIL", "WARN"]) == "WARN"
-        assert gate.loc[1, "qa_status"] != max(["FAIL", "WARN"])
+        rows = gateRows(verdicts, 9, "comparison", NOW)
+        assert list(rows.columns) == list(QA_GATE)
+        assert rows["processing_id"].tolist() == [9] * 4
+        assert rows["pfs_visit_id"].tolist() == [1, 1, 2, 3]
+        assert rows["camera_name"].tolist() == ["b1", "r1", "b1", "n2"]
+        assert rows["frame_type"].tolist() == ["arc", "arc", "quartz", None]
+        assert rows["qa_status"].tolist() == ["PASS", "FAIL", "WARN", "UNKNOWN"]
+        assert rows["qa_decided_by"].tolist() == ["", "width", "calibOffset", ""]
+        assert rows.loc[1, "qa_reason"] == "width 3.50 px is +16.7 % from normal 3.00 px"
+        assert rows.loc[3, "qa_reason"] == "no frame type"
+        assert (rows["mode"] == "comparison").all() and (rows["decided_at"] == NOW).all()
+        assert all(type(v) is int for v in rows["pfs_visit_id"])
+        # Negative control: the camera is arm then spectrograph, not the reverse.
+        assert rows.loc[3, "camera_name"] != "2n"
 
-    def testProvisionalAndRuns(self):
-        iq = self.task([(1, "b", 1, "PASS", "", "")]).assign(qaProvisional=[True], run=["r1"])
-        dm = self.task([(1, "b", 1, "PASS", "", ""), (1, "r", 1, "PASS", "", "")]).assign(run=["r1", "r2"])
-        gate = gateRows({"imageQualityQa": iq, "dmLineResiduals": dm}, {"r1": 11, "r2": 22}, "realtime", NOW)
-        assert gate["processing_id"].tolist() == [11, 22]
-        assert gate["provisional"].tolist() == [True, None]
+    def testProcessingByRun(self):
+        verdicts = self.verdicts(
+            [(1, "b", 1, "arc", "PASS", "", ""), (1, "r", 1, "arc", "PASS", "", "")]
+        ).assign(run=["r1", "r2"])
+        rows = gateRows(verdicts, {"r1": 11, "r2": 22}, "realtime", NOW)
+        assert rows["processing_id"].tolist() == [11, 22]
+        with pytest.raises(ValueError, match="run"):
+            gateRows(verdicts.drop(columns="run"), {"r1": 11}, "realtime", NOW)
 
-    def testNoThresholdsInTheGateRow(self):
-        """What judged an image is `processingThresholdsRows`' business: the gate row carries none of it."""
-        iq = self.task([(1, "b", 1, "PASS", "", "")]).assign(thresholdsIds=[[7, 8]])
-        gate = gateRows({"imageQualityQa": iq}, 1, "backfill", NOW)
-        assert list(gate.columns) == list(QA_GATE) and not any("thresholds" in c for c in gate.columns)
-
-    def testRowWithoutVerdictIsUnknownAndDecides(self):
-        iq = self.task([(1, "b", 1, None, "", ""), (2, "b", 1, np.nan, "", "")])
-        gate = gateRows({"imageQualityQa": iq}, 1, "backfill", NOW)
-        assert gate["qa_status"].tolist() == ["UNKNOWN", "UNKNOWN"]
-        assert gate["decided_by_task"].tolist() == ["imageQualityQa"] * 2
+    def testTheGatesOwnTable(self, fixtures):
+        """What `pfs.drp.qa.metrics.gate.gate` returns is what `gateRows` takes, column for column."""
+        verdicts = gate(iq=fixtures["iqQaMetrics"], lines=fixtures["dmLineResidualMetrics"])
+        assert list(verdicts.columns) == list(VERDICT_COLUMNS)
+        rows = gateRows(verdicts, 1, "backfill", NOW)
+        assert rows["frame_type"].tolist() == ["arc", "arc", "quartz", "quartz"]
+        assert rows["qa_status"].tolist() == verdicts["qaStatus"].tolist()
+        assert set(rows["qa_status"]) <= set(STATUS_ORDER)
 
     def testEmpty(self):
-        gate = gateRows({}, 1, "backfill", NOW)
-        assert gate.empty and list(gate.columns) == list(QA_GATE)
-
-    def testWorstStatus(self):
-        assert worstStatus([]) == "UNKNOWN"
-        assert worstStatus(["PASS", None, np.nan]) == "PASS"
-        assert worstStatus(["UNKNOWN", "PASS"]) == "PASS"
-        assert worstStatus(["WARN", "FAIL", "PASS"]) == "FAIL"
+        rows = gateRows(gate(), 1, "backfill", NOW)
+        assert rows.empty and list(rows.columns) == list(QA_GATE)
 
 
-class TestProcessingThresholdsRows:
-    """Every layer of every task, once per processing, in the order judged."""
+class TestNormalValueRows:
+    @staticmethod
+    def values(**changes):
+        row = {
+            "metric": "medFwhm",
+            "camera": "b1",
+            "frameType": "quartz",
+            "selector": "",
+            "value": 3.2,
+            "count": 5,
+            "collection": "u/test/qa",
+            "validFrom": 133042,
+            "sourceVisits": "133025-133041",
+            "acceptedBy": "tester",
+            "acceptedAt": pd.Timestamp(NOW),
+            "reason": "",
+        }
+        return pd.DataFrame([row | changes], columns=list(NORMAL_COLUMNS))
 
-    def task(self, images, **columns):
-        frame = pd.DataFrame(images, columns=["visit", "arm", "spectrograph"]).assign(qaStatus="PASS")
-        return frame.assign(**columns)
+    def testColumnsAndTypes(self):
+        rows = normalValueRows(self.values())
+        assert list(rows.columns) == list(NORMAL_VALUE)
+        row = rows.iloc[0]
+        assert (row["collection_name"], row["metric"], row["camera"]) == ("u/test/qa", "medFwhm", "b1")
+        assert (row["frame_type"], row["selector"]) == ("quartz", "")
+        assert type(row["valid_from"]) is int and row["valid_from"] == 133042
+        assert type(row["n_frames"]) is int and row["n_frames"] == 5
+        assert type(row["value"]) is float and row["value"] == 3.2
+        assert row["accepted_at"] == NOW and type(row["accepted_at"]) is datetime
+        assert (row["source_visits"], row["accepted_by"], row["reason"]) == ("133025-133041", "tester", "")
 
-    def testLayersInOrderWithGaps(self):
-        iq = self.task([(1, "b", 1), (1, "r", 1)], thresholdsIds=[[5, 7], [5, 7]])
-        dm = self.task([(1, "b", 1)], thresholdsIds=[[None, 8]])
-        rows = processingThresholdsRows({"imageQualityQa": iq, "dmLineResiduals": dm}, 3)
-        assert list(rows.columns) == list(QA_PROCESSING_THRESHOLDS)
-        assert rows.to_numpy().tolist() == [
-            [3, "imageQualityQa", 0, 5],
-            [3, "imageQualityQa", 1, 7],
-            [3, "dmLineResiduals", 1, 8],  # layer 0 could not be cited: a gap, not a shift
-        ]
-        # Negative control: the order is the order judged, so the config layer is never first.
-        assert rows.loc[rows["thresholds_id"] == 7, "layer"].tolist() != [0]
-        assert processingTasks({"imageQualityQa": iq, "dmLineResiduals": dm}, 3).to_numpy().tolist() == [
-            [3, "imageQualityQa"],
-            [3, "dmLineResiduals"],
-        ]
+    def testAMissingFrameTypeOrSelectorIsEmptyNotNull(self):
+        """Both are part of the key: an m-arm offset has neither, and a null would never conflict."""
+        rows = normalValueRows(self.values(metric="mArmOffsetX", frameType=None, selector=np.nan))
+        assert rows.loc[0, "frame_type"] == "" and rows.loc[0, "selector"] == ""
+        # Negative control: a value that may be missing stays null.
+        assert normalValueRows(self.values(reason=None)).loc[0, "reason"] is None
 
-    def testOncePerProcessing(self):
-        """Two images of one RUN give its one set of rows; two RUNs each theirs."""
-        iq = self.task(
-            [(1, "b", 1), (1, "r", 1), (2, "b", 1)], thresholdsIds=[[5], [5], [6]], run=["r1", "r1", "r2"]
+    def testRoundTrip(self):
+        """`normalValueFrame` is the inverse: qadb's rows come back under the gate's names."""
+        values = pd.concat(
+            [self.values(), self.values(metric="linesPerFiber", camera="b", selector="Neon", value=40.0)],
+            ignore_index=True,
         )
-        rows = processingThresholdsRows({"imageQualityQa": iq}, {"r1": 11, "r2": 22})
-        assert rows[["processing_id", "thresholds_id"]].to_numpy().tolist() == [[11, 5], [22, 6]]
-        assert processingTasks({"imageQualityQa": iq}, {"r1": 11, "r2": 22})["processing_id"].tolist() == [
-            11,
-            22,
-        ]
+        frame = normalValueFrame(normalValueRows(values))
+        assert list(frame.columns) == list(NORMAL_VALUE.values())
+        assert set(frame.columns) == set(NORMAL_COLUMNS)
+        for column in ("metric", "camera", "frameType", "selector", "value", "count", "validFrom"):
+            assert frame[column].tolist() == values[column].tolist(), column
+        # What the gate looks a value up by is there under its own names.
+        assert set(NORMAL_KEYS) | {"value", "count", "validFrom"} <= set(frame.columns)
+        # Negative control: qadb's own names are not the gate's.
+        assert "n_frames" not in frame and "count" not in normalValueRows(values)
 
-    def testImagesDisagreeingAreLoggedAndTheFirstCited(self):
-        iq = self.task([(1, "b", 1), (1, "r", 1)], thresholdsIds=[[5, 7], [6, 7]], run=["r1", "r1"])
-        messages = []
-        rows = processingThresholdsRows({"imageQualityQa": iq}, {"r1": 11}, messages.append)
-        assert rows["thresholds_id"].tolist() == [5, 7]
-        assert messages == [
-            "r1: imageQualityQa's images record different thresholds layers; citing the first image's"
+    def testKeysNameTheUniqueConstraint(self):
+        assert NORMAL_VALUE_KEYS == (
+            "collection_name",
+            "metric",
+            "camera",
+            "frame_type",
+            "selector",
+            "valid_from",
+        )
+        # The gate's key, plus whose values they are and from when.
+        assert [NORMAL_VALUE[column] for column in NORMAL_VALUE_KEYS] == [
+            "collection",
+            *NORMAL_KEYS,
+            "validFrom",
         ]
-        # Negative control: agreeing images say nothing.
-        messages.clear()
-        processingThresholdsRows(
-            {"imageQualityQa": iq.assign(thresholdsIds=[[5, 7], [5, 7]])}, {"r1": 11}, messages.append
-        )
-        assert messages == []
-
-    def testTablesWithoutLayersContributeNone(self):
-        iq = self.task([(1, "b", 1), (2, "b", 1)], thresholdsIds=[[5], []])
-        assert processingThresholdsRows({"imageQualityQa": iq.drop(columns="thresholdsIds")}, 1).empty
-        assert processingThresholdsRows({}, 1).empty and processingTasks({}, 1).empty
-        # An image recording nothing neither decides nor disagrees: the other's layer is the RUN's, quietly.
-        messages = []
-        both = processingThresholdsRows(
-            {"imageQualityQa": iq.assign(thresholdsIds=[[], [5]])}, 1, messages.append
-        )
-        assert both["thresholds_id"].tolist() == [5] and messages == []

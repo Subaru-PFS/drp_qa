@@ -1,9 +1,9 @@
 """The end-of-run AG report: how the guide cameras and the guide loop did over an observing run.
 
-Two steps, as ``bin.src/agRunReport.py``::
+Two steps, as ``drpQa.py agReport``::
 
-    agRunReport.py fetch --period run30     # read the run from the opdb, once
-    agRunReport.py report --period run30    # flags, plots and tables, from what was read
+    drpQa.py agReport fetch --period run30     # read the run from the opdb, once
+    drpQa.py agReport report --period run30    # flags, plots and tables, from what was read
 
 The runs are those of comparison mode (`pfs.drp.qa.comparison.runs`). `fetch`
 is the only step that touches the opdb (through
@@ -291,7 +291,7 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="agRunReport.py", description=__doc__.split("\n\n")[0])
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("command", choices=["fetch", "report"])
     parser.add_argument("--period", required=True, help="e.g. run30")
     parser.add_argument(

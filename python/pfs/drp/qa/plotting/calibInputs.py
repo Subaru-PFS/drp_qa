@@ -204,6 +204,7 @@ def plotDetectorDetail(
     detector: str,
     *,
     title: str | None = None,
+    numbers: pd.DataFrame | None = None,
 ) -> Figure:
     """Show one detector through the set: FWHM, reserved-line RMS and lines per fiber, visit by visit.
 
@@ -219,16 +220,20 @@ def plotDetectorDetail(
         E.g. ``n4``.
     title : `str`, optional
         The figure title; default names the detector.
+    numbers : `pandas.DataFrame`, optional
+        From `pfs.drp.qa.comparison.calibInputs.gateNumbers`: the gate's width limits
+        (``warnLimit``, ``failLimit``) are drawn at each visit it judged the width of. They follow
+        the camera's normal value for the lamp, so they step from one sequence to the next.
+        Without it, or where the gate gave no verdict, no limit is drawn.
 
     Returns
     -------
     `matplotlib.figure.Figure`
-        Three panels over the set's visits in order: FWHM (px) with the gate's thresholds where its
-        reasons name them, reserved RMS (px, log), and each species' lines per fiber. No-go images
-        are ringed in red, check images in amber; sequences are separated and named.
+        Three panels over the set's visits in order: FWHM (px) with the gate's warn (amber) and
+        fail (red) limits as dashed marks, reserved RMS (px, log), and each species' lines per
+        fiber. No-go images are ringed in red, check images in amber; sequences are separated and
+        named.
     """
-    from pfs.drp.qa.comparison.calibInputs import parseReason
-
     order = {v: i for i, v in enumerate(visits["visit"])}
     # One row per set visit, NaN where the detector has no image, so lines break over gaps.
     rows = (
@@ -260,18 +265,28 @@ def plotDetectorDetail(
             )
         ax.set_ylabel(label, fontsize="small")
     axes[1].set_yscale("log")
-    # The gate's FWHM thresholds, where a reason names them (each level once).
-    drawn = set()
-    for r in rows.dropna(subset=["gateReason"]).itertuples():
-        for e in parseReason(r.gateReason):
-            if e["metric"] == "medFWHM" and (e["level"], e["threshold"]) not in drawn:
-                drawn.add((e["level"], e["threshold"]))
-                axes[0].axhline(
-                    e["threshold"],
-                    color=VERDICT_COLORS[Verdict.OUT if e["level"] == "fail" else Verdict.CHECK],
+    # The gate's width limits, at each visit it judged the width of.
+    if numbers is not None and len(numbers):
+        width = numbers[
+            (numbers["check"] == "width")
+            & (numbers["arm"] == detector[0])
+            & (numbers["spectrograph"].astype(str) == detector[1:])
+            & numbers["visit"].isin(list(order))
+        ]
+        for column, level in (("warnLimit", Verdict.CHECK), ("failLimit", Verdict.OUT)):
+            limits = width[np.isfinite(width[column].astype(float))]
+            at = limits["visit"].map(order).to_numpy(dtype=float)
+            if len(limits):
+                axes[0].hlines(
+                    limits[column].astype(float),
+                    at - 0.45,
+                    at + 0.45,
+                    color=VERDICT_COLORS[level],
                     linestyle="--",
                     linewidth=0.8,
+                    label=f"gate {'warn' if level == Verdict.CHECK else 'fail'} limit",
                 )
+                axes[0].legend(fontsize="x-small", frameon=False, ncol=2)
     sp = species[(species["arm"] == detector[0]) & (species["spectrograph"].astype(str) == detector[1:])]
     seen = set()
     for (name, _seq), g in sp.groupby(["species", "iic_sequence_id"]):
@@ -324,7 +339,7 @@ def plotLineResiduals(
     data: pd.DataFrame,
     *,
     title: str = "Line residuals against the visit's own detectorMap",
-    thresholds: dict[str, dict[str, tuple[float | None, float | None]]] | None = None,
+    limits: dict[str, dict[str, tuple[float | None, float | None]]] | None = None,
 ) -> Figure:
     """Show one detector image's line residuals against its own detectorMap, by wavelength and by fiber.
 
@@ -335,12 +350,12 @@ def plotLineResiduals(
         ``description``, ``statusType`` (``USED``, ``RESERVED``), ``dxVisit``, ``dyVisit``.
     title : `str`, optional
         The figure title.
-    thresholds : `dict`, optional
-        From `pfs.drp.qa.comparison.calibInputs.lineThresholds`: the reserved-line RMS warn and
-        fail limits per species and metric, drawn as bands about zero. A species with none is
-        named as such in the legend. A key ``sequence`` holds the sequence rule's limits (the
-        detector's median fit RMS over the sequence times the check and out factors), drawn the
-        same way, for an image out on that rule.
+    limits : `dict`, optional
+        From `pfs.drp.qa.comparison.calibInputs.scatterLimits`: the gate's warn and fail limits on
+        the reserved-line RMS per species and metric, drawn as bands about zero. A species with
+        none is named as such in the legend. A key ``sequence`` holds the sequence rule's limits
+        (the detector's median fit RMS over the sequence times the check and out factors), drawn
+        the same way, for an image out on that rule. No bands without it.
 
     Returns
     -------
@@ -378,10 +393,10 @@ def plotLineResiduals(
                     )
             ax.axhline(0, color=_INK, linewidth=0.8)
             metric = "robustRmsDeltaX" if column == "dxVisit" else "robustRmsDeltaY"
-            for name, limits in (thresholds or {}).items():
-                warn, fail = limits.get(metric, (None, None))
+            for name, byMetric in (limits or {}).items():
+                warn, fail = byMetric.get(metric, (None, None))
                 if warn is None and fail is None and col == 0 and row == 0:
-                    ax.plot([], [], linestyle="none", label=f"{name}: no RMS threshold in the file")
+                    ax.plot([], [], linestyle="none", label=f"{name}: no RMS limit")
                 for value, level in ((warn, Verdict.CHECK), (fail, Verdict.OUT)):
                     if value is not None:
                         for sign in (-1, 1):
@@ -427,7 +442,7 @@ def plotLineResiduals(
             if col == 0:
                 ax.set_ylabel(label, fontsize="small")
     axes[0, 0].legend(fontsize="x-small", frameon=False, ncol=3, loc="lower left")
-    if thresholds:
+    if limits:
         axes[1, 0].legend(fontsize="x-small", frameon=False, ncol=3, loc="lower left")
     fig.suptitle(title, x=0.01, ha="left", fontsize="medium")
     fig.tight_layout()

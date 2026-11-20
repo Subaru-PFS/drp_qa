@@ -1,6 +1,8 @@
 """Tests for `pfs.drp.qa.comparison.cli` that need neither the opdb nor a Butler."""
 
 import datetime
+import sys
+from types import ModuleType, SimpleNamespace
 
 import pandas as pd
 import pytest
@@ -179,3 +181,146 @@ def testPassOption():
     args = _parser().parse_args(["run", "--period", "run25", "--pass", "calibration", "--pass", "sky-judge"])
     assert args.passes == ["calibration", "sky-judge"]
     assert _parser().parse_args(["run", "--period", "run25"]).passes == []
+
+
+def testCommandsAndOptions():
+    """fetch, plan and run are the commands; there is no report, and no option of one."""
+    from pfs.drp.qa.comparison.cli import _parser
+
+    for command in ("fetch", "plan", "run"):
+        assert _parser().parse_args([command, "--period", "run25"]).command == command
+    # Negative control: the report and the options only it took are refused, not ignored.
+    with pytest.raises(SystemExit):
+        _parser().parse_args(["report", "--period", "run25"])
+    for option in ("--reference", "--reference-version"):
+        with pytest.raises(SystemExit):
+            _parser().parse_args(["run", "--period", "run25", option, "run25"])
+
+
+@pytest.fixture
+def planned(tmp_path, periods, visit, listing, FakeOpDB, monkeypatch):
+    """Fetch a period of one arc sequence and one trace, and stand in for the Butler and pipetask.
+
+    Returns the arguments of ``main`` after the command, the holdings to fill (one row per detector
+    image: visit, arm, spectrograph, raw, reduced, judged) and the pipetask commands run.
+    """
+    from pfs.drp.qa.comparison import butlerQueries, cli
+
+    answer = listing(
+        visit(1, "2026-01-03 18:00", "scienceArc", sequence=50, cameras="b1,r1"),
+        visit(2, "2026-01-03 18:01", "scienceArc", sequence=50, cameras="b1,r1"),
+        visit(3, "2026-01-03 18:05", "scienceTrace", sequence=51, cameras="b1,r1"),
+    )
+    opdb = FakeOpDB(
+        {
+            "FROM pfs_visit": answer,
+            "obslog_visit_set_note": pd.DataFrame(columns=["iic_sequence_id", "note"]),
+            "obslog_visit_note": pd.DataFrame(
+                columns=["pfs_visit_id", "camera", "data_flag", "note", "source"]
+            ),
+            "FROM tel_status": pd.DataFrame(columns=["pfs_visit_id", "n_status", "focus_offset_max"]),
+            "pfs_design_fiber": pd.DataFrame(columns=["pfs_design_id", "proposal_id", "n_fibers"]),
+        }
+    )
+    fetch(opdb, periods["run1"], tmp_path, now=datetime.datetime(2026, 2, 1))
+
+    holdings = []
+    butlerModule = ModuleType("lsst.daf.butler")
+    butlerModule.Butler = lambda repo, writeable=False: SimpleNamespace(repo=repo, writeable=writeable)
+    for name, module in (
+        ("lsst", ModuleType("lsst")),
+        ("lsst.daf", ModuleType("lsst.daf")),
+        ("lsst.daf.butler", butlerModule),
+    ):
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.setattr(butlerQueries, "collectionExists", lambda butler, name: False)
+    monkeypatch.setattr(butlerQueries, "earlierRuns", lambda *args: [])
+    monkeypatch.setattr(
+        butlerQueries,
+        "detectorHoldings",
+        lambda butler, visits, **kwargs: pd.DataFrame(
+            holdings, columns=["visit", "arm", "spectrograph", "raw", "reduced", "judged"]
+        ),
+    )
+    commands = []
+
+    def pipetask(command, stdout=None, stderr=None):
+        commands.append(command)
+        stdout.write("INFO lsst.ctrl.mpexec ... Executed 4 quanta successfully, 0 failed\n")
+        stdout.flush()
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(cli.subprocess, "run", pipetask)
+    arguments = [
+        "--period",
+        "run1",
+        "--runs",
+        str(tmp_path / "runs.yaml"),
+        "--data-dir",
+        str(tmp_path),
+        "--version",
+        "v1",
+        "--prefix",
+        "u/me/comparison",
+    ]
+    return SimpleNamespace(arguments=arguments, holdings=holdings, commands=commands, directory=tmp_path)
+
+
+def testPlanPrintsThePassesAndRunsNothing(planned, capsys):
+    from pfs.drp.qa.comparison.cli import main
+
+    # The arcs are reduced but not measured; the trace has only raw data.
+    planned.holdings += [(visit, arm, 1, True, visit != 3, False) for visit in (1, 2, 3) for arm in "br"]
+    assert main(["plan", *planned.arguments]) == 0
+    printed = capsys.readouterr().out
+    assert "output collection: u/me/comparison/run1/v1" in printed
+    assert "detector images: 0 judged, 4 to judge, 2 to reduce" in printed
+    assert "# calibration-judge (scienceArc): 2 visits" in printed
+    assert "# calibration (scienceTrace): 1 visits" in printed
+    assert planned.commands == []  # plan runs nothing
+    workDir = planned.directory / "run1" / "qa" / "v1"
+    assert sorted(path.name for path in workDir.iterdir()) == [
+        "cosmicray-run1-calibration.py",
+        "coverage-run1.parquet",
+    ]
+
+
+def testRunReducesAndRunsTheQaTasksAndJudgesNothing(planned, capsys):
+    from pfs.drp.qa.comparison.cli import main
+
+    planned.holdings += [(visit, arm, 1, True, visit != 3, False) for visit in (1, 2, 3) for arm in "br"]
+    assert main(["run", *planned.arguments]) == 0
+    judge, reduce = planned.commands
+    # The reduced arcs get the QA tasks alone; the trace the whole pipeline, the QA tasks included.
+    assert judge[judge.index("-p") + 1].endswith("qaThresholds.yaml#imageQualityQa,dmLineResiduals")
+    assert reduce[reduce.index("-p") + 1].endswith("qaThresholds.yaml")
+    assert judge[-1] == "instrument = 'PFS' AND visit IN (1..2)"
+    assert reduce[-1] == "instrument = 'PFS' AND visit IN (3)"
+    assert "--rebase" not in judge and "--rebase" in reduce  # the first pass makes the output chain
+    assert "calibration: Executed 4 quanta successfully, 0 failed" in capsys.readouterr().out
+    # run stores what the tasks measure in the Butler and leaves the verdict to the gate: beside the
+    # coverage and the cosmicray config it writes only the pipetask logs.
+    workDir = planned.directory / "run1" / "qa" / "v1"
+    names = sorted(path.name for path in workDir.iterdir())
+    assert [name for name in names if not name.startswith("pipetask-")] == [
+        "cosmicray-run1-calibration.py",
+        "coverage-run1.parquet",
+    ]
+    assert len([name for name in names if name.startswith("pipetask-run1-")]) == 2
+    # Negative control: the files the report's judging used to write are not among them.
+    assert not [name for name in names if "findings" in name.lower() or name.endswith((".html", ".csv"))]
+
+
+def testRunReportsAFailedPass(planned, monkeypatch, capsys):
+    from pfs.drp.qa.comparison import cli
+
+    planned.holdings += [(visit, arm, 1, True, True, False) for visit in (1, 2, 3) for arm in "br"]
+    monkeypatch.setattr(
+        cli.subprocess, "run", lambda command, stdout=None, stderr=None: SimpleNamespace(returncode=1)
+    )
+    assert cli.main(["run", *planned.arguments]) == 1
+    assert "1 of 1 passes failed: calibration-judge" in capsys.readouterr().err
+    # Negative control: with nothing left to do, run does nothing and succeeds.
+    planned.holdings[:] = [(visit, arm, 1, True, True, True) for visit in (1, 2, 3) for arm in "br"]
+    assert cli.main(["run", *planned.arguments]) == 0
+    assert "Nothing to do" in capsys.readouterr().out
