@@ -8,7 +8,6 @@ from pfs.drp.qa.metrics.saturation import (
     apertureSaturation,
     measureSaturation,
     saturatedAt,
-    saturatedLineSummary,
 )
 
 
@@ -119,18 +118,3 @@ def testMeasureSaturationPutsLinesAtTheirWavelength():
 
     # Negative control: the same line 2 nm (20 rows) along is not saturated.
     assert not measureSaturation(saturated, FakeDetectorMap(), lines.assign(wavelength=504.0))[0].any()
-
-
-def testSaturatedLineSummaryCountsFibersPerLine():
-    """Each saturated line is listed with the fibers it is saturated on, in order of wavelength."""
-    _, lines = makeDetector()
-    lines = lines.iloc[:6].assign(saturated=[False, True, False, True, True, False])
-    summary = saturatedLineSummary(lines)
-    assert summary["wavelength"].tolist() == [502.0, 504.0]
-    assert summary["nSaturated"].tolist() == [1, 2]  # by wavelength, not by how saturated
-    assert summary["nFibers"].tolist() == [3, 3]
-    assert len(saturatedLineSummary(lines.assign(saturated=False))) == 0
-    # No lines at all (a quartz): the same columns, typed, so that it sorts like any other.
-    empty = saturatedLineSummary(lines.iloc[:0])
-    assert list(empty.columns) == list(summary.columns) and len(empty) == 0
-    assert len(empty["nSaturated"].nlargest(3)) == 0

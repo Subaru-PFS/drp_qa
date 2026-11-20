@@ -17,9 +17,7 @@ from the detectorMap.
 
 `linePositions` and `traceCentres` ask a detectorMap (any object with its
 ``findPoint`` and ``getXCenter``) where those are, and `measureSaturation`
-puts the four together for the task and for the per-detector report
-(`pfs.drp.qa.saturationReport`). `saturatedLineSummary` counts the saturated
-fibers of each line.
+puts the four together for the task.
 """
 
 from typing import Any
@@ -34,7 +32,6 @@ __all__ = [
     "linePositions",
     "measureSaturation",
     "saturatedAt",
-    "saturatedLineSummary",
     "traceCentres",
 ]
 
@@ -222,34 +219,3 @@ def measureSaturation(
         if numPixels:
             pctSaturatedPixels = 100.0 * numSaturated / numPixels
     return lineSaturated, x, y, pctSaturatedPixels
-
-
-def saturatedLineSummary(lines: pd.DataFrame) -> pd.DataFrame:
-    """Return, for each line with a saturated fiber, how many fibers are.
-
-    Parameters
-    ----------
-    lines : `pandas.DataFrame`
-        One row per line and fiber: ``description``, ``wavelength``,
-        ``fiberId`` and ``saturated``.
-
-    Returns
-    -------
-    `pandas.DataFrame`
-        ``description``, ``wavelength``, ``nFibers`` (fibers with the line)
-        and ``nSaturated`` (those saturated), for the lines with any, in order
-        of wavelength; empty, with the same columns, when ``lines`` is.
-    """
-    columns = ["description", "wavelength", "nFibers", "nSaturated"]
-    if len(lines) == 0:
-        # Typed, so that an image with no lamp or sky line (a quartz) sorts and selects like any other.
-        dtypes = {"description": object, "wavelength": float, "nFibers": int, "nSaturated": int}
-        return pd.DataFrame({name: pd.Series(dtype=dtype) for name, dtype in dtypes.items()})
-    summary = (
-        lines.groupby(["description", "wavelength"], sort=True)
-        .agg(nFibers=("fiberId", "nunique"), nSaturated=("saturated", "sum"))
-        .reset_index()
-    )
-    summary["nSaturated"] = summary["nSaturated"].astype(int)
-    summary = summary[summary["nSaturated"] > 0]
-    return summary.sort_values(["wavelength", "description"], ignore_index=True)[columns]

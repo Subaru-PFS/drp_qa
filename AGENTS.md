@@ -128,8 +128,6 @@ the pipeline/config glue to run them.
     the per-image verdict in the Butler (`twilightQaMetrics`, via `qadb.store`) for the qadb loader's
     gate, and with `--qadb-host` loads the judged visits; its exit status tells ics_qaActor what
     happened
-  - `saturationReport.py` — entry point for `pfs.drp.qa.saturationReport.main`: a figure and a Markdown file per
-    saturated detector image of a visit, from the calexp's `SAT` plane
   - `qaVisitSummary.py` — entry point for `pfs.drp.qa.qadb.visitSummary.main`: a collection's gate verdicts per
     visit from qadb (`qadb.reader.readGate`, rolled up by the stack-free `metrics.visitRollup`), with the cameras
     that exposed but have no verdict when given an opdb (`comparison.queries.readVisitCameras`); its exit status is
