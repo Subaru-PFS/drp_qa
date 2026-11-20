@@ -20,6 +20,8 @@ They differ from the originals in that:
 - A star whose exposure has no tel_status row is kept, with NaN ``m2_off3``.
 - The columns are those of `pfs.drp.qa.guiders.queries.AGC_DATA_COLUMNS`
   plus each reader's own, so there are more of them.
+- ``FWHM`` is `pfs.drp.qa.guiders.analysis.addImageSizes`'s: 23% above
+  drp_stella's, and NaN for a ``BAD_SHAPE`` detection.
 """
 
 import warnings
