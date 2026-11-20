@@ -19,7 +19,8 @@ made, and earlier sections to the weekly tag alone.
   spots, whose moments are unweighted, so everything downstream is on one scale across the change. `rms_pix`,
   `sigma_pix`, `rms_left_pix`, `rms_right_pix` and `compat`'s `rms` are therefore the stars' sigma, sqrt(2) larger
   than before for the same exposures, and `mxx`, `myy`, `mxy` twice as large. `FOCUS_PISTON_MM_PER_PIX2` is 0.0043,
-  half of 0.0086, as in ics_agActor, and the FWHM is 2.05 times the sigma: `fwhm_arcsec` and the run report's FWHM
+  half of 0.0086 (it and `FOCUS_PISTON_OFFSET_MM` are now `pfs.utils.agMetrics`'s, which ics_agActor uses), and
+  the FWHM is 2.05 times the sigma: `fwhm_arcsec` and the run report's FWHM
   are what they were, and so is `focus_error_um` from stars without `BAD_SHAPE` (`plotFocus` and `plotFocusFit`
   use only those). `estimateFocusErrors` now leaves `BAD_SHAPE` detections out, as ics_agActor's focus does:
   their moments are unweighted, and they used to enter the medians sqrt(2) above the other stars. Where good

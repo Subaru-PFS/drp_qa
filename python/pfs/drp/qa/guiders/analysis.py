@@ -79,10 +79,10 @@ GAUSSIAN_FWHM_PER_SIGMA = 2 * np.sqrt(2 * np.log(2))
 # ics_agActor's focus calibration (momentdifference2focuserror): the focus
 # error is FOCUS_PISTON_MM_PER_PIX2 times the difference of the 2-D second
 # moments of the two halves of a detector, less FOCUS_PISTON_OFFSET_MM. The
-# moments are the stars' variance, as `queries.readAgcData` returns them; it
-# was calibrated as 0.0086 on moments that were half the variance.
-FOCUS_PISTON_MM_PER_PIX2 = 0.0043
-FOCUS_PISTON_OFFSET_MM = 0.026
+# moments are the stars' variance, as `queries.readAgcData` returns them.
+# Both numbers are pfs_utils's, which ics_agActor uses.
+FOCUS_PISTON_MM_PER_PIX2 = agMetrics.AG_FOCUS_MM_PER_PIX2
+FOCUS_PISTON_OFFSET_MM = agMetrics.AG_FOCUS_OFFSET_MM
 
 # ics_agActor's guide_delta_z* were 4 times too large, less the offset, before
 # this visit (INSTRM-2501, fixed on 2025-03-23).
