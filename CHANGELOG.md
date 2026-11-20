@@ -10,6 +10,130 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Changed
+
+- **Tasks write numbers; one gate gives the verdict** (PIPE2D-2012) — `imageQualityQa` and `dmLineResiduals` no
+  longer judge. Every limit is in `metrics.registry.CHECKS` (13 checks, each a WARN and a FAIL), and
+  `metrics.gate.gate` gives each image its verdict, from the numbers, the checks and each camera's normal values,
+  when the numbers are loaded into qadb. What breaks:
+  - *Config fields removed.* A pipeline or `-c` override that sets one fails. `imageQualityQa`:
+    `fwhmWarnThreshold`, `fwhmFailThreshold`, `dxCenterWarnThreshold`, `dxCenterFailThreshold`,
+    `flagRateWarnThreshold`, `flagRateFailThreshold`, `thresholdsFile`, `extraThresholdsFiles`. `dmLineResiduals`:
+    `thresholdsFile`, `xWarnThreshold`, `xFailThreshold`, `yWarnThreshold`, `yFailThreshold`, `xRmsWarnThreshold`,
+    `xRmsFailThreshold`, `yRmsWarnThreshold`, `yRmsFailThreshold`.
+  - *Output columns removed.* `iqQaMetrics`: `qaStatus`, `qaDecidedBy`, `qaReason`, `thresholdsFiles`,
+    `thresholdsSha256`. `dmLineResidualSummary`: the same five and `recommendedAction`. `dmLineResidualMetrics`:
+    `status`. The verdict is in qadb's `qa_gate` only; read it with `qadb.reader.readGate`. The tasks' log lines
+    (`IQ QA`, `DM line residuals`) carry no status.
+  - *`metrics.gate` rewritten.* `gate(iq, lines, twilight, normalValues)` takes the tasks' tables and returns one
+    row per image (`visit`, `arm`, `spectrograph`, `frameType`, `qaStatus`, `qaDecidedBy`, `qaReason`);
+    `qaDecidedBy` names a check (`width`, `skyOffset`, ...), not a metric. `STATUS_ORDER` is `UNKNOWN`, `PASS`,
+    `WARN`, `FAIL`. The thresholds-file functions (`loadThresholds`, `thresholdsPath`, `configThresholds`,
+    `taskThresholdsRecord`, `pipelineMismatch`, ...) are gone, with the provisional flag (`qaProvisional`,
+    `qaPipeline`).
+  - *`MetricSpec`* loses `groupBy`, `physicalLimit`, `tolerance` and `toleranceBy`; the limits are `Check` entries.
+- **What is judged differs** (PIPE2D-2012) — verdicts change on stored frames once they are judged again:
+  - Science and all-sky frames are judged on two fixed checks: the offset from the calibration (WARN 0.5 px, FAIL
+    1 px) and the sky-line residual after the visit's adjustment, in km/s (OH on r, n and m: 0.5 and 1; [O I] on
+    b: 1.5 and 2.5). Their width and scatter are stored and not judged; the config's width limits (3.2 and 3.5 px)
+    no longer apply to them.
+  - Width, line scatter and lines per lit fiber are judged, on arcs and quartz, in per cent from the camera's
+    normal value in qadb, not from Run25 medians in a packaged file. A collection with no normal values gets
+    `UNKNOWN` on those checks until `drpQa.py values --accept` has stored them.
+  - On a visit read with the m arm, the b arm's x offset and the n arm's y offset from the calibration (normal
+    values `mArmOffsetX`, `mArmOffsetY`) are subtracted before a science frame's offset is judged.
+  - `medDxCenter` is judged only on frames lit through the engineering fibers; `dmLineResiduals`' offsets judge
+    the others.
+  - An image with no check judged is `UNKNOWN`, with the reason in `qaReason`.
+- **qadb schema** (PIPE2D-2012) — the loader needs the `spt_qa_database` schema that goes with this change;
+  `tests/qadb/conftest.py` holds it. Against the previous schema: `qa_thresholds`, `qa_threshold_entry` and
+  `qa_processing_thresholds` are dropped; `qa_status`, `qa_decided_by` and `qa_reason` are dropped from
+  `image_quality_qa`, `dm_line_residual_qa` and `twilight_qa`, with `dm_line_residual_qa.recommended_action` and
+  `dm_line_residual_qa_metric.status`; `qa_gate` loses `decided_by_task` and `provisional` and gains `frame_type`;
+  `image_quality_qa` gains `n_saturated_lines` and `pct_saturated_pixels`; `qa_normal_value` is added.
+  `qa_gate.qa_decided_by` holds the check's name.
+- **Twilights are measured and judged by the loader** (PIPE2D-2012) — `drpQa.py load --opdb-host` looks up a
+  twilight visit's IIC sequence and, once it has finished and every visit has its `twilightFiberFlux`, measures the
+  sequence into `twilight_qa` and judges it, the visits loaded earlier included. No `twilightQaMetrics` dataset is
+  written to the Butler, and no RUN is prepended to the collection. Without an opdb, and until the sequence is
+  complete, a twilight image is `UNKNOWN`. `metrics.twilight` keeps the measurement (`fiberFlux`,
+  `sequenceConsistency`, `sequenceReadiness`); `twilightThresholds`, `twilightVerdict`, `twilightImageVerdict` and
+  `twilightThresholds.yaml` are gone, their limits being the three twilight checks of `CHECKS`.
+- **Comparison mode measures and gives no verdict** (PIPE2D-2012) — `qaComparison.py` keeps `fetch`, `plan` and
+  `run`. `report` is removed with its HTML report, its parquet and CSV files and `comparison.findings`,
+  `residuals`, `report` and `persistence`. `comparison.findings.lampsOf` is `comparison.calibInputs.lampsOf`, and
+  `metrics.validationVisits.visitExpression` is `comparison.plan.visitExpression`.
+- **`comparison.calibInputs`** (PIPE2D-2012) — `lineThresholds` is replaced by `scatterLimits(arm, spectrograph,
+  species, visit, normalValues, frameType)`, the gate's scatter limits from a table of normal values. The tasks'
+  tables carry no verdict, so the report judges each image with the gate itself (`gateNumbers`, `gateVerdicts`),
+  on its width, lines per lit fiber and held-back line scatter; `lineVerdicts`, `parseReason` and the columns
+  `lineStatus` and `lineReason` are gone, and `judge` adds a `rules` column. Without normal values the gate gives
+  no verdict and the go/no-go rests on the sequence rules alone.
+- **`qadb.reader`** (PIPE2D-2012) — `readQadb` also returns `twilightMetrics`, and `readNormalValues` reads a
+  collection's normal values. `readGate` returns `frameType` and no `decidedByTask` or `provisional`;
+  `metrics.visitRollup` drops the same two columns. The thresholds readers (`thresholdsLayers`,
+  `layeredThresholds`, `thresholdsTables`) are gone.
+- **`qadb.loader.loadCollection`** (PIPE2D-2012) — takes `opdb` for twilight sequences as well as visit
+  descriptions, and `normalValues` to judge with (default: the collection's in qadb). It reads no task config.
+
+### Added
+
+- **`drpQa.py`, one command for the QA jobs** (PIPE2D-2012) — `bin.src/drpQa.py` (`pfs.drp.qa.cli`) has a
+  subcommand for each job, imported only when asked for, so those that read only qadb run without the stack:
+  `load` (Butler to qadb, with the verdicts), `values` (normal values), `judge` (stored numbers again), `summary`
+  (verdict per visit, with an exit status), `calib inputs`, `calib validate`, `fiberNorms`, `agReport`.
+- **Normal values per camera** (PIPE2D-2012) — `metrics.normalValues` makes the median of each relatively judged
+  metric per camera or arm, frame type and lamp or species from a run's calibration frames (`candidates`), sets it
+  beside the value in force (`compare`) and returns the rows to store (`accepted`). `drpQa.py values -c COLLECTION
+  --visits FIRST-LAST ...` prints the comparison; with `--accept [NAME]` it stores them in `qa_normal_value`, valid
+  from the visit after the calibration frames (`--valid-from`), and judges again every frame from there on. A
+  value shifted beyond its check's FAIL is refused, and the value in force kept, unless `--reason` is given; one
+  resting on fewer than 3 frames is left out. `--arms` restricts it to some arms and `--all` lists every value.
+- **`drpQa.py judge`** (PIPE2D-2012) — `-c COLLECTION --visits FIRST LAST` judges the numbers qadb holds again,
+  with the limits and normal values as they are, and replaces the `qa_gate` rows (`qadb.judge.judgeStored`);
+  `--dry-run` writes nothing. For use after a change to `CHECKS`.
+- **Sky-line residuals in km/s** (PIPE2D-2012) — `dmLineResiduals` writes `medianDeltaYKms` rows in
+  `dmLineResidualMetrics`, for every species with a y residual and against both references, and `dyKmsCalib` and
+  `dyKmsVisit` in `dmLineResidualData`: each line's y residual times `c × dispersion / wavelength`, with the
+  reference detectorMap's dispersion at the line, positive to the red. No schema change: they are rows of
+  `dm_line_residual_qa_metric`. Reductions measured before this have none, and their science frames are judged on
+  their offsets alone.
+- **`registry.EXCLUSIONS`** (PIPE2D-2012) — what is measured and stored but not judged, each with its reason.
+- **Known-fault test** (PIPE2D-2012) — `tests/metrics/test_knownFaults.py` holds a table of faults on stored
+  numbers of calibration and engineering visits; each must reach its verdict, and the frames known to be good must
+  not fail.
+- **`--normal-values` for `drpQa.py calib inputs`** (PIPE2D-2012) — a table of normal values (parquet or CSV) for
+  the gate to judge the set's images with; the figures show its limits and `<stem>-gate.csv` every number judged.
+
+### Removed
+
+- **Scripts, and what replaces each** (PIPE2D-2012):
+
+  | Removed | Use |
+  |---|---|
+  | `loadQadb.py` | `drpQa.py load` |
+  | `twilightQa.py` | `drpQa.py load --opdb-host ...`; no separate twilight step |
+  | `qaVisitSummary.py` | `drpQa.py summary`, same options and exit statuses |
+  | `calibInputsReport.py` | `drpQa.py calib inputs` |
+  | `calibValidate.py` | `drpQa.py calib validate` |
+  | `fiberNormsQa.py` | `drpQa.py fiberNorms` |
+  | `agRunReport.py` | `drpQa.py agReport` |
+  | `exportMetrics.py` | none; the function `metrics.readers.exportMetrics` stays |
+  | `qaCompareRuns.py` | none; `drpQa.py values` shows a run's shift against the values in force |
+  | `judgeScatterThresholds.py` | none; `drpQa.py judge --dry-run` counts the verdicts of a visit range |
+  | `plotIqQaTimeSeries.py`, `imageQualityLogQa.py`, `fitDetectorMapLogQa.py` | none |
+
+- **Thresholds files and their machinery** (PIPE2D-2012) — `iqQaThresholds-run25.yaml`,
+  `iqQaThresholds-iis-run30.yaml`, `dmLineResidualThresholds-run25.yaml`, `twilightThresholds.yaml` and the
+  `make*Thresholds.py` scripts beside them; `metrics.thresholds`, `metrics.calibration`, `metrics.coverage`,
+  `metrics.runComparison`, `qadb.compareRuns`, `qadb.store`; `qadb.writer.registerThresholds` and
+  `registerThresholdsContent`.
+- **The validation visit set** (PIPE2D-2012) — `metrics.validationVisits`, `validationVisits.yaml`,
+  `docs/validation-visits.md` and `docs/qa-thresholds.ipynb`. The known faults are the table in
+  `tests/metrics/test_knownFaults.py`.
+- **Plots of removed code** (PIPE2D-2012) — `plotting.iqQa`, `plotting.thresholds`, `plotting.comparison` and
+  `iqQaPlots`. `pfs.drp.qa.plotting` exports the palettes only; `plotting.calibInputs` stays.
+
 ## [0.4.1] - 2026-11-19
 
 ### Changed
