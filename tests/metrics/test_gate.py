@@ -1,765 +1,509 @@
-"""Tests for the gate: judging metrics against layered threshold tables."""
-
-import ast
-import hashlib
-import importlib.util
-import math
-import os
-import subprocess
-import sys
-from pathlib import Path
-from types import SimpleNamespace
+"""The gate, on synthetic numbers: every rule, and what gets no verdict."""
 
 import numpy as np
 import pandas as pd
 import pytest
-import yaml
 
-from pfs.drp.qa.metrics.calibration import labelRows, readThresholds
-from pfs.drp.qa.metrics.gate import (
-    PROVISIONAL_COLUMNS,
-    THRESHOLDS_COLUMNS,
-    VERDICT_COLUMNS,
-    configLayerName,
-    configThresholds,
-    gate,
-    isConfigLayer,
-    judge,
-    layerPipelineMismatch,
-    loadThresholds,
-    pipelineMismatch,
-    recordedThresholds,
-    sha256Of,
-    taskThresholdsRecord,
-    thresholdsDocument,
-    thresholdsNames,
-    thresholdsPath,
-    thresholdsRecord,
-)
-from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
+from pfs.drp.qa.metrics.gate import STATUS_ORDER, VERDICT_COLUMNS, gate, judge, longLines, measurements, worst
+from pfs.drp.qa.metrics.registry import MIN_NORMAL_FRAMES
 
-ROOT = Path(__file__).parents[2]
-DATA = Path(__file__).parent / "data"
-RUN25 = DATA / "iqQaThresholds-run25.yaml"
-IIS = DATA / "iqQaThresholds-iis-run30.yaml"
+VISIT = 1000
 
 
-def configDefaults() -> SimpleNamespace:
-    """Return the threshold defaults of ``ImageQualityQaConfig``, read from its source.
+def iqRow(
+    arm="r", spectrograph=1, visit=VISIT, obsType="arc", seqName="Arc: Neon", illumination="full", **values
+):
+    """Return one ``iqQaMetrics`` row."""
+    row = {
+        "visit": visit,
+        "arm": arm,
+        "spectrograph": spectrograph,
+        "obsType": obsType,
+        "illumination": illumination,
+        "seqName": seqName,
+        "traceOnly": False,
+        "medFwhm": np.nan,
+        "medDxCenter": np.nan,
+        "linesPerFiber": np.nan,
+    }
+    return row | values
 
-    The task module imports the stack, so the defaults are read with `ast`
-    rather than by instantiating the config: a changed default changes this.
-    """
-    source = (ROOT / "python" / "pfs" / "drp" / "qa" / "imageQualityQa.py").read_text()
-    config = next(
-        node
-        for node in ast.walk(ast.parse(source))
-        if isinstance(node, ast.ClassDef) and node.name == "ImageQualityQaConfig"
+
+def lineRow(metric, value, description="Trace", reference="calib", statusType="BOTH", **keys):
+    """Return one ``dmLineResidualMetrics`` row."""
+    row = {
+        "visit": VISIT,
+        "arm": "r",
+        "spectrograph": 1,
+        "cameraSet": "brn",
+        "obsType": "science",
+        "reference": reference,
+        "description": description,
+        "statusType": statusType,
+        "metric": metric,
+        "value": value,
+    }
+    return row | keys
+
+
+def normalRow(metric, camera, frameType, selector, value, count=10, validFrom=1):
+    """Return one normal-value row."""
+    return {
+        "metric": metric,
+        "camera": camera,
+        "frameType": frameType,
+        "selector": selector,
+        "value": value,
+        "count": count,
+        "validFrom": validFrom,
+    }
+
+
+def frame(*rows):
+    return pd.DataFrame(list(rows))
+
+
+def verdict(**tables):
+    """Return the one image's verdict row."""
+    result = gate(**tables)
+    assert len(result) == 1, result
+    return result.iloc[0]
+
+
+def testEmpty():
+    assert list(gate().columns) == list(VERDICT_COLUMNS) and gate().empty
+    assert measurements().empty
+    assert worst([]) == "UNKNOWN" and worst(["PASS", "FAIL", "WARN"]) == "FAIL"
+    assert STATUS_ORDER == ("UNKNOWN", "PASS", "WARN", "FAIL")
+
+
+class TestScience:
+    """Science and all-sky frames: the offset from the calibration and the sky-line residual."""
+
+    @pytest.mark.parametrize(
+        "value, status",
+        [(0.49, "PASS"), (0.5, "WARN"), (-0.5, "WARN"), (0.99, "WARN"), (1.0, "FAIL"), (-3, "FAIL")],
     )
-    defaults = {}
-    for statement in config.body:
-        if isinstance(statement, ast.Assign) and isinstance(statement.value, ast.Call):
-            for keyword in statement.value.keywords:
-                if keyword.arg == "default":
-                    defaults[statement.targets[0].id] = ast.literal_eval(keyword.value)
-    return SimpleNamespace(**defaults)
+    def testOffsetInX(self, value, status):
+        """A value at a limit has crossed it, in either direction."""
+        row = verdict(lines=frame(lineRow("medianDeltaX", value)))
+        assert row["qaStatus"] == status and row["frameType"] == "science"
+        assert row["qaDecidedBy"] == ("" if status == "PASS" else "skyOffset")
+        if status != "PASS":
+            assert f"x offset {value:+.2f} px, limit {0.5 if status == 'WARN' else 1:g} px" == row["qaReason"]
 
+    def testAllSkyIsJudgedLikeScience(self):
+        row = verdict(lines=frame(lineRow("medianDeltaX", 0.7, obsType="allsky")))
+        assert (row["qaStatus"], row["frameType"]) == ("WARN", "allsky")
+        # Negative control: the same offset on an arc is within the calibration frames' 1 px.
+        arc = gate(iq=frame(iqRow()), lines=frame(lineRow("medianDeltaX", 0.7, obsType="arc")))
+        assert arc.iloc[0]["qaStatus"] == "PASS"
 
-@pytest.fixture(scope="module")
-def stored() -> pd.DataFrame:
-    """Return the validation visits' ``iqQaMetrics`` with the verdicts the task stored."""
-    return pd.read_parquet(DATA / "iqQaMetrics-validation.parquet")
+    def testOffsetInYIsTheSpeciesFurthestOff(self):
+        lines = frame(
+            lineRow("medianDeltaY", 0.2, "OH"),
+            lineRow("medianDeltaY", -0.6, "O2"),
+            lineRow("medianDeltaY", 0.55, "NaI"),
+            lineRow("medianDeltaX", 0.1),
+        )
+        row = verdict(lines=lines)
+        assert row["qaStatus"] == "WARN" and row["qaReason"] == "y offset (O2) -0.60 px, limit 0.5 px"
+        judged = judge(measurements(lines=lines))
+        # One species is judged in y, not each: the others leave no row.
+        assert sorted(judged["part"]) == ["x", "y O2"]
 
+    def testOnlyGoodLinesAgainstTheCalibration(self):
+        """RESERVED or USED rows against the calibration, and rows against the visit, are not the offset."""
+        for keys in ({"statusType": "RESERVED"}, {"statusType": "USED"}, {"reference": "visit"}):
+            row = verdict(lines=frame(lineRow("medianDeltaX", 5.0, **keys)))
+            assert row["qaStatus"] == "UNKNOWN", keys
+        assert verdict(lines=frame(lineRow("medianDeltaX", 5.0, statusType="UNFITTED")))["qaStatus"] == "FAIL"
 
-@pytest.fixture(scope="module")
-def configStored() -> pd.DataFrame:
-    """Return ``iqQaMetrics`` from a run whose verdicts the task made from its config alone."""
-    return pd.read_parquet(DATA / "iqQaMetrics-config.parquet")
-
-
-def image(**values) -> pd.DataFrame:
-    """Return one image's metrics row."""
-    base = {"visit": 1, "arm": "b", "spectrograph": 1, "obsType": "arc", "seqName": "Arc: Neon"}
-    return pd.DataFrame([base | values])
-
-
-def table(*entries) -> pd.DataFrame:
-    """Return a thresholds table, higher-is-worse unless an entry says otherwise."""
-    rows = [{"higherIsWorse": True, "absolute": False, "provenance": "test"} | entry for entry in entries]
-    return pd.DataFrame(rows)
-
-
-def testConfigReproducesStoredVerdicts(configStored):
-    """The config defaults as a table give every verdict the task stored."""
-    verdicts = gate(configStored, configThresholds(configDefaults()))
-    assert (verdicts["qaStatus"] == configStored["qaStatus"]).all()
-    # The data cover every verdict and every deciding metric.
-    assert set(configStored["qaStatus"]) == {"PASS", "WARN", "FAIL"}
-    assert set(verdicts["qaDecidedBy"]) == {"", "medFwhm", "pctFlagged", "medDxCenter"}
-
-
-def testConfigRegressionHasTeeth(configStored):
-    """Negative controls: the comparison fails without per-arm or per-species keys."""
-    stored = configStored
-    blended = configDefaults()
-    blended.flagRateWarnThreshold = {}
-    blended.flagRateFailThreshold = {}
-    assert (gate(stored, configThresholds(blended))["qaStatus"] != stored["qaStatus"]).sum() > 50
-
-    armOnly = configDefaults()
-    armOnly.flagRateWarnThreshold = {k: v for k, v in armOnly.flagRateWarnThreshold.items() if ":" not in k}
-    armOnly.flagRateFailThreshold = {k: v for k, v in armOnly.flagRateFailThreshold.items() if ":" not in k}
-    assert (gate(stored, configThresholds(armOnly))["qaStatus"] != stored["qaStatus"]).sum() > 0
-
-
-def testReadsRun25(stored):
-    """The Run25 file gates the arcs and quartz it has populations for; the config takes the rest."""
-    thresholds = [RUN25, configThresholds(configDefaults())]
-    judged = judge(stored, thresholds).merge(stored[["obsType", "seqName"]], left_on="row", right_index=True)
-    fwhm = judged[judged["metric"] == "medFwhm"]
-    derived = fwhm["obsType"].isin(["arc", "trace"])
-    assert (fwhm.loc[derived, "layer"] == 0).all()
-    assert (fwhm.loc[~derived, "layer"] == 1).all()
-    # Run25 has no b-arm Argon flag rate: the config's b:Argon entry judges it.
-    argon = judged[
-        (judged["metric"] == "pctFlagged") & (judged["arm"] == "b") & (judged["seqName"] == "Arc: Argon")
-    ]
-    assert len(argon) and (argon["population"] == "arm=b species=Argon").all()
-    assert (argon["layer"] == 1).all()
-    assert judged.loc[judged["metric"] == "medDxCenter", "layer"].eq(1).all()
-
-    # The obstructed frames fail, the traces of them included.
-    verdicts = gate(stored, thresholds)
-    obstructed = stored["visit"].isin([150115, 150116, 150641, 150642])
-    assert (verdicts.loc[obstructed, "qaStatus"] == "FAIL").all()
-
-
-def testLoadThresholds():
-    """Paths are read, tables pass through, and order is kept."""
-    config = configThresholds(configDefaults())
-    tables = loadThresholds([RUN25, config])
-    assert len(tables) == 2 and tables[1] is config
-    pd.testing.assert_frame_equal(tables[0], readThresholds(RUN25)[1])
-    assert len(loadThresholds(str(RUN25))) == 1
-    assert loadThresholds([]) == []
-
-
-def testLevels():
-    """At a threshold is crossed; FAIL is tested before WARN."""
-    thresholds = table({"metric": "medFwhm", "warn": 3.0, "fail": 3.5})
-    for value, expected in ((2.9, "PASS"), (3.0, "WARN"), (3.49, "WARN"), (3.5, "FAIL"), (9.0, "FAIL")):
-        assert gate(image(medFwhm=value), thresholds)["qaStatus"].iloc[0] == expected
-
-
-def testMissingAndInfinite():
-    """NaN gets no verdict; an infinite value is judged and fails."""
-    thresholds = table({"metric": "medFwhm", "warn": 3.0, "fail": 3.5})
-    judged = judge(image(medFwhm=np.nan), thresholds)
-    assert judged["status"].iloc[0] == ""
-    assert gate(image(medFwhm=np.nan), thresholds)["qaStatus"].iloc[0] == "PASS"
-    assert gate(image(medFwhm=np.nan), thresholds, default="UNKNOWN")["qaStatus"].iloc[0] == "UNKNOWN"
-    verdict = gate(image(medFwhm=math.inf), thresholds)
-    assert verdict["qaStatus"].iloc[0] == "FAIL"
-    assert verdict["qaReason"].iloc[0] == "medFWHM=infpx >= fail threshold 3.5px"
-
-
-def testDirectionAndAbsolute():
-    """A lower-is-worse entry fails low; an absolute one judges |value|."""
-    low = table({"metric": "nLines", "warn": 100, "fail": 50, "higherIsWorse": False})
-    assert gate(image(nLines=50), low)["qaStatus"].iloc[0] == "FAIL"
-    assert gate(image(nLines=99), low)["qaStatus"].iloc[0] == "WARN"
-    assert gate(image(nLines=1000), low)["qaStatus"].iloc[0] == "PASS"
-
-    offset = table({"metric": "medDxCenter", "warn": 1.0, "fail": 2.0, "absolute": True})
-    verdict = gate(image(medDxCenter=-2.5), offset)
-    assert verdict["qaStatus"].iloc[0] == "FAIL"
-    assert verdict["qaReason"].iloc[0] == "|dxCenter|=2.500px >= fail threshold 2px"
-    # Negative control: the same entry without ``absolute`` passes it.
-    signed = offset.assign(absolute=False)
-    assert gate(image(medDxCenter=-2.5), signed)["qaStatus"].iloc[0] == "PASS"
-
-
-def testMostSpecificEntryWins():
-    """``arm`` + ``species`` beats ``arm``, which beats an entry naming nothing."""
-    thresholds = table(
-        {"metric": "pctFlagged", "warn": 15.0, "fail": 20.0},
-        {"metric": "pctFlagged", "arm": "b", "warn": 50.0, "fail": 60.0},
-        {"metric": "pctFlagged", "arm": "b", "species": "Neon", "warn": 80.0, "fail": 90.0},
-    )
-    metrics = pd.concat(
+    @pytest.mark.parametrize(
+        "arm, species, value, status",
         [
-            image(pctFlagged=70.0),
-            image(pctFlagged=70.0, seqName="Arc: Argon"),
-            image(pctFlagged=70.0, arm="r"),
+            ("r", "OH", 0.49, "PASS"),
+            ("r", "OH", -0.5, "WARN"),
+            ("n", "OH", 1.0, "FAIL"),
+            ("m", "OH", 0.6, "WARN"),
+            ("b", "OI", 1.2, "PASS"),
+            ("b", "OI", 1.5, "WARN"),
+            ("b", "OI", -2.5, "FAIL"),
         ],
-        ignore_index=True,
     )
-    judged = judge(metrics, thresholds)
-    assert list(judged["population"]) == ["arm=b species=Neon", "arm=b", ""]
-    assert list(judged["status"]) == ["PASS", "FAIL", "FAIL"]
+    def testSkyLineResidual(self, arm, species, value, status):
+        lines = frame(lineRow("medianDeltaYKms", value, species, "visit", "RESERVED", arm=arm))
+        row = verdict(lines=lines)
+        assert row["qaStatus"] == status
+        if status != "PASS":
+            assert row["qaDecidedBy"] == ("skyLineResidualBlue" if arm == "b" else "skyLineResidual")
+            assert row["qaReason"].startswith(f"{'[O I]' if arm == 'b' else 'OH'} residual {value:+.2f} km/s")
 
+    def testEachArmHasItsSpecies(self):
+        """The b arm is judged on [O I] and the others on OH; the other species' residuals are stored only."""
+        for arm, species in (("b", "OH"), ("r", "OI"), ("r", "O2"), ("n", "NaI")):
+            lines = frame(lineRow("medianDeltaYKms", 9.0, species, "visit", "RESERVED", arm=arm))
+            assert verdict(lines=lines)["qaStatus"] == "UNKNOWN", (arm, species)
+        # Nor the fitted lines, nor the residual against the calibration.
+        for keys in ({"statusType": "BOTH"}, {"reference": "calib", "statusType": "RESERVED"}):
+            lines = frame(lineRow("medianDeltaYKms", 9.0, "OH", **({"reference": "visit"} | keys)))
+            assert verdict(lines=lines)["qaStatus"] == "UNKNOWN", keys
 
-def testIlluminationDefaultsToFull():
-    """An entry without ``illumination`` judges full-slit images only; an IIS image needs one naming it."""
-    full = table({"metric": "medFwhm", "arm": "b", "warn": 3.0, "fail": 3.5})
-    assert gate(image(medFwhm=4.0), full)["qaStatus"].iloc[0] == "FAIL"
-    assert gate(image(medFwhm=4.0, illumination="full"), full)["qaStatus"].iloc[0] == "FAIL"
-    assert (
-        gate(image(medFwhm=4.0, illumination="iis"), full, default="UNKNOWN")["qaStatus"].iloc[0] == "UNKNOWN"
-    )
-
-    both = table(
-        {"metric": "medFwhm", "illumination": "iis", "warn": 5.0, "fail": 6.0},
-        {"metric": "medFwhm", "arm": "b", "warn": 3.0, "fail": 3.5},
-    )
-    images = pd.concat(
-        [image(medFwhm=4.0), image(visit=2, medFwhm=4.0, illumination="iis")], ignore_index=True
-    )
-    judged = judge(images, both)
-    assert judged["population"].tolist() == ["arm=b", "illumination=iis"]
-    assert judged["status"].tolist() == ["FAIL", "PASS"]
-    # Negative control: by specificity alone the arm=b entry (1 column) ties the IIS one, which
-    # would be an error, and an entry naming two columns would take the IIS image.
-    specific = table(
-        {"metric": "medFwhm", "illumination": "iis", "warn": 5.0, "fail": 6.0},
-        {"metric": "medFwhm", "arm": "b", "obsType": "arc", "warn": 3.0, "fail": 3.5},
-    )
-    assert judge(images, specific)["population"].tolist() == ["arm=b obsType=arc", "illumination=iis"]
-
-
-def testEarlierTableWins():
-    """A table's match, however general, beats any match in a later table."""
-    first = table({"metric": "medFwhm", "warn": 2.0, "fail": 2.5})
-    second = table({"metric": "medFwhm", "arm": "b", "obsType": "arc", "warn": 3.0, "fail": 3.5})
-    judged = judge(image(medFwhm=2.7), [first, second])
-    assert judged["layer"].iloc[0] == 0 and judged["status"].iloc[0] == "FAIL"
-    judged = judge(image(medFwhm=2.7, obsType="trace", arm="r"), [second, first])
-    assert judged["layer"].iloc[0] == 1
-
-
-def testEntryWithoutThresholdsStopsTheSearch():
-    """A matching entry with no thresholds means "not judged here", not "look further"."""
-    skip = table({"metric": "medFwhm", "obsType": "trace", "warn": None, "fail": None})
-    config = configThresholds(configDefaults())
-    judged = judge(image(medFwhm=9.0, obsType="trace", pctFlagged=0.0, medDxCenter=0.0), [skip, config])
-    fwhm = judged[judged["metric"] == "medFwhm"].iloc[0]
-    assert fwhm["status"] == "" and fwhm["population"] == "obsType=trace" and fwhm["layer"] == 0
-    judged = judge(image(medFwhm=9.0, obsType="arc", pctFlagged=0.0, medDxCenter=0.0), [skip, config])
-    assert judged.loc[judged["metric"] == "medFwhm", "status"].iloc[0] == "FAIL"
-
-
-def testCalibrationValuesAreNotJudged():
-    """A FWHM read from fiberProfiles gets no verdict from any table; a measured one does."""
-    entry = table({"metric": "medFwhm", "obsType": "trace", "arm": "b", "warn": 3.0, "fail": 3.5})
-    config = configThresholds(configDefaults())
-    others = {"pctFlagged": 0.0, "medDxCenter": 0.0}
-    for thresholds in (entry, config, [entry, config]):
-        judged = judge(image(medFwhm=9.0, obsType="trace", traceOnly=True, **others), thresholds)
-        assert judged.loc[judged["metric"] == "medFwhm", "status"].iloc[0] == ""
-        # Negative control: the same value, measured, fails.
-        judged = judge(image(medFwhm=9.0, obsType="trace", traceOnly=False, **others), thresholds)
-        assert judged.loc[judged["metric"] == "medFwhm", "status"].iloc[0] == "FAIL"
-    # Other metrics of the same image are still judged.
-    judged = judge(image(medFwhm=9.0, traceOnly=True, pctFlagged=99.0, medDxCenter=0.0), config)
-    assert judged.loc[judged["metric"] == "pctFlagged", "status"].iloc[0] == "FAIL"
-
-
-def testTiesAndMissingColumns():
-    """Equal specificity and unmeasured metrics are errors; an absent column matches nothing."""
-    tied = table(
-        {"metric": "medFwhm", "arm": "b", "warn": 3.0, "fail": 3.5},
-        {"metric": "medFwhm", "obsType": "arc", "warn": 3.0, "fail": 3.5},
-    )
-    with pytest.raises(ValueError, match="equally specific"):
-        gate(image(medFwhm=2.0), tied)
-    # Ties among entries that don't match are harmless.
-    assert gate(image(medFwhm=2.0, arm="r", obsType="trace"), tied)["qaStatus"].iloc[0] == "PASS"
-
-    with pytest.raises(KeyError, match="medFwhm"):
-        gate(image(pctFlagged=1.0), tied)
-
-    thresholds = table({"metric": "medFwhm", "camera": "b1", "warn": 3.0, "fail": 3.5})
-    judged = judge(image(medFwhm=9.0), thresholds)
-    assert judged["layer"].iloc[0] == -1 and judged["status"].iloc[0] == ""
-
-
-def testVerdictColumns():
-    """The worst verdict, the first metric reaching it, and every WARN/FAIL reason."""
-    thresholds = table(
-        {"metric": "medFwhm", "warn": 3.0, "fail": 3.5},
-        {"metric": "pctFlagged", "warn": 15.0, "fail": 20.0},
-        {"metric": "medDxCenter", "warn": 1.0, "fail": 2.0, "absolute": True},
-    )
-    metrics = pd.concat(
-        [
-            image(medFwhm=3.2, pctFlagged=25.0, medDxCenter=3.0),
-            image(medFwhm=2.0, pctFlagged=5.0, medDxCenter=0.1),
-        ],
-        ignore_index=True,
-    ).set_axis([10, 20])
-    verdicts = gate(metrics, thresholds)
-    assert list(verdicts.index) == [10, 20]
-    assert list(verdicts["qaStatus"]) == ["FAIL", "PASS"]
-    assert list(verdicts["qaDecidedBy"]) == ["pctFlagged", ""]
-    assert verdicts["qaReason"].iloc[0] == (
-        "medFWHM=3.20px >= warn threshold 3px; pctFlagged=25.0% >= fail threshold 20%; "
-        "|dxCenter|=3.000px >= fail threshold 2px"
-    )
-    assert verdicts["qaReason"].iloc[1] == ""
-
-
-def testConfigKeysResolvePerSide():
-    """A key in one dict takes the other side from its arm, as the task's lookup did."""
-    config = configDefaults()
-    config.flagRateWarnThreshold = {"b": 50.0, "b:Argon": 93.0}
-    config.flagRateFailThreshold = {"b": 60.0}
-    entries = configThresholds(config)
-    argon = entries[(entries["metric"] == "pctFlagged") & (entries["species"] == "Argon")].iloc[0]
-    assert (argon["warn"], argon["fail"]) == (93.0, 60.0)
-    assert (
-        gate(
-            image(seqName="Arc: Argon", pctFlagged=61.0, medFwhm=2.0, medDxCenter=0.0, traceOnly=False),
-            entries,
-        )["qaStatus"].iloc[0]
-        == "FAIL"
-    )
-
-
-def testThresholdsPath(tmp_path):
-    """A relative name is a shipped file; an absolute path is taken as given."""
-    shipped = thresholdsPath(configDefaults().thresholdsFile)
-    assert shipped.parent == ROOT / "python" / "pfs" / "drp" / "qa" / "metrics" / "data"
-    assert shipped.exists()
-    assert thresholdsPath(str(tmp_path / "x.yaml")) == tmp_path / "x.yaml"
-
-
-def testShippedFileIsTheAdoptedRun25(stored):
-    """The shipped file is what its script makes from the Run25 derivation."""
-    script = thresholdsPath("makeRun25Thresholds.py")
-    spec = importlib.util.spec_from_file_location("makeRun25Thresholds", script)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    remade = module.adopt(
-        yaml.safe_load(RUN25.read_text()), pd.read_parquet(DATA / "iqQaMetrics-validation.parquet")
-    )
-    assert remade == yaml.safe_load(thresholdsPath("iqQaThresholds-run25.yaml").read_text())
-
-
-def loadScript(name: str):
-    """Return the thresholds-making script ``name`` beside the shipped files, imported as a module."""
-    spec = importlib.util.spec_from_file_location(name, thresholdsPath(f"{name}.py"))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-@pytest.fixture(scope="module")
-def iisStored() -> pd.DataFrame:
-    """Return Run30's nightly IIS frames' ``iqQaMetrics``, reduced afresh (u/wtg/qa-iis/003b)."""
-    return pd.read_parquet(DATA / "iqQaMetrics-iis-run30.parquet")
-
-
-def testShippedIisFileIsTheAdoptedRun30(iisStored, tmp_path):
-    """The IIS file is what its script derives from the Run30 IIS frames and adopts."""
-    module = loadScript("makeIisThresholds")
-    derived = module.derive(iisStored, tmp_path / "derived.yaml")
-    assert yaml.safe_load(derived.read_text()) == yaml.safe_load(IIS.read_text())
-    remade = module.adopt(yaml.safe_load(IIS.read_text()), iisStored)
-    assert remade == yaml.safe_load(thresholdsPath("iqQaThresholds-iis-run30.yaml").read_text())
-    assert all(entry["population"]["illumination"] == "iis" for entry in remade["thresholds"])
-
-
-def testShippedIisFileVerdicts(iisStored):
-    """IIS frames are judged by the IIS file alone: the known-good nights pass, the two faults warn."""
-    files = [thresholdsPath(configDefaults().thresholdsFile)]
-    files += [thresholdsPath(name) for name in configDefaults().extraThresholdsFiles]
-    thresholds = [*files, configThresholds(configDefaults())]
-    metrics = iisStored.drop(columns=list(VERDICT_COLUMNS))
-    verdicts = gate(metrics, thresholds, default="UNKNOWN")
-    judged = judge(metrics, thresholds)
-    assert (metrics["illumination"] == "iis").all()
-    # Neither the Run25 file (layer 0) nor the config (layer 2) judges an IIS image.
-    assert set(judged.loc[judged["status"] != "", "layer"]) == {1}
-    flagged = metrics.assign(qaStatus=verdicts["qaStatus"], qaDecidedBy=verdicts["qaDecidedBy"])
-    flagged = flagged[flagged["qaStatus"] != "PASS"]
-    assert flagged[["visit", "arm", "spectrograph", "qaStatus", "qaDecidedBy"]].to_records(
-        index=False
-    ).tolist() == [
-        (148829, "n", 4, "WARN", "medDxCenter"),  # IIS lamp header off: reduced against the sky line list
-        (149595, "b", 2, "WARN", "medFwhm"),  # the night SM2 and SM4 moved; not a known-good night
-    ]
-    # Every known-good image has its FWHM judged, the n-arm Ne arcs and the m arm excepted.
-    fwhm = judged[judged["metric"] == "medFwhm"].merge(metrics[["seqName"]], left_on="row", right_index=True)
-    unjudged = fwhm[fwhm["status"] == ""]
-    assert set(unjudged["arm"]) == {"m", "n"}
-    assert set(unjudged.loc[unjudged["arm"] == "n", "seqName"]) == {"ImageQuality (Ne)"}
-    # Negative control: a full-slit image is not judged by the IIS file.
-    full = image(medFwhm=1.0, linesPerFiber=1.0, medDxCenter=0.0)
-    assert (judge(full, [IIS])["status"] == "").all()
-    # An IIS lamp with no entry of its own (an IIS Ar arc) has no FWHM reference: not judged, not failed.
-    argon = image(
-        seqName="ImageQuality (Ar)",
-        illumination="iis",
-        medFwhm=1.95,
-        linesPerFiber=50.0,
-        medDxCenter=0.0,
-        pctFlagged=np.nan,
-    )
-    judgedArgon = judge(argon, thresholds).set_index("metric")
-    assert judgedArgon.loc["medFwhm", "status"] == "" and judgedArgon.loc["medDxCenter", "status"] == "PASS"
-
-
-def testShippedFileVerdicts(stored):
-    """The adopted file: obstructed frames and defocused quartz fail, no known-good fails; flags aren't judged.
-
-    The fixture is ``u/wtg/qa-thresholds/010``: the validation visits reduced afresh,
-    Run29's b2 and n4 quartz among them. The one-group Run30 arcs that PIPE2D-1935 checked are no
-    longer validation visits; comparison mode judges them with every other daily arc.
-    """
-    thresholds = [thresholdsPath(configDefaults().thresholdsFile), configThresholds(configDefaults())]
-    judged = judge(stored, thresholds)
-    verdicts = gate(stored, thresholds, default="UNKNOWN")
-
-    obstructed = stored["visit"].isin([150115, 150116, 150641, 150642])
-    assert (verdicts.loc[obstructed, "qaStatus"] == "FAIL").all()
-    # The validation set records them as known-bad for linesPerFiber, the metric that fails them:
-    # each lit fiber measures fewer lines.
-    lines = labelRows(stored, loadValidationVisits(), "linesPerFiber")
-    perFiber = judged[judged["metric"] == "linesPerFiber"].set_index("row")
-    obstructedLines = lines[lines["visit"].isin([150115, 150116, 150641, 150642])]
-    assert len(obstructedLines) == obstructed.sum() and (obstructedLines["validation"] == "bad:FAIL").all()
-    assert (perFiber.loc[obstructedLines.index, "status"] == "FAIL").all()
-    # Every known-good arc and quartz passes it, but b Argon, under a line per fiber, isn't judged.
-    goodLines = perFiber.loc[lines.index[lines["validation"] == "good"]]
-    goodLines = goodLines[goodLines["value"].notna()]
-    argon = stored.loc[goodLines.index, "seqName"].eq("Arc: Argon") & stored.loc[goodLines.index, "arm"].eq(
-        "b"
-    )
-    assert (goodLines.loc[~argon, "status"] == "PASS").all() and (goodLines.loc[argon, "status"] == "").all()
-    run25Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(133040, 135850)
-    assert (perFiber.loc[np.flatnonzero(run25Quartz), "status"] == "PASS").all()
-    # medFwhm: every known-good arc and quartz is judged against its own detector and
-    # lamp's reference median, and none fails; every known-bad one with a value fails. b-arm Argon
-    # is not judged: under a line per fiber, its width rests on a handful of lines.
-    labelled = labelRows(stored, loadValidationVisits(), "medFwhm")
-    fwhm = judged[judged["metric"] == "medFwhm"].set_index("row")
-    bArgon = (stored["arm"] == "b") & (stored["seqName"] == "Arc: Argon")
-    good = fwhm.loc[labelled.index[labelled["validation"] == "good"]]
-    good = good[good["value"].notna()]
-    assert len(good) == 636 and good["population"].str.contains("spectrograph=").all()
-    assert (good["layer"] == 0).all() and (good["status"] != "FAIL").all()
-    assert good["status"].value_counts().to_dict() == {
-        "PASS": 595,
-        "": 40,
-        "WARN": 1,
-    }  # 135841 m1 Argon, +3.3 %
-    assert bArgon[good.index[good["status"] == ""]].all() and bArgon[good.index].sum() == 40
-    bad = fwhm.loc[labelled.index[labelled["validation"] == "bad:FAIL"]]
-    bad = bad[bad["value"].notna()]
-    assert len(bad) == 82 and (bad["status"] == "FAIL").all()
-    assert not bArgon[bad.index].any()  # the set asserts nothing about b-arm Argon widths
-    # The b2 and n4 quartz reference is Run29's set: its traces pass on those two cameras,
-    # and Run25's own, narrower, pass as well.
-    camera = stored["arm"].add(stored["spectrograph"].astype(str))
-    run29Quartz = (stored["seqName"] == "Trace") & stored["visit"].between(144587, 147830)
-    moved = run29Quartz & camera.isin(["b2", "n4"])
-    assert moved.sum() == 42 and (verdicts.loc[moved, "qaStatus"] == "PASS").all()
-    run25B2 = run25Quartz & (camera == "b2")
-    assert run25B2.sum() == 14 and (verdicts.loc[run25B2, "qaStatus"] == "PASS").all()
-    # Negative control: against a tolerance on Run25's own b2 and n4 medians, Run29's b2 quartz
-    # would FAIL (5 % above) and n4's WARN (3 % above).
-    run25Median = stored.loc[run25Quartz & camera.isin(["b2", "n4"])].groupby(camera)["medFwhm"].median()
-    run29Median = stored.loc[moved].groupby(camera)["medFwhm"].median()
-    assert run29Median["b2"] > 1.05 * run25Median["b2"] and run29Median["n4"] > 1.03 * run25Median["n4"]
-    # Negative control: the per-arm entries alone fail known-good arcs and quartz.
-    perArm = readThresholds(thresholdsPath(configDefaults().thresholdsFile))[1]
-    perArm = perArm[perArm["method"] != "tolerance"].drop(columns=["spectrograph", "species"])
-    perArmFwhm = judge(stored, [perArm, configThresholds(configDefaults())]).set_index("row")
-    perArmFwhm = perArmFwhm[perArmFwhm["metric"] == "medFwhm"]
-    assert (perArmFwhm.loc[good.index, "status"] == "FAIL").sum() >= 3
-    # SM1 defocused (Run27): every SM1 quartz fails on medFwhm.
-    defocused = np.flatnonzero(
-        stored["visit"].isin([140032, 140035, *range(140139, 140149)]) & (stored["spectrograph"] == 1)
-    )
-    defocusedFwhm = judged[(judged["metric"] == "medFwhm") & judged["row"].isin(defocused)]
-    assert len(defocusedFwhm) == len(defocused) and (defocusedFwhm["status"] == "FAIL").all()
-    # Negative control: the derived (degenerate) quartz entries fail some of them.
-    derived = gate(stored, [RUN25, configThresholds(configDefaults())])
-    assert (derived.loc[run25Quartz, "qaStatus"] == "FAIL").any()
-
-    # nLines is no longer judged, nor is a twilight frame's count.
-    assert "nLines" not in set(judged["metric"])
-    twilight = perFiber.loc[np.flatnonzero(stored["seqName"] == "Twilight sky")]
-    assert len(twilight) and (twilight["status"] == "").all()
-    # pctFlagged is not judged at all: the shipped file's entry stops the search before the config.
-    flags = judged[judged["metric"] == "pctFlagged"]
-    assert len(flags) and (flags["layer"] == 0).all() and (flags["status"] == "").all()
-    # Negative control: the config alone judges them, some badly.
-    configOnly = judge(stored, [configThresholds(configDefaults())])
-    assert configOnly.loc[configOnly["metric"] == "pctFlagged", "status"].isin(["WARN", "FAIL"]).any()
-
-
-PIPELINE = {"datamodel": "w.2026.40", "obs_pfs": "w.2026.40", "drp_stella": "w.2026.41-6-ge56938d2"}
-
-
-def reductions(*drpStella) -> pd.DataFrame:
-    """Images reduced with PIPELINE but for drp_stella's version (None: not recorded)."""
-    return pd.DataFrame(
-        {
-            "medFwhm": 2.0,
-            "versionDatamodel": [None if v is None else "w.2026.40" for v in drpStella],
-            "versionObsPfs": [None if v is None else "w.2026.40" for v in drpStella],
-            "versionDrpStella": list(drpStella),
-        },
-        index=[10 + i for i in range(len(drpStella))],
-    )
-
-
-def testPipelineMismatch():
-    """Only the image reduced with the thresholds' pipeline gets a firm verdict."""
-    metrics = reductions("w.2026.41-6-ge56938d2", "w.2026.38", None)
-    result = pipelineMismatch(metrics, PIPELINE)
-    assert list(result.columns) == list(PROVISIONAL_COLUMNS)
-    assert result.index.tolist() == metrics.index.tolist()
-    assert result["qaProvisional"].tolist() == [False, True, True]
-    assert result["qaPipeline"].tolist() == [
-        "",
-        "drp_stella w.2026.38 (thresholds w.2026.41-6-ge56938d2)",
-        "reduction's pipeline unknown",
-    ]
-
-
-def testPipelineMismatchWithoutAReference():
-    """Thresholds that record no pipeline, or only part of it, can't vouch for any reduction."""
-    metrics = reductions("w.2026.41-6-ge56938d2")
-    assert pipelineMismatch(metrics, {})["qaPipeline"].tolist() == ["the thresholds record no pipeline"]
-    partial = {key: value for key, value in PIPELINE.items() if key != "obs_pfs"}
-    assert pipelineMismatch(metrics, partial)["qaPipeline"].tolist() == [
-        "obs_pfs w.2026.40 (thresholds unknown)"
-    ]
-    # No version columns at all, as in iqQaMetrics read without its pfsArm.
-    assert pipelineMismatch(metrics[["medFwhm"]], PIPELINE)["qaProvisional"].all()
-
-
-def testLayerPipelineMismatch():
-    """Each image is provisional against the pipeline of the layer that judged it."""
-    run25 = table({"metric": "medFwhm", "warn": 3.0, "fail": 4.0})
-    iis = table({"metric": "medFwhm", "illumination": "iis", "warn": 2.0, "fail": 2.5})
-    iisPipeline = PIPELINE | {"obs_pfs": "w.2026.43"}
-    images = pd.concat(
-        [image(medFwhm=2.0), image(visit=2, medFwhm=1.9, illumination="iis"), image(visit=3, medFwhm=np.nan)],
-        ignore_index=True,
-    )
-    for column, value in (("versionDatamodel", "w.2026.40"), ("versionDrpStella", "w.2026.41-6-ge56938d2")):
-        images[column] = value
-    images["versionObsPfs"] = [
-        "w.2026.40",
-        "w.2026.43",
-        "w.2026.43",
-    ]  # each reduced on its own file's pipeline
-    judged = judge(images, [run25, iis])
-    assert judged.loc[judged["status"] != "", "layer"].tolist() == [0, 1]  # the third image's FWHM is NaN
-    mismatch = layerPipelineMismatch(images, judged, [PIPELINE, iisPipeline])
-    # The full-slit and IIS images match their own layers; the unjudged image is compared with the first.
-    assert mismatch["qaProvisional"].tolist() == [False, False, True]
-    assert mismatch["qaPipeline"].iloc[2] == "obs_pfs w.2026.43 (thresholds w.2026.40)"
-    # Negative control: against one pipeline, as before, the IIS image reads as provisional.
-    assert pipelineMismatch(images, PIPELINE)["qaProvisional"].tolist() == [False, True, True]
-    # Through gate, and a layer without a pipeline (the config's) checks nothing.
-    verdicts = gate(images, [run25, iis], default="UNKNOWN", pipeline=[PIPELINE, iisPipeline, None])
-    assert verdicts["qaProvisional"].tolist() == [False, False, True]
-    assert gate(images, [run25, iis], pipeline=[None, None])["qaProvisional"].tolist() == [
-        False,
-        False,
-        False,
-    ]
-
-
-def testGateMarksProvisionalOnlyWhenAsked():
-    thresholds = pd.DataFrame([{"metric": "medFwhm", "warn": 3.0, "fail": 4.0, "higherIsWorse": True}])
-    metrics = reductions("w.2026.41-6-ge56938d2", "w.2026.38")
-    plain = gate(metrics, thresholds)
-    assert list(plain.columns) == list(VERDICT_COLUMNS)
-    checked = gate(metrics, thresholds, pipeline=PIPELINE)
-    assert list(checked.columns) == [*VERDICT_COLUMNS, *PROVISIONAL_COLUMNS]
-    # Provisional qualifies the verdict; it doesn't change it.
-    assert checked["qaStatus"].tolist() == plain["qaStatus"].tolist() == ["PASS", "PASS"]
-    assert checked["qaProvisional"].tolist() == [False, True]
-
-
-def testUnknownIsNotAVersion():
-    """Both sides reading "unknown" is no match."""
-    metrics = reductions("w.2026.41-6-ge56938d2").assign(versionObsPfs="unknown")
-    result = pipelineMismatch(metrics, PIPELINE | {"obs_pfs": "unknown"})
-    assert result["qaPipeline"].tolist() == ["obs_pfs unknown (thresholds unknown)"]
-    assert pipelineMismatch(metrics, dict.fromkeys(PIPELINE, "unknown"))["qaPipeline"].tolist() == [
-        "the thresholds record no pipeline"
-    ]
-
-
-def testGateKeepsOneRowPerImageWithDuplicateLabels():
-    """Rows that share an index label keep their own verdicts and flags, in order."""
-    thresholds = pd.DataFrame([{"metric": "medFwhm", "warn": 3.0, "fail": 4.0, "higherIsWorse": True}])
-    metrics = reductions("w.2026.41-6-ge56938d2", "w.2026.38").assign(medFwhm=[2.0, 5.0])
-    metrics.index = [0, 0]
-    result = gate(metrics, thresholds, pipeline=PIPELINE)
-    assert len(result) == 2
-    assert result["qaStatus"].tolist() == ["PASS", "FAIL"]
-    assert result["qaProvisional"].tolist() == [False, True]
-
-
-class TestThresholdsRecord:
-    """A task records the files it judged with by name and content, in the order judged."""
-
-    def testNamesInTheOrderJudged(self):
-        config = SimpleNamespace(thresholdsFile="a.yaml", extraThresholdsFiles=["b.yaml", ""])
-        assert thresholdsNames(config) == ["a.yaml", "b.yaml"]
-        assert thresholdsNames(SimpleNamespace(thresholdsFile="", extraThresholdsFiles=["b.yaml"])) == [
-            "b.yaml"
-        ]
-        assert thresholdsNames(SimpleNamespace(thresholdsFile="a.yaml")) == ["a.yaml"]  # no further layers
-
-    def testRecordRoundTrips(self):
-        names = ["iqQaThresholds-run25.yaml", str(IIS)]  # shipped by name, and an absolute path
-        record = thresholdsRecord(names)
-        assert tuple(record) == THRESHOLDS_COLUMNS
-        expected = [(names[0], sha256Of(thresholdsPath(names[0]))), (names[1], sha256Of(IIS))]
-        assert recordedThresholds(*record.values()) == expected
-        # Negative control: the order is the order judged, so the first layer is the one qa_gate cites.
-        assert recordedThresholds(*thresholdsRecord(names[::-1]).values()) != expected
-
-    def testRecordsContentNotName(self, tmp_path):
-        path = tmp_path / "thresholds.yaml"
-        path.write_bytes(RUN25.read_bytes())
-        before = thresholdsRecord([str(path)])
-        assert before["thresholdsSha256"] == sha256Of(RUN25)
-        path.write_bytes(RUN25.read_bytes() + b"\n# edited\n")
-        after = thresholdsRecord([str(path)])
-        assert after["thresholdsFiles"] == before["thresholdsFiles"]
-        assert after["thresholdsSha256"] != before["thresholdsSha256"]
-
-    def testNoFileIsRecordedAsNone(self):
-        """Judged by the config's fields alone is recorded, and differs from a table that recorded nothing."""
-        assert thresholdsRecord([]) == dict.fromkeys(THRESHOLDS_COLUMNS, "")
-        assert recordedThresholds("", "") == []
-        assert recordedThresholds(None, None) is None
-        assert recordedThresholds(np.nan, np.nan) is None
-
-    def testBadRecords(self):
-        with pytest.raises(ValueError, match="comma"):
-            thresholdsRecord(["a,b.yaml"])
-        with pytest.raises(ValueError, match="2 thresholds layers recorded with 1"):
-            recordedThresholds("a.yaml,b.yaml", "0" * 64)
-
-
-class TestThresholdsDocument:
-    """A task config's fields become a thresholds layer with a content hash, read back as the same table."""
-
-    CONFIG = SimpleNamespace(
-        fwhmWarnThreshold=3.2,
-        fwhmFailThreshold=3.5,
-        flagRateWarnThreshold={"b": 55.0, "b:HgCd": 20.0},
-        flagRateFailThreshold={"b": 60.0, "b:HgCd": 25.0},
-        dxCenterWarnThreshold=1.0,
-        dxCenterFailThreshold=2.0,
-    )
-
-    #: The SHA-256 of `CONFIG`'s document and of ``residualThresholds(1.0, 2.0, 1.0, 2.0)``'s. The bytes are a
-    #: stored format: tasks record these and a loader of another drp_qa must rebuild them, so a change here
-    #: is a change to make on purpose, knowing layers recorded before it no longer register.
-    IMAGE_QUALITY_SHA256 = "06e1340eea51d350f5b7bbb72566aa27ff556946fb162825bbce9f10a0107027"
-    RESIDUALS_SHA256 = "c0cf0fcf971c345c4e254a3a19d2d56b401a9afc495389a327745b8fb877530f"
-
-    def testNames(self):
-        assert configLayerName("imageQualityQa") == "imageQualityQa.config"
-        assert isConfigLayer("dmLineResiduals.config") and not isConfigLayer("iqQaThresholds-run25.yaml")
-
-    def testDeterministicAndContentAddressed(self):
-        table = configThresholds(self.CONFIG)
-        document = thresholdsDocument(table, "imageQualityQa.config")
-        assert document == thresholdsDocument(configThresholds(self.CONFIG), "imageQualityQa.config")
-        assert b"name: imageQualityQa.config" in document and b"version: 2" in document
-        # Negative control: another field value is another document, so another SHA-256.
-        other = SimpleNamespace(**vars(self.CONFIG), **{})
-        other.fwhmWarnThreshold = 3.3
-        assert sha256Of(thresholdsDocument(configThresholds(other), "imageQualityQa.config")) != sha256Of(
-            document
+    def testJudgedOnWhatWasMeasured(self):
+        """Without a sky-line residual an image is judged on its offsets alone; with neither it is UNKNOWN."""
+        assert verdict(lines=frame(lineRow("medianDeltaX", 0.1)))["qaStatus"] == "PASS"
+        unmeasured = verdict(lines=frame(lineRow("medianDeltaX", np.nan)))
+        assert (
+            unmeasured["qaStatus"] == "UNKNOWN" and unmeasured["qaReason"] == "nothing to judge was measured"
         )
 
-    def testTheSameBytesInEveryProcess(self):
-        """Every process builds the SHA-256 pinned here: the task that judges and the loader that registers."""
-        code = (
-            "from types import SimpleNamespace\n"
-            "from pfs.drp.qa.metrics.gate import configThresholds, sha256Of, thresholdsDocument\n"
-            "from pfs.drp.qa.metrics.lineResiduals import residualThresholds\n"
-            f"config = SimpleNamespace(**{vars(self.CONFIG)!r})\n"
-            "print(sha256Of(thresholdsDocument(configThresholds(config), 'imageQualityQa.config')))\n"
-            "residuals = residualThresholds(1.0, 2.0, 1.0, 2.0)\n"
-            "print(sha256Of(thresholdsDocument(residuals, 'dmLineResiduals.config')))\n"
+    def testWidthAndScatterAreNotJudged(self):
+        iq = frame(iqRow(obsType="science", seqName="x", medFwhm=9.0, linesPerFiber=1.0, medDxCenter=5.0))
+        lines = frame(
+            lineRow("robustRmsDeltaX", 9.0, "Trace", "visit", "RESERVED"),
+            lineRow("robustRmsDeltaY", 9.0, "OH", "visit", "RESERVED"),
         )
-        path = os.pathsep.join(path for path in sys.path if path)
-        digests = set()
-        for seed in ("0", "1", "2", "3", "random"):
-            env = {**os.environ, "PYTHONPATH": path, "PYTHONHASHSEED": seed}
-            result = subprocess.run(
-                [sys.executable, "-c", code], capture_output=True, text=True, check=True, env=env
+        normal = frame(normalRow("medFwhm", "r1", "science", "x", 1.0))
+        assert verdict(iq=iq, lines=lines, normalValues=normal)["qaStatus"] == "UNKNOWN"
+
+
+class TestMArmOffset:
+    """On a visit read with m, the b arm's x and the n arm's y are measured from where they sit in that mode."""
+
+    NORMAL = frame(
+        normalRow("mArmOffsetX", "b1", "", "", -0.51, count=4),
+        normalRow("mArmOffsetY", "n1", "", "", -0.14, count=4),
+    )
+
+    def testSubtractedBeforeTheLimit(self):
+        lines = frame(lineRow("medianDeltaX", -0.62, arm="b", cameraSet="bmn"))
+        assert verdict(lines=lines, normalValues=self.NORMAL)["qaStatus"] == "PASS"
+        # Negative control: uncorrected, the same frame warns.
+        assert verdict(lines=lines)["qaStatus"] == "WARN"
+        # And the wrong sign would fail it.
+        wrong = self.NORMAL.assign(value=-self.NORMAL["value"])
+        assert verdict(lines=lines, normalValues=wrong)["qaStatus"] == "FAIL"
+
+    def testTheReasonSaysSo(self):
+        lines = frame(lineRow("medianDeltaX", -1.2, arm="b", cameraSet="bm"))
+        row = verdict(lines=lines, normalValues=self.NORMAL)
+        assert row["qaReason"] == "x offset -0.69 px, limit 0.5 px (less the m-arm offset -0.51 px)"
+
+    def testNArmInY(self):
+        lines = frame(lineRow("medianDeltaY", -0.6, "OH", arm="n", cameraSet="bmn"))
+        assert verdict(lines=lines, normalValues=self.NORMAL)["qaStatus"] == "PASS"
+        assert verdict(lines=lines)["qaStatus"] == "WARN"
+
+    def testOnlyWithMAndOnlyThoseArmsAndAxes(self):
+        for keys in (
+            {"arm": "b", "cameraSet": "brn"},  # read with r
+            {"arm": "r", "cameraSet": "bmn"},  # not the b arm
+            {"arm": "n", "cameraSet": "bmn"},  # the n arm's offset is in y
+        ):
+            lines = frame(lineRow("medianDeltaX", -0.62, **keys))
+            normal = pd.concat([self.NORMAL, frame(normalRow("mArmOffsetX", "n1", "", "", -0.5))])
+            assert verdict(lines=lines, normalValues=normal)["qaStatus"] == "WARN", keys
+
+    def testCalibrationFramesAreNotCorrected(self):
+        lines = frame(lineRow("medianDeltaX", -1.2, arm="b", cameraSet="bm", obsType="trace"))
+        row = verdict(
+            iq=frame(iqRow(arm="b", obsType="trace", seqName="Trace")), lines=lines, normalValues=self.NORMAL
+        )
+        assert row["qaStatus"] == "WARN" and "m-arm" not in row["qaReason"]
+
+
+class TestCalibrationFrames:
+    def testOffsets(self):
+        iq = frame(iqRow())
+        for value, status in ((0.99, "PASS"), (1.0, "WARN"), (-2.0, "FAIL")):
+            lines = frame(lineRow("medianDeltaX", value, obsType="arc"))
+            assert verdict(iq=iq, lines=lines)["qaStatus"] == status
+            lines = frame(lineRow("medianDeltaY", value, "NeI", obsType="arc"))
+            row = verdict(iq=iq, lines=lines)
+            assert row["qaStatus"] == status and row["qaDecidedBy"] == (
+                "" if status == "PASS" else "calibOffset"
             )
-            digests.add(tuple(result.stdout.split()))
-        document = thresholdsDocument(configThresholds(self.CONFIG), "imageQualityQa.config")
-        assert digests == {(self.IMAGE_QUALITY_SHA256, self.RESIDUALS_SHA256)}
-        assert sha256Of(document) == self.IMAGE_QUALITY_SHA256
-        # Negative control: the same entries with their keys in another order are other bytes.
-        content = yaml.safe_load(document)
-        content["thresholds"] = [dict(reversed(entry.items())) for entry in content["thresholds"]]
-        reordered = yaml.safe_dump(content, sort_keys=False, allow_unicode=True, width=110).encode()
-        assert yaml.safe_load(reordered) == yaml.safe_load(document)
-        assert sha256Of(reordered) != sha256Of(document)
 
-    def testReadsBackAsTheTable(self, tmp_path):
-        """What `parseThresholds` reads from the document judges as the table did: null populations are 'any'."""
-        from pfs.drp.qa.metrics.calibration import parseThresholds, readThresholds
+    def testLampFramesNeedTheirIllumination(self):
+        """Line residuals of an arc with no ``iqQaMetrics`` row are not judged: it may be lit through the IIS."""
+        lines = frame(lineRow("medianDeltaX", 5.0, obsType="arc"))
+        assert verdict(lines=lines)["qaStatus"] == "UNKNOWN"
+        assert verdict(iq=frame(iqRow()), lines=lines)["qaStatus"] == "FAIL"
+        assert verdict(iq=frame(iqRow(illumination="iis")), lines=lines)["qaStatus"] == "UNKNOWN"
+        # Another image's row does not vouch for this one.
+        other = gate(iq=frame(iqRow(spectrograph=2)), lines=lines)
+        assert other.set_index("spectrograph").loc[1, "qaStatus"] == "UNKNOWN"
 
-        table = configThresholds(self.CONFIG)
-        document = thresholdsDocument(table, "imageQualityQa.config")
-        metadata, parsed = parseThresholds(document)
-        assert metadata["pipelineVersions"] == {} and metadata["collection"] is None
-        assert parsed["metric"].tolist() == table["metric"].tolist()
-        assert parsed.loc[parsed["species"].notna(), "species"].tolist() == ["HgCd"]
-        assert parsed["arm"].isna().sum() == table["arm"].isna().sum()
-        metrics = pd.DataFrame(
-            {
-                "medFwhm": [3.0, 3.4],
-                "pctFlagged": [21.0, 10.0],
-                "medDxCenter": [-1.5, 0.1],
-                "arm": ["b", "r"],
-                "species": ["HgCd", "Neon"],
-            }
+    def testTraceCentreOffsetOnEngineeringFiberFrames(self):
+        for value, status in ((0.5, "PASS"), (-1.0, "WARN"), (2.5, "FAIL")):
+            iq = frame(iqRow(illumination="iis", seqName="ImageQuality (Ne)", medDxCenter=value))
+            row = verdict(iq=iq)
+            assert (row["qaStatus"], row["frameType"]) == (status, "iisArc")
+        # Negative control: on a full-slit frame it is not judged; the line residuals give the offset there.
+        assert verdict(iq=frame(iqRow(medDxCenter=2.5)))["qaStatus"] == "UNKNOWN"
+
+
+class TestRelative:
+    """Checks against the camera's normal value."""
+
+    NORMAL = frame(
+        normalRow("medFwhm", "r1", "arc", "Neon", 2.0),
+        normalRow("medFwhm", "r1", "quartz", "", 3.0),
+        normalRow("linesPerFiber", "r", "arc", "Neon", 80.0),
+        normalRow("linesPerFiber", "r", "quartz", "", 4000.0),
+        normalRow("robustRmsDeltaX", "r1", "arc", "NeI", 0.05),
+        normalRow("robustRmsDeltaX", "r1", "quartz", "Trace", 0.02),
+        normalRow("robustRmsDeltaY", "r1", "arc", "NeI", 0.04),
+    )
+
+    @pytest.mark.parametrize("width, status", [(2.059, "PASS"), (2.06, "WARN"), (2.1, "FAIL"), (1.0, "PASS")])
+    def testWidth(self, width, status):
+        row = verdict(iq=frame(iqRow(medFwhm=width, linesPerFiber=80.0)), normalValues=self.NORMAL)
+        assert row["qaStatus"] == status
+        if status == "FAIL":
+            assert row["qaReason"] == "width 2.10 px is +5.0 % from normal 2.00 px, limit +5 %"
+
+    @pytest.mark.parametrize(
+        "count, status", [(61.0, "PASS"), (60.0, "WARN"), (40.0, "FAIL"), (160.0, "PASS")]
+    )
+    def testLinesPerFiberOnAnArc(self, count, status):
+        """Fewer lines is the bad direction: more than normal passes."""
+        row = verdict(iq=frame(iqRow(linesPerFiber=count)), normalValues=self.NORMAL)
+        assert row["qaStatus"] == status
+        if status == "WARN":
+            assert row["qaReason"] == "lines per lit fiber 60.0 is -25.0 % from normal 80.0, limit -25 %"
+
+    def testLinesPerFiberOnAQuartzIsTighter(self):
+        quartz = iqRow(obsType="trace", seqName="Trace", linesPerFiber=3880.0)  # -3 %
+        row = verdict(iq=frame(quartz), normalValues=self.NORMAL)
+        assert (row["qaStatus"], row["qaDecidedBy"]) == ("WARN", "linesPerFiberQuartz")
+        # Negative control: the same -3 % on an arc is well inside its -25 %.
+        assert verdict(iq=frame(iqRow(linesPerFiber=77.6)), normalValues=self.NORMAL)["qaStatus"] == "PASS"
+
+    def testScatter(self):
+        iq = frame(iqRow())
+        for metric, value, status in (
+            ("robustRmsDeltaX", 0.059, "PASS"),
+            ("robustRmsDeltaX", 0.06, "WARN"),
+            ("robustRmsDeltaX", 0.075, "FAIL"),
+            ("robustRmsDeltaY", 0.059, "PASS"),
+            ("robustRmsDeltaY", 0.06, "WARN"),
+            ("robustRmsDeltaY", 0.1, "FAIL"),
+        ):
+            lines = frame(lineRow(metric, value, "NeI", "visit", "RESERVED", obsType="arc"))
+            assert verdict(iq=iq, lines=lines, normalValues=self.NORMAL)["qaStatus"] == status, (
+                metric,
+                value,
+            )
+
+    def testScatterOnlyOfHeldBackLinesAgainstTheVisit(self):
+        iq = frame(iqRow())
+        for keys in (
+            {"statusType": "BOTH"},
+            {"statusType": "USED"},
+            {"reference": "calib", "statusType": "BOTH"},
+        ):
+            lines = frame(
+                lineRow("robustRmsDeltaX", 9.0, "NeI", **({"reference": "visit"} | keys), obsType="arc")
+            )
+            assert verdict(iq=iq, lines=lines, normalValues=self.NORMAL)["qaStatus"] == "UNKNOWN", keys
+
+    def testSpeciesNotJudged(self):
+        """Mercury and cadmium, sky species and an arc's trace centroids are stored, not judged."""
+        iq = frame(iqRow())
+        normal = pd.concat(
+            [
+                self.NORMAL,
+                frame(
+                    *(
+                        normalRow("robustRmsDeltaX", "r1", "arc", s, 0.01)
+                        for s in ("HgI", "CdI", "Trace", "OH")
+                    )
+                ),
+            ]
         )
-        pd.testing.assert_frame_equal(
-            judge(metrics, parsed)[["metric", "status", "warn", "fail", "population"]],
-            judge(metrics, table)[["metric", "status", "warn", "fail", "population"]],
+        for species in ("HgI", "CdI", "Trace", "OH"):
+            lines = frame(lineRow("robustRmsDeltaX", 9.0, species, "visit", "RESERVED", obsType="arc"))
+            assert verdict(iq=iq, lines=lines, normalValues=normal)["qaStatus"] == "UNKNOWN", species
+        # A quartz is judged on its trace centroids, in x only.
+        quartz = frame(iqRow(obsType="trace", seqName="Trace"))
+        lines = frame(lineRow("robustRmsDeltaX", 0.05, "Trace", "visit", "RESERVED", obsType="trace"))
+        assert verdict(iq=quartz, lines=lines, normalValues=self.NORMAL)["qaStatus"] == "FAIL"
+        lines = frame(lineRow("robustRmsDeltaY", 9.0, "Trace", "visit", "RESERVED", obsType="trace"))
+        assert verdict(iq=quartz, lines=lines, normalValues=self.NORMAL)["qaStatus"] == "UNKNOWN"
+
+    def testNoNormalValueIsUnknown(self):
+        iq = frame(iqRow(medFwhm=9.0, linesPerFiber=80.0))
+        row = verdict(iq=iq)
+        assert row["qaStatus"] == "UNKNOWN" and row["qaReason"] == "no normal value"
+        # Another camera's, lamp's or frame type's value is none.
+        for wrong in (
+            normalRow("medFwhm", "r2", "arc", "Neon", 2.0),
+            normalRow("medFwhm", "r1", "arc", "Argon", 2.0),
+            normalRow("medFwhm", "r1", "iisArc", "Neon", 2.0),
+            normalRow("medFwhm", "r", "arc", "Neon", 2.0),
+        ):
+            assert verdict(iq=iq, normalValues=frame(wrong))["qaStatus"] == "UNKNOWN", wrong
+        assert (
+            verdict(iq=iq, normalValues=frame(normalRow("medFwhm", "r1", "arc", "Neon", 2.0)))["qaStatus"]
+            == "FAIL"
         )
-        path = tmp_path / "imageQualityQa.config.yaml"
-        path.write_bytes(document)
-        assert readThresholds(path)[1].equals(parsed)
 
-    def testNanThresholdsAreNull(self):
-        """A field left NaN (not judged) is null in the document, and an unjudged entry when read back."""
-        from pfs.drp.qa.metrics.calibration import parseThresholds
-        from pfs.drp.qa.metrics.lineResiduals import residualThresholds
+    def testTooFewFramesIsNoNormalValue(self):
+        iq = frame(iqRow(medFwhm=9.0, linesPerFiber=80.0))
+        few = frame(normalRow("medFwhm", "r1", "arc", "Neon", 2.0, count=MIN_NORMAL_FRAMES - 1))
+        assert verdict(iq=iq, normalValues=few)["qaStatus"] == "UNKNOWN"
+        enough = frame(normalRow("medFwhm", "r1", "arc", "Neon", 2.0, count=MIN_NORMAL_FRAMES))
+        assert verdict(iq=iq, normalValues=enough)["qaStatus"] == "FAIL"
 
-        table = residualThresholds(1.0, 2.0, 1.0, 2.0)
-        document = thresholdsDocument(table, "dmLineResiduals.config")
-        assert b"warn: null" in document and b".nan" not in document
-        _, parsed = parseThresholds(document)
-        rms = parsed[parsed["metric"] == "robustRmsDeltaX"].iloc[0]
-        assert pd.isna(rms["warn"]) and pd.isna(rms["fail"]) and rms["statusType"] == "RESERVED"
+    def testLatestValueAtOrBeforeTheVisit(self):
+        """The previous run's value stays in force until the new one is valid."""
+        normal = frame(
+            normalRow("medFwhm", "r1", "arc", "Neon", 2.0, validFrom=500),
+            normalRow("medFwhm", "r1", "arc", "Neon", 2.2, validFrom=VISIT),
+            normalRow("medFwhm", "r1", "arc", "Neon", 3.0, validFrom=VISIT + 1),
+        )
+        rows = [iqRow(medFwhm=2.2, linesPerFiber=80.0, visit=visit) for visit in (499, 999, VISIT, VISIT + 1)]
+        result = gate(iq=frame(*rows), normalValues=normal).set_index("visit")["qaStatus"]
+        assert result.to_dict() == {499: "UNKNOWN", 999: "FAIL", VISIT: "PASS", VISIT + 1: "PASS"}
+        # A value with too few frames does not replace the one in force.
+        normal.loc[1, "count"] = 1
+        assert gate(iq=frame(rows[2]), normalValues=normal).iloc[0]["qaStatus"] == "FAIL"
 
-    def testTaskRecordListsFilesThenTheConfigLayer(self):
-        table = configThresholds(self.CONFIG)
-        record = taskThresholdsRecord("imageQualityQa", ["iqQaThresholds-run25.yaml"], table)
-        layers = recordedThresholds(*record.values())
-        assert [name for name, _ in layers] == ["iqQaThresholds-run25.yaml", "imageQualityQa.config"]
-        assert layers[0][1] == sha256Of(thresholdsPath("iqQaThresholds-run25.yaml"))
-        assert layers[1][1] == sha256Of(thresholdsDocument(table, "imageQualityQa.config"))
-        assert sha256Of(b"abc") == hashlib.sha256(b"abc").hexdigest()
+    def testWidthOnTooFewLinesIsNotJudged(self):
+        """b-arm Argon: under 5 lines per lit fiber the width rests on a handful of lines."""
+        sparse = frame(iqRow(medFwhm=9.0, linesPerFiber=4.9))
+        normal = pd.concat(
+            [self.NORMAL, frame(normalRow("linesPerFiber", "r", "arc", "Neon", 4.0))], ignore_index=True
+        )
+        normal = normal.drop(index=2)
+        row = verdict(iq=sparse, normalValues=normal)
+        assert row["qaStatus"] == "UNKNOWN" and "under 5 lines per lit fiber" in row["qaReason"]
+        # Negative control: with the lines, the same width fails. A quartz has no such floor.
+        assert (
+            verdict(iq=frame(iqRow(medFwhm=9.0, linesPerFiber=80.0)), normalValues=self.NORMAL)["qaStatus"]
+            == "FAIL"
+        )
+
+    def testAFrameShortOfLinesStillFailsItsCount(self):
+        """The floor is on the normal value, so obstructed fibers are caught, not excused."""
+        row = verdict(iq=frame(iqRow(medFwhm=2.0, linesPerFiber=2.0)), normalValues=self.NORMAL)
+        assert (row["qaStatus"], row["qaDecidedBy"]) == ("FAIL", "linesPerFiberArc")
+
+    def testWidthReadFromFiberProfilesIsNotMeasured(self):
+        iq = frame(iqRow(medFwhm=9.0, linesPerFiber=80.0, traceOnly=True))
+        normal = self.NORMAL[self.NORMAL["metric"] == "medFwhm"]
+        assert verdict(iq=iq, normalValues=normal)["qaStatus"] == "UNKNOWN"
+
+    def testEngineeringFiberFramesHaveTheirOwnValues(self):
+        iq = frame(iqRow(illumination="iis", seqName="ImageQuality (Ne)", medFwhm=2.0, linesPerFiber=80.0))
+        # The full-slit values do not judge it.
+        assert verdict(iq=iq, normalValues=self.NORMAL)["qaStatus"] == "UNKNOWN"
+        own = frame(
+            normalRow("medFwhm", "r1", "iisArc", "Ne", 1.8),
+            normalRow("linesPerFiber", "r", "iisArc", "Ne", 81.0),
+        )
+        row = verdict(iq=iq, normalValues=own)
+        assert (row["qaStatus"], row["qaDecidedBy"]) == ("FAIL", "width")
+
+
+class TestTwilight:
+    @staticmethod
+    def row(arm="b", level=0.0, rms=0.5, patch=0.5, tooFaint=False):
+        return {
+            "visit": VISIT,
+            "arm": arm,
+            "spectrograph": 1,
+            "tooFaint": tooFaint,
+            "twilightLevelOffset": level,
+            "twilightResidRms": rms,
+            "twilightPatch": patch,
+        }
+
+    @pytest.mark.parametrize(
+        "values, status, check",
+        [
+            ({}, "PASS", ""),
+            ({"level": -2.0}, "WARN", "twilightLevel"),
+            ({"level": 3.0}, "FAIL", "twilightLevel"),
+            ({"rms": 1.5}, "WARN", "twilightScatter"),
+            ({"rms": 2.5}, "FAIL", "twilightScatter"),
+            ({"patch": 2.5}, "WARN", "twilightPatch"),
+            ({"patch": 4.0}, "FAIL", "twilightPatch"),
+            ({"level": np.inf}, "FAIL", "twilightLevel"),
+        ],
+    )
+    def testLimits(self, values, status, check):
+        row = verdict(twilight=frame(self.row(**values)))
+        assert (row["qaStatus"], row["qaDecidedBy"], row["frameType"]) == (status, check, "twilight")
+
+    def testTooFaintIsJudgedOnItsLevelAlone(self):
+        faint = self.row(rms=9.0, patch=9.0, tooFaint=True)
+        assert verdict(twilight=frame(faint))["qaStatus"] == "PASS"
+        assert verdict(twilight=frame(faint | {"twilightLevelOffset": 5.0}))["qaStatus"] == "FAIL"
+        # Negative control: bright enough, the same scatter fails.
+        assert verdict(twilight=frame(faint | {"tooFaint": False}))["qaStatus"] == "FAIL"
+
+    def testNArmIsNotJudged(self):
+        row = verdict(twilight=frame(self.row(arm="n", level=9.0, rms=9.0, patch=9.0)))
+        assert row["qaStatus"] == "UNKNOWN"
+        assert verdict(twilight=frame(self.row(arm="m", level=9.0)))["qaStatus"] == "FAIL"
+
+
+class TestImage:
+    def testAnImageTakesItsWorstCheck(self):
+        iq = frame(iqRow(medFwhm=2.07, linesPerFiber=30.0))
+        lines = frame(lineRow("medianDeltaX", 1.5, obsType="arc"))
+        row = verdict(iq=iq, lines=lines, normalValues=TestRelative.NORMAL)
+        assert row["qaStatus"] == "FAIL" and row["qaDecidedBy"] == "linesPerFiberArc"
+        # Every crossing is in the reason, WARNs included.
+        assert row["qaReason"].count(";") == 2
+        for text in ("width 2.07 px", "lines per lit fiber 30.0", "x offset +1.50 px"):
+            assert text in row["qaReason"]
+
+    def testNoFrameTypeIsUnknownNeverPass(self):
+        for obsType in ("unknown", "dark", None):
+            row = verdict(
+                iq=frame(iqRow(obsType=obsType, medFwhm=2.0, linesPerFiber=80.0)),
+                normalValues=TestRelative.NORMAL,
+            )
+            assert row["qaStatus"] == "UNKNOWN" and row["qaReason"] == "no frame type"
+            assert row["frameType"] is None
+
+    def testOneRowPerImageOfAnyTable(self):
+        iq = frame(iqRow(spectrograph=1), iqRow(spectrograph=2, medFwhm=2.0, linesPerFiber=80.0))
+        lines = frame(
+            lineRow("medianDeltaX", 0.1, spectrograph=3), lineRow("medianDeltaX", 0.1, spectrograph=3)
+        )
+        twilight = frame(TestTwilight.row(arm="r") | {"spectrograph": 4})
+        result = gate(iq=iq, lines=lines, twilight=twilight, normalValues=TestRelative.NORMAL)
+        assert list(result["spectrograph"]) == [1, 2, 3, 4]
+        assert list(result["qaStatus"]) == ["UNKNOWN", "PASS", "PASS", "PASS"]
+        assert list(result["frameType"]) == ["arc", "arc", "science", "twilight"]
+
+    def testIndexAndDtypesDoNotMatter(self):
+        iq = frame(iqRow(medFwhm=2.2, linesPerFiber=80.0)).astype({"visit": "int32", "spectrograph": "int16"})
+        iq.index = [7]
+        normal = TestRelative.NORMAL.astype({"validFrom": "float64"})
+        assert verdict(iq=iq, normalValues=normal)["qaStatus"] == "FAIL"
+
+
+def testLongLines():
+    wide = pd.DataFrame(
+        {
+            "visit": [VISIT],
+            "arm": ["r"],
+            "spectrograph": [1],
+            "obsType": ["science"],
+            "reference": ["calib"],
+            "description": ["Trace"],
+            "statusType": ["BOTH"],
+            "medianDeltaX": [0.7],
+            "robustRmsDeltaX": [0.02],
+        }
+    )
+    long = longLines(wide)
+    assert (
+        sorted(long["metric"]) == ["medianDeltaX", "robustRmsDeltaX"] and "medianDeltaX" not in long.columns
+    )
+    assert gate(lines=long).iloc[0]["qaStatus"] == "WARN"

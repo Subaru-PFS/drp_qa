@@ -1,4 +1,4 @@
-"""Twilight sky flats: is each exposure of a twilight sequence a good flat? Measurement and verdict.
+"""Twilight sky flats: is each exposure of a twilight sequence a good flat? The measurement.
 
 A twilight is the sky flat behind the screen response: each fiber's flux over
 its normalisation should be the same across the focal plane, but for a smooth
@@ -61,42 +61,38 @@ on the focal plane or a change of colour uniform across it. Comparing a
 twilight with good twilights of other nights covers it (PIPE2D-1981), and is
 not done here.
 
-The provisional thresholds (`twilightThresholds`) are from a prototype over 16
-sequences of 2025-03 to 2026-09; the n arm is not judged, its residuals sit
-3-9 % above the noise model even on clear nights.
+The three judged metrics (`TWILIGHT_METRICS`) get their verdict from
+`pfs.drp.qa.metrics.gate`, by the twilight checks of
+`pfs.drp.qa.metrics.registry.CHECKS`. Their limits are provisional, from a
+prototype over 16 sequences of 2025-03 to 2026-09: normal detectors stepped at
+most 1.02 % and the Run21 faults 8-14 %; normal bright exposures reached 1.2 %
+RMS, and a patch of 1.6 % (r) and 2.0 % (b), where a 6 % patch 30-60 mm wide
+gives 2.5-3.4 %. The n arm is not judged: its residuals sit 3-9 % above the
+noise model even on clear nights.
 
 Nothing here imports the LSST stack.
 """
 
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from scipy.spatial import cKDTree
 
-from pfs.drp.qa.metrics.gate import THRESHOLDS_COLUMNS, gate, judge, thresholdsPath, thresholdsRecord
-from pfs.drp.qa.metrics.gate import VERDICT_COLUMNS as VERDICT_COLUMNS_GATE
 from pfs.drp.qa.metrics.lineResiduals import observationType
 
 __all__ = [
     "FIBER_COLUMNS",
-    "IMAGE_VERDICT_COLUMNS",
     "METRIC_COLUMNS",
     "MIN_EXPOSURES",
     "PATCH_NEIGHBOURS",
     "TWILIGHT_METRICS",
-    "TWILIGHT_THRESHOLDS_FILE",
-    "VERDICT_COLUMNS",
     "WINDOWS",
     "addPositions",
     "fiberFlux",
     "isTwilightSequence",
     "sequenceConsistency",
     "sequenceReadiness",
-    "twilightImageVerdict",
-    "twilightThresholds",
-    "twilightVerdict",
 ]
 
 #: Wavelength window per arm (nm), fiberNormsQa's.
@@ -105,22 +101,11 @@ WINDOWS = {"b": (450.0, 650.0), "r": (650.0, 950.0), "m": (650.0, 950.0), "n": (
 #: Exposures a sequence needs in an arm for its medians to resist one bad exposure.
 MIN_EXPOSURES = 3
 
-#: Provisional patch thresholds (%): normal exposures reached 1.6 % in r and 2.0 % in b; a 6 % patch
-#: 30-60 mm wide gives 2.5-3.4 %.
-PATCH_WARN, PATCH_FAIL = 2.5, 4.0
-
 #: Fibers a patch is averaged over: about 1 % of the focal plane, 45 mm across.
 PATCH_NEIGHBOURS = 30
 
 #: The judged metrics.
 TWILIGHT_METRICS = ("twilightLevelOffset", "twilightResidRms", "twilightPatch")
-
-#: Columns of `twilightVerdict`'s table, one row per (visit, arm).
-VERDICT_COLUMNS = ("visit", "arm", "sequence", "status", "reason", "twilightArmMean", "twilightArmHalfDiff")
-
-#: The thresholds file shipped with the package (``metrics/data``, made by ``makeTwilightThresholds.py`` from
-#: `twilightThresholds`): what the judge judges with and records, so qadb's gate can cite it.
-TWILIGHT_THRESHOLDS_FILE = "twilightThresholds.yaml"
 
 #: Columns of `fiberFlux`'s table, the ``twilightFiberFlux`` dataset with the task's identity columns.
 FIBER_COLUMNS = {
@@ -157,9 +142,6 @@ METRIC_COLUMNS = {
     "twilightArmMean": "RMS of the mean of each fiber's b and r residuals (%).",
     "twilightArmHalfDiff": "RMS of half the difference of each fiber's b and r residuals (%).",
 }
-
-#: Columns of `twilightImageVerdict`'s table, the ``twilightQaMetrics`` dataset: one row per detector image.
-IMAGE_VERDICT_COLUMNS = (*METRIC_COLUMNS, *VERDICT_COLUMNS_GATE, *THRESHOLDS_COLUMNS)
 
 # The expected error of a median is sqrt(pi/2) that of a mean.
 _MEDIAN_ERROR = np.sqrt(np.pi / 2)
@@ -495,162 +477,3 @@ def sequenceReadiness(
     if missing:
         return False, f"sequence {first['iic_sequence_id']} is waiting for " + "; ".join(missing)
     return True, f"sequence {first['iic_sequence_id']}: {len(sequence)} visits, all stored"
-
-
-def twilightThresholds(
-    levelWarn: float = 2.0,
-    levelFail: float = 3.0,
-    rmsWarn: float = 1.5,
-    rmsFail: float = 2.5,
-    patchWarn: float = PATCH_WARN,
-    patchFail: float = PATCH_FAIL,
-    unjudgedArms: tuple[str, ...] = ("n",),
-    source: str = (
-        "Provisional (PIPE2D-1973): from a prototype over 16 twilight sequences, 2025-03 to 2026-09."
-        " Normal detectors stepped at most 1.02 % and the Run21 faults 8-14 %; normal bright exposures"
-        " reached 1.2 % RMS, and a patch of 1.6 % (r) and 2.0 % (b). To be replaced by the flat precision"
-        " the screen response needs."
-    ),
-) -> pd.DataFrame:
-    """Return the twilight thresholds as a `gate` table.
-
-    ``twilightLevelOffset`` is judged on its absolute value. The arms in
-    ``unjudgedArms`` get entries with no thresholds, which stop the search:
-    deliberately not judged.
-    """
-    rows = []
-    for metric, warn, fail, absolute in (
-        ("twilightLevelOffset", levelWarn, levelFail, True),
-        ("twilightResidRms", rmsWarn, rmsFail, False),
-        ("twilightPatch", patchWarn, patchFail, False),
-    ):
-        rows.append(
-            {
-                "metric": metric,
-                "arm": None,
-                "warn": float(warn),
-                "fail": float(fail),
-                "higherIsWorse": True,
-                "absolute": absolute,
-                "provenance": source,
-            }
-        )
-        for arm in unjudgedArms:
-            rows.append(
-                {
-                    "metric": metric,
-                    "arm": arm,
-                    "warn": np.nan,
-                    "fail": np.nan,
-                    "higherIsWorse": True,
-                    "absolute": absolute,
-                    "provenance": f"{arm} arm not judged: its residuals exceed the noise model on clear nights.",
-                }
-            )
-    return pd.DataFrame(rows).astype({"arm": object})
-
-
-def twilightVerdict(metrics: pd.DataFrame, thresholds: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Return one verdict per exposure and arm: whether it is a good flat.
-
-    Parameters
-    ----------
-    metrics : `pandas.DataFrame`
-        `sequenceConsistency` rows.
-    thresholds : `pandas.DataFrame` or path, optional
-        A `gate` table or thresholds file; `TWILIGHT_THRESHOLDS_FILE` by default.
-
-    Returns
-    -------
-    `pandas.DataFrame`
-        One row per (visit, arm), `VERDICT_COLUMNS`: ``status`` is the worst
-        of ``PASS``, ``WARN``, ``FAIL`` over the arm's detector levels, RMS and
-        patch; ``TOO_FAINT`` in place of a ``PASS`` for an exposure below the
-        floor (its levels are judged, and a step still fails it); ``UNKNOWN`` when
-        nothing is judged, as in an arm the thresholds leave out. ``reason`` holds the reasons,
-        ``;``-joined. No rows when ``metrics`` has none.
-    """
-    if metrics.empty:
-        return pd.DataFrame(columns=list(VERDICT_COLUMNS))
-    thresholds = thresholdsPath(TWILIGHT_THRESHOLDS_FILE) if thresholds is None else thresholds
-    judged = judge(metrics.reset_index(drop=True), thresholds)
-    judged = judged.merge(
-        metrics.reset_index(drop=True)[["sequence", "tooFaint", "twilightArmMean", "twilightArmHalfDiff"]],
-        left_on="row",
-        right_index=True,
-    )
-    order = {"": 0, "PASS": 1, "WARN": 2, "FAIL": 3}
-    rows = []
-    for (visit, arm), frame in judged.groupby(["visit", "arm"], sort=False):
-        worst = max(frame["status"], key=lambda status: order.get(status, 0))
-        reasons = sorted(set(frame.loc[frame["status"].isin(["WARN", "FAIL"]), "reason"]))
-        tooFaint = bool(frame["tooFaint"].iloc[0])
-        rows.append(
-            {
-                "visit": visit,
-                "arm": arm,
-                "sequence": frame["sequence"].iloc[0],
-                "status": "TOO_FAINT" if tooFaint and worst == "PASS" else (worst or "UNKNOWN"),
-                "reason": "; ".join(reasons),
-                "twilightArmMean": frame["twilightArmMean"].iloc[0],
-                "twilightArmHalfDiff": frame["twilightArmHalfDiff"].iloc[0],
-            }
-        )
-    return pd.DataFrame(rows, columns=list(VERDICT_COLUMNS))
-
-
-def _thresholdsName(path: Path | str) -> str:
-    """Return how a thresholds file is recorded: its name when shipped with the package, else its path."""
-    path = Path(path)
-    try:
-        return str(path.resolve().relative_to(thresholdsPath("").resolve()))
-    except ValueError:
-        return str(path)
-
-
-def twilightImageVerdict(
-    metrics: pd.DataFrame, thresholds: pd.DataFrame | Path | str | None = None
-) -> pd.DataFrame:
-    """Return one verdict per detector image, for the per-image gate: the ``twilightQaMetrics`` rows.
-
-    Parameters
-    ----------
-    metrics : `pandas.DataFrame`
-        `sequenceConsistency` rows.
-    thresholds : `pandas.DataFrame` or path, optional
-        A `gate` table or thresholds file; `TWILIGHT_THRESHOLDS_FILE` by default.
-        A file is recorded in `pfs.drp.qa.metrics.gate.THRESHOLDS_COLUMNS` (by
-        its name when it is a shipped file, else by its path) so the qadb loader
-        can cite it in ``qa_gate``; a table has no file and records none.
-
-    Returns
-    -------
-    `pandas.DataFrame`
-        `IMAGE_VERDICT_COLUMNS`: each metrics row with ``qaStatus`` (the worst
-        of the detector's level offset and its arm's RMS and patch: ``PASS``,
-        ``WARN`` or ``FAIL``; ``UNKNOWN`` for an arm the thresholds leave out),
-        ``qaDecidedBy``, ``qaReason``, and the thresholds record. An exposure
-        below the brightness floor keeps ``tooFaint``; the gate's vocabulary has
-        no ``TOO_FAINT``, which `twilightVerdict` gives the arm instead. No rows
-        when ``metrics`` has none.
-
-    Notes
-    -----
-    `twilightVerdict` is the sequence's view, one row per exposure and arm;
-    this is the image's, so an arm's worst image verdict is its arm verdict
-    (``TOO_FAINT`` read as ``PASS``).
-    """
-    if metrics.empty:
-        return pd.DataFrame(columns=list(IMAGE_VERDICT_COLUMNS))
-    if thresholds is None:
-        thresholds = thresholdsPath(TWILIGHT_THRESHOLDS_FILE)
-    if isinstance(thresholds, str | Path):
-        record = thresholdsRecord([_thresholdsName(thresholds)])
-    else:
-        record = dict.fromkeys(THRESHOLDS_COLUMNS, "")
-    rows = metrics.reset_index(drop=True)
-    verdicts = gate(rows, thresholds, default="UNKNOWN")
-    image = pd.concat([rows, verdicts], axis=1)
-    for column, value in record.items():
-        image[column] = value
-    return image.reindex(columns=list(IMAGE_VERDICT_COLUMNS))

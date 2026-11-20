@@ -1,742 +1,571 @@
-"""Judge metrics against thresholds: the one gating path.
+"""Judge an image's numbers: the one judging path.
 
-Measurement and judgement are separate (rule R3 of ``docs/qa-principles.md``):
-``imageQualityQa`` measures, and `gate` turns a table of metrics into a verdict
-per image, whether in the task, in real time, or over a whole run's stored
-``iqQaMetrics``.
+The tasks measure and store numbers; nothing but `gate` gives a verdict. It
+takes the numbers, the rules (`pfs.drp.qa.metrics.registry.CHECKS`) and the
+table of each camera's normal values (`pfs.drp.qa.metrics.normalValues`), and
+returns ``PASS``, ``WARN``, ``FAIL`` or ``UNKNOWN`` per image. An image takes
+its worst check; one with no check judged is ``UNKNOWN``, never ``PASS``.
 
-Thresholds come as tables in the format `readThresholds` returns: one row per
-metric and population, with ``warn``, ``fail``, ``higherIsWorse``, ``absolute``
-and ``provenance``. Every other column is a population column, and a null in
-one means "any value". For each image and metric, the entry used is
+The numbers come as up to three tables, as the Butler or qadb holds them:
 
-1. from the first table, in the order given, with an entry whose population
-   matches the image, so a derived file can be layered over the task config;
-2. within that table, the matching entry naming the most population columns,
-   so ``arm=b species=HgCd`` beats ``arm=b``, which beats an entry naming
-   none. Two equally specific matches are an error.
+``iq``
+    ``iqQaMetrics``: one row per image, with ``obsType``, ``illumination``
+    and ``seqName``.
+``lines``
+    ``dmLineResidualMetrics``: one row per image, reference, species,
+    ``statusType`` and metric.
+``twilight``
+    The twilight metrics (`pfs.drp.qa.metrics.twilight.sequenceConsistency`):
+    one row per image of a twilight sequence.
 
-An entry with neither ``warn`` nor ``fail`` stops the search: the metric is
-deliberately not judged in that population.
+`measurements` says which numbers each check reads, as one row per image,
+check and number. `judge` gives each a verdict, and `gate` the image's.
 
-One population column has a default, `DEFAULT_POPULATION`: ``illumination``,
-``full`` for the science fibers and ``iis`` for the 16 engineering fibers lit
-by the IIS lamps. An entry that doesn't name it applies to
-``full`` images only, since every threshold derived before the column existed
-was from full-slit frames; an IIS image is judged only by an entry naming
-``illumination: iis``. An image without the column has the default.
+What each check reads:
 
-A missing (NaN) value, one with no thresholds, or one its `MetricSpec` marks
-as not measured (a FWHM read from ``fiberProfiles``) gets no verdict; an
-infinite one is judged, and fails a higher-is-worse metric. A value at a
-threshold has crossed it.
+- ``skyOffset`` and ``calibOffset``: against the calibration, over every good
+  line (``BOTH``, or ``UNFITTED`` when the visit's fit marked none). In x the
+  median offset of the trace centroids; in y the species furthest off, sky
+  species on a science or all-sky frame and lamp species on an arc.
+- ``skyLineResidual`` and ``skyLineResidualBlue``: against the visit's
+  detectorMap, the median of the held-back (``RESERVED``) lines in km/s: OH on
+  r, n and m, [O I] on b.
+- ``scatterX`` and ``scatterY``: against the visit's detectorMap, the robust
+  RMS of the held-back lines: each lamp species of an arc but mercury and
+  cadmium, and in x the trace centroids of a quartz.
+- ``width``, ``linesPerFiberArc``, ``linesPerFiberQuartz`` and
+  ``traceCentreOffset``: ``iqQaMetrics`` columns.
+- the three twilight checks: the twilight metrics' columns.
 
-Thresholds hold for the pipeline that reduced the visits they were derived
-from. Given that pipeline, `gate` marks a verdict on an image reduced with
-another one provisional (`pipelineMismatch`): the difference may be the
-pipeline's, not the instrument's.
+On a visit read with the m arm, the b arm's standing x offset and the n arm's
+y offset (`pfs.drp.qa.metrics.registry.M_ARM_OFFSETS` rows of the normal
+values) are subtracted before ``skyOffset`` is judged, and the reason says so.
+
+A frame's type needs its illumination, which only ``iqQaMetrics`` records. An
+arc or quartz with line residuals and no ``iqQaMetrics`` row is not judged on
+them: lit through the engineering fibers, it would be judged as a full slit.
+
+Nothing here imports the LSST stack.
 """
 
-import hashlib
-from collections.abc import Mapping, Sequence
-from dataclasses import replace
-from importlib.resources import files
-from pathlib import Path
-from typing import Any
+from collections.abc import Sequence
 
 import numpy as np
 import pandas as pd
-import yaml
 
-from pfs.drp.qa.metrics.calibration import (
-    THRESHOLDS_VERSION,
-    addSpecies,
-    plainValue,
-    populationValue,
-    readThresholds,
+from pfs.drp.qa.metrics.registry import (
+    ALLSKY,
+    ARC,
+    CHECKS,
+    FIXED,
+    IIS_ARC,
+    M_ARM_OFFSETS,
+    MIN_LINES_PER_FIBER,
+    MIN_NORMAL_FRAMES,
+    QUARTZ,
+    SCIENCE,
+    TWILIGHT,
+    UNJUDGED_SPECIES,
+    Check,
+    frameType,
+    lampOf,
+    specFor,
 )
-from pfs.drp.qa.metrics.registry import specFor
-from pfs.drp.qa.utils.provenance import PIPELINE_COLUMNS, PIPELINE_PRODUCTS, knownVersion
 
 __all__ = [
-    "CONFIG_LAYER_SUFFIX",
-    "DEFAULT_POPULATION",
-    "PROVISIONAL_COLUMNS",
+    "IMAGE_KEYS",
+    "MEASUREMENT_COLUMNS",
+    "NORMAL_KEYS",
+    "SKY_LINE",
     "STATUS_ORDER",
-    "THRESHOLDS_COLUMNS",
-    "THRESHOLD_FIELDS",
     "VERDICT_COLUMNS",
-    "configLayerName",
-    "configThresholds",
     "gate",
-    "isConfigLayer",
     "judge",
-    "layerPipelineMismatch",
-    "loadThresholds",
-    "pipelineMismatch",
-    "recordedThresholds",
-    "sha256Of",
-    "taskThresholdsRecord",
-    "thresholdsDocument",
-    "thresholdsNames",
-    "thresholdsPath",
-    "thresholdsRecord",
+    "longLines",
+    "measurements",
+    "normalKey",
+    "worst",
 ]
 
-#: Verdicts from best to worst.
-STATUS_ORDER = ("PASS", "WARN", "FAIL")
+#: Verdicts from best to worst. ``UNKNOWN`` is no verdict: nothing was judged.
+STATUS_ORDER = ("UNKNOWN", "PASS", "WARN", "FAIL")
 
-#: Columns of a thresholds table that are not population columns. A tuple: `thresholdsDocument` writes an
-#: entry's keys in this order, and a set's order differs from one process to the next, so would the SHA-256.
-_FIELDS = (
+#: Columns identifying an image.
+IMAGE_KEYS = ("visit", "arm", "spectrograph")
+
+#: Columns of `measurements`.
+MEASUREMENT_COLUMNS = (
+    *IMAGE_KEYS,
+    "frameType",
+    "check",
     "metric",
-    "method",
-    "higherIsWorse",
-    "absolute",
-    "warn",
-    "fail",
-    "nGood",
-    "nGoodVisits",
-    "visitRange",
-    "reliable",
-    "failBounded",
-    "degenerate",
-    "provenance",
+    "part",
+    "camera",
+    "selector",
+    "value",
+    "withM",
 )
 
-#: The same, for readers of a thresholds table: every other column names its population.
-THRESHOLD_FIELDS = _FIELDS
+#: Columns of `gate`: the verdict, the check that decided it, and why.
+VERDICT_COLUMNS = (*IMAGE_KEYS, "frameType", "qaStatus", "qaDecidedBy", "qaReason")
 
-#: Columns `gate` returns: the verdict, the metric that decided it, and why.
-VERDICT_COLUMNS = ("qaStatus", "qaDecidedBy", "qaReason")
+#: What identifies a normal value, with the visit it is valid from.
+NORMAL_KEYS = ("metric", "camera", "frameType", "selector")
 
-#: Columns `gate` adds when given the thresholds' pipeline: whether the verdict is provisional, and why.
-PROVISIONAL_COLUMNS = ("qaProvisional", "qaPipeline")
+#: The sky species whose held-back lines give an arm's residual in km/s.
+SKY_LINE = {"b": "OI", "r": "OH", "n": "OH", "m": "OH"}
 
-#: Columns a task adds to each image's row: the thresholds layers it judged with, in the order judged,
-#: comma-separated, and the SHA-256 of each as it was then (`thresholdsRecord`): its files by name, and its
-#: config's threshold fields as `configLayerName` names them.
-THRESHOLDS_COLUMNS = ("thresholdsFiles", "thresholdsSha256")
+#: Line species of the night sky, and the description of trace centroids, in ``dmLineResidualMetrics``.
+_SKY_SPECIES = ("OH", "O2", "OI", "NaI")
+_TRACE = "Trace"
 
-#: What a task's config layer is named after the task: ``imageQualityQa.config`` (`configLayerName`).
-CONFIG_LAYER_SUFFIX = ".config"
-
-#: Columns identifying an image, copied to `judge`'s output when present.
-_ID_COLUMNS = ("visit", "arm", "spectrograph")
-
-#: Population columns with a default: an entry that doesn't name the column applies
-#: to images with the default value only, and an image without the column has it.
-#: ``illumination`` is ``imageQualityQa``'s: ``full`` (the science fibers, every
-#: threshold derived before PIPE2D-1954) or ``iis`` (the 16 engineering fibers).
-DEFAULT_POPULATION: dict[str, str] = {"illumination": "full"}
-
-#: Fallback flag-rate thresholds of ``imageQualityQa`` for an arm with no entry.
-_FLAG_RATE_FALLBACK = (15.0, 20.0)
-
-ThresholdsLike = pd.DataFrame | Path | str
+#: The residual statistics of a wide line-residual table (`longLines`).
+_LINE_METRICS = ("medianDeltaX", "robustRmsDeltaX", "medianDeltaY", "robustRmsDeltaY", "medianDeltaYKms")
 
 
-def loadThresholds(thresholds: ThresholdsLike | Sequence[ThresholdsLike]) -> list[pd.DataFrame]:
-    """Return threshold tables, reading any paths with `readThresholds`.
-
-    Parameters
-    ----------
-    thresholds : `pandas.DataFrame`, path, or a sequence of them
-        Tables, or thresholds files, in priority order.
-
-    Returns
-    -------
-    `list` [`pandas.DataFrame`]
-        The tables, in the order given.
-    """
-    if isinstance(thresholds, (pd.DataFrame, Path, str)):
-        thresholds = [thresholds]
-    return [table if isinstance(table, pd.DataFrame) else readThresholds(table)[1] for table in thresholds]
+def worst(statuses: Sequence[str]) -> str:
+    """Return the worst of ``statuses``; ``UNKNOWN`` when there is none."""
+    known = [status for status in statuses if status in STATUS_ORDER]
+    return max(known, key=STATUS_ORDER.index) if known else "UNKNOWN"
 
 
-def thresholdsPath(name: str) -> Path:
-    """Return the path of a thresholds file named in a task config.
-
-    Parameters
-    ----------
-    name : `str`
-        An absolute path, or a path relative to the thresholds files shipped
-        with the package (``pfs/drp/qa/metrics/data``), e.g.
-        ``"iqQaThresholds-run25.yaml"``.
-
-    Returns
-    -------
-    `pathlib.Path`
-        The file. Not checked for existence.
-    """
-    path = Path(name)
-    return path if path.is_absolute() else Path(str(files("pfs.drp.qa.metrics") / "data")) / path
+def normalKey(check: Check, arm: pd.Series, spectrograph: pd.Series) -> pd.Series:
+    """Return what a check's normal value is kept per: the camera (``b1``) or the arm (``b``)."""
+    if "camera" in check.by:
+        return arm.astype(str) + spectrograph.astype(int).astype(str)
+    return arm.astype(str)
 
 
-def thresholdsNames(config: Any) -> list[str]:
-    """Return the thresholds files a task config names, in the order they are judged.
-
-    Its ``thresholdsFile``, then any ``extraThresholdsFiles`` (``imageQualityQa``'s
-    further layers); empty names are dropped. Duck-typed, for any QA task's config.
-    """
-    names = [getattr(config, "thresholdsFile", None), *(getattr(config, "extraThresholdsFiles", None) or [])]
-    return [str(name) for name in names if name]
+def longLines(wide: pd.DataFrame) -> pd.DataFrame:
+    """Return a wide line-residual table (a column per statistic) as ``dmLineResidualMetrics`` rows."""
+    metrics = [name for name in _LINE_METRICS if name in wide.columns]
+    keys = [column for column in wide.columns if column not in _LINE_METRICS]
+    return wide.melt(id_vars=keys, value_vars=metrics, var_name="metric", value_name="value")
 
 
-def sha256Of(content: Path | str | bytes) -> str:
-    """Return the hex SHA-256 of a file, or of some bytes (a `thresholdsDocument`)."""
-    if not isinstance(content, bytes):
-        content = Path(content).read_bytes()
-    return hashlib.sha256(content).hexdigest()
-
-
-def configLayerName(task: str) -> str:
-    """Return the name a task's config threshold fields are recorded under as a thresholds layer.
-
-    ``imageQualityQa.config``: the task's label in the pipeline and
-    `CONFIG_LAYER_SUFFIX`. It is what qadb's ``qa_thresholds.name`` holds
-    for the layer, beside the files' names.
-    """
-    return f"{task}{CONFIG_LAYER_SUFFIX}"
-
-
-def isConfigLayer(name: str) -> bool:
-    """Say whether a recorded thresholds layer is a task config's fields (`configLayerName`), not a file."""
-    return name.endswith(CONFIG_LAYER_SUFFIX)
-
-
-def thresholdsDocument(table: pd.DataFrame, name: str) -> bytes:
-    """Return a thresholds table as the bytes of a thresholds file.
-
-    A table that is no file (the thresholds a task config's fields give,
-    `configThresholds`) has no content to hash. Written this way it has: the
-    same table gives the same bytes, so the same SHA-256, and
-    `pfs.drp.qa.metrics.calibration.parseThresholds` reads them back as the
-    table, so qadb registers the layer as it does a file (``qa_thresholds``,
-    by content). The document records no origin (``derivedOn``,
-    ``collection``, ``referenceRuns``, ``drpQaVersion`` null): a config's
-    fields have none, and the drp_qa version is kept out so the same fields
-    hash the same whichever drp_qa judged with them.
-
-    Parameters
-    ----------
-    table : `pandas.DataFrame`
-        A thresholds table as `judge` takes it: ``metric``, ``warn``,
-        ``fail``, and the population columns; ``higherIsWorse``,
-        ``absolute``, ``provenance`` and the other `THRESHOLD_FIELDS` where
-        present. A null population value is left out of the entry ("any").
-    name : `str`
-        The layer's name (`configLayerName`), written into the document.
-
-    Returns
-    -------
-    `bytes`
-        UTF-8 YAML, version `pfs.drp.qa.metrics.calibration.THRESHOLDS_VERSION`.
-    """
-    fields = [field for field in _FIELDS if field in table.columns and field != "metric"]
-    populationColumns = [column for column in table.columns if column not in _FIELDS]
-    entries = []
-    for record in table.to_dict("records"):
-        entry: dict[str, Any] = {
-            "metric": str(record["metric"]),
-            "population": {
-                column: populationValue(record[column])
-                for column in populationColumns
-                if not _isNull(record[column])
-            },
-        }
-        for field in fields:
-            value = plainValue(record[field])
-            if field in ("higherIsWorse", "absolute", "reliable", "failBounded", "degenerate"):
-                if value is not None:
-                    entry[field] = bool(value)
-            elif field in ("warn", "fail"):
-                entry[field] = None if value is None else float(value)
-            elif value is not None:
-                entry[field] = value
-        entries.append(entry)
-    document = {
-        "version": THRESHOLDS_VERSION,
-        "name": name,
-        "derivedOn": None,
-        "collection": None,
-        "referenceRuns": [],
-        "drpQaVersion": None,
-        "thresholds": entries,
-    }
-    return yaml.safe_dump(document, sort_keys=False, allow_unicode=True, width=110).encode()
-
-
-def thresholdsRecord(names: Sequence[str], documents: Mapping[str, bytes] | None = None) -> dict[str, str]:
-    """Return `THRESHOLDS_COLUMNS` for the thresholds layers a task judges with.
-
-    A task calls this when it loads its layers, so the record is of their
-    content at judgement time, whatever the drp_qa that later reads it ships.
-    Nothing given records empty strings: judged with no layer.
-
-    Parameters
-    ----------
-    names : sequence [`str`]
-        The files as the config names them (`thresholdsNames`), in the order
-        judged; none may contain a comma.
-    documents : mapping [`str`, `bytes`], optional
-        Layers that are no file, judged after the files in the order given:
-        each by its name (`configLayerName`) and its `thresholdsDocument`.
-    """
-    documents = dict(documents or {})
-    layers = [*names, *documents]
-    if any("," in name for name in layers):
-        raise ValueError(f"A thresholds layer name may not contain a comma: {layers}")
-    digests = [
-        *(sha256Of(thresholdsPath(name)) for name in names),
-        *(sha256Of(document) for document in documents.values()),
-    ]
-    return dict(zip(THRESHOLDS_COLUMNS, (",".join(layers), ",".join(digests)), strict=True))
-
-
-def taskThresholdsRecord(task: str, names: Sequence[str], config: pd.DataFrame) -> dict[str, str]:
-    """Return `THRESHOLDS_COLUMNS` for a task that judges with its files, then its config's fields.
-
-    Parameters
-    ----------
-    task : `str`
-        The task's label in the pipeline (``imageQualityQa``,
-        ``dmLineResiduals``), which names the config layer (`configLayerName`).
-    names : sequence [`str`]
-        Its thresholds files (`thresholdsNames`).
-    config : `pandas.DataFrame`
-        The table its config's fields give (`configThresholds`,
-        `pfs.drp.qa.metrics.lineResiduals.residualConfigThresholds`): its last
-        layer.
-    """
-    layer = configLayerName(task)
-    return thresholdsRecord(names, {layer: thresholdsDocument(config, layer)})
-
-
-def recordedThresholds(files: Any, digests: Any) -> list[tuple[str, str]] | None:
-    """Return the ``(name, sha256)`` pairs a `thresholdsRecord` holds, in the order judged.
-
-    `None` when nothing was recorded (a table written before PIPE2D-1976, or
-    a null); an empty list when the task judged with no layer.
-
-    Raises
-    ------
-    ValueError
-        If the two columns name different numbers of files.
-    """
-    if not isinstance(files, str) or not isinstance(digests, str):
-        return None
-    names = [name for name in files.split(",") if name]
-    hashes = [digest for digest in digests.split(",") if digest]
-    if len(names) != len(hashes):
-        raise ValueError(f"{len(names)} thresholds layers recorded with {len(hashes)} SHA-256s: {files!r}")
-    return list(zip(names, hashes, strict=True))
-
-
-def configThresholds(config: Any) -> pd.DataFrame:
-    """Return the thresholds of an ``imageQualityQa`` config as a table.
-
-    Parameters
-    ----------
-    config : `Any`
-        An ``ImageQualityQaConfig``, or any object with its threshold
-        attributes; duck-typed so this is tested without ``lsst.pex.config``.
-
-    Returns
-    -------
-    `pandas.DataFrame`
-        Entries for ``medFwhm``, ``pctFlagged`` (per ``arm`` and
-        ``arm:species`` key, and the 15/20 % fallback for any other arm) and
-        ``medDxCenter`` (absolute), in that order, with ``arm`` and
-        ``species`` population columns.
-    """
-    rows = [
-        _entry("medFwhm", config.fwhmWarnThreshold, config.fwhmFailThreshold, "fwhmWarn/FailThreshold"),
-        _entry("pctFlagged", *_FLAG_RATE_FALLBACK, "fallback for an arm with no flagRate*Threshold entry"),
-    ]
-    warn, fail = dict(config.flagRateWarnThreshold), dict(config.flagRateFailThreshold)
-
-    def resolve(source: dict, key: str, fallback: float) -> float:
-        # The task looks each level up on its own: arm:species, then arm, then
-        # the fallback. A key in one dict only takes the other from its arm.
-        return source[key] if key in source else source.get(key.split(":", 1)[0], fallback)
-
-    for key in sorted(set(warn) | set(fail)):
-        arm, _, species = key.partition(":")
-        entry = _entry(
-            "pctFlagged",
-            resolve(warn, key, _FLAG_RATE_FALLBACK[0]),
-            resolve(fail, key, _FLAG_RATE_FALLBACK[1]),
-            f"flagRateWarn/FailThreshold[{key!r}]",
-        )
-        rows.append(entry | {"arm": arm} | ({"species": species} if species else {}))
-    rows.append(
-        _entry(
-            "medDxCenter",
-            config.dxCenterWarnThreshold,
-            config.dxCenterFailThreshold,
-            "dxCenterWarn/FailThreshold",
-        )
+def _empty() -> pd.DataFrame:
+    return pd.DataFrame({column: pd.Series(dtype=object) for column in MEASUREMENT_COLUMNS}).astype(
+        {"visit": "int64", "spectrograph": "int64", "value": "float64", "withM": bool}
     )
 
-    table = pd.DataFrame(rows)
-    for column in ("arm", "species"):
-        if column not in table:
-            table[column] = None
-    table["higherIsWorse"] = [specFor(name).higherIsWorse for name in table["metric"]]
-    table["absolute"] = [specFor(name).absolute for name in table["metric"]]
-    return table.astype({"arm": object, "species": object})
+
+def _rows(frame: pd.DataFrame, check: str, metric: str, part, selector, value, withM=False) -> pd.DataFrame:
+    """Return `measurements` rows for the images of ``frame``."""
+    spec = CHECKS[check]
+    keep = frame["frameType"].isin(spec.frames)
+    if spec.arms:
+        keep &= frame["arm"].isin(spec.arms)
+    frame = frame[keep]
+    return pd.DataFrame(
+        {
+            "visit": frame["visit"].astype("int64").to_numpy(),
+            "arm": frame["arm"].astype(str).to_numpy(),
+            "spectrograph": frame["spectrograph"].astype("int64").to_numpy(),
+            "frameType": frame["frameType"].to_numpy(),
+            "check": check,
+            "metric": metric,
+            "part": pd.Series(part, index=keep.index)[keep].to_numpy()
+            if isinstance(part, pd.Series)
+            else part,
+            "camera": normalKey(spec, frame["arm"], frame["spectrograph"]).to_numpy(),
+            "selector": pd.Series(selector, index=keep.index)[keep].to_numpy()
+            if isinstance(selector, pd.Series)
+            else selector,
+            "value": pd.Series(value, index=keep.index)[keep].astype(float).to_numpy(),
+            "withM": pd.Series(withM, index=keep.index)[keep].astype(bool).to_numpy()
+            if isinstance(withM, pd.Series)
+            else withM,
+        },
+        columns=list(MEASUREMENT_COLUMNS),
+    )
 
 
-def _entry(metric: str, warn: float, fail: float, source: str) -> dict:
-    """Return a `configThresholds` row: a pair of thresholds from ``source``."""
-    provenance = f"imageQualityQa config {source}; origin unrecorded."
-    return {"metric": metric, "warn": float(warn), "fail": float(fail), "provenance": provenance}
+def _iqRows(iq: pd.DataFrame) -> list[pd.DataFrame]:
+    """Return the measurements ``iqQaMetrics`` gives: width, lines per lit fiber, trace centre offset."""
+    iq = iq.reset_index(drop=True)
+    illumination = iq["illumination"] if "illumination" in iq else pd.Series(None, index=iq.index)
+    iq = iq.assign(
+        frameType=[frameType(o, i) for o, i in zip(iq["obsType"], illumination, strict=True)],
+        lamp=iq["seqName"].map(lampOf) if "seqName" in iq else "",
+    )
+    frames = []
+
+    def column(name: str) -> pd.Series:
+        values = iq[name].astype(float) if name in iq else pd.Series(np.nan, index=iq.index)
+        return values.mask(specFor(name).notMeasured(iq))
+
+    perFiber = column("linesPerFiber")
+    # A width resting on a handful of lines is not judged: an arc under the floor of lines per lit fiber.
+    sparse = iq["frameType"].isin([ARC, IIS_ARC]) & (perFiber < MIN_LINES_PER_FIBER)
+    frames.append(_rows(iq, "width", "medFwhm", "", iq["lamp"], column("medFwhm").mask(sparse)))
+    for check in ("linesPerFiberArc", "linesPerFiberQuartz"):
+        frames.append(_rows(iq, check, "linesPerFiber", "", iq["lamp"], perFiber))
+    frames.append(_rows(iq, "traceCentreOffset", "medDxCenter", "", "", column("medDxCenter")))
+    return frames
 
 
-def judge(metrics: pd.DataFrame, thresholds: ThresholdsLike | Sequence[ThresholdsLike]) -> pd.DataFrame:
-    """Judge each metric of each image.
+def _lineRows(lines: pd.DataFrame, iq: pd.DataFrame | None) -> list[pd.DataFrame]:
+    """Return the measurements ``dmLineResidualMetrics`` gives: offsets, scatter, sky-line residuals."""
+    lines = lines.reset_index(drop=True)
+    keys = list(IMAGE_KEYS)
+    kind = lines["obsType"].map(lambda obsType: frameType(obsType))
+    # Lamp frames need their illumination, which only iqQaMetrics records.
+    lamp = kind.isin([ARC, QUARTZ])
+    if iq is not None and len(iq):
+        illumination = iq["illumination"] if "illumination" in iq else pd.Series(None, index=iq.index)
+        known = pd.DataFrame(
+            {
+                "visit": iq["visit"].to_numpy(),
+                "arm": iq["arm"].to_numpy(),
+                "spectrograph": iq["spectrograph"].to_numpy(),
+                "_iqType": [frameType(o, i) for o, i in zip(iq["obsType"], illumination, strict=True)],
+                "_inIq": True,
+            }
+        ).drop_duplicates(keys)
+        merged = lines[keys].merge(known, on=keys, how="left")
+        inIq = merged["_inIq"].fillna(False).astype(bool).to_numpy()
+        kind = kind.where(~(lamp & inIq), merged["_iqType"].where(pd.Series(inIq), None))
+        kind = kind.where(~lamp | inIq, None)
+    else:
+        kind = kind.where(~lamp, None)
+    cameraSet = lines["cameraSet"] if "cameraSet" in lines else pd.Series("", index=lines.index)
+    lines = lines.assign(frameType=kind, withM=cameraSet.fillna("").astype(str).str.contains("m"))
+    lines = lines[lines["frameType"].notna() & np.isfinite(lines["value"].astype(float))]
+
+    description = lines["description"].astype(str)
+    isTrace = description == _TRACE
+    isSky = description.isin(_SKY_SPECIES)
+    calib = (lines["reference"] == "calib") & lines["statusType"].isin(["BOTH", "UNFITTED"])
+    heldBack = (lines["reference"] == "visit") & (lines["statusType"] == "RESERVED")
+    onSky = lines["frameType"].isin([SCIENCE, ALLSKY])
+    metric = lines["metric"]
+
+    frames = []
+    for check, species in (("skyOffset", isSky), ("calibOffset", ~isSky)):
+        x = lines[calib & isTrace & (metric == "medianDeltaX")]
+        frames.append(_rows(x, check, "medianDeltaX", "x", "", x["value"], x["withM"]))
+        y = lines[calib & ~isTrace & species & (metric == "medianDeltaY")]
+        frames.append(
+            _rows(y, check, "medianDeltaY", "y " + y["description"].astype(str), "", y["value"], y["withM"])
+        )
+    for check in ("skyLineResidual", "skyLineResidualBlue"):
+        best = description == lines["arm"].map(SKY_LINE)
+        kms = lines[heldBack & onSky & best & (metric == "medianDeltaYKms")]
+        frames.append(_rows(kms, check, "medianDeltaYKms", kms["description"].astype(str), "", kms["value"]))
+    judgedSpecies = np.where(
+        lines["frameType"] == QUARTZ, isTrace, ~isTrace & ~isSky & ~description.isin(UNJUDGED_SPECIES)
+    )
+    for check, name in (("scatterX", "robustRmsDeltaX"), ("scatterY", "robustRmsDeltaY")):
+        scatter = lines[heldBack & judgedSpecies & (metric == name)]
+        species = scatter["description"].astype(str)
+        frames.append(_rows(scatter, check, name, species, species, scatter["value"]))
+    return frames
+
+
+def _twilightRows(twilight: pd.DataFrame) -> list[pd.DataFrame]:
+    """Return the measurements the twilight metrics give."""
+    twilight = twilight.reset_index(drop=True).assign(frameType=TWILIGHT)
+    frames = []
+    for check in ("twilightLevel", "twilightScatter", "twilightPatch"):
+        (name,) = CHECKS[check].metrics
+        if name in twilight:
+            value = twilight[name].astype(float).mask(specFor(name).notMeasured(twilight))
+            frames.append(_rows(twilight, check, name, "", "", value))
+    return frames
+
+
+def measurements(
+    iq: pd.DataFrame | None = None, lines: pd.DataFrame | None = None, twilight: pd.DataFrame | None = None
+) -> pd.DataFrame:
+    """Return the numbers each check reads: one row per image, check and number.
 
     Parameters
     ----------
-    metrics : `pandas.DataFrame`
-        One row per image (``iqQaMetrics`` rows), with a column per metric
-        and the population columns the thresholds name. ``species`` is added
-        from ``seqName`` when absent (`addSpecies`).
-    thresholds : `pandas.DataFrame`, path, or a sequence of them
-        Threshold tables or files, highest priority first; see the module
-        docstring.
+    iq : `pandas.DataFrame`, optional
+        ``iqQaMetrics`` rows.
+    lines : `pandas.DataFrame`, optional
+        ``dmLineResidualMetrics`` rows (`longLines` of a wide table).
+    twilight : `pandas.DataFrame`, optional
+        Twilight metrics rows.
 
     Returns
     -------
     `pandas.DataFrame`
-        One row per image and metric named by any table, images in the order
-        of ``metrics`` and metrics in the order the tables first name them:
-
-        ``row``
-            Position of the image in ``metrics``.
-        ``visit``, ``arm``, ``spectrograph``
-            When ``metrics`` has them.
-        ``metric``, ``value``
-            The value judged: absolute, for an ``absolute`` entry.
-        ``status``
-            ``PASS``, ``WARN`` or ``FAIL``; empty when there is no verdict,
-            including for a value its `MetricSpec` marks as not measured.
-        ``reason``
-            Why, for ``WARN`` and ``FAIL``.
-        ``layer``, ``population``, ``warn``, ``fail``, ``provenance``
-            The entry used: its table's position in ``thresholds``, its
-            population (``"arm=b species=HgCd"``; ``""`` matches any image),
-            and its thresholds. ``layer`` is -1 when no entry matched.
-
-    Raises
-    ------
-    KeyError
-        If a table names a metric that is not a column of ``metrics``: an
-        unmeasured metric must not pass silently.
-    ValueError
-        If two entries of one table match an image equally specifically.
+        `MEASUREMENT_COLUMNS`: the image and its ``frameType``, the ``check``
+        and the ``metric`` read, ``part`` (which of a check's numbers: ``x``,
+        ``y OH``, a species), ``camera`` and ``selector`` (what a normal value
+        is kept per: the camera or arm, and the lamp or species), ``value`` as
+        measured, and ``withM`` (the visit was read with the m arm). Numbers
+        not measured are left out.
     """
-    tables = loadThresholds(thresholds)
-    metrics = addSpecies(metrics).reset_index(drop=True)
-    numRows = len(metrics)
-    names = list(dict.fromkeys(name for table in tables for name in table["metric"]))
-    missing = [name for name in names if name not in metrics.columns]
-    if missing:
-        raise KeyError(f"Thresholds name metrics that are not columns of the metrics table: {missing}")
+    frames = [_empty()]
+    if iq is not None and len(iq):
+        frames += _iqRows(iq)
+    if lines is not None and len(lines):
+        frames += _lineRows(lines, iq)
+    if twilight is not None and len(twilight):
+        frames += _twilightRows(twilight)
+    result = pd.concat([frame for frame in frames if len(frame)] or [_empty()], ignore_index=True)
+    return result[~np.isnan(result["value"])].reset_index(drop=True)
 
-    frames = []
-    for name in names:
-        chosen = _choose(metrics, tables, name)
-        values = metrics[name].astype(float).to_numpy()
-        notMeasured = specFor(name).notMeasured(metrics)
-        columns: dict[str, list] = {key: [] for key in ("value", "status", "reason", "layer", "population")}
-        columns |= {"warn": [], "fail": [], "provenance": []}
-        for row in range(numRows):
-            layer, entry = chosen[row]
-            value, status, reason = values[row], "", ""
-            if entry is None:
-                columns["layer"].append(-1)
-                columns["population"].append("")
-                columns["warn"].append(np.nan)
-                columns["fail"].append(np.nan)
-                columns["provenance"].append("")
-            else:
-                spec = replace(
-                    specFor(name),
-                    higherIsWorse=bool(entry.get("higherIsWorse", specFor(name).higherIsWorse)),
-                )
-                if bool(entry.get("absolute", spec.absolute)):
-                    value = abs(value)
-                warn, fail = _limit(entry.get("warn")), _limit(entry.get("fail"))
-                if not (np.isnan(value) or notMeasured[row]) and (warn is not None or fail is not None):
-                    status = "PASS"
-                    for level, limit in (("FAIL", fail), ("WARN", warn)):
-                        if limit is not None and spec.crossed(value, limit):
-                            status, reason = level, spec.describe(value, level, limit)
-                            break
-                columns["layer"].append(layer)
-                columns["population"].append(entry["_population"])
-                columns["warn"].append(np.nan if warn is None else warn)
-                columns["fail"].append(np.nan if fail is None else fail)
-                columns["provenance"].append(entry.get("provenance") or "")
-            columns["value"].append(value)
-            columns["status"].append(status)
-            columns["reason"].append(reason)
-        frame = pd.DataFrame({"row": np.arange(numRows), "metric": name} | columns)
-        for key in reversed(_ID_COLUMNS):
-            if key in metrics.columns:
-                frame.insert(1, key, metrics[key].to_numpy())
-        frames.append(frame)
-    if not frames:
-        return pd.DataFrame(columns=["row", "metric", "value", "status", "reason", "layer", "population"])
-    return pd.concat(frames, ignore_index=True).sort_values(["row"], kind="stable", ignore_index=True)
+
+def _inForce(rows: pd.DataFrame, normalValues: pd.DataFrame | None, value: str = "normal") -> pd.DataFrame:
+    """Return, per row, the normal value in force: the latest valid at or before the row's visit.
+
+    Parameters
+    ----------
+    rows : `pandas.DataFrame`
+        With `NORMAL_KEYS` and ``visit``.
+    normalValues : `pandas.DataFrame`
+        With `NORMAL_KEYS`, ``value``, ``count`` and ``validFrom``.
+    value : `str`
+        Name of the column returned.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        Indexed like ``rows``: ``value`` (NaN when there is none) and
+        ``validFrom``.
+    """
+    result = pd.DataFrame({value: np.nan, "validFrom": np.nan}, index=rows.index)
+    if normalValues is None or not len(normalValues) or not len(rows):
+        return result
+    keys = list(NORMAL_KEYS)
+    table = normalValues[normalValues["count"] >= MIN_NORMAL_FRAMES]
+    table = table.assign(
+        validFrom=table["validFrom"].astype("int64"),
+        **{key: table[key].fillna("").astype(str) for key in keys},
+    ).sort_values("validFrom", kind="stable")
+    left = rows.assign(
+        _row=np.arange(len(rows)),
+        visit=rows["visit"].astype("int64"),
+        **{key: rows[key].fillna("").astype(str) for key in keys},
+    ).sort_values("visit", kind="stable")
+    merged = pd.merge_asof(
+        left[["_row", "visit", *keys]],
+        table[[*keys, "validFrom", "value"]],
+        left_on="visit",
+        right_on="validFrom",
+        by=keys,
+        direction="backward",
+    ).sort_values("_row")
+    result[value] = merged["value"].to_numpy()
+    result["validFrom"] = merged["validFrom"].to_numpy()
+    return result
+
+
+def judge(measured: pd.DataFrame, normalValues: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Give each measurement a verdict.
+
+    Parameters
+    ----------
+    measured : `pandas.DataFrame`
+        `measurements`.
+    normalValues : `pandas.DataFrame`, optional
+        The normal values that may judge these images
+        (`pfs.drp.qa.metrics.normalValues.NORMAL_COLUMNS`): those of the
+        images' collection. Without them a relative check gives no verdict.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``measured`` with:
+
+        ``value``
+            As judged: less the m-arm offset where one applies.
+        ``mArmOffset``
+            The offset subtracted, NaN where none was.
+        ``normal``
+            The normal value in force, for a relative check.
+        ``excess``
+            What is compared with the limits: the absolute value for an
+            offset, the per cent from ``normal`` in the bad direction for a
+            relative check, else the value.
+        ``warn``, ``fail``
+            The check's limits.
+        ``status``
+            ``PASS``, ``WARN`` or ``FAIL``; empty when not judged.
+        ``reason``
+            Why, for ``WARN`` and ``FAIL``; why not, when not judged.
+    """
+    judged = measured.reset_index(drop=True).copy()
+    numRows = len(judged)
+    judged["mArmOffset"] = np.nan
+    for name, arm in M_ARM_OFFSETS.items():
+        metric = "medianDeltaX" if name.endswith("X") else "medianDeltaY"
+        use = (
+            (judged["check"] == "skyOffset")
+            & (judged["metric"] == metric)
+            & (judged["arm"] == arm)
+            & judged["withM"]
+        )
+        if not use.any():
+            continue
+        keyed = judged.loc[use].assign(
+            metric=name,
+            camera=judged.loc[use, "arm"] + judged.loc[use, "spectrograph"].astype(str),
+            frameType="",
+            selector="",
+        )
+        offset = _inForce(keyed, normalValues)["normal"]
+        judged.loc[use, "mArmOffset"] = offset.to_numpy()
+        judged.loc[use, "value"] = judged.loc[use, "value"] - offset.fillna(0.0).to_numpy()
+
+    # In y an offset check judges one species per image: the one furthest off.
+    isY = judged["check"].isin(["skyOffset", "calibOffset"]) & (judged["metric"] == "medianDeltaY")
+    if isY.any():
+        furthest = judged.loc[isY, "value"].abs().groupby([judged[key] for key in IMAGE_KEYS]).idxmax()
+        judged = judged[~isY | judged.index.isin(furthest)].reset_index(drop=True)
+        numRows = len(judged)
+
+    checks = judged["check"].map(CHECKS)
+    relative = np.array([check.kind != FIXED for check in checks], dtype=bool)
+    higherIsWorse = np.array([specFor(name).higherIsWorse for name in judged["metric"]], dtype=bool)
+    absolute = np.array([specFor(name).absolute for name in judged["metric"]], dtype=bool)
+    judged["normal"] = _inForce(judged, normalValues)["normal"].where(relative).to_numpy() if numRows else []
+    value = judged["value"].to_numpy(dtype=float)
+    normal = judged["normal"].to_numpy(dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        percent = np.where(higherIsWorse, 1.0, -1.0) * (value / normal - 1.0) * 100.0
+    excess = np.where(relative, percent, np.where(absolute, np.abs(value), value))
+    judged["excess"] = excess
+    judged["warn"] = [check.warn for check in checks]
+    judged["fail"] = [check.fail for check in checks]
+
+    # Not judged: no normal value, or a line count whose normal value is itself too small.
+    noNormal = relative & ~np.isfinite(normal)
+    sparse = relative & (judged["metric"] == "linesPerFiber").to_numpy() & (normal < MIN_LINES_PER_FIBER)
+    unjudged = noNormal | sparse | np.isnan(excess)
+    status = np.full(numRows, "PASS", dtype=object)
+    for level in ("warn", "fail"):
+        limit = judged[level].to_numpy(dtype=float)
+        # A value at a limit has crossed it, whatever the last bit of a percentage says.
+        with np.errstate(invalid="ignore"):
+            status[(excess >= limit) | np.isclose(excess, limit, rtol=1e-9, atol=0.0)] = level.upper()
+    status[unjudged] = ""
+    judged["status"] = status
+
+    reason = np.full(numRows, "", dtype=object)
+    reason[noNormal] = "no normal value"
+    reason[sparse] = f"normal value under {MIN_LINES_PER_FIBER:g} lines per lit fiber"
+    for row in np.flatnonzero(np.isin(status, ["WARN", "FAIL"])):
+        reason[row] = _reason(judged.iloc[row])
+    judged["reason"] = reason
+    return judged
+
+
+def _reason(row: pd.Series) -> str:
+    """Return why a measurement warns or fails."""
+    check, spec = CHECKS[row["check"]], specFor(row["metric"])
+    limit = row["fail"] if row["status"] == "FAIL" else row["warn"]
+    part = str(row["part"])
+    # "x offset", "y offset (OH)", "OH residual", "NeI x scatter", "width".
+    if part.startswith("y "):
+        name = f"{spec.label} ({part[2:]})"
+    elif part in ("", "x"):
+        name = spec.label or spec.name
+    elif row["metric"] == "medianDeltaYKms":
+        name = f"{'[O I]' if part == 'OI' else part} {spec.label}"
+    else:
+        name = f"{part} {spec.label}"
+    if check.kind == FIXED:
+        text = f"{name} {spec.show(row['value'])}, limit {limit:g}{spec.unitSuffix}"
+        if np.isfinite(row["mArmOffset"]):
+            text += f" (less the m-arm offset {row['mArmOffset']:+.2f}{spec.unitSuffix})"
+        return text
+    sign = "+" if spec.higherIsWorse else "-"
+    change = row["excess"] if spec.higherIsWorse else -row["excess"]
+    return (
+        f"{name} {spec.show(row['value'])} is {change:+.1f} % from normal {spec.show(row['normal'])}, "
+        f"limit {sign}{limit:g} %"
+    )
 
 
 def gate(
-    metrics: pd.DataFrame,
-    thresholds: ThresholdsLike | Sequence[ThresholdsLike],
-    default: str = "PASS",
-    pipeline: Mapping[str, str] | Sequence[Mapping[str, str] | None] | None = None,
+    iq: pd.DataFrame | None = None,
+    lines: pd.DataFrame | None = None,
+    twilight: pd.DataFrame | None = None,
+    normalValues: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Give each image a verdict, and the metric that decided it.
+    """Give each image a verdict, the check that decided it, and why.
 
     Parameters
     ----------
-    metrics : `pandas.DataFrame`
-        One row per image; see `judge`.
-    thresholds : `pandas.DataFrame`, path, or a sequence of them
-        Threshold tables or files, highest priority first.
-    default : `str`, optional
-        The verdict for an image with no metric judged.
-    pipeline : mapping [`str`, `str`], or a sequence of them, optional
-        The pipeline the thresholds were derived with, as the thresholds
-        file's ``pipelineVersions`` (empty when it records none), or one per
-        table of ``thresholds`` (`None` for a table with no origin, such as
-        the config's). When given, `PROVISIONAL_COLUMNS` are added from
-        `pipelineMismatch` or `layerPipelineMismatch`.
+    iq, lines, twilight : `pandas.DataFrame`, optional
+        The numbers; see `measurements`.
+    normalValues : `pandas.DataFrame`, optional
+        The normal values of the images' collection; see `judge`.
 
     Returns
     -------
     `pandas.DataFrame`
-        Indexed like ``metrics``, with `VERDICT_COLUMNS`:
+        One row per image of any table, sorted, with `VERDICT_COLUMNS`:
 
+        ``frameType``
+            The image's frame type, `None` when it has none.
         ``qaStatus``
-            The worst verdict of the image's metrics, or ``default``.
+            The worst verdict of the image's checks; ``UNKNOWN`` when none
+            was judged.
         ``qaDecidedBy``
-            The first metric with that verdict when it is ``WARN`` or
-            ``FAIL``; empty otherwise.
+            The check with that verdict when it is ``WARN`` or ``FAIL``.
         ``qaReason``
-            The reasons of every ``WARN`` and ``FAIL``, joined by ``"; "``.
-        ``qaProvisional``, ``qaPipeline``
-            With ``pipeline``: see `pipelineMismatch`.
+            The reasons of every ``WARN`` and ``FAIL``, joined by ``"; "``;
+            for ``UNKNOWN``, why nothing was judged.
     """
-    judged = judge(metrics, thresholds)
-    status, decidedBy, reason = [default] * len(metrics), [""] * len(metrics), [""] * len(metrics)
-    for row, group in judged.groupby("row", sort=True):
-        verdicts = group[group["status"] != ""]
-        if verdicts.empty:
+    keys = list(IMAGE_KEYS)
+    images = []
+    for table, kind in ((iq, None), (twilight, TWILIGHT), (lines, None)):
+        if table is None or not len(table):
             continue
-        rank = verdicts["status"].map(STATUS_ORDER.index)
-        worst = STATUS_ORDER[int(rank.max())]
-        status[row] = worst
-        if worst != "PASS":
-            decidedBy[row] = verdicts.loc[rank.idxmax(), "metric"]
-            reason[row] = "; ".join(verdicts.loc[verdicts["reason"] != "", "reason"])
-    verdicts = pd.DataFrame(
-        {"qaStatus": status, "qaDecidedBy": decidedBy, "qaReason": reason}, index=metrics.index
-    )
-    if pipeline is not None:
-        # By position: an index join would multiply rows that share a label.
-        if isinstance(pipeline, Mapping):
-            mismatch = pipelineMismatch(metrics, pipeline)
+        image = table[keys].copy()
+        if kind is not None:
+            image["frameType"] = kind
         else:
-            mismatch = layerPipelineMismatch(metrics, judged, pipeline)
-        for column in PROVISIONAL_COLUMNS:
-            verdicts[column] = mismatch[column].to_numpy()
-    return verdicts
+            illumination = (
+                table["illumination"] if "illumination" in table else pd.Series(None, index=table.index)
+            )
+            image["frameType"] = [
+                frameType(o, i) for o, i in zip(table["obsType"], illumination, strict=True)
+            ]
+        images.append(image)
+    if not images:
+        return pd.DataFrame(columns=list(VERDICT_COLUMNS))
+    # The first table naming an image gives its type: iqQaMetrics knows the illumination, the line residuals do not.
+    images = (
+        pd.concat(images, ignore_index=True)
+        .drop_duplicates(keys)
+        .astype({"visit": "int64", "spectrograph": "int64"})
+    )
 
-
-def layerPipelineMismatch(
-    metrics: pd.DataFrame, judged: pd.DataFrame, pipelines: Sequence[Mapping[str, str] | None]
-) -> pd.DataFrame:
-    """Say which images were reduced with another pipeline than the thresholds that judged them.
-
-    Thresholds files derived from different collections record different
-    pipelines (the Run25 file obs_pfs w.2026.40, the IIS file w.2026.43),
-    and each image is judged by some of the layers: it is
-    provisional when its reduction differs from the pipeline of any layer that
-    gave it a verdict. An image no layer judged is compared with the first
-    pipeline recorded, as `pipelineMismatch` would.
-
-    Parameters
-    ----------
-    metrics : `pandas.DataFrame`
-        One row per image, as for `pipelineMismatch`.
-    judged : `pandas.DataFrame`
-        `judge`'s table for ``metrics``: ``row`` is the image's position,
-        ``layer`` the table that judged it and ``status`` its verdict.
-    pipelines : sequence of mapping [`str`, `str`] or `None`
-        One per thresholds layer: its ``pipelineVersions``, or `None` for a
-        layer with no origin to check (the config's fields).
-
-    Returns
-    -------
-    `pandas.DataFrame`
-        Indexed like ``metrics``, with `PROVISIONAL_COLUMNS`; the reasons of
-        every differing layer, joined by ``"; "``.
-    """
-    byLayer = {
-        layer: pipelineMismatch(metrics, pipeline)
-        for layer, pipeline in enumerate(pipelines)
-        if pipeline is not None
-    }
-    first = min(byLayer) if byLayer else None
+    judged = judge(measurements(iq, lines, twilight), normalValues)
     verdicts = judged[judged["status"] != ""]
-    judgedLayers = verdicts.groupby("row")["layer"].agg(lambda layers: sorted(set(layers)))
-    reasons = []
-    for position in range(len(metrics)):
-        layers = [layer for layer in judgedLayers.get(position, []) if layer in byLayer]
-        if not layers and first is not None:
-            layers = [first]
-        found = [byLayer[layer]["qaPipeline"].iloc[position] for layer in layers]
-        reasons.append("; ".join(dict.fromkeys(reason for reason in found if reason)))
-    reason = pd.Series(reasons, index=metrics.index, dtype=object)
-    return pd.DataFrame({"qaProvisional": reason != "", "qaPipeline": reason}, index=metrics.index)
+    rank = verdicts["status"].map(STATUS_ORDER.index)
+    verdicts = verdicts.assign(_rank=rank)
+    status = verdicts.groupby(keys, sort=False)["_rank"].max().map(lambda index: STATUS_ORDER[int(index)])
+    crossed = verdicts[verdicts["_rank"] >= STATUS_ORDER.index("WARN")]
+    decider = (
+        crossed.sort_values("_rank", ascending=False, kind="stable")
+        .groupby(keys, sort=False)["check"]
+        .first()
+    )
+    reasons = crossed.groupby(keys, sort=False)["reason"].agg("; ".join)
+    whyNot = (
+        judged[judged["status"] == ""]
+        .groupby(keys, sort=False)["reason"]
+        .agg(lambda values: "; ".join(dict.fromkeys(value for value in values if value)))
+    )
 
-
-def pipelineMismatch(metrics: pd.DataFrame, pipeline: Mapping[str, str]) -> pd.DataFrame:
-    """Say which images were reduced with another pipeline than the thresholds.
-
-    A verdict on such an image is provisional: Run25's n-arm trace widths
-    differ by up to 53 % between two reductions of the same exposures
-    (PIPE2D-1938). So is one where either pipeline is unknown.
-
-    Parameters
-    ----------
-    metrics : `pandas.DataFrame`
-        One row per image, with `pfs.drp.qa.utils.provenance.PIPELINE_COLUMNS`
-        where known (`pfs.drp.qa.metrics.readers.readPipelineVersions`).
-    pipeline : mapping [`str`, `str`]
-        The thresholds' pipeline, version per product; empty when the
-        thresholds record none.
-
-    Returns
-    -------
-    `pandas.DataFrame`
-        Indexed like ``metrics``, with `PROVISIONAL_COLUMNS`:
-
-        ``qaProvisional``
-            Whether a product's version differs, or is unknown (null or
-            ``unknown``) on either side.
-        ``qaPipeline``
-            Why, e.g. ``drp_stella w.2026.41-6-ge56938d2 (thresholds
-            w.2026.38)``; ``the thresholds record no pipeline``; ``reduction's
-            pipeline unknown``. Empty when not provisional.
-    """
-    pipeline = {product: knownVersion(pipeline.get(product)) for product in PIPELINE_PRODUCTS}
-    if not any(pipeline.values()):
-        reasons = ["the thresholds record no pipeline"] * len(metrics)
-    else:
-        images = pd.DataFrame(
-            {
-                product: metrics[column].to_numpy(dtype=object) if column in metrics else None
-                for product, column in PIPELINE_COLUMNS.items()
-            },
-            index=range(len(metrics)),
-        )
-        reasons = []
-        for row in images.itertuples(index=False):
-            known = (knownVersion(value) for value in row)
-            versions = {
-                product: version
-                for product, version in zip(PIPELINE_PRODUCTS, known, strict=True)
-                if version is not None
-            }
-            if not versions:
-                reasons.append("reduction's pipeline unknown")
-                continue
-            differs = []
-            for product in PIPELINE_PRODUCTS:
-                mine, theirs = versions.get(product), pipeline.get(product)
-                if mine is None or theirs is None or str(mine) != str(theirs):
-                    differs.append(f"{product} {mine or 'unknown'} (thresholds {theirs or 'unknown'})")
-            reasons.append(", ".join(differs))
-    reason = pd.Series(reasons, index=metrics.index, dtype=object)
-    return pd.DataFrame({"qaProvisional": reason != "", "qaPipeline": reason}, index=metrics.index)
-
-
-def _limit(value: Any) -> float | None:
-    """Return a threshold as a float, or `None` when it is null."""
-    return None if _isNull(value) else float(value)
-
-
-def _choose(metrics: pd.DataFrame, tables: list[pd.DataFrame], name: str) -> list[tuple[int, dict | None]]:
-    """Choose the entry for metric ``name`` for each image.
-
-    Parameters
-    ----------
-    metrics : `pandas.DataFrame`
-        The images, with a default index.
-    tables : `list` [`pandas.DataFrame`]
-        Threshold tables, highest priority first.
-    name : `str`
-        The metric.
-
-    Returns
-    -------
-    `list` [`tuple` [`int`, `dict` or `None`]]
-        Per image, the table's position and the entry (with its population as
-        ``_population``), or ``(-1, None)`` when nothing matched.
-    """
-    numRows = len(metrics)
-    chosen: list[tuple[int, dict | None]] = [(-1, None)] * numRows
-    pending = np.ones(numRows, dtype=bool)
-    for layer, table in enumerate(tables):
-        entries = table[table["metric"] == name].reset_index(drop=True)
-        if entries.empty or not pending.any():
-            continue
-        populationColumns = [column for column in entries.columns if column not in _FIELDS]
-        match = np.ones((numRows, len(entries)), dtype=bool)
-        specificity = np.zeros(len(entries), dtype=int)
-        labels = [[] for _ in range(len(entries))]
-        for column in populationColumns:
-            wanted = entries[column].to_numpy(dtype=object)
-            named = np.array([not _isNull(value) for value in wanted])
-            specificity += named
-            for index in np.flatnonzero(named):
-                labels[index].append(f"{column}={wanted[index]}")
-                if column in metrics.columns:
-                    match[:, index] &= metrics[column].to_numpy(dtype=object) == wanted[index]
-                else:
-                    match[:, index] = False
-        for column, default in DEFAULT_POPULATION.items():
-            # An entry that doesn't name the column is for the default population alone.
-            if column not in metrics.columns:
-                continue
-            values = metrics[column].to_numpy(dtype=object)
-            isDefault = np.array([_isNull(value) or value == default for value in values], dtype=bool)
-            if column in entries.columns:
-                unnamed = np.array([_isNull(value) for value in entries[column].to_numpy(dtype=object)])
-            else:
-                unnamed = np.ones(len(entries), dtype=bool)
-            match[:, unnamed] &= isDefault[:, None]
-        score = np.where(match, specificity, -1)
-        best = score.max(axis=1)
-        ties = ((score == best[:, None]).sum(axis=1) > 1) & (best >= 0) & pending
-        if ties.any():
-            row = int(np.flatnonzero(ties)[0])
-            tied = [" ".join(labels[i]) or "(any)" for i in np.flatnonzero(score[row] == best[row])]
-            raise ValueError(f"Thresholds table {layer} has equally specific entries for {name}: {tied}")
-        best_index = score.argmax(axis=1)
-        for row in np.flatnonzero(pending & (best >= 0)):
-            entry = entries.iloc[best_index[row]].to_dict()
-            entry["_population"] = " ".join(labels[best_index[row]])
-            chosen[row] = (layer, entry)
-        pending &= best < 0
-    return chosen
-
-
-def _isNull(value: Any) -> bool:
-    """Return whether a population value is null, meaning "any"."""
-    return pd.api.types.is_scalar(value) and bool(pd.isna(value))
+    result = images.join(status.rename("qaStatus"), on=keys).join(decider.rename("qaDecidedBy"), on=keys)
+    result = result.join(reasons.rename("qaReason"), on=keys).join(whyNot.rename("_whyNot"), on=keys)
+    unknown = result["qaStatus"].isna()
+    result["qaStatus"] = result["qaStatus"].fillna("UNKNOWN")
+    result["qaDecidedBy"] = result["qaDecidedBy"].fillna("")
+    noType = result["frameType"].isna()
+    why = (
+        result["_whyNot"]
+        .fillna("")
+        .where(result["_whyNot"].fillna("") != "", "nothing to judge was measured")
+    )
+    why = why.where(~noType, "no frame type")
+    result["qaReason"] = result["qaReason"].fillna("").where(~unknown, why)
+    return result[list(VERDICT_COLUMNS)].sort_values(keys, kind="stable", ignore_index=True)

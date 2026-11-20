@@ -369,3 +369,25 @@ def testDatasetDetectorsListsCamerasPerVisit():
     assert butler.queries[0]["bind"]["visits"] == (150840, 150841)
     # Negative control: a visit outside the list is not reported.
     assert 149000 not in cameras
+
+
+def testDatasetDetectorsSearchesTheCollectionsGiven():
+    """With ``collections`` the query names them; without, it is left to the Butler's own."""
+    butler = StubButler({(150840, "b", 1): None, (150840, "r", 1): None})
+    cameras = datasetDetectors(butler, "twilightFiberFlux", [150840], collections=["u/someone/qa"])
+    assert cameras == {150840: {"b1", "r1"}}
+    assert butler.queries[-1]["collections"] == ["u/someone/qa"]
+    assert butler.queries[-1]["find_first"] is True
+
+    class OwnCollectionsButler(StubButler):
+        """Refuses a ``collections`` argument, as a query that must use the Butler's defaults would show."""
+
+        def query_datasets(self, datasetType, where="", bind=None, **kwargs):
+            assert "collections" not in kwargs
+            return super().query_datasets(datasetType, where=where, bind=bind, **kwargs)
+
+    # Negative control: without the argument no collection is passed, not even None.
+    own = OwnCollectionsButler(butler.tables)
+    assert datasetDetectors(own, "twilightFiberFlux", [150840]) == cameras
+    with pytest.raises(AssertionError):
+        datasetDetectors(own, "twilightFiberFlux", [150840], collections="u/someone/qa")

@@ -79,5 +79,5 @@ def testNothingForbiddenIsLoaded():
     env = {**os.environ, "PYTHONPATH": os.pathsep.join(path for path in sys.path if path)}
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True, env=env)
     loaded = json.loads(result.stdout)
-    assert "pfs.drp.qa.plotting.iqQa" in loaded
+    assert "pfs.drp.qa.plotting.palettes" in loaded
     assert [name for name in loaded if isForbidden(name)] == []
