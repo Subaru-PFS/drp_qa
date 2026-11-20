@@ -1,4 +1,4 @@
-"""What each visit is, and how the gate treats it.
+"""What each visit is, and whether comparison mode measures it.
 
 Every visit is a calibration or science, by what the exposure is rather than when it was taken:
 every sequence type but ``scienceObject`` and ``scienceObject_windowed`` is a calibration, and
@@ -6,12 +6,12 @@ those two are science when their design was made for a science proposal. Twiligh
 dithers and the fields of telescope focus sweeps are on engineering designs, so they are
 calibrations.
 
-``imageQualityQa`` measures and judges every exposure it can, but only the sequence types in
-`VALIDATED_TYPES` are *gated*: their thresholds were derived from, and checked against, visits of
-those types. The others (science frames, judged as arcs on their sky lines until PIPE2D-1984;
-engineering arcs, flats, fiber profiles, focus sweeps, windowed readouts, any new type) are *unvalidated*: judged the same way so their results can be seen, but often
-off-nominal on purpose, so a FAIL there may be what the test expected. So are the engineering
-sequences taken as those types (`ENGINEERING_SEQUENCES`, by sequence name): a bootstrap, an IIS
+The QA tasks measure every exposure they can. The sequence types in `VALIDATED_TYPES`, the arcs
+and traces of the calibration recipe, are *gated*: their passes are planned and run first. The
+others (science frames, engineering arcs, flats, fiber profiles, focus sweeps, windowed readouts,
+any new type) are *unvalidated*: measured the same way so their results can be seen, but often
+off-nominal on purpose, so a result out of the ordinary there may be what the test expected. So are
+the engineering sequences taken as those types (`ENGINEERING_SEQUENCES`, by sequence name): a bootstrap, an IIS
 ``ImageQuality`` frame or a health check lights a handful of fibers, and its trace centroids scatter
 twice a trace set's; a ``LineCheck`` or ``DetectorMap test`` arc is taken off the calibration recipe,
 and its lamp lines scatter like a fault's. `NOT_MEASURED_TYPES` have
@@ -23,7 +23,7 @@ traces for the calibrations) and, from Run28, as *daily* single exposures of one
 for drift. ``cadence`` tells them apart; they are reported apart. A set can include one-visit
 sequences, so a one-visit sequence in the same sequence group (``group_id``) as a longer one of its
 type belongs to the set; one whose name recurs on `DAILY_MIN_NIGHTS` nights is daily; any other is a one-off
-``single`` (a positioner scan, a bootstrap exposure), judged like a set.
+``single`` (a positioner scan, a bootstrap exposure), measured like a set.
 
 Sky visits also get sub-labels from the telescope status: `focusSweep` (a telescope focus sweep,
 which changes how much light enters the fibers but not the spectrograph's line widths) and
@@ -56,9 +56,7 @@ __all__ = [
     "focusSweeps",
 ]
 
-#: Sequence types the thresholds are validated for: the gate.
-#: Not ``scienceObject`` until PIPE2D-1984: science frames are judged with the arc thresholds (their lines
-#: are sky lines, so imageQualityQa calls them arcs), a population those thresholds were not derived from.
+#: Sequence types of the calibration recipe, whose passes come first: the *gated* visits.
 VALIDATED_TYPES = ("scienceArc", "scienceTrace")
 
 #: Starts of sequence group names (case-insensitive) whose arcs and traces are engineering exposures.
@@ -164,8 +162,8 @@ def engineeringGroups(groups: pd.Series) -> pd.Series:
     """Return whether each sequence group is an engineering group (`ENGINEERING_GROUPS`).
 
     An arc or trace taken inside a fiberProfiles group is exposed with most cobras hidden and the
-    rest dithered across pixels: a scienceArc by type, but not the slit the thresholds were derived
-    on (Run31's 153004 had 65 Neon lines on a b detector against 9,900 on a nightly arc).
+    rest dithered across pixels: a scienceArc by type, but not the slit a calibration arc lights
+    (Run31's 153004 had 65 Neon lines on a b detector against 9,900 on a nightly arc).
     """
     lowered = groups.fillna("").astype(str).str.strip().str.lower()
     return lowered.str.startswith(ENGINEERING_GROUPS)
@@ -226,7 +224,7 @@ def classifyVisits(
     designs: pd.Series | None = None,
     telStatus: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Say what each visit is and whether the gate judges it.
+    """Say what each visit is and whether comparison mode measures it.
 
     Parameters
     ----------
@@ -258,12 +256,14 @@ def classifyVisits(
         ``focusSweep``, ``dithered``
             Sky sub-labels (`bool`).
         ``judged``
-            Whether ``imageQualityQa`` measures and judges the visit (`bool`).
+            Whether the QA tasks measure the visit (`bool`). The name is
+            historical: the verdict is given later, from the stored numbers
+            (`pfs.drp.qa.metrics.gate`).
         ``validated``
-            Whether its verdict is the gate's: a judged visit of a
-            `VALIDATED_TYPES` type (`bool`).
+            Whether it is gated: a measured visit of a `VALIDATED_TYPES`
+            type, of no engineering sequence or group (`bool`).
         ``reason``
-            ``gated``, ``unvalidated``, or why it isn't judged: ``test
+            ``gated``, ``unvalidated``, or why it isn't measured: ``test
             exposure``, ``outside every period``, ``no sequence`` or ``no
             method for <type>``.
     """
@@ -277,7 +277,8 @@ def classifyVisits(
     if designs is None:
         designKind = pd.Series("science", index=visits.index)
     else:
-        designKind = visits["pfs_design_id"].map(designs).fillna("engineering")
+        # As objects: no design matched leaves the design IDs' integer type, which takes no name.
+        designKind = visits["pfs_design_id"].map(designs).astype(object).fillna("engineering")
     visits["category"] = np.where(isSky & (designKind == "science").to_numpy(), "science", "calibration")
 
     if telStatus is not None and not telStatus.empty:

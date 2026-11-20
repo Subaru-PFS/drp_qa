@@ -1,119 +1,63 @@
-"""Read the QA tables qadb holds back in the Butler tables' shapes.
+"""Read the QA numbers, verdicts and normal values qadb holds, in the shapes the gate reads.
 
 The inverse of `pfs.drp.qa.qadb.tables`: what `pfs.drp.qa.qadb.loader` wrote for a
-collection (by qaActor after each visit, or ``bin.src/loadQadb.py`` after a run)
-comes back as ``iqQaMetrics``, ``dmLineResidualSummary`` and
-``dmLineResidualMetrics``, for readers without a Butler (the QA dashboard,
-``pfs_qa_dashboard``).
+collection comes back as ``iqQaMetrics``, ``dmLineResidualSummary``,
+``dmLineResidualMetrics`` and the twilight metrics, for readers without a Butler:
+the commands that judge stored numbers again and make normal values
+(`pfs.drp.qa.qadb.judge`), and the QA dashboard (``pfs_qa_dashboard``).
 
-Each image comes back with the thresholds it was judged with. A task judges each
-metric by the first of its layers with an entry for the image's population: its
-thresholds files, then its config's threshold fields. ``qa_processing_thresholds``
-cites every layer in that order for each processing (a Butler RUN, which has one
-config) and task; each image gets its own processing's (``thresholdsIds``, the
-ids joined by commas; `thresholdsLayers` splits them). The cited layers' entries (``thresholds``) and
-headers (``thresholdsFiles``, a config layer named by
-`pfs.drp.qa.metrics.gate.configLayerName`) are read back too, so a reader gives
-`pfs.drp.qa.metrics.gate.judge` the layers the image was judged by
-(`layeredThresholds`), whatever this drp_qa ships, rather than ones rebuilt from
-today's files and defaults.
-
-Read-only: one query per table, with bound parameters. An image judged in more
+Read-only: one query per table, with bound parameters. An image measured in more
 than one Butler RUN of the collection is read, table by table, as the newest
 RUN that wrote that table: a task rerun alone into a newer RUN shows its new
-rows beside the other task's older ones, as the gate (the worst of the tasks'
-latest verdicts) already did. ``since`` is the image's latest gate row.
+rows beside the other task's older ones. ``since`` is the image's latest gate row.
 Visit times are qadb's ``pfs_visit.issued_at`` (HST); qadb holds no IIC sequence.
 """
 
-import re
 from typing import Any
 
 import pandas as pd
 
-from pfs.drp.qa.metrics.gate import THRESHOLD_FIELDS
 from pfs.drp.qa.qadb.tables import (
+    IMAGE_KEYS,
     IMAGE_QUALITY,
     LINE_RESIDUAL,
     LINE_RESIDUAL_METRIC,
+    NORMAL_VALUE,
     QA_GATE,
-    QA_THRESHOLD_ENTRY,
-    QA_THRESHOLDS,
+    TWILIGHT_QA,
     TableSpec,
-    snakeCase,
+    normalValueFrame,
 )
 
 __all__ = [
     "FIRST_VISIT",
     "GATE_COLUMNS",
     "LAST_VISIT",
-    "THRESHOLDS_COLUMNS",
-    "THRESHOLDS_FILES_COLUMNS",
-    "THRESHOLDS_ID",
-    "THRESHOLDS_IDS",
+    "PROCESSING_ID",
     "collectionLoaded",
-    "layeredThresholds",
     "readGate",
+    "readNormalValues",
     "readQadb",
-    "thresholdsLayers",
-    "thresholdsTables",
+    "readTwilight",
+    "visitsJudged",
 ]
 
 #: The widest visit range: every visit.
 FIRST_VISIT, LAST_VISIT = 0, 2**31 - 1
 
-#: The id column of ``thresholds`` and ``thresholdsFiles``.
-THRESHOLDS_ID = "thresholdsId"
+#: The column of `readQadb`'s tables holding each row's processing (``data_processing_pipe2d``).
+PROCESSING_ID = "processingId"
 
-#: The column of every table read back naming every layer its image's task judged with: the ids in the order
-#: judged, joined by commas (`thresholdsLayers`); empty when none.
-THRESHOLDS_IDS = "thresholdsIds"
-
-#: The tables read back, by Butler dataset type.
-_SPECS = {spec.source: spec for spec in (IMAGE_QUALITY, LINE_RESIDUAL, LINE_RESIDUAL_METRIC)}
-
-#: The task whose layers ``qa_processing_thresholds`` holds for each table read back.
-_GATE_TASK = {
-    IMAGE_QUALITY.source: "imageQualityQa",
-    LINE_RESIDUAL.source: "dmLineResiduals",
-    LINE_RESIDUAL_METRIC.source: "dmLineResiduals",
-}
+_SPECS = {spec.source: spec for spec in (IMAGE_QUALITY, LINE_RESIDUAL, LINE_RESIDUAL_METRIC, TWILIGHT_QA)}
 
 
 def _camelCase(name: str) -> str:
-    """Return a snake_case column as the camelCase the Butler tables and thresholds files use."""
+    """Return a snake_case column as the camelCase the Butler tables use."""
     first, *rest = name.split("_")
     return first + "".join(part.capitalize() for part in rest)
 
 
-#: Population columns ``qa_threshold_entry`` stores in their own columns, camelCase, in its order.
-_STORED_POPULATION = tuple(
-    _camelCase(column)
-    for column in QA_THRESHOLD_ENTRY
-    if column not in ("thresholds_id", "metric", "population") and _camelCase(column) not in THRESHOLD_FIELDS
-)
-
-#: The threshold fields, camelCase, in ``qa_threshold_entry``'s order.
-_FIELDS = tuple(
-    _camelCase(column)
-    for column in QA_THRESHOLD_ENTRY
-    if column != "metric" and _camelCase(column) in THRESHOLD_FIELDS
-)
-
-#: Columns of ``thresholds``: the id, the metric, the stored population key, the population columns it
-#: stores (the keys it only names in the key, such as ``species``, follow), then the threshold fields.
-THRESHOLDS_COLUMNS = (THRESHOLDS_ID, "metric", "population", *_STORED_POPULATION, *_FIELDS)
-
-#: Columns of ``thresholdsFiles``: ``qa_thresholds`` in camelCase (``derivedOn``, ``referenceRuns``, ...).
-THRESHOLDS_FILES_COLUMNS = tuple(
-    THRESHOLDS_ID if c == "thresholds_id" else _camelCase(c) for c in QA_THRESHOLDS
-)
-
-_BOOL_FIELDS = ("higherIsWorse", "absolute", "reliable", "failBounded", "degenerate")
-_INT_FIELDS = ("nGood", "nGoodVisits")
-_FLOAT_FIELDS = ("warn", "fail")
-
-# Each image's latest judgement in the collection: the highest processing (Butler RUN) that judged it.
+# Each image's latest gate row in the collection: its key and when it was decided.
 _LATEST = """
 WITH latest AS (
     SELECT g.processing_id, g.pfs_visit_id, g.camera_name, g.decided_at,
@@ -140,28 +84,26 @@ SELECT * FROM latest WHERE n = 1 ORDER BY pfs_visit_id, camera_name
 
 _COLLECTION_SQL = "SELECT COUNT(*) FROM data_processing_pipe2d WHERE collection_name = :collection"
 
-#: Columns of `readGate`: the image, then ``qa_gate`` in camelCase, then the Butler RUN that judged it.
+_VISITS_JUDGED_SQL = """
+SELECT DISTINCT g.pfs_visit_id FROM qa_gate g JOIN data_processing_pipe2d p ON p.processing_id = g.processing_id
+WHERE p.collection_name = :collection AND g.pfs_visit_id BETWEEN :first AND :last ORDER BY g.pfs_visit_id
+"""
+
+#: Columns of `readGate`: the image, then ``qa_gate`` in camelCase, then the Butler RUN it was measured in.
 GATE_COLUMNS = (
-    "visit",
-    "arm",
-    "spectrograph",
+    *IMAGE_KEYS,
     *(_camelCase(c) for c in QA_GATE if c not in ("processing_id", "pfs_visit_id", "camera_name")),
     "run",
+    PROCESSING_ID,
 )
 
 _VISITS_SQL = """
 SELECT pfs_visit_id, issued_at AS time_exp_start FROM pfs_visit WHERE pfs_visit_id = ANY(:visits)
 """
 
-_ENTRIES_SQL = """
-SELECT * FROM qa_threshold_entry WHERE thresholds_id = ANY(:ids) ORDER BY thresholds_id, metric, population
-"""
-
-_FILES_SQL = "SELECT * FROM qa_thresholds WHERE thresholds_id = ANY(:ids) ORDER BY thresholds_id"
-
-_LAYERS_SQL = (
-    "SELECT processing_id, task, layer, thresholds_id FROM qa_processing_thresholds"
-    " WHERE processing_id = ANY(:ids) ORDER BY processing_id, task, layer"
+_NORMAL_SQL = (
+    "SELECT * FROM qa_normal_value WHERE collection_name = :collection"
+    " ORDER BY valid_from, metric, camera, frame_type, selector"
 )
 
 
@@ -185,7 +127,7 @@ SELECT t.*, l.decided_at FROM {table} t"""
 
 def _butlerFrame(rows: pd.DataFrame, spec: TableSpec) -> pd.DataFrame:
     """Return qadb rows of ``spec`` with the Butler table's column names and types."""
-    names = {snakeCase(column): column for column in (*spec.extraKeys, *spec.columns)}
+    names = {spec.qadbColumn(column): column for column in (*spec.extraKeys, *spec.columns)}
     frame = rows.rename(columns={**names, "pfs_visit_id": "visit"})
     camera = frame["camera_name"].astype(str)
     if "arm" not in frame:
@@ -201,152 +143,12 @@ def _butlerFrame(rows: pd.DataFrame, spec: TableSpec) -> pd.DataFrame:
             frame[column] = pd.to_numeric(frame[column], errors="coerce").astype("float64")
         else:
             frame[column] = frame[column].map(_nullableBool)
-    return frame.drop(columns=["processing_id", "camera_name"])
+    return frame.rename(columns={"processing_id": PROCESSING_ID}).drop(columns=["camera_name"])
 
 
 def _nullableBool(value: Any) -> bool | None:
     """Return a stored boolean as `bool`, a null as `None`: SQLite gives 0/1, and a null must stay missing."""
     return None if pd.isna(value) else bool(value)
-
-
-def _populationValue(value: Any) -> Any:
-    """Return a population value as the files hold it: an integral number as `int`, a null as `None`."""
-    if value is None or (pd.api.types.is_scalar(value) and pd.isna(value)):
-        return None
-    if isinstance(value, float) and value.is_integer():
-        return int(value)
-    if isinstance(value, str) and re.fullmatch(r"-?\d+", value):
-        return int(value)
-    return value
-
-
-def _parsePopulation(key: Any) -> dict[str, Any]:
-    """Return the population a stored key names (`pfs.drp.qa.qadb.tables.populationKey`): ``arm=b species=Neon``.
-
-    A value may hold spaces (``seqName=Arc: Neon``): the key splits before each ``name=``.
-    """
-    if not isinstance(key, str) or not key:
-        return {}
-    pairs = (part.split("=", 1) for part in re.split(r" (?=[A-Za-z_]\w*=)", key))
-    return {name: _populationValue(value) for name, value in pairs}
-
-
-def _entriesFrame(rows: pd.DataFrame) -> pd.DataFrame:
-    """Return ``qa_threshold_entry`` rows as `THRESHOLDS_COLUMNS`, typed as the thresholds files are read.
-
-    The stored population columns come back typed; a population key the table
-    has no column for (``species``, ``seqName``) is parsed from ``population``
-    into a column of its own, so the entries match images as the file's did.
-    """
-    frame = rows.reindex(columns=list(QA_THRESHOLD_ENTRY)).rename(
-        columns={column: _camelCase(column) for column in QA_THRESHOLD_ENTRY}
-    )
-    populations = [_parsePopulation(key) for key in frame["population"]]
-    extra = sorted({name for population in populations for name in population} - set(_STORED_POPULATION))
-    for column in _STORED_POPULATION:
-        values = [_populationValue(value) for value in frame[column].tolist()]
-        frame[column] = pd.Series(values, index=frame.index, dtype=object)
-    for column in extra:
-        values = [population.get(column) for population in populations]
-        frame[column] = pd.Series(values, index=frame.index, dtype=object)
-    for column in _BOOL_FIELDS:
-        values = [_nullableBool(value) for value in frame[column].tolist()]
-        frame[column] = pd.Series(values, index=frame.index, dtype=object)
-    for column in _FLOAT_FIELDS:
-        frame[column] = pd.to_numeric(frame[column], errors="coerce").astype("float64")
-    for column in _INT_FIELDS:
-        frame[column] = pd.to_numeric(frame[column], errors="coerce").astype("Int64")
-    frame[THRESHOLDS_ID] = frame[THRESHOLDS_ID].astype("int64")
-    order = [THRESHOLDS_ID, "metric", "population", *_STORED_POPULATION, *extra, *_FIELDS]
-    return frame[order].reset_index(drop=True)
-
-
-def _filesFrame(rows: pd.DataFrame) -> pd.DataFrame:
-    """Return ``qa_thresholds`` rows as `THRESHOLDS_FILES_COLUMNS`."""
-    frame = rows.reindex(columns=list(QA_THRESHOLDS)).rename(
-        columns=dict(zip(QA_THRESHOLDS, THRESHOLDS_FILES_COLUMNS, strict=True))
-    )
-    frame[THRESHOLDS_ID] = frame[THRESHOLDS_ID].astype("int64")
-    for column in ("derivedOn", "registeredAt"):
-        frame[column] = pd.to_datetime(frame[column], errors="coerce")
-    frame["nEntries"] = pd.to_numeric(frame["nEntries"], errors="coerce").astype("Int64")
-    return frame.reset_index(drop=True)
-
-
-def thresholdsLayers(key: Any) -> list[int]:
-    """Return the ``thresholds_id`` of each layer a ``thresholdsIds`` value names, in the order judged.
-
-    Parameters
-    ----------
-    key : `str` or null
-        A `THRESHOLDS_IDS` value: ``"12,7"``. Empty or null names none.
-    """
-    if not isinstance(key, str) or not key:
-        return []
-    return [int(part) for part in key.split(",") if part]
-
-
-def layeredThresholds(key: Any, tables: dict[int, pd.DataFrame]) -> list[pd.DataFrame]:
-    """Return the thresholds tables of the layers a ``thresholdsIds`` value names, in the order judged.
-
-    What `pfs.drp.qa.metrics.gate.judge` takes to judge an image as its task
-    did: each metric by the first table with an entry for the image.
-
-    Parameters
-    ----------
-    key : `str` or null
-        A `THRESHOLDS_IDS` value.
-    tables : `dict` [`int`, `pandas.DataFrame`]
-        `thresholdsTables` of the read's ``thresholds``.
-
-    Returns
-    -------
-    `list` [`pandas.DataFrame`]
-        The tables; a layer ``tables`` lacks is left out.
-    """
-    return [tables[thresholdsId] for thresholdsId in thresholdsLayers(key) if thresholdsId in tables]
-
-
-def _layerKeys(layers: pd.DataFrame) -> dict[tuple[int, str], str]:
-    """Return each processing and task's `THRESHOLDS_IDS` value from its ``qa_processing_thresholds`` rows."""
-    keys: dict[tuple[int, str], str] = {}
-    ordered = layers.sort_values(["processing_id", "task", "layer"], kind="stable")
-    for (processing, task), group in ordered.groupby(["processing_id", "task"], sort=False):
-        keys[(int(processing), str(task))] = ",".join(str(int(i)) for i in group["thresholds_id"])
-    return keys
-
-
-def thresholdsTables(thresholds: pd.DataFrame) -> dict[int, pd.DataFrame]:
-    """Return each cited file's entries as a thresholds table `pfs.drp.qa.metrics.gate.judge` takes, by id.
-
-    `judge` takes every column but the threshold fields for a population
-    column, so ``thresholdsId`` and the stored ``population`` key go, as do the
-    population columns the file never names (null throughout: "any" to the
-    gate, but noise to a reader). Population values are as the files hold them
-    (a spectrograph `int`, a null `None`), whatever a parquet round trip made of
-    them.
-
-    Parameters
-    ----------
-    thresholds : `pandas.DataFrame`
-        `readQadb`'s ``thresholds``.
-
-    Returns
-    -------
-    `dict` [`int`, `pandas.DataFrame`]
-        By ``thresholdsId``: the file's entries, one row per metric and
-        population, as `pfs.drp.qa.metrics.calibration.readThresholds` returns
-        them.
-    """
-    tables = {}
-    for thresholdsId, rows in thresholds.groupby(THRESHOLDS_ID, sort=True):
-        table = rows.drop(columns=[THRESHOLDS_ID, "population"]).reset_index(drop=True)
-        for column in [c for c in table.columns if c not in THRESHOLD_FIELDS]:
-            values = [_populationValue(value) for value in table[column].tolist()]
-            table[column] = pd.Series(values, index=table.index, dtype=object)
-        unnamed = [c for c in table.columns if c not in THRESHOLD_FIELDS and table[c].isna().all()]
-        tables[int(thresholdsId)] = table.drop(columns=unnamed)
-    return tables
 
 
 def readQadb(
@@ -356,7 +158,7 @@ def readQadb(
     last: int = LAST_VISIT,
     since: Any = None,
 ) -> dict[str, pd.DataFrame]:
-    """Read a collection's QA results from qadb, as the Butler tables they were loaded from.
+    """Read a collection's QA numbers from qadb, as the tables they were loaded from.
 
     Parameters
     ----------
@@ -369,55 +171,33 @@ def readQadb(
     since : optional
         Only images whose latest gate row was decided at or after this
         (``qa_gate.decided_at``, as a previous read returned it); default all.
-        A task rerun alone re-decides the gate, so its images come back whole.
 
     Returns
     -------
     `dict` [`str`, `pandas.DataFrame`]
-        ``iqQaMetrics``, ``dmLineResidualSummary`` and ``dmLineResidualMetrics``
-        with their Butler columns (those qadb stores), ``decidedAt``, and
-        ``thresholdsIds``, every thresholds layer the image's task judged with
-        in the order judged (`THRESHOLDS_IDS`, a string, empty when none;
-        `layeredThresholds` gives `judge` their tables); ``thresholds``, the
-        entries of every layer cited by the images read
-        (`THRESHOLDS_COLUMNS`; `thresholdsTables` of it, by id);
-        ``thresholdsFiles``, one row per layer (`THRESHOLDS_FILES_COLUMNS`);
-        and ``visitTimes``, qadb's visit listing in the opdb listing's columns
+        ``iqQaMetrics``, ``dmLineResidualSummary``, ``dmLineResidualMetrics``
+        and ``twilightMetrics`` with their columns (those qadb stores),
+        `PROCESSING_ID` and ``decidedAt``; the line-residual rows carry their
+        image's ``cameraSet`` and ``obsType``, as the Butler table does, so
+        `pfs.drp.qa.metrics.gate.gate` reads them as they are. And
+        ``visitTimes``, qadb's visit listing in the opdb listing's columns
         (``pfs_visit_id``, ``time_exp_start``, ``iic_sequence_id``, the last
         always missing).
     """
     params = {"collection": collection, "first": int(first), "last": int(last)}
     if since is not None:
         params["since"] = since
-    read = {
-        source: qadb.query_dataframe(_tableSql(spec.name, since is not None), params=params)
-        for source, spec in _SPECS.items()
-    }
-    processings = sorted({int(p) for rows in read.values() for p in rows["processing_id"]})
-    layers = (
-        qadb.query_dataframe(_LAYERS_SQL, params={"ids": processings})
-        if processings
-        else pd.DataFrame(columns=["processing_id", "task", "layer", "thresholds_id"])
-    )
-    keys = _layerKeys(layers)
     tables = {}
     for source, spec in _SPECS.items():
-        rows = read[source]
-        # Each row's layers are its own processing's, before the Butler shape drops the processing.
-        cited = [keys.get((int(processing), _GATE_TASK[source]), "") for processing in rows["processing_id"]]
+        rows = qadb.query_dataframe(_tableSql(spec.name, since is not None), params=params)
         frame = _butlerFrame(rows, spec).rename(columns={"decided_at": "decidedAt"})
-        frame[THRESHOLDS_IDS] = cited
         tables[source] = frame.reset_index(drop=True)
-    ids = sorted({int(i) for i in layers["thresholds_id"]})
-    if ids:
-        entries = qadb.query_dataframe(_ENTRIES_SQL, params={"ids": ids})
-        files = qadb.query_dataframe(_FILES_SQL, params={"ids": ids})
-    else:
-        entries = pd.DataFrame(columns=list(QA_THRESHOLD_ENTRY))
-        files = pd.DataFrame(columns=list(QA_THRESHOLDS))
-    tables["thresholds"] = _entriesFrame(entries)
-    tables["thresholdsFiles"] = _filesFrame(files)
-    visits = sorted({int(visit) for visit in tables["iqQaMetrics"]["visit"]})
+    keys = list(IMAGE_KEYS)
+    summary = tables["dmLineResidualSummary"]
+    tables["dmLineResidualMetrics"] = tables["dmLineResidualMetrics"].merge(
+        summary[[*keys, "cameraSet", "obsType"]].drop_duplicates(keys), on=keys, how="left"
+    )
+    visits = sorted({int(visit) for table in tables.values() for visit in table["visit"]})
     times = (
         qadb.query_dataframe(_VISITS_SQL, params={"visits": visits})
         if visits
@@ -426,6 +206,47 @@ def readQadb(
     times["time_exp_start"] = pd.to_datetime(times["time_exp_start"])
     tables["visitTimes"] = times.assign(iic_sequence_id=pd.array([pd.NA] * len(times), dtype="Int64"))
     return tables
+
+
+def readTwilight(qadb: Any, collection: str, first: int, last: int) -> pd.DataFrame:
+    """Read the twilight metrics qadb holds for a visit range of a collection, as `readQadb` returns them."""
+    params = {"collection": collection, "first": int(first), "last": int(last)}
+    rows = qadb.query_dataframe(_tableSql(TWILIGHT_QA.name, False), params=params)
+    return _butlerFrame(rows, TWILIGHT_QA).rename(columns={"decided_at": "decidedAt"}).reset_index(drop=True)
+
+
+def visitsJudged(qadb: Any, collection: str, first: int = FIRST_VISIT, last: int = LAST_VISIT) -> list[int]:
+    """Return the visits of a collection with a gate row in a visit range, sorted."""
+    params = {"collection": collection, "first": int(first), "last": int(last)}
+    rows = qadb.query_dataframe(_VISITS_JUDGED_SQL, params=params)
+    return [int(visit) for visit in rows["pfs_visit_id"]]
+
+
+def readNormalValues(qadb: Any, collection: str) -> pd.DataFrame:
+    """Read a collection's normal values.
+
+    Parameters
+    ----------
+    qadb : `pfs.utils.database.qadb.QaDB`
+        The qadb, read-only.
+    collection : `str`
+        The collection they judge.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        `pfs.drp.qa.metrics.normalValues.NORMAL_COLUMNS`, every accepted row
+        of the collection: `pfs.drp.qa.metrics.gate.gate` takes the one in
+        force for each image.
+    """
+    rows = qadb.query_dataframe(_NORMAL_SQL, params={"collection": collection})
+    frame = normalValueFrame(rows.reindex(columns=list(NORMAL_VALUE)))
+    frame["value"] = pd.to_numeric(frame["value"], errors="coerce").astype("float64")
+    for column in ("count", "validFrom"):
+        frame[column] = pd.to_numeric(frame[column], errors="coerce").astype("int64")
+    for column in ("frameType", "selector"):
+        frame[column] = frame[column].fillna("").astype(str)
+    return frame
 
 
 def collectionLoaded(qadb: Any, collection: str) -> bool:
@@ -445,7 +266,7 @@ def collectionLoaded(qadb: Any, collection: str) -> bool:
 
 
 def readGate(qadb: Any, collection: str, first: int = FIRST_VISIT, last: int = LAST_VISIT) -> pd.DataFrame:
-    """Read each image's gate verdict in a collection: the worst of the QA tasks' on it.
+    """Read each image's gate verdict in a collection.
 
     Parameters
     ----------
@@ -460,18 +281,19 @@ def readGate(qadb: Any, collection: str, first: int = FIRST_VISIT, last: int = L
     -------
     `pandas.DataFrame`
         `GATE_COLUMNS`, one row per image, sorted by visit and camera: the row
-        of the highest processing (Butler RUN, ``run``) of the collection that
-        judged the image, as `readQadb` reads it.
-        `pfs.drp.qa.metrics.visitRollup.rollupVisits` takes it.
+        of the highest processing (Butler RUN, ``run``, and `PROCESSING_ID`) of
+        the collection that judged the image. `pfs.drp.qa.metrics.visitRollup.rollupVisits`
+        takes it.
     """
     params = {"collection": collection, "first": int(first), "last": int(last)}
     rows = qadb.query_dataframe(_GATE_SQL, params=params)
     names = {column: _camelCase(column) for column in QA_GATE if column != "camera_name"}
     frame = rows.rename(columns={**names, "pfs_visit_id": "visit", "run_name": "run"})
+    frame[PROCESSING_ID] = pd.to_numeric(frame[PROCESSING_ID]).astype("int64")
     camera = frame["camera_name"].astype(str)
     frame["arm"] = camera.str[0]
     frame["spectrograph"] = pd.to_numeric(camera.str[1:]).astype("int64")
     frame["visit"] = frame["visit"].astype("int64")
-    frame["provisional"] = frame["provisional"].map(_nullableBool)
-    frame["decidedAt"] = pd.to_datetime(frame["decidedAt"])
+    # A database that returns times as text writes the fraction of a second only when there is one.
+    frame["decidedAt"] = pd.to_datetime(frame["decidedAt"], format="mixed")
     return frame.reindex(columns=list(GATE_COLUMNS)).reset_index(drop=True)

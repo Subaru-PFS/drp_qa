@@ -18,7 +18,7 @@ import textwrap
 import traceback
 import typing
 import warnings
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import Any, Literal, ParamSpec, TypeVar  # These won't be necessary in future pythons.
 
 import eups
@@ -95,7 +95,7 @@ QUARTZ_RATIO_TITLES: dict[str, str] = {
 """What each of ``QUARTZ_RATIO_KINDS`` is a ratio of, for the plot titles."""
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """FiberNorms QA.
 
     This QA monitors fiber-to-fiber and visit-to-visit throughput variation.
@@ -191,7 +191,7 @@ def main() -> int:
     config = FiberNormsQaConfig()
     add_dataclass_to_argparser(config, subparser, prefix="config")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     logging.basicConfig(
         level=getattr(logging, args.log_level), format="%(levelname)s:%(process)d:%(name)s:%(message)s"

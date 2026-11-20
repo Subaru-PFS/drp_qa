@@ -119,6 +119,23 @@ def testWithoutDesignsSkyIsScience(periods, visit, listing):
     assert classifyVisits(visits, periods.values())["category"].tolist() == ["science"]
 
 
+def testNoDesignCategoriesMeansNoScience(periods, visit, listing):
+    """A period with no design of a proposal (calibrations only) has an empty table of design kinds."""
+    answer = listing(
+        visit(1, "2026-01-03 18:00", "scienceArc", design=10),
+        visit(2, "2026-01-03 20:00", "scienceObject", design=11),
+    )
+    empty = designKinds(pd.DataFrame(columns=["pfs_design_id", "category"]))
+    visits = classifyVisits(answer, periods.values(), empty)
+    assert visits["category"].tolist() == ["calibration", "calibration"]
+    # Negative control: the same sky visit on a science design is science.
+    science = designKinds(pd.DataFrame({"pfs_design_id": [11], "category": ["QF"]}))
+    assert classifyVisits(answer, periods.values(), science)["category"].tolist() == [
+        "calibration",
+        "science",
+    ]
+
+
 def testSubLabels(periods, visit, listing):
     offsets = np.round(np.arange(2.705, 3.756, 0.075), 3)
     rows = [

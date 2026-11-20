@@ -3,15 +3,20 @@
 Each test loads the fixtures with the loader, as qaActor does.
 """
 
-import importlib.util
 import json
 from datetime import datetime
-from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.visitRollup import EXIT_FAIL, EXIT_NO_DATA, EXIT_PASS, exitCode
+from pfs.drp.qa.metrics.visitRollup import (
+    EXIT_FAIL,
+    EXIT_NO_DATA,
+    EXIT_PASS,
+    EXIT_WARN,
+    ROLLUP_COLUMNS,
+    exitCode,
+)
 from pfs.drp.qa.qadb import visitSummary as module
 from pfs.drp.qa.qadb.loader import loadCollection
 from pfs.drp.qa.qadb.reader import GATE_COLUMNS, collectionLoaded, readGate
@@ -24,12 +29,19 @@ from pfs.drp.qa.qadb.visitSummary import (
     visitSummary,
 )
 
-SCRIPT = Path(__file__).parents[2] / "bin.src" / "qaVisitSummary.py"
 COLLECTION = "u/test/qa"
 VISITS = [133025, 133040]
 NOW = datetime(2026, 10, 26, 12, 0, 0)
 LATER = datetime(2026, 10, 26, 12, 5, 0)
 IMAGE = ["visit", "arm", "spectrograph"]
+
+#: Normal widths of the fixture's images: r1's arc is +10 % (FAIL), b1's quartz +2.4 % (PASS) and r1's
+#: quartz +3.9 % (WARN).
+WIDTHS = {
+    ("medFwhm", "r1", "arc", "Argon"): 2.5,
+    ("medFwhm", "b1", "quartz", ""): 3.1,
+    ("medFwhm", "r1", "quartz", ""): 3.2,
+}
 
 
 def load(butler, qadb, now=NOW):
@@ -39,12 +51,21 @@ def load(butler, qadb, now=NOW):
 
 
 @pytest.fixture
-def datasets(configs):
-    return {"packages": {"drp_qa": "w.2026.44"}, **configs}
+def datasets():
+    return {"packages": {"drp_qa": "w.2026.44"}}
 
 
 @pytest.fixture
 def loaded(StubButler, fixtures, datasets, qadb):
+    """Return a database with the fixtures loaded and no normal value: every image passes."""
+    load(StubButler(fixtures, datasets=datasets), qadb)
+    return qadb
+
+
+@pytest.fixture
+def judged(StubButler, fixtures, datasets, qadb, storeValues):
+    """Return a database with the fixtures loaded and judged by `WIDTHS`: a FAIL on 133025, a WARN on 133040."""
+    storeValues(qadb, COLLECTION, WIDTHS, validFrom=133000)
     load(StubButler(fixtures, datasets=datasets), qadb)
     return qadb
 
@@ -68,7 +89,8 @@ def testReadGate(loaded):
     gate = readGate(loaded, COLLECTION)
     assert list(gate.columns) == list(GATE_COLUMNS)
     assert gate[IMAGE].values.tolist() == [[v, a, 1] for v in VISITS for a in "br"]
-    assert set(gate["qaStatus"]) <= {"PASS", "WARN", "FAIL", "UNKNOWN"}
+    assert gate["qaStatus"].tolist() == ["PASS"] * 4
+    assert gate["frameType"].tolist() == ["arc", "arc", "quartz", "quartz"]
     assert set(gate["run"]) == {"u/test/qa/20261026T000000Z"}
     assert (gate["decidedAt"] == pd.Timestamp(NOW)).all()
     assert readGate(loaded, COLLECTION, first=133030)["visit"].unique().tolist() == [133040]
@@ -76,16 +98,28 @@ def testReadGate(loaded):
 
 
 def testReadGateTakesTheLatestRun(StubButler, fixtures, datasets, loaded):
-    """An image judged again in a later RUN reads back once, with the later verdict."""
+    """An image measured again in a later RUN reads back once, with the later RUN's verdict."""
     before = readGate(loaded, COLLECTION)
-    again = fixtures["iqQaMetrics"].assign(qaStatus="FAIL", qaDecidedBy="medFwhm", qaReason="rejudged")
-    runs = {tuple(image): "u/test/qa/20261026T010000Z" for image in again[IMAGE].itertuples(index=False)}
-    load(StubButler({**fixtures, "iqQaMetrics": again}, runs=runs, datasets=datasets), loaded, now=LATER)
+    # The later RUN finds every trace 2.5 px from the calibration: beyond the offset check's FAIL.
+    metrics = fixtures["dmLineResidualMetrics"].copy()
+    offset = (
+        (metrics["description"] == "Trace")
+        & (metrics["reference"] == "calib")
+        & (metrics["metric"] == "medianDeltaX")
+    )
+    metrics.loc[offset, "value"] = 2.5
+    runs = {
+        tuple(image): "u/test/qa/20261026T010000Z"
+        for image in fixtures["iqQaMetrics"][IMAGE].itertuples(index=False)
+    }
+    again = {**fixtures, "dmLineResidualMetrics": metrics}
+    load(StubButler(again, runs=runs, datasets=datasets), loaded, now=LATER)
     after = readGate(loaded, COLLECTION)
-    assert len(after) == len(before) == 4
+    assert len(after) == len(before) == 4 and loaded.count("qa_gate") == 8
     assert set(after["qaStatus"]) == {"FAIL"} and set(after["run"]) == {"u/test/qa/20261026T010000Z"}
-    # Negative control: the first RUN's verdicts were not all FAIL, so this is the later row.
-    assert set(before["qaStatus"]) != {"FAIL"}
+    assert set(after["qaDecidedBy"]) == {"calibOffset"}
+    # Negative control: the first RUN's verdicts were not FAIL, so this is the later row.
+    assert set(before["qaStatus"]) == {"PASS"}
 
 
 def testUnknownCollectionIsAnErrorNotNoData(loaded):
@@ -98,15 +132,44 @@ def testUnknownCollectionIsAnErrorNotNoData(loaded):
     assert rollup.empty and unjudged == [] and exitCode(rollup) == EXIT_NO_DATA
 
 
-def testSummaryWithoutOpdb(loaded):
-    rollup, unjudged = visitSummary(loaded, COLLECTION)
-    gate = readGate(loaded, COLLECTION)
+def testSummaryWithoutOpdb(judged):
+    rollup, unjudged = visitSummary(judged, COLLECTION)
+    gate = readGate(judged, COLLECTION)
+    assert list(rollup.columns) == list(ROLLUP_COLUMNS)
     assert rollup["visit"].tolist() == VISITS and unjudged == []
     assert rollup["nImages"].tolist() == [2, 2]
     assert rollup["missingCameras"].isna().all()
+    assert rollup["qaStatus"].tolist() == ["FAIL", "WARN"]
     for visit, status in zip(rollup["visit"], rollup["qaStatus"], strict=True):
         statuses = set(gate[gate["visit"] == visit]["qaStatus"])
         assert status == max(statuses, key=("UNKNOWN", "PASS", "WARN", "FAIL").index)
+    # The camera and the check that decided each visit, with the gate's reason.
+    assert rollup["decidedByCamera"].tolist() == ["r1", "r1"]
+    assert rollup["qaDecidedBy"].tolist() == ["width", "width"]
+    assert rollup.loc[0, "qaReason"] == "width 2.76 px is +10.3 % from normal 2.50 px, limit +5 %"
+    assert exitCode(rollup) == EXIT_FAIL
+
+
+def testFormatSummaryNamesTheCameraAndTheCheck(judged):
+    rollup, _ = visitSummary(judged, COLLECTION)
+    lines = formatSummary(rollup).splitlines()
+    assert lines[0] == "2 visits judged: 1 FAIL, 1 WARN, 0 PASS, 0 UNKNOWN"
+    assert lines[1] == (
+        "133025 FAIL     2 images (F1 W0 P1 U0) r1 width:"
+        " width 2.76 px is +10.3 % from normal 2.50 px, limit +5 %"
+    )
+    assert lines[2].startswith("133040 WARN     2 images (F0 W1 P1 U0) r1 width: width 3.33 px")
+    assert "provisional" not in "\n".join(lines) and "imageQualityQa" not in "\n".join(lines)
+    # A deciding image with no reason stored is named by its check alone.
+    bare = formatSummary(rollup.assign(qaReason="")).splitlines()
+    assert bare[1] == "133025 FAIL     2 images (F1 W0 P1 U0) r1 width"
+
+
+def testAPassedVisitNamesNoDecider(loaded):
+    rollup, _ = visitSummary(loaded, COLLECTION)
+    assert rollup["qaStatus"].tolist() == ["PASS", "PASS"]
+    assert formatSummary(rollup).splitlines()[1:] == ["133025 PASS     2 images", "133040 PASS     2 images"]
+    assert exitCode(rollup) == EXIT_PASS
 
 
 def testSummaryWithOpdb(loaded):
@@ -164,13 +227,22 @@ class TestMain:
         monkeypatch.setattr(qadbModule, "QaDB", fake)
         return lambda *argv: (main(["-c", COLLECTION, *argv]), made)
 
-    def testExitStatusIsTheWorstVerdict(self, run, loaded, capsys, tmp_path):
+    def testExitStatusIsTheWorstVerdict(
+        self, run, loaded, capsys, tmp_path, storeValues, StubButler, fixtures
+    ):
         status, made = run("--json", str(tmp_path / "s.json"))
         rollup, _ = visitSummary(loaded, COLLECTION)
-        assert status == exitCode(rollup)
+        assert status == exitCode(rollup) == EXIT_PASS == 0
         assert made == [{"host": "pfsa-db", "port": 5436, "user": "pfs", "dbname": "qadb"}]
         assert "2 visits judged" in capsys.readouterr().out
-        assert json.loads((tmp_path / "s.json").read_text())["exitCode"] == status
+        document = json.loads((tmp_path / "s.json").read_text())
+        assert document["exitCode"] == status
+        assert not {"decidedByTask", "provisional"} & set(document["visits"][0])
+        # Judged with normal values, the same collection warns on one visit and fails on the other.
+        storeValues(loaded, COLLECTION, WIDTHS, validFrom=133000)
+        load(StubButler(fixtures), loaded, now=LATER)
+        assert run("--visit-range", "133040", "133040")[0] == EXIT_WARN == 1
+        assert run()[0] == EXIT_FAIL == 2
 
     def testNoDataAndErrorsAreNotVerdicts(self, run, monkeypatch, capsys):
         assert run("--visit-range", "1", "2")[0] == EXIT_NO_DATA == 3
@@ -197,10 +269,3 @@ class TestMain:
         assert status == EXIT_ERROR != 1 and "absent" in capsys.readouterr().err
         # Negative control: the same summary, written where it can be, is a verdict.
         assert run("--json", str(tmp_path / "s.json"))[0] != EXIT_ERROR
-
-
-def testScriptCallsMain():
-    spec = importlib.util.spec_from_file_location("qaVisitSummary", SCRIPT)
-    script = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(script)
-    assert script.main is main

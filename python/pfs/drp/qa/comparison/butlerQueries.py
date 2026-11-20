@@ -52,7 +52,7 @@ def earlierReductions(butler, prefix: str, period: str, reductions: str, exclude
     """Return a period's comparison collections whose reductions a new one reuses.
 
     Reductions depend on the pipeline, not on drp_qa, so a new drp_qa version reuses those an
-    earlier one made, and only judges again: with ``--fresh``, those made with the same pipeline;
+    earlier one made, and only runs the QA tasks again: with ``--fresh``, those made with the same pipeline;
     by default, those any earlier version made beside drpActor's, which mix pipelines as
     drpActor's do.
 

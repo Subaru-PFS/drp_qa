@@ -1,24 +1,141 @@
-"""What each QA metric is, declared once.
+"""What each QA metric is, and the limits it is judged by, declared once.
 
-A `MetricSpec` holds everything about a metric other than its value and its
-thresholds: its units, the external reference it is measured against (rule R1
-of ``docs/qa-principles.md``), its direction, the populations it is judged in
-(R7) and how to phrase it in a reason string. Threshold derivation
-(`pfs.drp.qa.metrics.calibration`) and gating (`pfs.drp.qa.metrics.gate`) both
-read it, so the two cannot disagree on direction, populations, or which values
-were measured at all.
+A `MetricSpec` says what a measured number is: its units, direction, the
+reference it is measured against and how to phrase it. A `Check` is a rule
+that turns numbers into a verdict: the frames it applies to, a WARN and a FAIL
+limit, and whether the limits are fixed or a percentage from the camera's
+normal value. `CHECKS` holds every rule there is, 13 of them; nothing else in
+the package holds a limit. `pfs.drp.qa.metrics.gate` reads them to judge and
+`pfs.drp.qa.metrics.normalValues` to make the normal values, so the two cannot
+disagree on what a check covers.
 
-The thresholds themselves are not here: they live in a thresholds file
-(`~pfs.drp.qa.metrics.calibration.writeThresholds`), with the provenance of
-each (R2).
+A fixed check needs only the number measured. A relative check compares it
+with the camera's normal value for that frame type and lamp or species
+(`Check.by`), and gives no verdict without one. A value at a limit has crossed
+it.
+
+`EXCLUSIONS` names what is measured and stored but not judged, with the reason.
+
+Nothing here imports the LSST stack.
 """
 
 import math
+import re
 from dataclasses import dataclass
 
 import numpy as np
 
-__all__ = ["METRIC_SPECS", "MetricSpec", "specFor"]
+__all__ = [
+    "ALLSKY",
+    "ARC",
+    "CHECKS",
+    "EXCLUSIONS",
+    "FIXED",
+    "FRAME_TYPES",
+    "IIS_ARC",
+    "IIS_QUARTZ",
+    "METRIC_SPECS",
+    "MIN_LINES_PER_FIBER",
+    "MIN_NORMAL_FRAMES",
+    "M_ARM_OFFSETS",
+    "QUARTZ",
+    "RELATIVE",
+    "SCIENCE",
+    "TWILIGHT",
+    "UNJUDGED_SPECIES",
+    "Check",
+    "MetricSpec",
+    "addSpecies",
+    "checkFor",
+    "frameType",
+    "lampOf",
+    "specFor",
+]
+
+#: Frame types a `Check` names. ``IIS_ARC`` and ``IIS_QUARTZ`` are lit through the 16 engineering fibers of each
+#: spectrograph by the IIS lamps; the others through the science fibers.
+SCIENCE, ALLSKY, ARC, QUARTZ, TWILIGHT, IIS_ARC, IIS_QUARTZ = (
+    "science",
+    "allsky",
+    "arc",
+    "quartz",
+    "twilight",
+    "iisArc",
+    "iisQuartz",
+)
+FRAME_TYPES = (SCIENCE, ALLSKY, ARC, QUARTZ, TWILIGHT, IIS_ARC, IIS_QUARTZ)
+
+#: Kinds of `Check`: limits in the metric's own units, or in per cent from the normal value.
+FIXED, RELATIVE = "fixed", "relative"
+
+#: A normal value made from fewer exposures than this judges nothing, however many detectors each gave.
+MIN_NORMAL_FRAMES = 3
+
+#: A width or a line count resting on fewer lines per lit fiber than this is not judged.
+MIN_LINES_PER_FIBER = 5.0
+
+#: Line species whose scatter is not judged.
+UNJUDGED_SPECIES = ("HgI", "CdI")
+
+#: The normal-value rows for visits read with the m arm: the b arm's standing offset from the calibration in
+#: x and the n arm's in y, by metric name, with the arm each applies to.
+M_ARM_OFFSETS = {"mArmOffsetX": "b", "mArmOffsetY": "n"}
+
+
+def frameType(obsType: object, illumination: object = None) -> str | None:
+    """Return the frame type of an image, or `None` when it has none.
+
+    Parameters
+    ----------
+    obsType : `str`
+        ``imageQualityQa``'s or ``dmLineResiduals``' observation type:
+        ``science``, ``allsky``, ``arc``, ``trace``, ``twilight``, ...
+    illumination : `str`, optional
+        ``full`` or ``iis``; anything else is taken as ``full``.
+
+    Returns
+    -------
+    `str` or `None`
+        One of `FRAME_TYPES`; `None` for ``dark``, ``unknown`` or a missing type.
+    """
+    kind = {"science": SCIENCE, "allsky": ALLSKY, "arc": ARC, "trace": QUARTZ, "twilight": TWILIGHT}.get(
+        obsType if isinstance(obsType, str) else ""
+    )
+    if illumination == "iis":
+        return {ARC: IIS_ARC, QUARTZ: IIS_QUARTZ}.get(kind)
+    return kind
+
+
+def lampOf(seqName: object) -> str:
+    """Return the lamp a sequence name gives, or an empty string.
+
+    The part of ``W_SEQNAM`` after the colon (``"Arc: HgCd"`` gives
+    ``"HgCd"``), else the part in trailing parentheses (the IIS sequences:
+    ``"ImageQuality (Ne)"`` gives ``"Ne"``).
+    """
+    name = seqName if isinstance(seqName, str) else ""
+    if ":" in name:
+        return name.split(":", 1)[-1].strip()
+    match = re.search(r"\(([^()]+)\)\s*$", name)
+    return match.group(1).strip() if match else ""
+
+
+def addSpecies(metrics):
+    """Return ``metrics`` with a ``species`` column, the `lampOf` its ``seqName``.
+
+    Parameters
+    ----------
+    metrics : `pandas.DataFrame`
+        Metrics with a ``seqName`` column.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        A copy with ``species`` added; unchanged if ``seqName`` is absent.
+    """
+    if "seqName" not in metrics.columns:
+        return metrics
+    return metrics.assign(species=metrics["seqName"].map(lampOf))
 
 
 @dataclass(frozen=True)
@@ -28,51 +145,30 @@ class MetricSpec:
     Attributes
     ----------
     name : `str`
-        Column name in ``iqQaMetrics``, or the ``metric`` value in a
-        long-format table.
+        Column name in a wide table, or the ``metric`` value in a long one.
     higherIsWorse : `bool`
         Direction of the metric.
     absolute : `bool`
-        Judge, and derive thresholds from, the absolute value: an offset is as
-        bad in either direction.
-    groupBy : `tuple` [`str`]
-        Columns separating the populations thresholds are derived for. Columns
-        absent from the data are dropped from the grouping.
-    physicalLimit : `float` or `None`
-        A physical limit to use for FAIL.
-    tolerance : `tuple` [`float`, `float`] or `None`
-        WARN and FAIL as fractions beyond the median of each `toleranceBy`
-        population's known-good values, in the bad direction. The reference
-        is then the same detector, observed the same way, in the reference
-        run (R1), and a median needs far fewer values than a tail percentile.
-    toleranceBy : `tuple` [`str`]
-        Columns separating the populations of `tolerance`. An image whose
-        population has no known-good values is judged by the `groupBy`
-        percentiles instead.
+        Judge the absolute value: an offset is as bad in either direction.
     units : `str`
         Physical units, for axis labels.
     reference : `str`
-        The external reference the metric is measured against (R1).
+        What the metric is measured against.
     label : `str`
         Name in reason strings; defaults to ``name``.
     valueFormat : `str`
         Format spec for the value in reason strings.
     unitSuffix : `str`
-        Suffix for values in reason strings, e.g. ``"px"``.
+        Suffix for values in reason strings, e.g. ``" px"``.
     notMeasuredWhen : `tuple` [`str`]
-        Boolean columns that, when true, mark the value as read back from a
-        calibration rather than measured from the exposure. Such a value is
-        identical for every exposure reduced against that calibration, so it
-        is neither judged nor used to derive thresholds.
+        Boolean columns that, when true, mark the value as not measured from
+        the exposure (a width read back from ``fiberProfiles``, a twilight
+        too faint to measure). Such a value is not judged.
     """
 
     name: str
     higherIsWorse: bool = True
     absolute: bool = False
-    groupBy: tuple[str, ...] = ("arm", "obsType")
-    physicalLimit: float | None = None
-    tolerance: tuple[float, float] | None = None
-    toleranceBy: tuple[str, ...] = ()
     units: str = ""
     reference: str = ""
     label: str = ""
@@ -100,73 +196,92 @@ class MetricSpec:
                 mask |= np.array([isinstance(v, (bool, np.bool_)) and bool(v) for v in values], dtype=bool)
         return mask
 
-    def crossed(self, value: float, limit: float) -> bool:
-        """Return whether ``value`` is at or beyond ``limit`` in the bad direction."""
-        return value >= limit if self.higherIsWorse else value <= limit
+    def show(self, value: float) -> str:
+        """Return ``value`` as reason strings show it, with its unit."""
+        shown = format(value, self.valueFormat) if math.isfinite(value) else str(value)
+        return f"{shown}{self.unitSuffix}"
 
-    def describe(self, value: float, status: str, limit: float) -> str:
-        """Return the reason string for a crossed threshold.
+
+@dataclass(frozen=True)
+class Check:
+    """One rule: the frames it judges, and its WARN and FAIL.
+
+    Attributes
+    ----------
+    name : `str`
+        The check's name, as ``qa_gate.qa_decided_by`` records it.
+    title : `str`
+        What it judges, for reason strings and tables.
+    metrics : `tuple` [`str`]
+        The `MetricSpec` names it reads. A check on several judges each and
+        takes the worst.
+    frames : `tuple` [`str`]
+        The `FRAME_TYPES` it applies to.
+    warn, fail : `float`
+        The limits: in the metric's units for a `FIXED` check, in per cent
+        from the normal value, in the metric's bad direction, for a
+        `RELATIVE` one.
+    kind : `str`
+        `FIXED` or `RELATIVE`.
+    arms : `tuple` [`str`]
+        The arms it applies to; every arm when empty.
+    by : `tuple` [`str`]
+        `RELATIVE` only: what a normal value is kept per, besides the frame
+        type. ``camera`` or ``arm``, then ``lamp`` (the lamp of the sequence)
+        or ``species`` (the line species), or neither.
+    """
+
+    name: str
+    title: str
+    metrics: tuple[str, ...]
+    frames: tuple[str, ...]
+    warn: float
+    fail: float
+    kind: str = FIXED
+    arms: tuple[str, ...] = ()
+    by: tuple[str, ...] = ()
+
+    def limits(self, normal: float | None = None, higherIsWorse: bool = True) -> tuple[float, float]:
+        """Return WARN and FAIL in the metric's units.
 
         Parameters
         ----------
-        value : `float`
-            The value judged (absolute, for an ``absolute`` metric).
-        status : `str`
-            ``"WARN"`` or ``"FAIL"``.
-        limit : `float`
-            The threshold crossed.
-
-        Returns
-        -------
-        `str`
-            E.g. ``"medFWHM=3.60px >= fail threshold 3.5px"``.
+        normal : `float`, optional
+            The normal value, for a `RELATIVE` check.
+        higherIsWorse : `bool`, optional
+            The metric's direction, for a `RELATIVE` check.
         """
-        comparison = ">=" if self.higherIsWorse else "<="
-        shown = format(value, self.valueFormat) if math.isfinite(value) else str(value)
-        return (
-            f"{self.label or self.name}={shown}{self.unitSuffix} {comparison} "
-            f"{status.lower()} threshold {limit:g}{self.unitSuffix}"
-        )
+        if self.kind == FIXED:
+            return self.warn, self.fail
+        sign = 1.0 if higherIsWorse else -1.0
+        return normal * (1 + sign * self.warn / 100), normal * (1 + sign * self.fail / 100)
 
 
 _CALIB = (
-    "detectorMap_calib, the calibration the exposure is reduced against: an offset against an "
-    "out-of-date calibration is a calibration problem, not an instrument one."
+    "detectorMap_calib, the calibration the exposure is reduced against: an offset from it is how far "
+    "the instrument has moved since the calibration was made."
 )
-
+_VISIT = (
+    "The visit's own detectorMap, adjusted to the visit's lines: the lines the adjustment held back "
+    "(RESERVED) were not fitted, so their residuals say how well the adjusted map predicts a line."
+)
 _TWILIGHT = (
     "The other exposures of the same twilight sequence, minutes apart: each fiber's flux / norm against their "
     "median."
 )
-
 _SATURATION = (
     "The detector's saturation level, as ISR marks it in the calexp's SAT mask plane (on an H4RG, "
     "a ramp leaving the valid range)."
 )
-
 _LINE_FLUX = (
     "The same line species on the same detector at another epoch: within one image the lines of a "
     "species span orders of magnitude, so it is compared across visits, not judged per image."
 )
-
-_LINE_REFERENCES = (
-    "Per the ``reference`` column: detectorMap_calib (``calib``), as above; or the visit's own "
-    "detectorMap (``visit``), adjusted to these lines, whose RESERVED lines it was not fitted to."
+_NORMAL = (
+    " Judged against the camera's normal value for the frame type: cameras differ by more than the tolerance."
 )
 
-#: The metrics with a known treatment, by name. ``pctFlagged`` is split by lamp
-#: (``species``, from ``seqName``) because the line lists differ per lamp;
-#: ``nLines`` and ``linesPerFiber`` by sequence because the line count is a
-#: property of the lamp. ``linesPerFiber`` is the one judged: per lit fiber, so a
-#: design lighting one fiber group is judged like a full slit, and without the
-#: trace centroids an arc also records.
-#: ``medFwhm`` is judged against each detector's own width per lamp:
-#: the spectrographs of one arm differ from each other by more
-#: than any one of them varies, and the lamps of one arm differ even more (b:
-#: Argon 2.5 px, Krypton 2.85 px), so a per-arm percentile sits at the tail of
-#: the widest spectrograph or lamp. Run25's known-good values
-#: sit at most 1.4 % above their population's median (3.3 % for Argon), the
-#: SM1 defocus 24-41 %.
+#: The metrics, by name.
 METRIC_SPECS = {
     spec.name: spec
     for spec in (
@@ -174,14 +289,12 @@ METRIC_SPECS = {
             "medFwhm",
             units="pixels",
             reference=(
-                "The optical design's spot size: a Gaussian-equivalent FWHM from arc-line second "
-                "moments, a cross-dispersion fit to calexp pixels, or the fiberProfiles widths."
+                "A Gaussian-equivalent FWHM from arc-line second moments, or a cross-dispersion fit to "
+                "calexp pixels on a quartz." + _NORMAL
             ),
-            tolerance=(0.03, 0.05),
-            toleranceBy=("arm", "spectrograph", "obsType", "species"),
-            label="medFWHM",
+            label="width",
             valueFormat=".2f",
-            unitSuffix="px",
+            unitSuffix=" px",
             notMeasuredWhen=("traceOnly",),
         ),
         MetricSpec(
@@ -189,23 +302,21 @@ METRIC_SPECS = {
             absolute=True,
             units="pixels",
             reference=_CALIB,
-            label="|dxCenter|",
-            valueFormat=".3f",
-            unitSuffix="px",
+            label="trace centre offset",
+            valueFormat="+.2f",
+            unitSuffix=" px",
         ),
-        MetricSpec("dxCenterRms", units="pixels", reference=_CALIB, valueFormat=".3f", unitSuffix="px"),
+        MetricSpec("dxCenterRms", units="pixels", reference=_CALIB, valueFormat=".3f", unitSuffix=" px"),
         MetricSpec(
             "pctFlagged",
-            groupBy=("obsType", "arm", "species"),
             units="percent",
             reference="The line list and fitDetectorMap's flag bits on the arc lines.",
             valueFormat=".1f",
-            unitSuffix="%",
+            unitSuffix=" %",
         ),
         MetricSpec(
             "nLines",
             higherIsWorse=False,
-            groupBy=("arm", "seqName"),
             units="lines",
             reference="The line list of the lamp.",
             valueFormat=".0f",
@@ -213,114 +324,294 @@ METRIC_SPECS = {
         MetricSpec(
             "linesPerFiber",
             higherIsWorse=False,
-            groupBy=("arm", "seqName"),
             units="lines per lit fiber",
             reference=(
                 "The line list of the lamp, on the fibers the pfsConfig lights; on a quartz, the "
-                "detector rows a trace is found on."
+                "detector rows a trace is found on." + _NORMAL
             ),
+            label="lines per lit fiber",
             valueFormat=".1f",
         ),
-        # dmLineResidualMetrics: per line species and line set, against
-        # each reference (the ``reference`` column). x from every species, y from lamp lines; b-arm
-        # offsets from the calibration depend on the camera set, and trace centroids
-        # scatter two to three times more on an arc's faint continuum than on a quartz (obsType).
-        # The scatter also gets a tolerance per detector, species and frame type: a detector's
-        # quartz trace scatter repeats to about 1 % within a run and differs 20 % between
-        # detectors, so a pooled percentile is set by the worst detector and cuts through the
-        # best one's cluster. In x the regular trace sets and arcs of Runs 25-30 sit within
-        # +12 % of Run25's per-detector median (+24 % at the end of Run26 on b1), the Run27 SM1
-        # defocus at 1.7-4x: WARN 20 %, FAIL 50 %. In y the lamp lines move more between runs
-        # (healthy runs' p95 at 1.37x, Run26's worst 2.4x; Run27's faults 3-70x): WARN 50 %, FAIL 150 %.
-        *(
-            MetricSpec(
-                name,
-                absolute=name.startswith("median"),
-                groupBy=("reference", "statusType", "arm", "description", "cameraSet", "obsType"),
-                tolerance={"robustRmsDeltaX": (0.2, 0.5), "robustRmsDeltaY": (0.5, 1.5)}.get(name),
-                toleranceBy=()
-                if name.startswith("median")
-                else ("reference", "statusType", "arm", "spectrograph", "description", "obsType"),
-                units="pixels",
-                reference=_LINE_REFERENCES,
-                label=f"|{name}|" if name.startswith("median") else "",
-                valueFormat=".3f",
-                unitSuffix="px",
-            )
-            for name in ("medianDeltaX", "robustRmsDeltaX", "medianDeltaY", "robustRmsDeltaY")
+        # dmLineResidualMetrics: per line species and line set, against each reference.
+        MetricSpec(
+            "medianDeltaX",
+            absolute=True,
+            units="pixels",
+            reference=_CALIB,
+            label="x offset",
+            valueFormat="+.2f",
+            unitSuffix=" px",
+        ),
+        MetricSpec(
+            "medianDeltaY",
+            absolute=True,
+            units="pixels",
+            reference=_CALIB,
+            label="y offset",
+            valueFormat="+.2f",
+            unitSuffix=" px",
+        ),
+        MetricSpec(
+            "robustRmsDeltaX",
+            units="pixels",
+            reference=_VISIT + _NORMAL,
+            label="x scatter",
+            valueFormat=".3f",
+            unitSuffix=" px",
+        ),
+        MetricSpec(
+            "robustRmsDeltaY",
+            units="pixels",
+            reference=_VISIT + _NORMAL,
+            label="y scatter",
+            valueFormat=".3f",
+            unitSuffix=" px",
+        ),
+        MetricSpec(
+            "medianDeltaYKms",
+            absolute=True,
+            units="km/s",
+            reference=_VISIT
+            + " Each line's residual is converted with the detectorMap's dispersion at that line.",
+            label="residual",
+            valueFormat="+.2f",
+            unitSuffix=" km/s",
         ),
         MetricSpec(
             "fitXRms",
-            groupBy=("arm", "description"),
             units="pixels",
             reference="The fitDetectorMap solution, per line species, from the reduceExposure log.",
-            unitSuffix="px",
+            unitSuffix=" px",
         ),
         MetricSpec(
             "fitYRms",
-            groupBy=("arm", "description"),
             units="pixels",
             reference="The fitDetectorMap solution, per line species, from the reduceExposure log.",
-            unitSuffix="px",
+            unitSuffix=" px",
         ),
-        # Saturation and line flux: measured, with no thresholds. The validation set's saturated
-        # frames (the nightly IIS Kr arcs, r arm) have no unsaturated counterpart to derive
-        # saturation's from, and a species' flux is judged across visits, not per image.
         MetricSpec(
-            "pctSaturatedPixels",
-            units="percent",
-            reference=_SATURATION,
-            valueFormat=".3f",
-            unitSuffix="%",
+            "pctSaturatedPixels", units="percent", reference=_SATURATION, valueFormat=".3f", unitSuffix=" %"
         ),
         MetricSpec("nSaturatedLines", units="lines", reference=_SATURATION, valueFormat=".0f"),
-        MetricSpec(
-            "medLineFlux",
-            higherIsWorse=False,
-            groupBy=("arm", "description"),
-            units="counts",
-            reference=_LINE_FLUX,
-        ),
-        MetricSpec(
-            "robustRmsLineFlux",
-            groupBy=("arm", "description"),
-            units="counts",
-            reference=_LINE_FLUX,
-        ),
-        # Twilight sky flats: each exposure against the other exposures of its sequence,
-        # minutes apart (pfs.drp.qa.metrics.twilight).
+        MetricSpec("medLineFlux", higherIsWorse=False, units="counts", reference=_LINE_FLUX),
+        MetricSpec("robustRmsLineFlux", units="counts", reference=_LINE_FLUX),
+        # Twilight sky flats: each exposure against the other exposures of its sequence
+        # (pfs.drp.qa.metrics.twilight).
         MetricSpec(
             "twilightLevelOffset",
             absolute=True,
-            groupBy=("arm",),
             units="percent",
             reference=_TWILIGHT,
-            label="|twilightLevelOffset|",
-            valueFormat=".2f",
-            unitSuffix="%",
+            label="level offset",
+            valueFormat="+.2f",
+            unitSuffix=" %",
         ),
         MetricSpec(
             "twilightResidRms",
-            groupBy=("arm",),
             units="percent",
             reference=_TWILIGHT,
+            label="residual scatter",
             valueFormat=".2f",
-            unitSuffix="%",
+            unitSuffix=" %",
             notMeasuredWhen=("tooFaint",),
         ),
         MetricSpec(
             "twilightPatch",
-            groupBy=("arm",),
             units="percent",
             reference=_TWILIGHT,
+            label="patch",
             valueFormat=".2f",
-            unitSuffix="%",
+            unitSuffix=" %",
             notMeasuredWhen=("tooFaint",),
         ),
     )
 }
 
+_SKY = (SCIENCE, ALLSKY)
+_LAMP = (ARC, QUARTZ)
+_ALL_LAMP = (ARC, QUARTZ, IIS_ARC, IIS_QUARTZ)
+
+#: Every rule, by name: the 13 pairs of limits. `pfs.drp.qa.metrics.gate` says which rows of which table each
+#: reads.
+CHECKS = {
+    check.name: check
+    for check in (
+        # Science and all-sky frames: two fixed checks, the same for short and long exposures.
+        Check(
+            "skyOffset",
+            "offset from the calibration",
+            ("medianDeltaX", "medianDeltaY"),
+            _SKY,
+            warn=0.5,
+            fail=1.0,
+        ),
+        Check(
+            "skyLineResidual",
+            "OH residual after the visit's adjustment",
+            ("medianDeltaYKms",),
+            _SKY,
+            warn=0.5,
+            fail=1.0,
+            arms=("r", "n", "m"),
+        ),
+        Check(
+            "skyLineResidualBlue",
+            "[O I] residual after the visit's adjustment",
+            ("medianDeltaYKms",),
+            _SKY,
+            warn=1.5,
+            fail=2.5,
+            arms=("b",),
+        ),
+        # Calibration frames.
+        Check(
+            "calibOffset",
+            "offset from the calibration",
+            ("medianDeltaX", "medianDeltaY"),
+            _LAMP,
+            warn=1.0,
+            fail=2.0,
+        ),
+        Check(
+            "traceCentreOffset",
+            "trace centre offset",
+            ("medDxCenter",),
+            (IIS_ARC, IIS_QUARTZ),
+            warn=1.0,
+            fail=2.0,
+        ),
+        # Twilights: each exposure against the sequence's others.
+        Check(
+            "twilightLevel",
+            "twilight level offset",
+            ("twilightLevelOffset",),
+            (TWILIGHT,),
+            warn=2.0,
+            fail=3.0,
+            arms=("b", "r", "m"),
+        ),
+        Check(
+            "twilightScatter",
+            "twilight residual scatter",
+            ("twilightResidRms",),
+            (TWILIGHT,),
+            warn=1.5,
+            fail=2.5,
+            arms=("b", "r", "m"),
+        ),
+        Check(
+            "twilightPatch",
+            "twilight patch",
+            ("twilightPatch",),
+            (TWILIGHT,),
+            warn=2.5,
+            fail=4.0,
+            arms=("b", "r", "m"),
+        ),
+        # Against each camera's normal value.
+        Check(
+            "width",
+            "line and trace width",
+            ("medFwhm",),
+            _ALL_LAMP,
+            warn=3.0,
+            fail=5.0,
+            kind=RELATIVE,
+            by=("camera", "lamp"),
+        ),
+        Check(
+            "scatterX",
+            "line scatter in x",
+            ("robustRmsDeltaX",),
+            _LAMP,
+            warn=20.0,
+            fail=50.0,
+            kind=RELATIVE,
+            by=("camera", "species"),
+        ),
+        Check(
+            "scatterY",
+            "line scatter in y",
+            ("robustRmsDeltaY",),
+            (ARC,),
+            warn=50.0,
+            fail=150.0,
+            kind=RELATIVE,
+            by=("camera", "species"),
+        ),
+        Check(
+            "linesPerFiberArc",
+            "lines per lit fiber",
+            ("linesPerFiber",),
+            (ARC, IIS_ARC),
+            warn=25.0,
+            fail=50.0,
+            kind=RELATIVE,
+            by=("arm", "lamp"),
+        ),
+        Check(
+            "linesPerFiberQuartz",
+            "lines per lit fiber",
+            ("linesPerFiber",),
+            (QUARTZ, IIS_QUARTZ),
+            warn=2.5,
+            fail=5.0,
+            kind=RELATIVE,
+            by=("arm", "lamp"),
+        ),
+    )
+}
+
+#: What is measured and stored but not judged, and why.
+EXCLUSIONS = (
+    (
+        "Width and line or trace scatter on science and all-sky frames",
+        "They follow fiber signal and exposure time: the width is 15 to 30 % wider on faint fibers, and trace "
+        "scatter 15 to 20 % higher on 60 s exposures.",
+    ),
+    (
+        "Scatter of mercury and cadmium lines, in x and y",
+        "It varies by itself from frame to frame of a healthy run.",
+    ),
+    (
+        "Scatter of trace centroids on arcs and twilights",
+        "On a faint continuum they scatter two to three times more than on a quartz.",
+    ),
+    (
+        "Sky species on twilights, and the n arm on twilights",
+        "Its residuals exceed the noise model on clear nights.",
+    ),
+    (
+        f"A width resting on fewer than {MIN_LINES_PER_FIBER:g} lines per lit fiber, and a line count whose "
+        "normal value is below that",
+        "Too few lines for a median: this covers b-arm Argon.",
+    ),
+    (
+        "Line residuals on frames lit through the engineering fibers",
+        "No normal values are kept for them. Their width and lines per lit fiber are judged, against their own.",
+    ),
+    (
+        "A relative check whose normal value rests on fewer than "
+        f"{MIN_NORMAL_FRAMES} exposures, or that has none",
+        "A median of one or two exposures is not a normal value, however many detectors each gave.",
+    ),
+    (
+        "Flagged-line rate (pctFlagged)",
+        "It is a property of the line list and the fit's flags, not of the frame.",
+    ),
+    (
+        "Saturation (nSaturatedLines, pctSaturatedPixels) and line flux",
+        "Stored for cross-visit comparison; no limit has been set.",
+    ),
+    ("Frames with no frame type, darks and biases", "No check applies; the image is UNKNOWN, never PASS."),
+)
+
 
 def specFor(name: str) -> MetricSpec:
     """Return the spec for ``name``, or a default higher-is-worse one."""
     return METRIC_SPECS.get(name, MetricSpec(name))
+
+
+def checkFor(name: str) -> Check:
+    """Return the check named ``name``."""
+    return CHECKS[name]

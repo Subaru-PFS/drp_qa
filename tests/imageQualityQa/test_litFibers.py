@@ -1,4 +1,4 @@
-"""Judging an image on the fibers its pfsConfig lights.
+"""Measuring an image on the fibers its pfsConfig lights.
 
 A design lighting one fiber group hides the others behind their black dots
 (``fiberStatus`` BLACKSPOT). ``lines`` has rows only for the ``GOOD`` fibers, and
@@ -16,24 +16,6 @@ import pytest
 
 TRACE = ("scienceTrace", "Trace")
 ARC = ("scienceArc", "Arc: Neon")
-
-
-def lowerIsWorse(metric: str, warn: float, fail: float, seqName: str, **population) -> pd.DataFrame:
-    """Return a thresholds table with one lower-is-worse entry for ``seqName`` (and ``population``)."""
-    return pd.DataFrame(
-        [
-            {
-                "metric": metric,
-                "seqName": seqName,
-                "warn": warn,
-                "fail": fail,
-                "higherIsWorse": False,
-                "absolute": False,
-                "provenance": "test",
-                **population,
-            }
-        ]
-    )
 
 
 def arcWithTraces(fakes, detectorMap, fibers, linesPerFiber=30, flagged=0, tracesPerFiber=40):
@@ -65,44 +47,38 @@ def testOneGroupArcIsCountedPerLitFiber(runTask, fakes):
     """A one-group arc has a quarter of the rows of a full one, and the same lines per lit fiber."""
     detectorMap = fakes.DetectorMap(numFibers=20)
     calexp = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*ARC))
-    thresholds = [lowerIsWorse("linesPerFiber", warn=28, fail=25, seqName="Arc: Neon")]
 
     full = arcWithTraces(fakes, detectorMap, detectorMap.fiberId, tracesPerFiber=60)
     allLit = fakes.PfsConfig(detectorMap.fiberId)
-    fullMetrics = runTask(
-        full, detectorMap=detectorMap, calexp=calexp, pfsConfig=allLit, thresholds=thresholds
-    ).iqQaMetrics.iloc[0]
+    fullMetrics = runTask(full, detectorMap=detectorMap, calexp=calexp, pfsConfig=allLit).iqQaMetrics.iloc[0]
 
     litIds, pfsConfig = fakes.oneGroup(detectorMap)
     # Fewer trace centroids per fiber on the one-group frame, as on 149398 against 149883.
     group = arcWithTraces(fakes, detectorMap, litIds, tracesPerFiber=20)
     groupMetrics = runTask(
-        group, detectorMap=detectorMap, calexp=calexp, pfsConfig=pfsConfig, thresholds=thresholds
+        group, detectorMap=detectorMap, calexp=calexp, pfsConfig=pfsConfig
     ).iqQaMetrics.iloc[0]
 
     assert (fullMetrics["nLitFibers"], fullMetrics["nFibers"]) == (20, 20)
     assert (groupMetrics["nLitFibers"], groupMetrics["nFibers"]) == (5, 20)
     assert fullMetrics["linesPerFiber"] == groupMetrics["linesPerFiber"] == 30
     assert groupMetrics["nTraceRows"] == 5 * 20
-    assert groupMetrics["qaStatus"] == "PASS"
     # Negative control: the raw row count is a sixth of the full frame's, so a count of
-    # rows or a scaling by lit fibers alone would fail it.
+    # rows, or one scaled by lit fibers alone, would not equal the full frame's.
     assert groupMetrics["nLines"] * 4 < fullMetrics["nLines"] * 0.6
 
 
-def testObstructedArcFailsPerLitFiber(runTask, fakes):
-    """An arc whose lit fibers measure few lines fails, however many fibers the design lights."""
+def testObstructedArcCountsFewPerLitFiber(runTask, fakes):
+    """An arc whose lit fibers measure few lines counts few, however many fibers the design lights."""
     detectorMap = fakes.DetectorMap(numFibers=20)
     calexp = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*ARC))
-    thresholds = [lowerIsWorse("linesPerFiber", warn=28, fail=25, seqName="Arc: Neon")]
     litIds, pfsConfig = fakes.oneGroup(detectorMap)
     # 30 lines per fiber, 15 of them unmeasured (flagged) on each of the 5 lit fibers.
     lines = arcWithTraces(fakes, detectorMap, litIds, flagged=75)
-    metrics = runTask(
-        lines, detectorMap=detectorMap, calexp=calexp, pfsConfig=pfsConfig, thresholds=thresholds
-    ).iqQaMetrics.iloc[0]
+    metrics = runTask(lines, detectorMap=detectorMap, calexp=calexp, pfsConfig=pfsConfig).iqQaMetrics.iloc[0]
     assert metrics["linesPerFiber"] == 15
-    assert (metrics["qaStatus"], metrics["qaDecidedBy"]) == ("FAIL", "linesPerFiber")
+    # Negative control: counting the flagged lines too would read the full 30.
+    assert (lines["description"] == "NeI").sum() / metrics["nLitFibers"] == 30
 
 
 def testPctFlaggedIsOverLampLines(runTask, fakes):
@@ -120,48 +96,39 @@ def testPctFlaggedIsOverLampLines(runTask, fakes):
 
 
 def testOneGroupQuartzIsMeasuredOnLitFibers(runTask, fakes):
-    """A one-group quartz is measured from the calexp, and judged per lit fiber."""
+    """A one-group quartz is measured from the calexp, and counted per lit fiber."""
     detectorMap = fakes.DetectorMap(numFibers=20)
     litIds, pfsConfig = fakes.oneGroup(detectorMap)
     calexp = fakes.Exposure(fakes.traceImage(detectorMap, sigma=1.3, fibers=litIds), fakes.header(*TRACE))
     lines = fakes.arcLines(detectorMap, 380, fibers=litIds, description="Trace")
     profiles = fakes.FiberProfiles(detectorMap, sigma=1.0)
-    thresholds = [lowerIsWorse("linesPerFiber", warn=370, fail=360, seqName="Trace")]
 
     metrics = runTask(
-        lines,
-        detectorMap=detectorMap,
-        calexp=calexp,
-        pfsConfig=pfsConfig,
-        fiberProfiles=profiles,
-        thresholds=thresholds,
+        lines, detectorMap=detectorMap, calexp=calexp, pfsConfig=pfsConfig, fiberProfiles=profiles
     ).iqQaMetrics.iloc[0]
     assert not metrics["traceOnly"]  # the calexp, not fiberProfiles
     assert metrics["linesPerFiber"] == 380
-    assert metrics["qaStatus"] == "PASS"
 
     # Negative control: without the pfsConfig the dark fibers flag most samples, and
-    # the width falls back to fiberProfiles; nor can the count be judged.
-    metrics = runTask(
-        lines, detectorMap=detectorMap, calexp=calexp, fiberProfiles=profiles, thresholds=thresholds
-    ).iqQaMetrics.iloc[0]
+    # the width falls back to fiberProfiles; nor is there a count per lit fiber.
+    metrics = runTask(lines, detectorMap=detectorMap, calexp=calexp, fiberProfiles=profiles).iqQaMetrics.iloc[
+        0
+    ]
     assert metrics["traceOnly"]
     assert np.isnan(metrics["linesPerFiber"]) and np.isnan(metrics["nLitFibers"])
 
 
-def testObstructedQuartzFails(runTask, fakes):
-    """A quartz whose design lights every fiber, with traces found on a third of them, fails."""
+def testObstructedQuartzCountsPerLitFiber(runTask, fakes):
+    """A quartz whose design lights every fiber, with traces found on a third of them, counts a third."""
     detectorMap = fakes.DetectorMap(numFibers=21)
     allLit = fakes.PfsConfig(detectorMap.fiberId)
     found = detectorMap.fiberId[::3]
     calexp = fakes.Exposure(fakes.traceImage(detectorMap, sigma=1.3, fibers=found), fakes.header(*TRACE))
     lines = fakes.arcLines(detectorMap, 380, fibers=found, description="Trace")
-    thresholds = [lowerIsWorse("linesPerFiber", warn=370, fail=360, seqName="Trace")]
-    metrics = runTask(
-        lines, detectorMap=detectorMap, calexp=calexp, pfsConfig=allLit, thresholds=thresholds
-    ).iqQaMetrics.iloc[0]
+    metrics = runTask(lines, detectorMap=detectorMap, calexp=calexp, pfsConfig=allLit).iqQaMetrics.iloc[0]
     assert metrics["linesPerFiber"] == pytest.approx(380 / 3)
-    assert metrics["qaStatus"] == "FAIL"
+    # Negative control: per fiber with a trace found, the count would be that of an unobstructed quartz.
+    assert len(lines) / len(found) == 380
 
 
 def _getLamps(md):
@@ -232,7 +199,7 @@ def testPfsConfigAlsoSaysIis(iqqa, fakes, oldGetLamps):
 
 
 def testIisQuartzIsMeasuredOnTheEngineeringFibers(iqqa, runTask, fakes, oldGetLamps):
-    """An IIS quartz is judged like a quartz on its engineering fibers, by IIS thresholds."""
+    """An IIS quartz is measured like a quartz, on its engineering fibers, and says it is IIS."""
     detectorMap = fakes.DetectorMap(numFibers=20)
     pfsConfig = iisPfsConfig(fakes, detectorMap)
     header = {"DATA-TYP": "FLAT", "W_IISQTH": True, **fakes.header(*IIS_QUARTZ)}
@@ -250,23 +217,15 @@ def testIisQuartzIsMeasuredOnTheEngineeringFibers(iqqa, runTask, fakes, oldGetLa
     # Negative control: on the science fibers nothing is lit, so linesPerFiber would go unmeasured.
     assert iqqa.litFibers(pfsConfig, detectorMap.fiberId) == (set(), 0)
 
-    # Judged only by a threshold naming illumination=iis: the full-slit one leaves it UNKNOWN.
-    fullSlit = lowerIsWorse("linesPerFiber", warn=390, fail=385, seqName=IIS_QUARTZ[1])
-    assert runTask(lines, thresholds=[fullSlit], **inputs).iqQaMetrics["qaStatus"].iloc[0] == "UNKNOWN"
-    iis = lowerIsWorse("linesPerFiber", warn=390, fail=385, seqName=IIS_QUARTZ[1], illumination="iis")
-    verdict = runTask(lines, thresholds=[iis], **inputs).iqQaMetrics.iloc[0]
-    assert (verdict["qaStatus"], verdict["qaDecidedBy"]) == ("FAIL", "linesPerFiber")
-
 
 def testIisArcIsMeasuredOnTheEngineeringFibers(runTask, fakes, oldGetLamps):
-    """An IIS arc takes the arc-line path on its engineering fibers; an unlit spectrograph fails."""
+    """An IIS arc takes the arc-line path on its engineering fibers; an unlit spectrograph counts no lines."""
     detectorMap = fakes.DetectorMap(numFibers=20)
     pfsConfig = iisPfsConfig(fakes, detectorMap)
     header = {"DATA-TYP": "COMPARISON", "W_IISNEO": True, **fakes.header(*IIS_ARC)}
     calexp = fakes.Exposure(fakes.noiseImage(detectorMap), header)
     lines = arcWithTraces(fakes, detectorMap, ENGINEERING, linesPerFiber=60, flagged=10, tracesPerFiber=400)
-    thresholds = [lowerIsWorse("linesPerFiber", warn=40, fail=20, seqName=IIS_ARC[1], illumination="iis")]
-    inputs = {"detectorMap": detectorMap, "calexp": calexp, "pfsConfig": pfsConfig, "thresholds": thresholds}
+    inputs = {"detectorMap": detectorMap, "calexp": calexp, "pfsConfig": pfsConfig}
 
     metrics = runTask(lines, **inputs).iqQaMetrics.iloc[0]
     assert metrics["illumination"] == "iis" and metrics["nLitFibers"] == 2
@@ -274,15 +233,13 @@ def testIisArcIsMeasuredOnTheEngineeringFibers(runTask, fakes, oldGetLamps):
     assert metrics["linesPerFiber"] == (120 - 10) / 2
     assert metrics["pctFlagged"] == pytest.approx(100 * 10 / 120)  # over the lamp lines alone
     assert metrics["nTraceRows"] == 800 and metrics["nLines"] == 920
-    assert metrics["qaStatus"] == "PASS"
 
     # The spectrograph whose lamp gave no light (Run27 139971): every lamp line flagged.
     dark = arcWithTraces(fakes, detectorMap, ENGINEERING, linesPerFiber=60, flagged=120, tracesPerFiber=2)
-    verdict = runTask(dark, **inputs).iqQaMetrics.iloc[0]
-    assert verdict["linesPerFiber"] == 0 and verdict["qaStatus"] == "FAIL"
-    # Negative control: the same threshold without illumination doesn't judge an IIS frame.
-    fullSlit = [lowerIsWorse("linesPerFiber", warn=40, fail=20, seqName=IIS_ARC[1])]
-    assert runTask(dark, **(inputs | {"thresholds": fullSlit})).iqQaMetrics["qaStatus"].iloc[0] == "UNKNOWN"
+    metrics = runTask(dark, **inputs).iqQaMetrics.iloc[0]
+    assert metrics["linesPerFiber"] == 0 and metrics["illumination"] == "iis"
+    # Negative control: its trace centroids are unflagged, so a count of every unflagged row is not zero.
+    assert (~dark["flag"]).sum() / metrics["nLitFibers"] == 2
 
 
 def testQuartzWithNoTracesFoundCountsNone(runTask, fakes):
@@ -290,14 +247,9 @@ def testQuartzWithNoTracesFoundCountsNone(runTask, fakes):
     detectorMap = fakes.DetectorMap(numFibers=20)
     calexp = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*TRACE))
     lines = fakes.arcLines(detectorMap, 380, description="NeI")  # described, but no "Trace" rows
-    thresholds = [lowerIsWorse("linesPerFiber", warn=370, fail=360, seqName="Trace")]
     metrics = runTask(
-        lines,
-        detectorMap=detectorMap,
-        calexp=calexp,
-        pfsConfig=fakes.PfsConfig(detectorMap.fiberId),
-        thresholds=thresholds,
+        lines, detectorMap=detectorMap, calexp=calexp, pfsConfig=fakes.PfsConfig(detectorMap.fiberId)
     ).iqQaMetrics.iloc[0]
-    assert metrics["linesPerFiber"] == 0 and metrics["qaStatus"] == "FAIL"
-    # Negative control: counting every row, as for a table without descriptions, would pass it.
-    assert (~lines["flag"]).sum() / 20 > 370
+    assert metrics["linesPerFiber"] == 0
+    # Negative control: counting every row, as for a table without descriptions, would read a full quartz.
+    assert (~lines["flag"]).sum() / 20 == 380

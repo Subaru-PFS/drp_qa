@@ -1,43 +1,61 @@
-#!/usr/bin/env python3
-r"""Report which exposures of a calibration set to build the calibrations from, per detector.
+r"""``drpQa.py calib inputs``: report which exposures of a calibration set to build the calibrations from, per detector.
 
 Reads comparison mode's visit listing for the period (``fetch``), takes the set's arcs and traces
 (cadence ``set``, or ``--visits``), reads what comparison mode measured on them (``iqQaMetrics``,
-``dmLineResidualMetrics``, ``dmLineResidualSummary``) from its output collection, or from
-``exportMetrics.py`` exports with ``--exports``, and writes the Markdown report of
+``dmLineResidualMetrics``) from its output collection, or from parquet exports
+(`pfs.drp.qa.metrics.readers.exportMetrics`) with ``--exports``, and writes the Markdown report of
 `pfs.drp.qa.comparison.calibInputs`: a go/no-go for every detector and visit, as a grid, a table and a
 CSV, with the reasons and the lamp trends behind ``--detail``. Blind: it uses no calibration built from the set.
 
-    python bin.src/calibInputsReport.py --period run31 --data-dir ~/qa-comparison \\
+The stored tables hold numbers, not verdicts: the gate (`pfs.drp.qa.metrics.gate`) judges them here, against
+the table of normal values ``--normal-values`` gives (those in force at each visit). Every gate check of a
+calibration frame is relative to a normal value, so without the table the gate gives no verdict: the report
+says so, the go/no-go rests on the sequence rules alone, and the figures show no gate limit.
+
+    drpQa.py calib inputs --period run31 --data-dir ~/qa-comparison \\
         --collection u/wtg/comparison/run31/w.2026.35-259-g83ef4f3 -o calibInputs-run31.md
-    python bin.src/calibInputsReport.py --period run31 --data-dir ~/qa-comparison --exports ./export \\
+    drpQa.py calib inputs --period run31 --data-dir ~/qa-comparison --exports ./export \\
         --visits 152652 152705 -o calibInputs-run31.md
 """
 
 import argparse
-import sys
 from pathlib import Path
 
 import pandas as pd
 
 from pfs.drp.qa.comparison.calibInputs import (
+    Rule,
     Thresholds,
     buildReport,
     detectorTable,
+    gateNumbers,
     goNoGo,
     judge,
-    lineThresholds,
+    scatterLimits,
     setVisits,
     speciesTable,
 )
 from pfs.drp.qa.comparison.classify import classifyVisits
 from pfs.drp.qa.comparison.runs import loadPeriods
+from pfs.drp.qa.metrics.normalValues import NORMAL_COLUMNS
+from pfs.drp.qa.metrics.registry import ARC, IIS_ARC
 
-TABLES = ("iqQaMetrics", "dmLineResidualMetrics", "dmLineResidualSummary")
+TABLES = ("iqQaMetrics", "dmLineResidualMetrics")
+
+
+def readNormalValues(path: str | None) -> pd.DataFrame | None:
+    """Read a table of normal values (`NORMAL_COLUMNS`) from parquet or CSV; None without a path."""
+    if not path:
+        return None
+    table = pd.read_csv(path) if Path(path).suffix == ".csv" else pd.read_parquet(path)
+    missing = [column for column in NORMAL_COLUMNS if column not in table.columns]
+    if missing:
+        raise SystemExit(f"{path} is not a table of normal values: no {', '.join(missing)}")
+    return table
 
 
 def readTables(args, visits: list[int]) -> dict[str, pd.DataFrame]:
-    """Read the three per-detector tables for ``visits``, from the exports or the Butler."""
+    """Read the per-detector tables (`TABLES`) for ``visits``, from the exports or the Butler."""
     if args.exports:
         tables = {}
         for name in TABLES:
@@ -46,7 +64,7 @@ def readTables(args, visits: list[int]) -> dict[str, pd.DataFrame]:
                 raise SystemExit(f"no {name}-*.parquet in {args.exports}")
             frame = pd.read_parquet(files[-1])
             tables[name] = frame[frame["visit"].isin(visits)]
-            # exportMetrics.py names the file <datasetType>-<collection with / as _>.parquet
+            # exportMetrics names the file <datasetType>-<collection with / as _>.parquet
             tables["source"] = files[-1].stem[len(name) + 1 :]
         return tables
     from lsst.daf.butler import Butler
@@ -100,7 +118,7 @@ def main(argv=None) -> int:
     )
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--collection", help="comparison mode's output collection to read")
-    source.add_argument("--exports", help="directory of exportMetrics.py parquet files instead of a Butler")
+    source.add_argument("--exports", help="directory of exportMetrics parquet files instead of a Butler")
     parser.add_argument("--butler", default="/work/datastore", help="Butler repository")
     parser.add_argument("--title", default=None, help="report title (default: the period)")
     parser.add_argument("--weak-lines", type=float, default=Thresholds.weakLines)
@@ -115,6 +133,12 @@ def main(argv=None) -> int:
         help="the Markdown report; its tables (CSV) and figures (PNG) go beside it",
     )
     parser.add_argument("--no-plots", action="store_true", help="write no figures")
+    parser.add_argument(
+        "--normal-values",
+        default=None,
+        help="the table of normal values (parquet or CSV, the columns of qadb's qa_normal_value) the gate "
+        "judges by; without it the gate gives no verdict, and the go/no-go rests on the sequence rules alone",
+    )
     parser.add_argument(
         "--residuals",
         nargs="*",
@@ -153,13 +177,17 @@ def main(argv=None) -> int:
     )
 
     tables = readTables(args, [int(v) for v in visits["visit"]])
+    normalValues = readNormalValues(args.normal_values)
     thresholds = Thresholds(args.weak_lines, args.fwhm_check, args.fwhm_out, args.rms_check, args.rms_out)
+    if normalValues is None:
+        print(
+            "no --normal-values: the gate gives no verdict; judging on the sequence rules alone", flush=True
+        )
     judged = judge(
-        detectorTable(
-            visits, tables["iqQaMetrics"], tables["dmLineResidualMetrics"], tables["dmLineResidualSummary"]
-        ),
+        detectorTable(visits, tables["iqQaMetrics"], tables["dmLineResidualMetrics"], normalValues),
         thresholds,
     )
+    numbers = gateNumbers(tables["iqQaMetrics"], tables["dmLineResidualMetrics"], normalValues)
     species = speciesTable(visits, tables["dmLineResidualMetrics"])
     out = Path(args.output)
     figures, detectorFigures, imageFigures = {}, {}, {}
@@ -196,7 +224,9 @@ def main(argv=None) -> int:
         noGo = judged.loc[judged["verdict"] == Verdict.OUT, "detector"].unique()
         for det in sorted(noGo, key=lambda d: ("brmn".index(d[0]) if d[0] in "brmn" else 9, d)):
             path = out.with_name(f"{out.stem}-{det}.png")
-            plotDetectorDetail(judged, species, visits, det).savefig(path, dpi=130, bbox_inches="tight")
+            plotDetectorDetail(judged, species, visits, det, numbers=numbers).savefig(
+                path, dpi=130, bbox_inches="tight"
+            )
             detectorFigures[det] = path.name
         residuals = readResiduals(args, judged[judged["verdict"] == Verdict.OUT])
         if residuals is not None:
@@ -207,7 +237,9 @@ def main(argv=None) -> int:
                 .sort_values(["arm", "spectrograph", "visit"])
                 .itertuples()
             ):
-                if "line residuals" not in r.reason and "reserved RMS" not in r.reason:
+                onScatter = {"scatterX", "scatterY"} & set(r.gateChecks.split(","))
+                onSequenceRms = Rule.RMS in r.rules.split(", ")
+                if not onScatter and not onSequenceRms:
                     continue  # out on FWHM or lines per fiber alone: the residuals aren't the reason
                 lines = residuals[
                     (residuals["visit"] == r.visit)
@@ -217,29 +249,17 @@ def main(argv=None) -> int:
                 if lines.empty:
                     continue
                 path = out.with_name(f"{out.stem}-{r.detector}-{r.visit}-lines.png")
-                summaryRow = tables["dmLineResidualSummary"]
-                summaryRow = summaryRow[
-                    (summaryRow["visit"] == r.visit)
-                    & (summaryRow["arm"] == r.arm)
-                    & (summaryRow["spectrograph"] == r.spectrograph)
-                ]
-                limits = {}
-                if len(summaryRow):
-                    sr = summaryRow.iloc[0]
-                    named = (
-                        str(sr["thresholdsFiles"])
-                        if "thresholdsFiles" in sr.index and sr["thresholdsFiles"]
-                        else ""
-                    )
-                    limits = lineThresholds(
-                        r.arm,
-                        r.spectrograph,
-                        sorted(lines["description"].unique()),
-                        sr.get("cameraSet"),
-                        sr.get("obsType"),
-                        named.split(",")[0].strip() or None,
-                    )
-                if "reserved RMS" in r.reason:
+                # The gate's scatter limits, relative to the normal values in force at the visit; none
+                # without the table, or on a frame lit through the engineering fibers.
+                limits = scatterLimits(
+                    r.arm,
+                    r.spectrograph,
+                    sorted(lines["description"].unique()),
+                    r.visit,
+                    normalValues,
+                    frameType=IIS_ARC if "(IIS)" in str(r.lamp) else ARC,
+                )
+                if onSequenceRms:
                     # Out on the sequence rule: show its limits, the detector's median fit RMS over the
                     # sequence times the check and out factors, per axis.
                     same = judged[
@@ -254,7 +274,7 @@ def main(argv=None) -> int:
                 plotLineResiduals(
                     lines,
                     title=f"{r.detector} {r.visit} ({r.lamp} {r.k}/{r.n}): line residuals",
-                    thresholds=limits,
+                    limits=limits,
                 ).savefig(path, dpi=120, bbox_inches="tight")
                 imageFigures[(r.detector, int(r.visit))] = path.name
     report = buildReport(
@@ -269,15 +289,13 @@ def main(argv=None) -> int:
         thresholds=thresholds,
         figures=figures,
         detail=args.detail,
+        normalValues=Path(args.normal_values).name if args.normal_values else "",
     )
     out.write_text(report)
     goNoGo(judged, visits).to_csv(out.with_name(out.stem + "-gonogo.csv"))
     judged.to_csv(out.with_name(out.stem + "-detectors.csv"), index=False)
+    numbers.to_csv(out.with_name(out.stem + "-gate.csv"), index=False)
     species.to_csv(out.with_name(out.stem + "-species.csv"), index=False)
     counts = judged["verdict"].value_counts().to_dict()
     print(f"wrote {out}: {len(judged)} detector images, {counts}", flush=True)
     return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

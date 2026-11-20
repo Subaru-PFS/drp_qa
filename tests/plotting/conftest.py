@@ -1,6 +1,6 @@
 """Shared fixtures for the ``pfs.drp.qa.plotting`` tests.
 
-These tests need numpy, pandas, matplotlib, seaborn, scipy and pyyaml but not the LSST stack.
+These tests need numpy, pandas, matplotlib, seaborn and scipy but not the LSST stack.
 CI runs them in the ``deps`` job; the standard-library job ignores this
 directory.
 
@@ -14,7 +14,6 @@ import pandas as pd
 import pytest
 import scipy  # noqa: F401 (pfs.drp.qa.metrics needs it; listed so the directory is skipped without it)
 import seaborn  # noqa: F401 (pfs.drp.qa.plotting needs it; listed so the directory is skipped without it)
-import yaml  # noqa: F401 (pfs.drp.qa.metrics needs it; listed so the directory is skipped without it)
 from matplotlib import pyplot as plt
 
 # Draw without a display.
@@ -73,42 +72,6 @@ def makeArcData(numFibers: int = 8, numLines: int = 6, seed: int = 1) -> pd.Data
     return pd.DataFrame(rows)
 
 
-def makeIqMetrics(numVisits: int = 4) -> pd.DataFrame:
-    """Make a synthetic concatenated ``iqQaMetrics`` frame.
-
-    Parameters
-    ----------
-    numVisits : `int`, optional
-        Number of visits.
-
-    Returns
-    -------
-    `pandas.DataFrame`
-        One row per (visit, arm) on spectrograph 1.
-    """
-    rng = np.random.default_rng(2)
-    rows = []
-    for index in range(numVisits):
-        for arm in ("b", "r"):
-            rows.append(
-                {
-                    "visit": 140000 + index,
-                    "arm": arm,
-                    "spectrograph": 1,
-                    "medFwhm": rng.normal(2.9, 0.1),
-                    "medDxCenter": rng.normal(0.0, 0.2),
-                    "dxCenterRms": abs(rng.normal(0.3, 0.05)),
-                    "pctFlagged": abs(rng.normal(10.0, 3.0)),
-                    "nLines": 500,
-                    "traceOnly": False,
-                    "obsType": "arc",
-                    "seqName": "Arc: HgCd",
-                    "qaStatus": "PASS",
-                }
-            )
-    return pd.DataFrame(rows)
-
-
 @pytest.fixture(autouse=True)
 def closeFigures():
     """Close any pyplot figures a test leaves open."""
@@ -120,9 +83,3 @@ def closeFigures():
 def makeArcDataFixture():
     """Return `makeArcData`."""
     return makeArcData
-
-
-@pytest.fixture(name="makeIqMetrics")
-def makeIqMetricsFixture():
-    """Return `makeIqMetrics`."""
-    return makeIqMetrics

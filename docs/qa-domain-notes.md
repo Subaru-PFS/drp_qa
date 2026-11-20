@@ -71,16 +71,16 @@ pfsConfig (every ENGINEERING fiber GOOD) and measures lines and traces on those 
 regular arc or quartz path on its engineering fibers (`litFibers(..., engineering=True)`), and
 `iqQaMetrics.illumination` is `iis`. An IIS design records the science fibers as `UNILLUMINATED`
 (fiberStatus 5; Run30's designs, `reports/PIPE2D-1954/pfsConfigCounts-003b.parquet`), so
-`litFibers` on the science fibers finds none lit and `linesPerFiber` would be unmeasured. Thresholds: an entry that doesn't name `illumination` is for full-slit
-frames, and an IIS frame is judged only by one naming `illumination: iis`
-(`pfs.drp.qa.metrics.gate.DEFAULT_POPULATION`). They are `iqQaThresholds-iis-run30.yaml`
-(`extraThresholdsFiles`), derived by `makeIisThresholds.py` from Run30's nightly IIS frames
+`litFibers` on the science fibers finds none lit and `linesPerFiber` would be unmeasured. An IIS
+frame is a frame type of its own (`iisArc`, `iisQuartz`: `pfs.drp.qa.metrics.registry.frameType`),
+judged against normal values made from IIS frames, never against a full-slit frame's. The stored
+numbers behind the known-fault test are Run30's nightly IIS frames
 ("ImageQuality (Ne)", "(Kr)", "(Halogen)": 148548–150721, 15 of each) reduced afresh
-(`u/wtg/qa-iis/003b`; `tests/metrics/data/iqQaMetrics-iis-run30.parquet`), Run30 being the IIS
-reference run in the validation set. What the 15 nights showed: per camera and lamp, `medFwhm`
+(`u/wtg/qa-iis/003b`; `tests/metrics/data/iqQaMetrics-iis-run30.parquet`). What the 15 nights
+showed: per camera and lamp, `medFwhm`
 within about 1 % and `linesPerFiber` within 2 % on b and r; the IIS fibers measure about 1.8 px
 FWHM (b2 quartz 2.03 px, a camera property); the n-arm Ne arc has about 15 faint lines per fiber
-and its median width scatters 2–4 % night to night, so it is not judged (Kr judges the n arm);
+and its median width scatters 2–4 % night to night;
 148829 n4's lamp header read off, so drp_stella fitted the sky line list to an IIS arc (known
 bad, `medDxCenter` 1.98 px); on 2026-09-08 (149593–149595) SM2 and SM4 sat 0.26–0.39 px from
 `detectorMap_calib` on every arm and b2's quartz width was 3.5 % high, so that night is no
@@ -90,16 +90,15 @@ pipeline was not; and one engineering fiber per spectrograph (316, 967, 1618, 22
 every quartz.
 
 **Out of sample, Run29** (`u/wtg/qa-iis/run29`: its 18 nightly ImageQuality nights of 2026-07-07 to
-07-24, reduced on the same pipeline; `reports/PIPE2D-1954/compareRuns.py`). The FWHM thresholds
-transfer: Run29's per-camera medians sit within 2 % of Run30's except b1 quartz (+3.6 %), b2 quartz
+07-24, reduced on the same pipeline; `reports/PIPE2D-1954/compareRuns.py`). The FWHM tolerance
+transfers: Run29's per-camera medians sit within 2 % of Run30's except b1 quartz (+3.6 %), b2 quartz
 (−3.7 %), r1 (+2.9 %) and n4 (+2.7 %), which WARN as a 3 % per-camera tolerance should. The
-`linesPerFiber` thresholds do not: Run29's Ne arcs count 73 % fewer unflagged lines per fiber on b
+`linesPerFiber` reference does not: Run29's Ne arcs count 73 % fewer unflagged lines per fiber on b
 and 35 % fewer on r than Run30's (n unchanged), Kr 16–36 % fewer on every arm, constant across
 Run29's nights, so the IIS lamps' output changed between the runs (the IIS hardware changed in
 September 2026; INSTRM-3020, INSTRM-3032). **An IIS lamp change invalidates the IIS
-`linesPerFiber` reference**: rerun `makeIisThresholds.py` on an export of the first nights with
-the new lamps, with those nights added to the validation set, and expect the gate to flag the
-change until then. Run29 is not in the validation set.
+`linesPerFiber` normal values**: make them again from the first nights with the new lamps
+(`drpQa.py values`, accepted with that reason), and expect the gate to flag the change until then.
 
 ### Key config fields
 
@@ -111,28 +110,10 @@ change until then. Run29 is not in the validation set.
 | `minFluxstdGoodFrac` (default 0.10) | Min fraction of good FLUXSTD samples for stellar calexp path |
 | `profileHalfWidth` | Deprecated, ignored: the calexp width uses no aperture |
 | `profileYStride` (default 100) | Row sampling interval (px) for calexp trace widths; cost is proportional to the rows |
-| `fwhmWarnThreshold` / `fwhmFailThreshold` (3.2/3.5 px) | FWHM pass/warn/fail thresholds |
-| `dxCenterWarnThreshold` / `dxCenterFailThreshold` (1.0/2.0 px) | `\|medDxCenter\|` flexure thresholds |
-| `flagRateWarnThreshold` / `flagRateFailThreshold` | `pctFlagged` thresholds; DictField keyed by `arm` **or** `arm:species` |
 
-Flag-rate thresholds are looked up as `arm:species` → `arm` → 15.0/20.0, where the
-species is the part of `W_SEQNAM` after the colon (`"Arc: HgCd"` → `HgCd`). Blue-arm
-defaults are permissive per-lamp because several species have almost no usable b-arm
-lines (see [Arc Lamp Physics](#arc-lamp-physics-and-b-arm-pctflagged-failures)):
-
-| Key | WARN | FAIL |
-|---|---|---|
-| `b` | 50.0 | 60.0 |
-| `b:HgCd` | 15.0 | 25.0 |
-| `b:Neon` | 50.0 | 60.0 |
-| `b:Krypton` | 55.0 | 65.0 |
-| `b:Xenon` | 85.0 | 92.0 |
-| `b:Argon` | 93.0 | 97.0 |
-| `r`, `n`, `m` | 15.0 | 20.0 |
-
-`DictField` values can't be set with dot notation on the command line — assign the whole
-dict as a Python literal:
-`-c "imageQualityQa:flagRateWarnThreshold={'b': 50.0, 'b:Argon': 93.0}"`.
+The config holds no limit: the limits are `pfs.drp.qa.metrics.registry.CHECKS`. The flag rate
+(`pctFlagged`) is not judged; several species have almost no usable b-arm lines (see
+[Arc Lamp Physics](#arc-lamp-physics-and-b-arm-pctflagged-failures)).
 
 ### Trace widths (PIPE2D-1918)
 
@@ -180,8 +161,7 @@ SM1-defocused quartz 140032 and 140139, and the test fixtures in `tests/imageQua
   609 fully lit and 473 on a shaka exposure in Run30), lamp lines per lit fiber do not.
 - `traceOnly`: True when falling back to fiber-profile widths; `medFwhm` is then not judged
 - `obsType` / `seqName`: visit classification and raw `W_SEQNAM`
-- `qaStatus`: `"PASS"`, `"WARN"`, or `"FAIL"` — the worst of the FWHM, flag-rate, and
-  `|medDxCenter|` checks
+- No verdict column: `pfs.drp.qa.metrics.gate` judges the numbers afterwards
 
 Additional columns are added dynamically: a per-status-bit flag breakdown
 (`pctNotVisible`, `pctBlend`, `pctSuspect`, `pctRejected`, `pctBroad`, plus `pctLowSN` /
@@ -200,8 +180,7 @@ per-species values go to `iqQaSpeciesMetrics`).
   174–180 on r3, 112–126 on r4 (0.19–0.57 % of the lit fibers' aperture pixels). On 148972, taken with the m arm,
   m1–m4 have 75–160. No b or n detector has a saturated line on any night. On r2 the Run30 nights have 196–201 and
   the Run31 nights 178–184; the other cameras' ranges overlap between the runs. On 153432 r2, nine KrI lines from
-  760.36 to 893.11 nm are saturated on all 16 engineering fibers. The Run30 nights are in the validation set twice:
-  known good for the IIS thresholds, and known bad for `nSaturatedLines`.
+  760.36 to 893.11 nm are saturated on all 16 engineering fibers.
 - **A count of line-list entries.** Kr 810.625 and 810.659 nm fall on the same pixels and count as two saturated
   lines per fiber.
 - **`SAT` pixels are interpolated over.** On the ten calexps examined every `SAT` pixel is also `INTRP`, so the
@@ -255,8 +234,7 @@ the robust RMS to 5–14 % (`dmLineResiduals` the higher, `dmResiduals` having c
 two give the same RMS on every image `dmLineResiduals` flagged. `dmResiduals` had no trace rows
 on arcs (312 detectors) and counted lines per fiber, so `linesPerFiber` has no counterpart.
 
-`imageQualityQa` writes **data only**. Plotting lives in `plotting/iqQa.py` and is driven after the
-fact by `bin.src/plotIqQaTimeSeries.py`; there is no `iqQaPlot` dataset.
+`imageQualityQa` writes **data only**; there is no `iqQaPlot` dataset.
 
 ### Line residuals: drift against `detectorMap_calib` (PIPE2D-1921)
 
@@ -268,7 +246,8 @@ offsets mean:
 - **A median offset is mostly harmless.** `adjustDetectorMap` fits a first-order correction
   per visit and absorbs a shift. It matters when it nears the 3 px radius within which
   drp_stella finds lines (`centroidLines.peakSearch`, `centroidTraces.searchRadius`): lines
-  are then lost or matched to a neighbour. Hence WARN 1 px, FAIL 2 px.
+  are then lost or matched to a neighbour. Hence WARN 1 px, FAIL 2 px on calibration frames
+  (`calibOffset`).
 - **Scatter about the median is what a shift cannot fix**, but against the calibration it
   also holds the linear change the adjustment absorbs. Known-good robust RMS (Run25, the
   calibration's own visits excluded): x 0.18–0.22 px at p99; y 0.08–0.13 px on lamp
@@ -277,7 +256,7 @@ offsets mean:
   drift derivation. Against the visit's own map they are visits like any other, and the scatter derivation keeps
   them (PIPE2D-1956).
 
-Measured in the validation run (`u/wtg/qa-thresholds/006`, 2026-10-15):
+Measured in `u/wtg/qa-thresholds/006` (2026-10-15):
 
 - **Run25 after its calibration block** (from 133532): lines sit off in y by the same
   pixels in every arm of a spectrograph, n with the opposite sign: SM1 0.45, SM2 0.65,
@@ -293,7 +272,8 @@ Measured in the validation run (`u/wtg/qa-thresholds/006`, 2026-10-15):
   read with m is within 3 % of read with r, per detector within a run (Runs 25, 26, 28, 29; Run30
   +13 % on 5 images read with m), so the gate does not split b-arm populations by camera set
   (PIPE2D-1927). Pooled over runs, 010 reads m 35–43 % below r: its m visits are mostly Run29
-  (0.025 px), its r visits include Run27's (0.054 px). Compare camera sets within a run.
+  (0.025 px), its r visits include Run27's (0.054 px). Compare camera sets within a run. The offset
+  itself is a normal value per b camera (`mArmOffsetX`), subtracted on science frames read with m.
 - **Off-zenith flexure is small**: the Helium detectorMap tests at alt 45–49 (150779,
   150782) sit within 0.2 px in y on b and m, and b −0.33 to −0.51 px in x, the camera-set
   offset of b read with m; at most about 0.1 px of flexure, far under the 1 px WARN.
@@ -328,8 +308,8 @@ from reserved lines" log line gives a robust RMS too, but over every species at 
 mixing traces and lamp lines (R7). The weighted RMS and softening per species are drp_stella's,
 from the `Stats for <species>` log lines (`iqQaSpeciesMetrics`), over the `USED` lines.
 
-Measured in `u/wtg/qa-thresholds/009` (2026-10-15): the validation visits only, so Run25's
-known-good visits and the fault examples of Runs 27 and 30; no healthy visit of a later run.
+Measured in `u/wtg/qa-thresholds/009` (2026-10-15): Run25's
+known-good visits and the fault examples of Runs 27 and 30 only; no healthy visit of a later run.
 Against the calibration it reproduces 008 exactly. RESERVED robust RMS against the visit's map:
 
 - **Run25 known-good lamp lines and traces**: medians 0.05–0.11 px in x and y per arm; the
@@ -342,27 +322,25 @@ Against the calibration it reproduces 008 exactly. RESERVED robust RMS against t
   spectrograph defocused in part of the run; against the calibration built later, SM3 sits
   0.85 px in y (median, up to 5.4 px; 0.88 px in x) and SM2 reaches 3.3 px in y. The metric
   separates both faults from Run25.
-Judged in `u/wtg/qa-thresholds/010` (2026-10-20, every validation visit reduced afresh) and
-checked with `bin.src/judgeScatterThresholds.py` on comparison mode's exports of Runs 25–30:
+Judged in `u/wtg/qa-thresholds/010` (2026-10-20, the same visits reduced afresh) and on
+comparison mode's exports of Runs 25–30:
 
 - **Trace centroids must be split by frame type.** On a quartz (`obsType` `trace`) the
   RESERVED trace scatter is 0.02–0.05 px (n1 0.08–0.13 through Run28); on an arc's faint
   continuum it is 0.10–0.14 px, and on a twilight 0.06–0.17. Pooled, the thresholds sat between
-  and failed 14–20 % of Runs 25–27's healthy arcs while every quartz passed. The task now stores
-  `obsType` and the derivation groups by it.
+  and failed 14–20 % of Runs 25–27's healthy arcs while every quartz passed. The task stores
+  `obsType`, and a normal value is kept per frame type.
 - **Quartz trace scatter is repeatable per detector to about 1 %, differs between detectors by
   20 %, and moves between runs.** In Run25 b1–b4 sit at 0.038, 0.044, 0.042, 0.046 px on every
   trace set; r3 reads 0.048 (Run25), 0.039 (Run26), 0.056 (Run27), 0.055 (Run28), 0.015 (Run29);
   b, r and n all drop to 0.015–0.03 px from Run29. A percentile over the pooled detectors is
   set by the worst detector (n by n1's 0.089) and cuts through the top detector's cluster (r4 at
   the p95 of its own run), so with 22–24 values the p95 and p99 coincide and the thresholds flag
-  Run26's late b1/b4 trace sets at +10 % and all of Run28's r3. Adopted instead (2026-10-20): a
-  tolerance about each detector's Run25 median, WARN 20 % and FAIL 50 %, as `medFwhm` has. The
-  regular trace sets of Runs 26–30 sit within +12 % of it (b1 and r1 reach +24 % and +28 % at the
+  Run26's late b1/b4 trace sets at +10 % and all of Run28's r3. Hence a tolerance about each
+  detector's own median, WARN 20 % and FAIL 50 % (`scatterX`). Against Run25's medians, the
+  regular trace sets of Runs 26–30 sit within +12 % (b1 and r1 reach +24 % and +28 % at the
   end of Run26: WARN), the Run27 SM1 defocus at 1.7–4× (FAIL, with r2 at 2.2× and one Run27 set at
-  1.5–1.9× on the other cameras); Runs 28–30 flag nothing. b2 and n4 keep Run25 as their scatter
-  reference (their scatter is unremarkable there), Run29 being their image-quality reference only.
-  The m arm has two known-good values per detector, below the floor: not judged.
+  1.5–1.9× on the other cameras); Runs 28–30 flag nothing.
 - **Bootstrap, IIS and health-check quartz are not full-slit quartz.** Their trace scatter is
   0.07–0.13 px, twice a trace set's, on every camera (Run25 132766–132767, 132958–132999,
   135903–135904; Run26 Bootstrap sets; Run29 147778–147780 `ImageQuality (Halogen)`); they are
@@ -383,8 +361,8 @@ checked with `bin.src/judgeScatterThresholds.py` on comparison mode's exports of
   population. In y the lamp lines move more between runs: against Run25's per-detector medians
   the healthy runs' standard arcs reach 1.37× at the 95th percentile and 2.4× at worst (Run26's
   b and r Krypton), where x stays within 1.2×, and the 20 %/50 % tolerance failed 8–14 % of
-  Run26's b Krypton, b Neon and r Krypton arcs. Adopted for y instead (2026-10-22; the file
-  keeps its 2026-10-20 adoption date): WARN 50 %, FAIL 150 %, which fails no standard arc of
+  Run26's b Krypton, b Neon and r Krypton arcs. Adopted for y instead (2026-10-22, `scatterY`):
+  WARN 50 %, FAIL 150 %, which fails no standard arc of
   Runs 25, 26 and 28–30, warns on one arc in each of Runs 25 and 28 and on 4 % of Run26's
   (b Krypton and Neon, r Krypton), and fails Run27's faults at 3–70×. The SM1 defocus barely shows
   in y (b 1.0×, r 1.3×, n 1.4×): x is the defocus detector. Not adopted: the HgCd lines, whose y
@@ -501,15 +479,15 @@ From engineering run data:
 
 | Symptom | Likely cause | Remedy |
 |---|---|---|
-| b-arm `pctFlagged` above the `b:Argon`/`b:Xenon`/`b:Krypton` thresholds | Lamp has very few/faint b-arm lines → global S/N cut flags almost all | No remedy available yet — `minSignalToNoisePerSpecies` is only proposed (see above). Treat as known lamp physics rather than a detector fault |
+| High b-arm `pctFlagged` on Argon, Xenon or Krypton arcs | Lamp has very few/faint b-arm lines → global S/N cut flags almost all | No remedy available yet — `minSignalToNoisePerSpecies` is only proposed (see above). Treat as known lamp physics rather than a detector fault |
 | b-arm `pctFlagged` > 15 % for HgCd arcs (or > 50 % for Ne) | Genuine crowding or optical problem | Investigate `medFwhm`; if FWHM is also high → optics issue |
 | High `pctMeasFail` with low `pctLowSN` | Centroid/photometry failures rather than faint lines — not lamp physics | Investigate the image; relaxing S/N thresholds will not help |
 | All arms FWHM > 3.5 px for a single spectrograph module | Hardware/focus issue | Flag the entire SM as bad for that visit range |
 | `\|medDxCenter\|` > 1 px across all arms of an SM | Flexure or a stale `detectorMap_calib` | Check the calib validity range before blaming the optics |
 | `medDxCenter` ≈ 0 but `dxCenterRms` large | Distortion rather than bulk shift | Look at the `dxCenter` distribution, not just the summary: rerun `imageQualityQa` on that dataId with `doWriteLineData=True` and read `iqQaData` (not written by default since PIPE2D-1962) |
 | `traceOnly=True` for all arc visits | `arcLines` connection missing or `minGoodLines` not satisfied | Check `fitDetectorMap` ran and produced `lines` |
-| No `medFwhm` for IIS arc or IIS quartz frames | Metrics stored before PIPE2D-1954, which reported IIS frames sparse on the belief that the arc catalog did not match the engineering fibers. From PIPE2D-1954 they are measured on the engineering fibers | Judge the collection again with the current `imageQualityQa` |
-| `medFwhm` measured on an IIS frame but `qaStatus` `UNKNOWN` | `extraThresholdsFiles` doesn't name the IIS file, or the population has no entry (m arm, n-arm Ne arc); full-slit thresholds don't apply to IIS frames (`gate.DEFAULT_POPULATION`) | Expected for the m arm and n Ne; otherwise check the config |
+| No `medFwhm` for IIS arc or IIS quartz frames | Metrics stored before PIPE2D-1954, which reported IIS frames sparse on the belief that the arc catalog did not match the engineering fibers. From PIPE2D-1954 they are measured on the engineering fibers | Run the current `imageQualityQa` on the collection again |
+| `medFwhm` measured on an IIS frame but the verdict is `UNKNOWN` | No normal value in force for its camera and lamp, or one resting on fewer than 3 frames; IIS frames have normal values of their own (`iisArc`, `iisQuartz`) | Make them from the run's IIS frames with `drpQa.py values` |
 | All `fit*` metric columns are `NaN`/0 | The `*_log` connections were absent from the input collection | Expected when `reduceExposure` hasn't run; the IQ metrics themselves are unaffected |
 | `ValueError: f(a) = NaN` in bisect during `fitDetectorMap` | Per-fiber dof=0 when very few arc lines remain after S/N cut | Proposed `dof <= 0` guard in `calculateSoftening` is **not** committed (see above), so relaxing per-species S/N is not yet safe |
 

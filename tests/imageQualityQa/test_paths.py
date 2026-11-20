@@ -1,50 +1,113 @@
-"""Which measurement path ``imageQualityQa`` takes, and what it then judges."""
+"""Which measurement path ``imageQualityQa`` takes, and what it then writes: numbers, no verdict."""
 
 import logging
+import re
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.gate import (
-    THRESHOLDS_COLUMNS,
-    configThresholds,
-    recordedThresholds,
-    sha256Of,
-    thresholdsDocument,
-    thresholdsPath,
-)
+from pfs.drp.qa.metrics.gate import measurements
 
 FWHM_FACTOR = 2.0 * np.sqrt(2.0 * np.log(2.0))
 TRACE = ("scienceTrace", "Trace")
 ARC = ("scienceArc", "Arc: Neon")
 
 
-def traceEntry(warn: float, fail: float, arm: str = "r") -> pd.DataFrame:
-    """Return a thresholds table with one ``medFwhm`` entry for trace quanta of ``arm``."""
-    return pd.DataFrame(
-        [
-            {
-                "metric": "medFwhm",
-                "obsType": "trace",
-                "arm": arm,
-                "warn": warn,
-                "fail": fail,
-                "higherIsWorse": True,
-                "absolute": False,
-                "provenance": "test",
-            }
-        ]
-    )
+def widthsRead(metrics: pd.DataFrame) -> list[float]:
+    """Return the widths the gate reads from ``iqQaMetrics`` rows (`pfs.drp.qa.metrics.gate.measurements`)."""
+    measured = measurements(iq=metrics)
+    return measured.loc[measured["check"] == "width", "value"].tolist()
 
 
-def configTable(iqqa) -> pd.DataFrame:
-    """Return the task config's thresholds as a table."""
-    return configThresholds(iqqa.ImageQualityQaConfig())
+#: Columns of ``iqQaMetrics`` on the arc-line path, in order. ``runQuantum`` appends ``calexpRun``.
+ARC_LINE_COLUMNS = [
+    "medFwhm",
+    "medDxCenter",
+    "dxCenterRms",
+    "pctFlagged",
+    "nLines",
+    "linesPerFiber",
+    "nLitFibers",
+    "nFibers",
+    "nTraceRows",
+    "nSaturatedLines",
+    "pctSaturatedPixels",
+    "traceOnly",
+    "obsType",
+    "illumination",
+    "seqName",
+    "isrBadPixels",
+    "isrTime",
+    "cosmicRayCount",
+    "cosmicRayPixels",
+    "cosmicRayTime",
+    "reduceExposureTime",
+    "fitChi2",
+    "fitDof",
+    "fitXRms",
+    "fitYRms",
+    "fitXSoften",
+    "fitYSoften",
+    "fitNLines",
+    "fitTotalLines",
+    "fitReservedChi2",
+    "fitReservedXRms",
+    "fitReservedYRms",
+    "fitReservedXSoften",
+    "fitReservedYSoften",
+    "fitReservedNLines",
+    "fitTraceXRms",
+    "fitTraceYRms",
+    "fiberIds",
+    "fiberXRms",
+    "fiberYRms",
+    "fiberNLines",
+    "pctNotVisible",
+    "pctBlend",
+    "pctSuspect",
+    "pctRejected",
+    "pctBroad",
+    "pctLowSN",
+    "pctMeasFail",
+    "visit",
+    "arm",
+    "spectrograph",
+]
+
+#: What a verdict column (``qaStatus``) or a limit (``thresholdsFile``, ``fwhmWarnThreshold``) is called.
+JUDGING = re.compile(r"^qa[A-Z]|[Tt]hreshold")
+
+
+def judging(names) -> list[str]:
+    """Return the ``names`` that are a verdict's or a limit's: none may be a column or a config field."""
+    return [name for name in names if JUDGING.search(name)]
+
+
+def testTaskWritesNumbersOnly(iqqa, runTask, fakes):
+    """``iqQaMetrics`` holds measurements and what identifies the frame; the config holds no limit."""
+    detectorMap = fakes.DetectorMap()
+    lines = fakes.arcLines(detectorMap, numPerFiber=30)
+    arc = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*ARC))
+    metrics = runTask(lines, detectorMap=detectorMap, calexp=arc).iqQaMetrics
+    assert list(metrics.columns) == ARC_LINE_COLUMNS
+    assert judging(metrics.columns) == []
+    assert judging(vars(iqqa.ImageQualityQaConfig())) == []
+    assert not hasattr(iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig()), "thresholds")
+    # With nothing measured the row is still written, and still without a verdict.
+    dark = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header("scienceDark", "Dark"))
+    sparse = runTask(lines, detectorMap=detectorMap, calexp=dark).iqQaMetrics
+    assert len(sparse) == 1 and judging(sparse.columns) == []
+    # Negative control: the check finds the columns and fields the task used to have.
+    assert judging([*ARC_LINE_COLUMNS, "qaStatus", "thresholdsSha256", "fwhmWarnThreshold"]) == [
+        "qaStatus",
+        "thresholdsSha256",
+        "fwhmWarnThreshold",
+    ]
 
 
 def testTraceFallsBackWhenCalexpUnusable(runTask, fakes, caplog):
-    """A calexp that measures nothing hands over to fiberProfiles, which is not judged."""
+    """A calexp that measures nothing hands over to fiberProfiles, marked ``traceOnly``."""
     detectorMap = fakes.DetectorMap()
     lines = fakes.arcLines(detectorMap, numPerFiber=30)
     calexp = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*TRACE))
@@ -60,8 +123,6 @@ def testTraceFallsBackWhenCalexpUnusable(runTask, fakes, caplog):
     # nLines counts the rows of ``lines``, not the 50 profile swaths.
     assert metrics["nLines"] == len(lines)
     assert len(outputs.lineData) == 50 and outputs.lineData["traceOnly"].all()
-    assert metrics["qaStatus"] == "UNKNOWN"
-    assert "fiberProfiles" in metrics["qaReason"]
 
     warnings = [record.getMessage() for record in caplog.records if record.levelno == logging.WARNING]
     # 10 fibers on 4 rows: 400 rows sampled every profileYStride (100).
@@ -72,57 +133,26 @@ def testTraceFallsBackWhenCalexpUnusable(runTask, fakes, caplog):
     outputs = runTask(lines, detectorMap=detectorMap, calexp=calexp)
     metrics = outputs.iqQaMetrics.iloc[0]
     assert not metrics["traceOnly"] and np.isnan(metrics["medFwhm"])
-    assert (metrics["qaStatus"], metrics["qaReason"]) == ("UNKNOWN", "no metric measured")
 
 
-def testProfileFwhmIsNotJudged(iqqa, runTask, fakes):
-    """A trace entry that would fail the profile FWHM gives no verdict on it; a calexp one fails."""
+def testProfileFwhmIsNotReadAsAMeasurement(runTask, fakes):
+    """The gate reads no width from a row whose FWHM is the fiberProfiles'; it reads a calexp one."""
     detectorMap = fakes.DetectorMap()
     lines = fakes.arcLines(detectorMap, numPerFiber=30)
-    thresholds = [traceEntry(warn=1.0, fail=2.0), configTable(iqqa)]
 
     unusable = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*TRACE))
     profiles = fakes.FiberProfiles(detectorMap, sigma=1.2)
-    outputs = runTask(
-        lines, detectorMap=detectorMap, calexp=unusable, fiberProfiles=profiles, thresholds=thresholds
-    )
-    assert outputs.iqQaMetrics["medFwhm"].iloc[0] > 2.0
-    assert outputs.iqQaMetrics["qaStatus"].iloc[0] == "UNKNOWN"
-
-    # Negative control: the same width measured from the calexp fails.
-    usable = fakes.Exposure(fakes.traceImage(detectorMap, sigma=1.2), fakes.header(*TRACE))
-    outputs = runTask(
-        lines, detectorMap=detectorMap, calexp=usable, fiberProfiles=profiles, thresholds=thresholds
-    )
+    outputs = runTask(lines, detectorMap=detectorMap, calexp=unusable, fiberProfiles=profiles)
     metrics = outputs.iqQaMetrics.iloc[0]
-    assert not metrics["traceOnly"]
-    assert (metrics["qaStatus"], metrics["qaDecidedBy"]) == ("FAIL", "medFwhm")
+    assert metrics["traceOnly"] and metrics["medFwhm"] == pytest.approx(FWHM_FACTOR * 1.2, rel=0.005)
+    assert widthsRead(outputs.iqQaMetrics) == []
 
-
-def testTraceFwhmIsGatedPerArm(iqqa, runTask, fakes):
-    """A trace entry for one arm judges that arm's trace quanta, not its arcs or other arms."""
-    detectorMap = fakes.DetectorMap()
-    lines = fakes.arcLines(detectorMap, numPerFiber=30)
-    calexp = fakes.Exposure(fakes.traceImage(detectorMap, sigma=1.3), fakes.header(*TRACE))
-    thresholds = [traceEntry(warn=2.5, fail=2.8, arm="r"), configTable(iqqa)]
-
-    outputs = runTask(lines, arm="r", detectorMap=detectorMap, calexp=calexp, thresholds=thresholds)
+    # Negative control: the same width measured from the calexp is read.
+    usable = fakes.Exposure(fakes.traceImage(detectorMap, sigma=1.2), fakes.header(*TRACE))
+    outputs = runTask(lines, detectorMap=detectorMap, calexp=usable, fiberProfiles=profiles)
     metrics = outputs.iqQaMetrics.iloc[0]
     assert metrics["obsType"] == "trace" and not metrics["traceOnly"]
-    assert metrics["medFwhm"] == pytest.approx(FWHM_FACTOR * 1.3, rel=0.02)
-    assert metrics["qaStatus"] == "FAIL"
-    assert "fail threshold 2.8px" in metrics["qaReason"]
-
-    # The b arm falls through to the config's 3.2/3.5.
-    outputs = runTask(lines, arm="b", detectorMap=detectorMap, calexp=calexp, thresholds=thresholds)
-    assert outputs.iqQaMetrics["qaStatus"].iloc[0] == "PASS"
-
-    # An r-arm arc with the same FWHM is not a trace.
-    arc = fakes.arcLines(detectorMap, numPerFiber=30, fwhm=FWHM_FACTOR * 1.3)
-    arcExposure = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*ARC))
-    outputs = runTask(arc, arm="r", detectorMap=detectorMap, calexp=arcExposure, thresholds=thresholds)
-    metrics = outputs.iqQaMetrics.iloc[0]
-    assert metrics["obsType"] == "arc" and metrics["qaStatus"] == "PASS"
+    assert widthsRead(outputs.iqQaMetrics) == [pytest.approx(FWHM_FACTOR * 1.2, rel=0.02)]
 
 
 def testQuartzAtThePfsPitchIsMeasuredFromTheCalexp(runTask, fakes):
@@ -143,24 +173,27 @@ def testQuartzAtThePfsPitchIsMeasuredFromTheCalexp(runTask, fakes):
     assert (~outputs.lineData["flag"]).mean() > 0.9
 
 
-def testNothingMeasuredIsUnknown(runTask, fakes):
-    """A dark is not judged, though the same lines on an arc pass."""
+def testDarkMeasuresNothing(runTask, fakes):
+    """A dark's metrics are null, though the same lines on an arc are measured."""
     detectorMap = fakes.DetectorMap()
     lines = fakes.arcLines(detectorMap, numPerFiber=30)
 
     dark = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header("scienceDark", "Dark"))
-    metrics = runTask(lines, detectorMap=detectorMap, calexp=dark).iqQaMetrics.iloc[0]
+    outputs = runTask(lines, detectorMap=detectorMap, calexp=dark)
+    metrics = outputs.iqQaMetrics.iloc[0]
     assert metrics["obsType"] == "dark"
-    assert (metrics["qaStatus"], metrics["qaReason"]) == ("UNKNOWN", "no metric measured")
+    assert np.isnan(metrics["medFwhm"]) and np.isnan(metrics["pctFlagged"])
+    assert widthsRead(outputs.iqQaMetrics) == []
 
+    # Negative control: on an arc the same lines give a width and a flag rate.
     arc = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*ARC))
     metrics = runTask(lines, detectorMap=detectorMap, calexp=arc).iqQaMetrics.iloc[0]
-    assert metrics["obsType"] == "arc" and metrics["qaStatus"] == "PASS"
+    assert metrics["obsType"] == "arc" and metrics["medFwhm"] == 2.5
     assert metrics["nLines"] == len(lines) and metrics["pctFlagged"] == 0.0
 
 
 def testTwilightIsNotMeasured(runTask, fakes):
-    """Twilight is its own class and, until sky lines are measured, unassessed."""
+    """Twilight is its own class and, until sky lines are measured, has no width."""
     detectorMap = fakes.DetectorMap()
     lines = fakes.arcLines(detectorMap, numPerFiber=30)
     calexp = fakes.Exposure(
@@ -168,8 +201,12 @@ def testTwilightIsNotMeasured(runTask, fakes):
     )
     metrics = runTask(lines, detectorMap=detectorMap, calexp=calexp).iqQaMetrics.iloc[0]
     assert metrics["obsType"] == "twilight"
-    assert metrics["qaStatus"] == "UNKNOWN" and np.isnan(metrics["medFwhm"])
+    assert np.isnan(metrics["medFwhm"])
     assert metrics["nLines"] == len(lines)
+    # Negative control: the same image as a quartz is measured.
+    quartz = fakes.Exposure(calexp.image.array, fakes.header(*TRACE))
+    metrics = runTask(lines, detectorMap=detectorMap, calexp=quartz).iqQaMetrics.iloc[0]
+    assert metrics["medFwhm"] == pytest.approx(FWHM_FACTOR * 1.2, rel=0.02)
 
 
 @pytest.mark.parametrize(
@@ -192,73 +229,11 @@ def testClassifyVisit(iqqa, fakes, seqType, seqName, obsType):
     assert task._classifyVisit(calexp, None)[0] == obsType
 
 
-def testDefaultConfigJudgesByTheShippedFile(iqqa):
-    """The default config puts the Run25 file, then the IIS file, ahead of its own fields."""
-    task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
-    assert len(task.thresholds) == 3
-    shipped = task.thresholds[0]
-    iis = task.thresholds[1]
-    assert (iis["illumination"] == "iis").all() and "illumination" not in shipped.columns
-    assert set(iis["metric"]) == {"medFwhm", "linesPerFiber", "medDxCenter", "pctFlagged"}
-    assert set(shipped["metric"]) == {"medFwhm", "linesPerFiber", "pctFlagged"}
-    flags = shipped[shipped["metric"] == "pctFlagged"]
-    assert len(flags) == 1 and flags[["warn", "fail"]].isna().all(axis=None)  # not judged
-    fwhm = shipped[shipped["metric"] == "medFwhm"]
-    assert set(fwhm["obsType"]) == {"arc", "trace"}
-    # Each detector's quartz is judged against its own Run25 median.
-    tolerance = fwhm[(fwhm["method"] == "tolerance") & (fwhm["obsType"] == "trace")]
-    assert set(zip(tolerance["arm"], tolerance["spectrograph"], strict=True)) == {
-        (arm, spectrograph) for arm in "brnm" for spectrograph in (1, 2, 3, 4)
-    }
-    assert tolerance[["warn", "fail"]].notna().all(axis=None)
-    # The per-arm fallback: the m arm's quartz derivation is below the sample floor and judges nothing.
-    trace = fwhm[(fwhm["method"] == "percentile") & (fwhm["obsType"] == "trace")].set_index("arm")
-    assert set(trace.index) == {"b", "r", "n", "m"}
-    assert trace.loc[["b", "r", "n"], "fail"].notna().all() and trace.loc[["m"], ["warn", "fail"]].isna().all(
-        axis=None
-    )
-
-
-def testMetricsRecordTheThresholdsFilesJudgedWith(iqqa, runTask, fakes):
-    """Each image's row names the layers the task loaded, by content then: its files, then its config's fields."""
-    detectorMap = fakes.DetectorMap()
-    calexp = fakes.Exposure(fakes.noiseImage(detectorMap), fakes.header(*ARC))
-    lines = fakes.arcLines(detectorMap, numPerFiber=30)
-
-    def layers(config=None):
-        row = runTask(lines, detectorMap=detectorMap, calexp=calexp, config=config).iqQaMetrics.iloc[0]
-        return recordedThresholds(*(row[column] for column in THRESHOLDS_COLUMNS))
-
-    def configLayer(config):
-        return (
-            "imageQualityQa.config",
-            sha256Of(thresholdsDocument(configThresholds(config), "imageQualityQa.config")),
-        )
-
-    default = iqqa.ImageQualityQaConfig()
-    assert layers(default) == [
-        *(
-            (name, sha256Of(thresholdsPath(name)))
-            for name in ("iqQaThresholds-run25.yaml", "iqQaThresholds-iis-run30.yaml")
-        ),
-        configLayer(default),
-    ]
-    # runTask's own config names no file: judged by the fields alone, recorded as the one layer, by content.
-    assert layers() == [configLayer(default)]  # the same fields as the default config
-    # Negative control: other field values are another layer.
-    changed = iqqa.ImageQualityQaConfig()
-    changed.thresholdsFile, changed.extraThresholdsFiles, changed.fwhmWarnThreshold = "", [], 9.0
-    assert layers(changed) == [configLayer(changed)] != [configLayer(default)]
-
-
 def testRunQuantumRecordsTheCalexpRun(iqqa, monkeypatch):
-    """IqQaMetrics names the RUN of the calexp judged, whose pfsArm records the pipeline."""
+    """IqQaMetrics names the RUN of the calexp measured, whose pfsArm records the pipeline."""
     from types import SimpleNamespace
 
-    config = iqqa.ImageQualityQaConfig()
-    config.thresholdsFile = ""
-    config.extraThresholdsFiles = []
-    task = iqqa.ImageQualityQaTask(config=config)
+    task = iqqa.ImageQualityQaTask(config=iqqa.ImageQualityQaConfig())
     outputs = SimpleNamespace(lineData=pd.DataFrame(), iqQaSpeciesMetrics=pd.DataFrame())
     monkeypatch.setattr(
         task,
@@ -291,8 +266,6 @@ def testLineDataIsWrittenOnlyWhenAskedFor(iqqa, monkeypatch):
 
     assert hasattr(iqqa.ImageQualityQaConnections, "iqQaData")
     config = iqqa.ImageQualityQaConfig()
-    config.thresholdsFile = ""
-    config.extraThresholdsFiles = []
     assert config.doWriteLineData is False
     assert "iqQaData" not in iqqa.ImageQualityQaConnections(config=config).outputs
 

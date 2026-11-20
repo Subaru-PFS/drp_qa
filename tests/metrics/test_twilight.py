@@ -1,4 +1,8 @@
-"""Tests for the twilight sequence check: synthetic sequences, then the stored metrics."""
+"""Tests for the twilight sequence check: synthetic sequences, then the stored metrics.
+
+The measurement is `pfs.drp.qa.metrics.twilight`'s; the verdicts are the gate's
+(`pfs.drp.qa.metrics.gate.gate`), one per detector image.
+"""
 
 from pathlib import Path
 
@@ -6,25 +10,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.calibration import readThresholds
-from pfs.drp.qa.metrics.gate import THRESHOLDS_COLUMNS, thresholdsPath
-from pfs.drp.qa.metrics.registry import specFor
+from pfs.drp.qa.metrics.gate import VERDICT_COLUMNS, gate, measurements, worst
+from pfs.drp.qa.metrics.registry import CHECKS, TWILIGHT
 from pfs.drp.qa.metrics.twilight import (
-    IMAGE_VERDICT_COLUMNS,
     METRIC_COLUMNS,
-    TWILIGHT_THRESHOLDS_FILE,
-    VERDICT_COLUMNS,
+    TWILIGHT_METRICS,
     WINDOWS,
     addPositions,
     fiberFlux,
     isTwilightSequence,
     sequenceConsistency,
     sequenceReadiness,
-    twilightImageVerdict,
-    twilightThresholds,
-    twilightVerdict,
 )
-from pfs.drp.qa.metrics.validationVisits import loadValidationVisits
 
 DATA = Path(__file__).parent / "data"
 SEQUENCE = 4242
@@ -98,8 +95,15 @@ def makeSequence(
     return pd.concat(rows, ignore_index=True)
 
 
-def verdictOf(fibers: pd.DataFrame) -> pd.DataFrame:
-    return twilightVerdict(sequenceConsistency(fibers)).set_index(["visit", "arm"])
+def imageVerdicts(metrics: pd.DataFrame) -> pd.Series:
+    """Return the gate's verdict on each detector image, by (visit, arm, spectrograph)."""
+    return gate(twilight=metrics).set_index(["visit", "arm", "spectrograph"])["qaStatus"]
+
+
+def verdictOf(fibers: pd.DataFrame) -> pd.Series:
+    """Return the gate's verdict on each exposure and arm of a sequence: the worst of its detectors'."""
+    images = imageVerdicts(sequenceConsistency(fibers))
+    return images.groupby(level=["visit", "arm"]).agg(lambda statuses: worst(list(statuses)))
 
 
 def testFiberFluxUsesTheWindowAndGoodPixels():
@@ -146,11 +150,11 @@ def testCleanSequencePasses():
     assert list(metrics.columns) == list(METRIC_COLUMNS)
     assert metrics["twilightLevelOffset"].abs().max() < 0.2
     assert metrics["twilightResidRms"].max() < 0.2
-    assert (verdictOf(makeSequence())["status"] == "PASS").all()
+    assert (verdictOf(makeSequence()) == "PASS").all()
 
 
 def testDetectorStepIsNamedInItsExposureAlone():
-    """A detector 12 % low in one exposure fails there, and nowhere else."""
+    """A detector 12 % low in one exposure fails there, and no other image does."""
     fibers = makeSequence(step=(2, "b", 4, 0.88))
     metrics = sequenceConsistency(fibers).set_index(["visit", "arm", "spectrograph"]).sort_index()
     offset = metrics["twilightLevelOffset"]
@@ -159,9 +163,9 @@ def testDetectorStepIsNamedInItsExposureAlone():
     assert not offset[(1002, "b", 4)] > 0
     others = offset.drop((1002, "b", 4))
     assert others.abs().max() < 1.0
-    verdict = verdictOf(fibers)["status"]
-    assert verdict[(1002, "b")] == "FAIL"
-    assert (verdict.drop((1002, "b")) == "PASS").all()
+    verdict = imageVerdicts(sequenceConsistency(fibers))
+    assert verdict[(1002, "b", 4)] == "FAIL"
+    assert (verdict.drop((1002, "b", 4)) == "PASS").all()
     # The detector's own median removes the step before the RMS: it is not counted twice.
     assert metrics.loc[(1002, "b"), "twilightResidRms"].max() < 0.2
 
@@ -173,7 +177,7 @@ def testPassingCloudFailsThePatchAndIsShared():
     exposure = metrics[metrics["visit"] == 1002].iloc[0]
     assert exposure["twilightPatch"] > 4.0
     assert exposure["twilightArmMean"] > 3 * exposure["twilightArmHalfDiff"]
-    assert verdictOf(fibers).loc[(1002, "b"), "status"] == "FAIL"
+    assert verdictOf(fibers)[(1002, "b")] == "FAIL"
     # The robust RMS ignores a patch on a few per cent of the fibers: that is why the patch is measured.
     assert exposure["twilightResidRms"] < 1.5
     assert metrics.loc[metrics["visit"] != 1002, "twilightPatch"].max() < 2.5
@@ -181,9 +185,9 @@ def testPassingCloudFailsThePatchAndIsShared():
 
 def testStationaryPatchIsNotSeen():
     """The blind spot, pinned: a patch in every exposure cancels against the sequence."""
-    assert (verdictOf(makeSequence(staticPatch=0.10))["status"] == "PASS").all()
+    assert (verdictOf(makeSequence(staticPatch=0.10)) == "PASS").all()
     # Negative control: the same patch in one exposure is seen.
-    assert (verdictOf(makeSequence(patch=(2, 0.10)))["status"] == "FAIL").any()
+    assert (verdictOf(makeSequence(patch=(2, 0.10))) == "FAIL").any()
 
 
 def testFaintExposureIsTooFaintButItsLevelIsJudged():
@@ -192,9 +196,17 @@ def testFaintExposureIsTooFaintButItsLevelIsJudged():
     faint = metrics[metrics["visit"] == 1000]
     assert faint["tooFaint"].all() and faint["twilightResidRms"].isna().all()
     assert faint.set_index(["arm", "spectrograph"]).loc[("b", 3), "twilightLevelOffset"] < -10
-    verdict = verdictOf(fibers)["status"]
+    verdict = verdictOf(fibers)
     assert verdict[(1000, "b")] == "FAIL"  # its level step still fails it
-    assert verdict[(1000, "r")] == "TOO_FAINT"
+    assert verdict[(1000, "r")] == "PASS"  # on its level, the one number of a faint exposure that is judged
+    judged = measurements(twilight=metrics)
+    assert set(judged.loc[judged["visit"] == 1000, "check"]) == {"twilightLevel"}
+    # Negative control: a bright exposure is judged on all three.
+    assert set(judged.loc[judged["visit"] == 1001, "check"]) == {
+        "twilightLevel",
+        "twilightScatter",
+        "twilightPatch",
+    }
     # A faint exposure is no reference: the brighter three's is their own median.
     assert (metrics.loc[metrics["visit"] != 1000, "nReference"] == 3).all()
 
@@ -209,7 +221,7 @@ def testOneBadExposureOfThreeIsNamedAlone():
     metrics = sequenceConsistency(fibers).drop_duplicates(["visit", "arm"]).set_index(["visit", "arm"])
     assert metrics.loc[(1002, "b"), "twilightPatch"] > 4.0
     assert metrics.drop(1002, level="visit")["twilightPatch"].max() < 1.0
-    verdict = verdictOf(fibers)["status"]
+    verdict = verdictOf(fibers)
     assert (verdict.xs(1002, level="visit") == "FAIL").all()
     assert (verdict.drop(1002, level="visit") == "PASS").all()
     # Negative control: against the mean of the other two, a clean neighbour shows the patch at half depth.
@@ -249,7 +261,7 @@ def testDeadDetectorFails():
         assert metrics.loc[(1002, "b", 3), "twilightLevelOffset"] == pytest.approx(expected)
         if np.isnan(value):
             assert metrics.loc[(1002, "b", 3), "nMeasured"] == 0
-        assert verdictOf(fibers).loc[(1002, "b"), "status"] == "FAIL"
+        assert imageVerdicts(sequenceConsistency(fibers))[(1002, "b", 3)] == "FAIL"
 
 
 def testCameraWithTooFewExposuresIsUnjudged():
@@ -264,36 +276,37 @@ def testCameraWithTooFewExposuresIsUnjudged():
     assert metrics.drop((1002, "r", 4))["twilightLevelOffset"].abs().max() < 1.0
 
 
-def testFaintArmLeftUnjudgedIsUnknown():
-    """TOO_FAINT replaces a PASS; an arm the thresholds leave out is UNKNOWN, faint or not."""
-    verdict = verdictOf(makeSequence(snr=(5.0, 20.0, 30.0, 45.0), arms=("b", "n")))["status"]
-    assert verdict[(1000, "n")] == "UNKNOWN"
-    # Negative control: the judged arm of the same faint exposure is TOO_FAINT.
-    assert verdict[(1000, "b")] == "TOO_FAINT"
+def testArmWithoutACheckIsUnknownFaintOrNot():
+    """An arm no twilight check applies to is UNKNOWN, never PASS, on a faint exposure as on a bright one."""
+    verdict = verdictOf(makeSequence(snr=(5.0, 20.0, 30.0, 45.0), arms=("b", "n")))
+    assert (verdict.xs("n", level="arm") == "UNKNOWN").all()
+    # Negative control: the judged arm of the same exposures has a verdict.
+    assert (verdict.xs("b", level="arm") == "PASS").all()
 
 
 def testShortSequenceIsNotMeasured():
-    assert sequenceConsistency(makeSequence(snr=(20.0, 30.0))).empty
+    metrics = sequenceConsistency(makeSequence(snr=(20.0, 30.0)))
+    assert metrics.empty
     # Nothing measured gives a verdict table with its columns, and no rows.
-    assert list(twilightVerdict(sequenceConsistency(makeSequence(snr=(20.0, 30.0))))) == list(VERDICT_COLUMNS)
+    verdicts = gate(twilight=metrics)
+    assert verdicts.empty and list(verdicts.columns) == list(VERDICT_COLUMNS)
 
 
 def testNArmIsNotJudged():
     fibers = makeSequence(arms=("b", "n"), step=(1, "n", 2, 0.8))
-    verdict = verdictOf(fibers)["status"]
+    verdict = verdictOf(fibers)
     assert (verdict.xs("n", level="arm") == "UNKNOWN").all()
     # Negative control: the same step in b fails.
-    assert verdictOf(makeSequence(arms=("b", "n"), step=(1, "b", 2, 0.8)))["status"][(1001, "b")] == "FAIL"
+    assert verdictOf(makeSequence(arms=("b", "n"), step=(1, "b", 2, 0.8)))[(1001, "b")] == "FAIL"
 
 
-def testThresholdsAgreeWithTheRegistry():
-    thresholds = twilightThresholds()
-    for _, entry in thresholds.iterrows():
-        spec = specFor(entry["metric"])
-        assert entry["higherIsWorse"] == spec.higherIsWorse
-        assert entry["absolute"] == spec.absolute
-    judged = thresholds[thresholds["arm"].isna()]
-    assert (judged["warn"] < judged["fail"]).all()
+def testEveryJudgedMetricHasATwilightCheck():
+    """`TWILIGHT_METRICS` are the numbers the gate's twilight checks read, each with WARN below FAIL."""
+    checks = [check for check in CHECKS.values() if TWILIGHT in check.frames]
+    assert {metric for check in checks for metric in check.metrics} == set(TWILIGHT_METRICS)
+    assert all(check.warn < check.fail and "n" not in check.arms for check in checks)
+    # Negative control: the diagnostics are measured, not judged.
+    assert "twilightArmMean" in METRIC_COLUMNS and "twilightArmMean" not in TWILIGHT_METRICS
 
 
 def opdbSequence(visits=(150840, 150841, 150842), name="Twilight sky", finished="2026-09-16 05:40:51"):
@@ -362,19 +375,38 @@ class TestSequenceReadiness:
 
 
 class TestStoredMetrics:
-    """The 16 twilight sequences of 2025-03 to 2026-09, through ``makeTwilightFixture.py``."""
+    """The 16 twilight sequences of 2025-03 to 2026-09, through ``makeTwilightFixture.py``, as the gate judges them."""
+
+    #: Run21's faults: b1's level steps through one sequence, b4's in one exposure of another.
+    RUN21 = frozenset({(121949, 1), (121950, 1), (121951, 1), (121952, 1), (123320, 4)})
+
+    #: Twilights known to be good flats: Run25's of 2025-11-25, and of 2025-11-28 at insrot 90.
+    KNOWN_GOOD = ((134880, 134886), (135275, 135279))
 
     @pytest.fixture(scope="class")
-    def verdict(self) -> pd.DataFrame:
-        return twilightVerdict(pd.read_parquet(DATA / "twilightMetrics.parquet"))
+    def metrics(self) -> pd.DataFrame:
+        return pd.read_parquet(DATA / "twilightMetrics.parquet")
 
-    def testKnownBadDetectorsFail(self, verdict):
-        statuses = verdict.set_index(["visit", "arm"])["status"]
-        for visit in (121949, 121950, 121951, 121952, 123320):
-            assert statuses[(visit, "b")] == "FAIL", visit
+    @pytest.fixture(scope="class")
+    def verdict(self, metrics) -> pd.DataFrame:
+        return gate(twilight=metrics)
 
-    def testOddExposureIsNamedAlone(self):
-        metrics = pd.read_parquet(DATA / "twilightMetrics.parquet")
+    def testOneVerdictPerImage(self, verdict, metrics):
+        assert list(verdict.columns) == list(VERDICT_COLUMNS)
+        assert len(verdict) == len(metrics) and set(verdict["frameType"]) == {TWILIGHT}
+        assert set(verdict["qaStatus"]) <= {"PASS", "WARN", "FAIL", "UNKNOWN"}
+
+    def testRun21StepsFailTheSteppedDetectorAlone(self, verdict):
+        """b1's level step (121949-121952) and b4's (123320) fail those detectors, not their arm's others."""
+        run21 = verdict[verdict["visit"].isin({visit for visit, _ in self.RUN21}) & (verdict["arm"] == "b")]
+        failed = run21[run21["qaStatus"] == "FAIL"]
+        assert set(failed["qaDecidedBy"]) == {"twilightLevel"}
+        assert set(zip(failed["visit"], failed["spectrograph"], strict=True)) == self.RUN21
+        # Negative control: the other detectors of those arms are not failed.
+        assert len(run21) > len(failed)
+        assert (run21.loc[~run21.index.isin(failed.index), "qaStatus"] != "FAIL").all()
+
+    def testOddExposureIsNamedAlone(self, metrics):
         b4 = metrics[
             (metrics["sequence"] == 44625) & (metrics["arm"] == "b") & (metrics["spectrograph"] == 4)
         ]
@@ -387,117 +419,37 @@ class TestStoredMetrics:
         A patch at x=-173, y=-28 mm, on SM1 and SM2 fibers alike, +10 % against the rest of its sequence,
         whose other two bright exposures agree within 0.2 %.
         """
-        failed = set(map(tuple, verdict.loc[verdict["status"] == "FAIL", ["visit", "arm"]].to_numpy()))
-        run21 = {(visit, "b") for visit in (121949, 121950, 121951, 121952, 123320)}
-        run29 = {(145073, "b")}
-        assert failed == run21 | run29
-        assert (verdict["status"] == "WARN").sum() <= 2
+        failed = verdict[verdict["qaStatus"] == "FAIL"]
+        patch = failed[failed["visit"] == 145073]
+        assert set(patch["arm"]) == {"b"} and set(patch["qaDecidedBy"]) == {"twilightPatch"}
+        others = failed[failed["visit"] != 145073]
+        assert set(zip(others["visit"], others["spectrograph"], strict=True)) == self.RUN21
+        assert set(others["arm"]) == {"b"}
+        assert (verdict["qaStatus"] == "WARN").sum() <= 2
 
     def testKnownGoodTwilightsAreNotFailed(self, verdict):
-        visitSet = loadValidationVisits()
-        for _, row in verdict[verdict["arm"].isin(["b", "r"])].iterrows():
-            if visitSet.expectationFor(row["visit"], arm=row["arm"], spectrograph=1) == "PASS":
-                assert row["status"] in ("PASS", "TOO_FAINT"), (row["visit"], row["arm"], row["reason"])
+        good = verdict[
+            np.logical_or.reduce([verdict["visit"].between(*visits) for visits in self.KNOWN_GOOD])
+            & verdict["arm"].isin(["b", "r"])
+        ]
+        assert good["visit"].nunique() == 12
+        assert (good["qaStatus"] == "PASS").all(), good[good["qaStatus"] != "PASS"]
 
     def testCloudyTwilightPasses(self, verdict):
-        """The obslog's cloudy twilight is a good flat by this check (its entry is unconfirmed)."""
+        """The obslog's cloudy twilight is a good flat by this check."""
         cloudy = verdict[verdict["visit"].between(134334, 134337) & verdict["arm"].isin(["b", "r"])]
-        assert set(cloudy["status"]) <= {"PASS", "TOO_FAINT"}
+        assert len(cloudy) and set(cloudy["qaStatus"]) == {"PASS"}
 
-
-def testShippedThresholdsAreTheFunctions():
-    """``twilightThresholds.yaml`` (what the judge records) holds `twilightThresholds` (what it means)."""
-    _, shipped = readThresholds(thresholdsPath(TWILIGHT_THRESHOLDS_FILE))
-    table = twilightThresholds()
-    assert len(shipped) == len(table)
-    for column in ("metric", "warn", "fail", "higherIsWorse", "absolute"):
-        assert list(shipped[column].fillna(-1)) == list(table[column].fillna(-1)), column
-    assert [None if pd.isna(a) else a for a in shipped["arm"]] == [
-        None if pd.isna(a) else a for a in table["arm"]
-    ]
-    # Negative control: a changed threshold would be caught.
-    assert list(shipped["warn"].fillna(-1)) != list(twilightThresholds(levelWarn=9.0)["warn"].fillna(-1))
+    def testTheNArmIsUnknown(self, verdict):
+        """An arm no check applies to is UNKNOWN per image, never blank and never PASS."""
+        n = verdict["arm"] == "n"
+        assert n.any() and set(verdict.loc[n, "qaStatus"]) == {"UNKNOWN"}
+        assert (verdict.loc[n, "qaReason"] != "").all()
+        # Negative control: the judged arms are not UNKNOWN.
+        assert "UNKNOWN" not in set(verdict.loc[~n, "qaStatus"])
 
 
 def testIsTwilightSequence():
     assert isTwilightSequence(opdbSequence())
     assert not isTwilightSequence(opdbSequence(name="Arc: HgCd"))
     assert not isTwilightSequence(opdbSequence(visits=()))
-
-
-class TestExposureVerdictUnknown:
-    """An arm without thresholds (n) is UNKNOWN per exposure, as it is per image, never blank."""
-
-    def testTheNArmIsUnknown(self):
-        metrics = pd.read_parquet(DATA / "twilightMetrics.parquet")
-        verdict = twilightVerdict(metrics[metrics["sequence"] == 54787])
-        assert set(verdict.loc[verdict["arm"] == "n", "status"]) == {"UNKNOWN"}
-        assert "" not in set(verdict["status"])
-        # Negative control: the judged arms are not UNKNOWN.
-        assert "UNKNOWN" not in set(verdict.loc[verdict["arm"].isin(["b", "r"]), "status"])
-
-
-class TestImageVerdict:
-    """One verdict per detector image, for the gate: the sequence verdict seen from each image."""
-
-    @pytest.fixture(scope="class")
-    def metrics(self):
-        return pd.read_parquet(DATA / "twilightMetrics.parquet")
-
-    @pytest.fixture(scope="class")
-    def images(self, metrics):
-        return twilightImageVerdict(metrics)
-
-    def testColumnsAndRecord(self, images, metrics):
-        assert list(images.columns) == list(IMAGE_VERDICT_COLUMNS)
-        assert len(images) == len(metrics)
-        assert set(images["thresholdsFiles"]) == {TWILIGHT_THRESHOLDS_FILE}
-        assert images["thresholdsSha256"].str.len().eq(64).all()
-        assert set(THRESHOLDS_COLUMNS) <= set(images.columns)
-
-    def testTheNArmIsUnknown(self, images):
-        assert set(images.loc[images["arm"] == "n", "qaStatus"]) == {"UNKNOWN"}
-        assert set(images.loc[images["arm"] != "n", "qaStatus"]) <= {"PASS", "WARN", "FAIL"}
-
-    def testWorstImageIsTheArmVerdict(self, images, metrics):
-        """An arm's verdict is the worst of its images', TOO_FAINT read as PASS."""
-        arm = twilightVerdict(metrics).set_index(["visit", "arm"])["status"]
-        order = {"UNKNOWN": -1, "PASS": 0, "WARN": 1, "FAIL": 2}
-        worst = images.groupby(["visit", "arm"])["qaStatus"].agg(lambda s: max(s, key=order.get))
-        judged = arm[arm != ""]
-        assert len(judged) and (arm == "TOO_FAINT").any()  # the mapping is exercised
-        assert (worst[judged.index] == judged.replace("TOO_FAINT", "PASS")).all()
-
-    def testRun21StepsFailTheSteppedDetectorAlone(self, images):
-        """b1's level step (121949-121952) and b4's (123320) fail those detectors, not their arm's others."""
-        run21 = images[
-            images["visit"].isin([121949, 121950, 121951, 121952, 123320]) & (images["arm"] == "b")
-        ]
-        failed = run21[run21["qaStatus"] == "FAIL"]
-        assert set(failed["qaDecidedBy"]) == {"twilightLevelOffset"}
-        assert set(zip(failed["visit"], failed["spectrograph"], strict=True)) == {
-            (121949, 1), (121950, 1), (121951, 1), (121952, 1), (123320, 4)
-        }  # fmt: skip
-        # Negative control: the other detectors of those arms are not failed.
-        assert (run21.loc[~run21.index.isin(failed.index), "qaStatus"] != "FAIL").all()
-
-    def testEmpty(self):
-        empty = twilightImageVerdict(pd.DataFrame(columns=list(METRIC_COLUMNS)))
-        assert empty.empty and list(empty.columns) == list(IMAGE_VERDICT_COLUMNS)
-
-    def testOwnThresholdsRecordNothing(self, metrics):
-        images = twilightImageVerdict(metrics.iloc[:12], twilightThresholds())
-        assert set(images["thresholdsFiles"]) == {""} and set(images["thresholdsSha256"]) == {""}
-
-    def testAFileGivenByPathIsRecorded(self, metrics, tmp_path):
-        """The shipped file by its path records as the default does; another file by its path."""
-        default = twilightImageVerdict(metrics.iloc[:12])
-        explicit = twilightImageVerdict(metrics.iloc[:12], thresholdsPath(TWILIGHT_THRESHOLDS_FILE))
-        for column in THRESHOLDS_COLUMNS:
-            assert set(explicit[column]) == set(default[column]) == {default[column].iloc[0]}
-        assert default["thresholdsFiles"].iloc[0] == TWILIGHT_THRESHOLDS_FILE
-        copy = tmp_path / "myThresholds.yaml"
-        copy.write_bytes(thresholdsPath(TWILIGHT_THRESHOLDS_FILE).read_bytes())
-        other = twilightImageVerdict(metrics.iloc[:12], copy)
-        assert set(other["thresholdsFiles"]) == {str(copy)}
-        assert set(other["thresholdsSha256"]) == set(default["thresholdsSha256"])  # same content

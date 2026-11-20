@@ -1,6 +1,5 @@
 """Tests for the idempotent qadb writes, on SQLite (and PostgreSQL when PFS_QADB_TEST_DSN is set)."""
 
-import shutil
 from datetime import datetime
 
 import numpy as np
@@ -8,16 +7,23 @@ import pandas as pd
 import pytest
 import sqlalchemy.exc
 
-from pfs.drp.qa.metrics.calibration import readThresholds
-from pfs.drp.qa.qadb.tables import IMAGE_QUALITY, imageRows
+from pfs.drp.qa.metrics.normalValues import NORMAL_COLUMNS
+from pfs.drp.qa.qadb import writer
+from pfs.drp.qa.qadb.tables import (
+    IMAGE_QUALITY,
+    NORMAL_VALUE,
+    NORMAL_VALUE_KEYS,
+    QA_GATE,
+    gateRows,
+    imageRows,
+    normalValueRows,
+)
 from pfs.drp.qa.qadb.writer import (
     UNKNOWN_VERSION,
     deleteRows,
     ensureVisits,
     processingId,
     records,
-    registerThresholds,
-    sha256Of,
     upsert,
     upsertSql,
 )
@@ -29,14 +35,14 @@ class TestUpsertSql:
     def testUpdatesNonKeyColumns(self):
         sql = upsertSql(
             "t",
-            ["processing_id", "pfs_visit_id", "camera_name", "med_fwhm", "qa_status"],
+            ["processing_id", "pfs_visit_id", "camera_name", "med_fwhm", "n_lines"],
             ["processing_id", "pfs_visit_id", "camera_name"],
         )
         assert sql.startswith(
-            "INSERT INTO t (processing_id, pfs_visit_id, camera_name, med_fwhm, qa_status) VALUES (:processing_id,"
+            "INSERT INTO t (processing_id, pfs_visit_id, camera_name, med_fwhm, n_lines) VALUES (:processing_id,"
         )
         assert "ON CONFLICT (processing_id, pfs_visit_id, camera_name) DO UPDATE SET" in sql
-        assert "med_fwhm = EXCLUDED.med_fwhm, qa_status = EXCLUDED.qa_status" in sql
+        assert "med_fwhm = EXCLUDED.med_fwhm, n_lines = EXCLUDED.n_lines" in sql
         # Negative control: a key is never updated.
         assert "processing_id = EXCLUDED" not in sql
 
@@ -211,27 +217,103 @@ class TestEnsureVisits:
         assert int(table.loc[0, "pfs_design_id"]) == 0x1234
 
 
-class TestRegisterThresholds:
-    def testSameContentSameId(self, qadb, thresholdsFiles, tmp_path):
-        path = thresholdsFiles["imageQualityQa"]
-        first = registerThresholds(qadb, path, NOW)
-        copy = tmp_path / "renamed.yaml"
-        shutil.copy(path, copy)
-        again = registerThresholds(qadb, copy, datetime(2027, 1, 1))
-        assert first == again
-        assert qadb.count("qa_thresholds") == 1
-        row = qadb.query_dataframe("SELECT * FROM qa_thresholds").iloc[0]
-        assert row["name"] == "renamed.yaml"  # the latest name
-        assert pd.Timestamp(row["registered_at"]) == pd.Timestamp(NOW)  # the first registration
-        assert row["sha256"] == sha256Of(path)
-        _, table = readThresholds(path)
-        assert qadb.count("qa_threshold_entry") == len(table) == row["n_entries"]
+def testNoThresholdsAreRegistered():
+    """The limits are the registry's and the normal values a table: the writer registers no thresholds file."""
+    assert not {"registerThresholds", "sha256Of"} & set(dir(writer))
+    assert not any("threshold" in name.lower() for name in writer.__all__)
+    # Negative control: the writes the loader does use are still there.
+    assert {"upsert", "deleteRows", "ensureVisits", "processingId"} <= set(writer.__all__)
 
-    def testDifferentContentDifferentId(self, qadb, thresholdsFiles):
-        iq = registerThresholds(qadb, thresholdsFiles["imageQualityQa"], NOW)
-        dm = registerThresholds(qadb, thresholdsFiles["dmLineResiduals"], NOW)
-        assert iq != dm
-        assert qadb.count("qa_thresholds") == 2
-        entries = qadb.query_dataframe("SELECT thresholds_id, metric, reference FROM qa_threshold_entry")
-        assert set(entries.loc[entries["thresholds_id"] == dm, "reference"].dropna()) <= {"calib", "visit"}
-        assert entries.loc[entries["thresholds_id"] == iq, "reference"].isna().all()
+
+class TestGateRow:
+    """``qa_gate`` holds one row per image and processing: judging again replaces it."""
+
+    @staticmethod
+    def verdict(status, decidedBy="", reason=""):
+        return pd.DataFrame(
+            {
+                "visit": [7],
+                "arm": ["b"],
+                "spectrograph": [1],
+                "frameType": ["arc"],
+                "qaStatus": [status],
+                "qaDecidedBy": [decidedBy],
+                "qaReason": [reason],
+            }
+        )
+
+    def testJudgingAgainReplacesTheRow(self, qadb):
+        pid = processingId(qadb, "u/test/writer", "r", "v")
+        ensureVisits(qadb, [7])
+        keys = list(QA_GATE[:3])
+        upsert(qadb, "qa_gate", gateRows(self.verdict("PASS"), pid, "realtime", NOW), keys)
+        later = datetime(2026, 10, 27)
+        upsert(
+            qadb, "qa_gate", gateRows(self.verdict("FAIL", "width", "too wide"), pid, "backfill", later), keys
+        )
+        gate = qadb.query_dataframe("SELECT * FROM qa_gate WHERE pfs_visit_id = 7")
+        assert len(gate) == 1
+        row = gate.iloc[0]
+        assert (row["qa_status"], row["qa_decided_by"], row["qa_reason"]) == ("FAIL", "width", "too wide")
+        assert (row["frame_type"], row["mode"]) == ("arc", "backfill")
+        assert pd.Timestamp(row["decided_at"]) == pd.Timestamp(later)
+        # Negative control: another processing of the same image is another row, not a replacement.
+        other = processingId(qadb, "u/test/writer", "r2", "v")
+        upsert(qadb, "qa_gate", gateRows(self.verdict("PASS"), other, "backfill", NOW), keys)
+        assert qadb.count("qa_gate", "pfs_visit_id = 7") == 2
+
+
+class TestNormalValues:
+    """``qa_normal_value``: storing the same key again replaces the row; another ``valid_from`` adds one."""
+
+    @staticmethod
+    def values(value, validFrom=100, selector="Neon", reason=""):
+        row = {
+            "metric": "linesPerFiber",
+            "camera": "b",
+            "frameType": "arc",
+            "selector": selector,
+            "value": value,
+            "count": 4,
+            "collection": "u/test/writer",
+            "validFrom": validFrom,
+            "sourceVisits": "90-99",
+            "acceptedBy": "tester",
+            "acceptedAt": NOW,
+            "reason": reason,
+        }
+        return normalValueRows(pd.DataFrame([row], columns=list(NORMAL_COLUMNS)))
+
+    def stored(self, qadb):
+        return qadb.query_dataframe(
+            "SELECT * FROM qa_normal_value WHERE collection_name = 'u/test/writer' ORDER BY valid_from, selector"
+        )
+
+    def testSameKeyReplaces(self, qadb):
+        keys = list(NORMAL_VALUE_KEYS)
+        assert upsert(qadb, "qa_normal_value", self.values(40.0), keys) == 1
+        assert upsert(qadb, "qa_normal_value", self.values(44.0, reason="lamp changed"), keys) == 1
+        stored = self.stored(qadb)
+        assert len(stored) == 1
+        assert stored.loc[0, "value"] == 44.0 and stored.loc[0, "reason"] == "lamp changed"
+        assert set(NORMAL_VALUE) < set(stored.columns)  # and the id the database gave
+        assert stored["normal_value_id"].notna().all()
+        # Negative control: a later valid_from, or another lamp, is another value, and the first stays.
+        upsert(qadb, "qa_normal_value", self.values(50.0, validFrom=200), keys)
+        upsert(qadb, "qa_normal_value", self.values(20.0, selector="Krypton"), keys)
+        stored = self.stored(qadb)
+        assert stored["value"].tolist() == [20.0, 44.0, 50.0]
+        assert stored["normal_value_id"].is_unique
+
+    def testAnEmptySelectorIsPartOfTheKey(self, qadb):
+        """A value with no lamp or species is stored with an empty selector, so storing it again conflicts."""
+        keys = list(NORMAL_VALUE_KEYS)
+        upsert(qadb, "qa_normal_value", self.values(3.1, selector=None), keys)
+        upsert(qadb, "qa_normal_value", self.values(3.2, selector=None), keys)
+        stored = self.stored(qadb)
+        assert stored["value"].tolist() == [3.2] and stored["selector"].tolist() == [""]
+        # Negative control: a null selector never conflicts, in SQLite or PostgreSQL, and would add a row;
+        # the schema refuses one.
+        null = self.values(3.3, selector=None).assign(selector=None)
+        with pytest.raises(sqlalchemy.exc.IntegrityError):
+            upsert(qadb, "qa_normal_value", null, keys)

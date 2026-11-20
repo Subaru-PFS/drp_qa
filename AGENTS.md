@@ -37,35 +37,38 @@ the pipeline/config glue to run them.
   currently registers **five** task labels, and only these run under `pipetask`:
   `extractionQa`, `extractionQaCombined`, `imageQualityQa`, `dmLineResiduals`,
   `twilightFluxQa`.
-- **Threshold pipeline (`pipelines/qaThresholds.yaml`)** — drp_stella's `reduceExposure`
-  (less `mergeArms`) plus `imageQualityQa`, so `docs/qa-thresholds.ipynb` reduces the
-  validation visits from raw data. The notebook applies `drpActor`'s per-sequence-type config.
+- **Reduce-and-measure pipeline (`pipelines/qaThresholds.yaml`)** — drp_stella's `reduceExposure`
+  (less `mergeArms`) plus `imageQualityQa` and `dmLineResiduals`, for comparison mode and
+  `drpQa.py calib validate`, which apply `drpActor`'s per-sequence-type config.
 - **Tasks in the pipeline (`python/pfs/drp/qa/`)**:
-  - `imageQualityQa.py` — image quality (FWHM, flag rates); plots in `plotting/iqQa.py`
+  - `imageQualityQa.py` — image quality (FWHM, flag rates); numbers only, no verdict
   - `extractionQa.py`, `extractionQaCombined.py` — fiber extraction quality
     (per-detector, and combined per `(instrument, visit, arm)`)
   - `dmLineResiduals.py` — per-species residuals of `lines` against `detectorMap_calib`
-    (drift) and the visit's `detectorMap` (scatter on `RESERVED` lines); the measurement
-    and verdict are stack-free in `metrics/lineResiduals.py`
+    (drift) and the visit's `detectorMap` (scatter on `RESERVED` lines, and their median in
+    km/s); numbers only, the measurement stack-free in `metrics/lineResiduals.py`
   - `twilightFluxQa.py` — stores each lit fiber's median flux on a twilight
     (`twilightFiberFlux`; other visits stop at the header, before the pfsArm is read);
-    `bin.src/twilightQa.py` judges each sequence's exposures against each other afterwards,
-    stack-free in `metrics/twilight.py`
+    `drpQa.py load` measures and judges a sequence's exposures against each other once the
+    sequence is complete, with the stack-free `metrics/twilight.py`
 - **QA modules *not* wired into `drpQA.yaml`** — these exist as `PipelineTask`s or CLIs
   but must be run via their own pipeline/entry point:
   - `skySubtractionQa.py` — sky subtraction accuracy (`SkyArmSubtractionTask`,
     `SkySubtractionQaTask`)
   - `fluxCalQa.py`, `fluxCal/fluxCalQA.py` — flux calibration validation
   - `fiberNormsQa.py` — **not** a `PipelineTask`; a standalone Butler-driven CLI module
-    whose `main()` is invoked from `bin.src/fiberNormsQa.py`
-- **Comparison mode (`python/pfs/drp/qa/comparison/`)** — gates every image of an observing run
-  against the reference thresholds; driven by `bin.src/qaComparison.py` (`fetch`, `plan`, `run`,
-  `report`). `queries` is the only code touching the opdb and `butlerQueries` the only code touching
-  a Butler (both take it as an argument); `runs`, `classify`, `plan`, `findings` and `report` are
-  stack-free and tested in `tests/comparison/`, with plots in `plotting/comparison.py`. The observing
+    whose `main()` is `drpQa.py fiberNorms`
+- **Comparison mode (`python/pfs/drp/qa/comparison/`)** — reduces every image of an observing run
+  that `drpActor/reductions` lacks and runs the QA tasks on all of them; it gives no verdict. Driven
+  by `bin.src/qaComparison.py` (`fetch`, `plan`, `run`). `queries` is the only code touching the opdb
+  and `butlerQueries` the only code touching a Butler (both take it as an argument); `runs`,
+  `classify` and `plan` are stack-free and tested in `tests/comparison/`. The observing
   runs are package data (`comparison/data/observingRuns.yaml`). Calibration vs science is decided by
   what an exposure is (sequence type, and the design's proposals for sky), never by when it was taken.
-  Reports show science visits: they stay local, and never print a science sequence name.
+  `calibInputs` (which exposures of a calibration set to build from) and `calibValidate` (candidate
+  calibrations compared on the same visits) are stack-free, with plots in `plotting/calibInputs.py`;
+  `drpQa.py calib inputs` and `drpQa.py calib validate` drive them. The opdb reads under
+  `--data-dir` list science visits: they stay local.
 - **Guider analysis (`python/pfs/drp/qa/guiders/`)** — notebook tools for the AG
   cameras, being moved from `pfs.drp.stella.utils.guiders` (epic PIPE2D-1891). Four
   layers: `coordinates`, `queries` (the only code touching the opdb or a butler),
@@ -81,31 +84,41 @@ the pipeline/config glue to run them.
   The end-of-run report adds `queries.readAgRun` (aggregates over a period's AG
   exposures), `runAnalysis` (stack-free: per-exposure camera states, dropouts, settled jitter,
   clusters of rejected matches, position-model errors, flags), `runPlotting` (figures from an `AgRun`) and `runReport` (fetch to parquet, then the
-  Markdown report), driven by `bin.src/agRunReport.py` with comparison mode's runs; tested in
+  Markdown report), driven by `drpQa.py agReport` with comparison mode's runs; tested in
   `tests/guiders/test_runAnalysis.py` and `test_runReport.py` on a synthetic run (`makeAgRunTables`). Its plots are not in `docs/guider-plots.ipynb`: a run
   holds science visits, which can't be committed, so each run's `report.md` is their description.
 - **Plotting (`python/pfs/drp/qa/plotting/`)** — the QA plots: DataFrames in, figures
-  out (`iqQa`, `comparison`, `thresholds`, and `palettes` for the shared
+  out (`calibInputs`, and `palettes` for the shared
   palettes and `scatterplot_with_outliers`). It imports no Butler, stack or task module, so plots can
-  be drawn from stored data; `tests/plotting/test_imports.py` enforces this. `iqQaPlots`
-  and `utils.plotting` re-export the names they used to define.
-- **Metrics (`python/pfs/drp/qa/metrics/`)** — the stack-free measurement and verdict of
-  `dmLineResiduals` (`lineResiduals`), and the threshold
-  machinery: `validationVisits` loads `data/validationVisits.yaml` (package data; visits
-  with known verdicts), `thresholds` derives WARN/FAIL from a distribution (or as a
-  tolerance about its median), `calibration` turns stored `iqQaMetrics` into a table of
-  suggestions, and `readers` reads them from a
-  Butler it is given. `registry` declares each metric once (direction, units, reference,
-  populations); `gate` is the only gating path, judging metrics rows against a thresholds
-  file layered over the task config; `longFormat` holds `iqQaSpeciesMetrics`; `saturation` (the calexp's
-  `SAT` plane) and `lineFlux` (per-species flux of `lines`) are `imageQualityQa`'s unjudged measurements; `twilight`
-  measures and judges twilight sequences, each exposure against the sequence's others. Read [`docs/qa-principles.md`](docs/qa-principles.md) (rules R1–R7,
-  the metric checklist) before adding a metric or a threshold. The procedure is the
-  notebook [`docs/qa-thresholds.ipynb`](docs/qa-thresholds.ipynb), from `pipetask` to
-  review (committed with outputs); the set is described in
-  [`docs/validation-visits.md`](docs/validation-visits.md), whose tables are generated
-  from the YAML (`python -m pfs.drp.qa.metrics.validationVisits tables`) and checked by a
-  test.
+  be drawn from stored data; `tests/plotting/test_imports.py` enforces this. `utils.plotting`
+  re-exports the palettes.
+- **Metrics (`python/pfs/drp/qa/metrics/`)** — stack-free: the limits, the judging, and the
+  measurements that need no Butler.
+  - `registry` declares each metric once (`METRIC_SPECS`: direction, units, reference) and holds
+    every limit: `CHECKS`, 13 checks with a WARN and a FAIL each and the frame types they apply to,
+    and `EXCLUSIONS`, what is measured but not judged, with the reason. Nothing else in the package
+    holds a limit.
+  - `gate` is the only judging path (`measurements`, `judge`, `gate`): numbers, checks and normal
+    values in, one verdict per image out.
+  - `normalValues` makes each camera's normal values from a run's calibration frames (`candidates`),
+    sets them beside those in force (`compare`) and returns the ones to store (`accepted`).
+  - `lineResiduals` is `dmLineResiduals`' measurement; `longFormat` holds `iqQaSpeciesMetrics`;
+    `saturation` (the calexp's `SAT` plane) and `lineFlux` (per-species flux of `lines`) are
+    `imageQualityQa`'s unjudged measurements; `twilight` measures twilight sequences, each exposure
+    against the sequence's others; `visitRollup` rolls verdicts up to one per visit; `readers` reads
+    the tasks' tables from a Butler it is given.
+
+  Read [`docs/qa-principles.md`](docs/qa-principles.md) (rules R1–R7, the procedure and the
+  checklist) before adding a metric or a check. `tests/metrics/test_knownFaults.py` holds a table
+  of known faults, on stored numbers of calibration and engineering visits, that every change must
+  still catch.
+- **qadb (`python/pfs/drp/qa/qadb/`)** — `loader` copies a collection's numbers from a Butler into
+  qadb, calls the gate and stores one verdict per image in `qa_gate`; `judge` judges stored numbers
+  again and makes, compares and stores normal values (`qa_normal_value`), from qadb alone; `reader`
+  reads numbers, verdicts and normal values back; `tables` and `writer` are the row shapes and the
+  idempotent writes; `visitSummary` prints the verdicts per visit; `cli` holds `drpQa.py`'s `load`,
+  `values` and `judge`. Tested in `tests/qadb/` on SQLite; the schema there
+  (`tests/qadb/conftest.py`) and `spt_qa_database`'s change together.
 - **Support modules (`python/pfs/drp/qa/`)**:
   - `crossDispersion.py` — stack-free trace widths: the joint fit `imageQualityQa` runs on the calexp, and
     `profileFwhm` for `fiberProfiles`; the choice is recorded in `docs/trace-widths.ipynb`
@@ -114,30 +127,13 @@ the pipeline/config glue to run them.
     `provenance.py` reads which calibrations a dataset was made with from its Butler provenance)
   - `tasks/` — auxiliary task helpers (e.g. `overlapRegionLines.py`)
 - **Command-line tools (`bin.src/`)** — run as `python bin.src/<name>.py`:
-  - `fitDetectorMapLogQa.py` — stdlib-only OK/WARN/BAD gate over `fitDetectorMap` logs;
-    exits non-zero on BAD. Keep it stack-free.
-  - `imageQualityLogQa.py` — per-visit report from `reduceExposure`/`imageQualityQa`
-    logs or a direct Butler query; dashboard plot, markdown report, JSON dump
-  - `plotIqQaTimeSeries.py` — cross-visit `iqQaMetrics` time series via `plotting/iqQa.py`
-  - `fiberNormsQa.py` — entry point for `fiberNormsQa.main`
+  - `drpQa.py` — one command with a subcommand for each job (`pfs.drp.qa.cli.COMMANDS`): `load`,
+    `values`, `judge`, `summary`, `calib inputs`, `calib validate`, `fiberNorms`, `agReport`. A
+    subcommand's module is imported only when it is asked for, so `values`, `judge` and `summary`,
+    which read only qadb, run without the stack: keep them that way. Add a job as an entry of
+    `COMMANDS`, not as a script. `summary`'s exit status is the worst visit verdict (0/1/2, 3 nothing
+    judged, 4 could not be read), for a nightly job.
   - `qaComparison.py` — entry point for `pfs.drp.qa.comparison.cli.main` (comparison mode)
-  - `agRunReport.py` — entry point for `pfs.drp.qa.guiders.runReport.main` (end-of-run AG report)
-  - `twilightQa.py` — judges a collection's twilight sequences (or a parquet export of them) with
-    `pfs.drp.qa.metrics.twilight`: which exposures are good flats; `--sequence-of-visit` judges one
-    visit's sequence once it is complete (opdb via `comparison.queries.readSequenceOfVisit`), stores
-    the per-image verdict in the Butler (`twilightQaMetrics`, via `qadb.store`) for the qadb loader's
-    gate, and with `--qadb-host` loads the judged visits; its exit status tells ics_qaActor what
-    happened
-  - `qaVisitSummary.py` — entry point for `pfs.drp.qa.qadb.visitSummary.main`: a collection's gate verdicts per
-    visit from qadb (`qadb.reader.readGate`, rolled up by the stack-free `metrics.visitRollup`), with the cameras
-    that exposed but have no verdict when given an opdb (`comparison.queries.readVisitCameras`); its exit status is
-    the worst visit verdict (0/1/2, 3 nothing judged, 4 could not be read) for a nightly job
-  - `qaCompareRuns.py` — entry point for `pfs.drp.qa.qadb.compareRuns.main`: a visit range's metrics against
-    reference visits' (`--reference NAME=[COLLECTION:]FIRST-LAST`, repeatable), read from qadb and compared by the
-    stack-free `metrics.runComparison.compareRuns` (medians per camera and population, status by
-    `MetricSpec.tolerance`); computed on demand, nothing stored; same exit statuses as `qaVisitSummary.py`
-  - `exportMetrics.py` — per-detector QA tables (`iqQaMetrics`, `dmLineResidualMetrics`, ...) from a
-    collection to parquet, with progress, via `metrics.readers.exportMetrics`
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),
   which contains the core reduction logic and C++ primitives, and on `pfs_utils`. Both
   are `setupRequired` in `ups/drp_qa.table`; `pfs-utils` is also a hard `pyproject.toml`
@@ -150,7 +146,7 @@ the pipeline/config glue to run them.
 - `bin.src/` — command-line scripts, run directly as `python bin.src/<name>.py`.
   There is no SCons `shebang()` step and no generated `bin/` directory.
 - `ups/` — EUPS configuration (`drp_qa.table`, dependencies and `PATH`/`PYTHONPATH`)
-- `tests/` — pytest-based tests (some rely on the LSST/PFS stack). Tests needing packages
+- `tests/` — pytest-based tests. Tests needing packages
   beyond the standard library live in subdirectories with their own `conftest.py`
   (`tests/guiders/`).
 - `pyproject.toml` — build config (setuptools) and **all** tool configs (Ruff, pytest).
@@ -201,22 +197,23 @@ python -m pip install build && python -m build
 pytest tests/
 
 # Single test file
-pytest tests/test_fitDetectorMapLogQa.py
+pytest tests/metrics/test_gate.py
 
 # Single test
-pytest tests/metrics/test_lineResiduals.py::testZeroOffsetPasses
+pytest tests/metrics/test_lineResiduals.py::testZeroOffset
 ```
 
 `pyproject.toml` sets `addopts = "-ra --import-mode=importlib"`. Note the `importlib`
 import mode: test modules are not added to `sys.path`, so they can't import each other
 by bare module name.
 
-`tests/test_fitDetectorMapLogQa.py` is stdlib-only and runs without the stack — keep it
-that way when editing `bin.src/fitDetectorMapLogQa.py`. Other tests use
-`lsst.utils.tests` and require the LSST/PFS stack; some are placeholders or rely on
-external data. If a test cannot run without that environment, validate the logic via
-unit-testable components and document the constraint in the test, the update note, or
-the PR.
+No test module needs the stack (`_STACK_MODULES` in `tests/conftest.py` is empty).
+`tests/test_connections.py` and
+`tests/test_qaThresholdsPipeline.py` read the task modules and the pipelines as text and need only
+pytest. The tests in the subdirectories of `tests/` need the packages their `conftest.py`
+imports (numpy, pandas, pfs_utils, ...). If logic cannot be tested without the LSST/PFS
+environment, validate it via unit-testable components and document the constraint in the test,
+the update note, or the PR.
 
 ### Continuous integration
 
@@ -425,11 +422,12 @@ on Butler/LSST objects are documentation rather than something a tool will check
    validate logic via unit-testable components and note the environment constraint.
 6. Keep public APIs stable. If you must change one, update dependent code and add
    migration notes in `README.md` and/or docstrings.
-7. Record QA decisions in the repository, where the next reader of the QA looks: which runs
-   are the reference and why, what the validation set holds, why a threshold was or was not
-   adopted. State each in `README.md` (*QA thresholds and the validation visit set*), with
-   the detail in `docs/` or beside the file it governs; not only in Jira or an assistant's
-   memory. A ticket can hold the discussion; the repository holds the outcome.
+7. Record QA decisions in the repository, where the next reader of the QA looks. A limit is one
+   entry of `CHECKS` in `metrics/registry.py`; what is measured but not judged is one entry of
+   `EXCLUSIONS` there, with its reason. Normal values are rows of qadb's `qa_normal_value`, each
+   with who accepted it, when and why. `README.md` (*How QA works*) describes the design, with
+   the detail in `docs/`. Not only in Jira or an assistant's memory: a ticket can hold the
+   discussion; the repository holds the outcome.
 8. Record user-visible changes — new tasks, new or removed config fields, new
    `iqQaMetrics` columns, changed defaults — under `## [Unreleased]` in `CHANGELOG.md`.
 9. Include concise docstrings describing purpose, inputs, outputs, and any assumptions —
@@ -474,31 +472,38 @@ drpQA.yaml#imageQualityQa            dims: (instrument, visit, arm, spectrograph
              fiberProfiles, detectorMap_calib (calibrations),
              calexp, pfsConfig (optional),
              isr_log, cosmicray_log, reduceExposure_log (optional)
-    → writes: iqQaMetrics, iqQaSpeciesMetrics; iqQaData only with doWriteLineData
+    → writes: iqQaMetrics, iqQaSpeciesMetrics; iqQaData only with doWriteLineData   (numbers, no verdict)
 
 drpQA.yaml#dmLineResiduals           dims: (instrument, visit, arm, spectrograph)
     ← reads: lines, detectorMap, raw.metadata, detectorMap_calib (calibration), pfsConfig (optional)
     → writes: dmLineResidualMetrics (long format), dmLineResidualSummary (one row),
-              dmLineResidualData (one row per line)
+              dmLineResidualData (one row per line)   (numbers, no verdict)
+
+drpQA.yaml#twilightFluxQa            dims: (instrument, visit, arm, spectrograph)
+    ← reads: pfsArm, raw.metadata, pfsConfig (optional)
+    → writes: twilightFiberFlux (twilights only)
 
 drpQA.yaml#extractionQa              → extQaStats, extQaImage, extQaImage_pickle
 drpQA.yaml#extractionQaCombined      ← extQaImage_pickle (multiple)
                                      → extQaStatsCombined
 
-bin.src/plotIqQaTimeSeries.py
-    ← reads: iqQaMetrics (all quanta in a collection)
-    → writes: time-series PNG via pfs.drp.qa.plotting.iqQa.plotIqTimeSeries
-
-bin.src/loadQadb.py / pfs.drp.qa.qadb.loader.loadCollection   (after pipetask, not a task)
-    ← reads: iqQaMetrics, iqQaSpeciesMetrics, dmLineResidualSummary, dmLineResidualMetrics, twilightQaMetrics,
-             packages (per RUN); *_config only for tables without thresholdsFiles/thresholdsSha256
+drpQa.py load / pfs.drp.qa.qadb.loader.loadCollection   (after pipetask, not a task)
+    ← reads: iqQaMetrics, iqQaSpeciesMetrics, dmLineResidualSummary, dmLineResidualMetrics,
+             packages (per RUN), pfsArm headers (the reducing pipeline);
+             for a twilight visit, the opdb's visit_set and iic_sequence(_status), and once the
+             sequence is complete the twilightFiberFlux of its visits;
+             qa_normal_value (the collection's normal values)
+    → pfs.drp.qa.metrics.gate.gate: one verdict per image
     → writes to qadb: image_quality_qa(_species), dm_line_residual_qa(_metric), twilight_qa,
-             data_processing_pipe2d, qa_thresholds, qa_threshold_entry, qa_gate (idempotent upserts)
+             data_processing_pipe2d, pfs_visit, qa_gate (idempotent upserts)
 
-bin.src/twilightQa.py --sequence-of-visit   (after pipetask, not a task; the sequence must be complete)
-    ← reads: opdb visit_set, iic_sequence(_status); twilightFiberFlux of the sequence's visits
-    → writes: twilightQaMetrics (one per detector image) to a new RUN prepended to the collection
-    → then loadCollection for the sequence's visits: twilight_qa, and qa_gate with twilightQa as a third task
+drpQa.py values / pfs.drp.qa.qadb.judge.makeValues   (qadb only: no Butler, no stack)
+    ← reads: the numbers of the run's calibration visits, qa_normal_value
+    → writes, with --accept: qa_normal_value, then qa_gate for every frame the values cover
+
+drpQa.py judge / pfs.drp.qa.qadb.judge.judgeStored   (qadb only)
+    ← reads: the numbers of a visit range, qa_normal_value
+    → writes: qa_gate
 ```
 
 `reduceExposure` is **not** required between `fitDetectorMap` and `imageQualityQa`. The
@@ -507,9 +512,9 @@ When `reduceExposure` *has* run, its logs are picked up through the optional `*_
 connections and its statistics are folded into `iqQaMetrics`.
 
 Cross-visit QA is **not** a pipeline task. There is no `imageQualityQaSummary` and no
-combined task — run `bin.src/plotIqQaTimeSeries.py` over the output collection after the
-fact. This keeps aggregation off the critical path of a reduction and lets it be re-run
-against a CSV without a Butler.
+combined task: normal values, verdicts and the per-visit rollup are made from qadb after the
+fact. This keeps them off the critical path of a reduction and lets a visit range be judged again
+without a Butler.
 
 ---
 

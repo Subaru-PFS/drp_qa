@@ -6,20 +6,26 @@ from them, so an exposure is judged per detector image, never per arm: a detecto
 one exposure is left out of that exposure's inputs and nothing else is.
 
 Each detector image is judged on what comparison mode measured on it (`pfs.drp.qa.imageQualityQa`
-and `pfs.drp.qa.dmLineResiduals`, read from their collection), with no reference but the other
-exposures of the same sequence on the same detector:
+and `pfs.drp.qa.dmLineResiduals`, read from their collection). The tasks store numbers, not
+verdicts, so the image is judged here, three ways:
 
-* the gate's verdict and the line-residual verdict (reserved lines against the visit's own
-  detectorMap), as stored;
+* the gate (`pfs.drp.qa.metrics.gate`), on the image's numbers: its width, lines per lit fiber and
+  held-back line scatter against the camera's normal values. It is given nothing measured against
+  the calibration in use, which the set is taken to replace, so the offset from it is not judged.
+  Every check left is relative to a normal value: without the table of them the gate gives no
+  verdict (``UNKNOWN``, never a pass), and the report says so;
 * consistency within the sequence: FWHM and reserved-line RMS relative to the detector's median
   over the sequence, which catches a detector that goes wrong mid-sequence without knowing what
   "right" looks like;
 * the lamp: each species' line count relative to the detector's best exposure of the sequence, which
   shows warm-up and fading and marks weak exposures, usable but with fewer lines.
 
-Stack-free: DataFrames in, a Markdown report out. `bin.src/calibInputsReport.py` reads the tables
-from a Butler or from `bin.src/exportMetrics.py` exports and the visit listing from comparison mode's
-``fetch``.
+The last two need no reference but the other exposures of the same sequence on the same detector
+(`Thresholds`); they choose exposures and are no part of the gate.
+
+Stack-free: DataFrames in, a Markdown report out. ``drpQa.py calib inputs`` reads the tables
+from a Butler or from parquet exports (`pfs.drp.qa.metrics.readers.exportMetrics`) and the visit
+listing from comparison mode's ``fetch``.
 """
 
 import datetime
@@ -29,22 +35,25 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from pfs.drp.qa.comparison.findings import lampsOf
+from pfs.drp.qa.metrics import gate
+from pfs.drp.qa.metrics.registry import ARC, CHECKS, FIXED, UNJUDGED_SPECIES, specFor
 
 __all__ = [
     "LAMP_SPECIES",
+    "Rule",
     "Thresholds",
     "Verdict",
     "buildReport",
     "coverage",
     "detectorTable",
+    "gateNumbers",
+    "gateVerdicts",
     "goNoGo",
     "judge",
     "lampOf",
-    "lineThresholds",
-    "lineVerdicts",
-    "parseReason",
+    "lampsOf",
     "pick",
+    "scatterLimits",
     "setVisits",
     "speciesTable",
     "summary",
@@ -80,6 +89,16 @@ class Verdict:
     ORDER = (OUT, CHECK, WEAK, USE)
 
 
+class Rule:
+    """The rules `judge` applies, as its ``rules`` column names them."""
+
+    GATE_FAIL = "gate FAIL"
+    GATE_WARN = "gate WARN"
+    FWHM = "FWHM off"
+    RMS = "reserved RMS off"
+    LINES = "few lines"
+
+
 @dataclass(frozen=True)
 class Thresholds:
     """What marks a detector image, relative to the same detector's other exposures of the sequence.
@@ -101,6 +120,43 @@ class Thresholds:
     fwhmOut: float = 1.25
     rmsCheck: float = 1.5
     rmsOut: float = 2.0
+
+
+# The ways an IIC command names a lamp: head='sps iis on=neon ...', iisNeon=30, argon=10.
+_LAMP_RE = re.compile(
+    r"\biis\s+on=(\w+)|\biis([A-Z][a-z]+)=\d|\b(hgcd|hgar|argon|xenon|neon|krypton|halogen|qth)=([\d.]+)"
+)
+
+
+def lampsOf(cmdStr: str | None) -> list[str]:
+    """Return the lamps an IIC command turns on.
+
+    Parameters
+    ----------
+    cmdStr : `str` or `None`
+        ``iic_sequence.cmd_str``.
+
+    Returns
+    -------
+    `list` [`str`]
+        Lower-case lamp names in order of appearance, without repeats;
+        ``(IIS)`` follows a lamp lit through the engineering fibers.
+    """
+    if not cmdStr or not isinstance(cmdStr, str):
+        return []
+    lamps: list[str] = []
+    for match in _LAMP_RE.finditer(cmdStr):
+        if match.group(1):
+            lamp = f"{match.group(1).lower()} (IIS)"
+        elif match.group(2):
+            lamp = f"{match.group(2).lower()} (IIS)"
+        elif float(match.group(4)) > 0:
+            lamp = match.group(3)
+        else:
+            continue
+        if lamp not in lamps:
+            lamps.append(lamp)
+    return lamps
 
 
 def lampOf(cmdStr: str | None, sequenceType: str | None = None) -> str | None:
@@ -228,129 +284,191 @@ def speciesTable(visits: pd.DataFrame, lineMetrics: pd.DataFrame) -> pd.DataFram
     return table.reindex(columns=columns).sort_values([*_DETECTOR, "species"]).reset_index(drop=True)
 
 
-_STATUS_RANK = {"": 0, "PASS": 1, "UNKNOWN": 1, "WARN": 2, "FAIL": 3}
-#: Short names for the judged metrics, for the report.
-_METRIC_NAMES = {
-    "robustRmsDeltaX": "RMS x",
-    "robustRmsDeltaY": "RMS y",
-    "medianDeltaX": "offset x",
-    "medianDeltaY": "offset y",
-    "medFWHM": "FWHM",
-    "linesPerFiber": "lines/fiber",
-}
+def _checkLimits(check: str, metric: str, normal: float | None) -> tuple[float, float]:
+    """Return a check's WARN and FAIL in the metric's units; NaN for a relative check without a normal value."""
+    spec = CHECKS[check]
+    if spec.kind == FIXED:
+        return spec.limits()
+    if normal is None or pd.isna(normal):
+        return float("nan"), float("nan")
+    return spec.limits(float(normal), specFor(metric).higherIsWorse)
 
 
-#: One judged metric in a stored ``qaReason``: ``visit NeI: robustRmsDeltaX=2.038px >= fail threshold 0.123px``
-#: or the gate's ``medFWHM=3.06px >= fail threshold 2.951px``.
-_REASON_ENTRY = re.compile(
-    r"(?:(?P<reference>\w+) (?P<species>\w+): )?(?P<metric>\|?\w+\|?)=(?P<value>-?[\d.]+)(?P<unit>px|%)? "
-    r"(?P<op>[<>]=?) (?P<level>warn|fail) threshold (?P<threshold>-?[\d.]+)"
-)
+def _gateTables(
+    iqMetrics: pd.DataFrame, lineMetrics: pd.DataFrame | None
+) -> tuple[pd.DataFrame, pd.DataFrame | None]:
+    """Return the tables the gate is given here: nothing measured against the calibration in use.
 
-
-def parseReason(reason: str) -> list[dict]:
-    """Return the judged metrics a stored ``qaReason`` names: reference, species, metric, value, op, level, threshold."""
-    out = []
-    for m in _REASON_ENTRY.finditer(reason or ""):
-        d = m.groupdict()
-        d["value"], d["threshold"] = float(d["value"]), float(d["threshold"])
-        d["metric"] = d["metric"].strip("|")
-        out.append(d)
-    return out
-
-
-def lineVerdicts(
-    visits: pd.DataFrame, lineMetrics: pd.DataFrame, lineSummary: pd.DataFrame | None = None
-) -> pd.DataFrame:
-    """Return each detector image's line-residual verdict on its lamp's own lines against its own detectorMap.
-
-    The worst ``status`` among the ``dmLineResidualMetrics`` rows with ``reference`` ``visit``
-    whose species the lamp gives (plus ``Trace``), with those rows' metric and value as the reason,
-    and the threshold when ``lineSummary``'s ``qaReason`` names it.
-    Columns ``visit``, ``arm``, ``spectrograph``, ``lineStatus``, ``lineReason``.
+    The set is taken to replace that calibration, so how far the instrument has moved from it is
+    not the image's doing. That leaves out the trace centre offset of ``iqQaMetrics`` and the line
+    residuals against ``detectorMap_calib``, and with them the gate's ``traceCentreOffset`` and
+    ``calibOffset``.
     """
-    columns = [*_DETECTOR, "lineStatus", "lineReason"]
-    if lineMetrics.empty or "status" not in lineMetrics:
-        return pd.DataFrame(columns=columns)
-    thresholds: dict[tuple, dict] = {}
-    if lineSummary is not None and not lineSummary.empty and "qaReason" in lineSummary:
-        for r in lineSummary.itertuples():
-            for entry in parseReason(getattr(r, "qaReason", "")):
-                if entry["reference"] == "visit":
-                    thresholds[
-                        (int(r.visit), r.arm, int(r.spectrograph), entry["species"], entry["metric"])
-                    ] = entry
-    rows = lineMetrics[(lineMetrics["reference"] == "visit") & (lineMetrics["status"].fillna("") != "")]
-    rows = rows.merge(visits[["visit", "species"]].rename(columns={"species": "lampSpecies"}), on="visit")
-    rows = rows[
-        [d == "Trace" or d in lamp for d, lamp in zip(rows["description"], rows["lampSpecies"], strict=True)]
+    iq = iqMetrics.drop(columns="medDxCenter", errors="ignore")
+    if lineMetrics is None or lineMetrics.empty:
+        return iq, None
+    return iq, lineMetrics[lineMetrics["reference"] == "visit"]
+
+
+def gateNumbers(
+    iqMetrics: pd.DataFrame,
+    lineMetrics: pd.DataFrame | None = None,
+    normalValues: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Return the gate's verdict on each number of the set's images, with its limits.
+
+    `pfs.drp.qa.metrics.gate.judge` of `pfs.drp.qa.metrics.gate.measurements`, on the width, the
+    lines per lit fiber and the line residuals against the visit's own detectorMap. Nothing
+    measured against the calibration in use is judged (the gate's ``calibOffset`` and
+    ``traceCentreOffset``): the set is taken to replace it.
+
+    Parameters
+    ----------
+    iqMetrics : `pandas.DataFrame`
+        ``iqQaMetrics`` rows of the set's images.
+    lineMetrics : `pandas.DataFrame`, optional
+        ``dmLineResidualMetrics`` rows of the set's images.
+    normalValues : `pandas.DataFrame`, optional
+        The normal values (`pfs.drp.qa.metrics.normalValues.NORMAL_COLUMNS`). Without them a
+        relative check gives no verdict.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        One row per image, check and number, as `pfs.drp.qa.metrics.gate.judge` returns them
+        (``value``, ``normal``, ``excess``, ``warn``, ``fail``, ``status``, ``reason``), with
+        ``warnLimit`` and ``failLimit``: the limits in the number's own units
+        (`pfs.drp.qa.metrics.registry.Check.limits`), on its absolute value for an offset; NaN
+        where the gate gave no verdict.
+    """
+    iq, lines = _gateTables(iqMetrics, lineMetrics)
+    numbers = gate.judge(gate.measurements(iq=iq, lines=lines), normalValues)
+    limits = [
+        _checkLimits(check, metric, normal) if status else (float("nan"), float("nan"))
+        for check, metric, normal, status in zip(
+            numbers["check"], numbers["metric"], numbers["normal"], numbers["status"], strict=True
+        )
     ]
-    if rows.empty:
-        return pd.DataFrame(columns=columns)
-    rows = rows.assign(rank=rows["status"].map(_STATUS_RANK).fillna(0))
-    out = []
-    for key, g in rows.groupby(_DETECTOR):
-        worst = g["rank"].max()
-        status = g.loc[g["rank"] == worst, "status"].iloc[0]
-        bad = g[g["rank"] >= 2].sort_values("rank", ascending=False)
-        parts = []
-        for r in bad.itertuples():
-            t = thresholds.get((int(r.visit), r.arm, int(r.spectrograph), r.description, r.metric))
-            limit = f" ({t['level']} {t['op']} {t['threshold']:.3g})" if t else f" {r.status}"
-            parts.append(f"{r.description} {_METRIC_NAMES.get(r.metric, r.metric)} {r.value:.3f} px{limit}")
-        out.append((*key, status, "; ".join(parts)))
-    return pd.DataFrame(out, columns=columns)
+    numbers["warnLimit"] = [warn for warn, _ in limits]
+    numbers["failLimit"] = [fail for _, fail in limits]
+    return numbers
 
 
-def lineThresholds(
+def gateVerdicts(
+    iqMetrics: pd.DataFrame,
+    lineMetrics: pd.DataFrame | None = None,
+    normalValues: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Return the gate's verdict on each of the set's images.
+
+    `pfs.drp.qa.metrics.gate.gate`, on the tables `gateNumbers` judges.
+
+    Parameters
+    ----------
+    iqMetrics, lineMetrics, normalValues
+        As for `gateNumbers`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        One row per image: ``visit``, ``arm``, ``spectrograph``, ``gateStatus`` (``PASS``,
+        ``WARN``, ``FAIL``, or ``UNKNOWN`` when no check was judged), ``gateDecidedBy`` (the check
+        with that verdict), ``gateReason`` (why, or for ``UNKNOWN`` why nothing was judged),
+        ``gateChecks`` (every check at ``WARN`` or ``FAIL``, comma-separated) and ``gateUnjudged``
+        (how many of the image's numbers the gate gave no verdict on, e.g. for want of a normal
+        value).
+    """
+    iq, lines = _gateTables(iqMetrics, lineMetrics)
+    images = gate.gate(iq=iq, lines=lines, normalValues=normalValues)
+    images = images.rename(
+        columns={"qaStatus": "gateStatus", "qaDecidedBy": "gateDecidedBy", "qaReason": "gateReason"}
+    ).drop(columns="frameType")
+    numbers = gateNumbers(iqMetrics, lineMetrics, normalValues)
+    crossed = numbers[numbers["status"].isin(["WARN", "FAIL"])]
+    checks = crossed.groupby(_DETECTOR)["check"].agg(lambda names: ",".join(dict.fromkeys(names)))
+    unjudged = numbers[numbers["status"] == ""].groupby(_DETECTOR).size()
+    images = images.join(checks.rename("gateChecks"), on=_DETECTOR).join(
+        unjudged.rename("gateUnjudged"), on=_DETECTOR
+    )
+    images["gateChecks"] = images["gateChecks"].fillna("")
+    images["gateUnjudged"] = images["gateUnjudged"].fillna(0).astype(int)
+    return images
+
+
+#: The gate's line-scatter checks, by the metric each reads.
+_SCATTER_CHECKS = {"robustRmsDeltaX": CHECKS["scatterX"], "robustRmsDeltaY": CHECKS["scatterY"]}
+
+
+def scatterLimits(
     arm: str,
     spectrograph: int,
     species: Iterable[str],
-    cameraSet: str | None,
-    obsType: str | None,
-    thresholdsFile: str | None = None,
+    visit: int,
+    normalValues: pd.DataFrame | None = None,
+    frameType: str = ARC,
 ) -> dict[str, dict[str, tuple[float | None, float | None]]]:
-    """Return the reserved-line RMS thresholds `dmLineResiduals` applies to one image, per species.
+    """Return the gate's limits on one image's held-back line scatter, in pixels, per species.
 
-    Looked up as the task does, through `pfs.drp.qa.metrics.gate.judge` on the population
-    (``reference`` ``visit``, ``statusType`` ``RESERVED``, arm, species, ``cameraSet``,
-    ``obsType``) in ``thresholdsFile`` (the name ``dmLineResidualSummary.thresholdsFiles``
-    records; default the packaged ``dmLineResidualThresholds-run25.yaml``).
+    The scatter checks (``scatterX`` and ``scatterY`` of `pfs.drp.qa.metrics.registry.CHECKS`) are
+    relative: WARN and FAIL are a percentage above the camera's normal value for the species. The
+    normal value is the one in force at ``visit``, looked up as the gate does
+    (`pfs.drp.qa.metrics.gate.judge`), so there is no limit without a table of them.
+
+    Parameters
+    ----------
+    arm : `str`
+        The image's arm.
+    spectrograph : `int`
+        The image's spectrograph.
+    species : iterable of `str`
+        The line species to return limits for; ``Trace`` is left out.
+    visit : `int`
+        The image's visit.
+    normalValues : `pandas.DataFrame`, optional
+        The normal values (`pfs.drp.qa.metrics.normalValues.NORMAL_COLUMNS`).
+    frameType : `str`, optional
+        The image's frame type (`pfs.drp.qa.metrics.registry.FRAME_TYPES`); a check that doesn't
+        apply to it gives no limit.
 
     Returns
     -------
     `dict`
-        ``{species: {"robustRmsDeltaX": (warn, fail), "robustRmsDeltaY": (warn, fail)}}``;
-        a limit is None where the file judges nothing (e.g. Hg and Cd).
+        ``{species: {"robustRmsDeltaX": (warn, fail), "robustRmsDeltaY": (warn, fail)}}``; both
+        limits are None where the gate judges nothing: no normal value in force, a species whose
+        scatter isn't judged (`pfs.drp.qa.metrics.registry.UNJUDGED_SPECIES`) or a frame type the
+        check doesn't cover. Empty without ``normalValues``.
     """
-    from pfs.drp.qa.metrics.gate import judge as gateJudge
-    from pfs.drp.qa.metrics.gate import thresholdsPath
-
-    species = [sp for sp in species if sp != "Trace"]
-    if not species:
+    species = [name for name in species if name != "Trace"]
+    if normalValues is None or normalValues.empty or not species:
         return {}
-    path = thresholdsPath(thresholdsFile or "dmLineResidualThresholds-run25.yaml")
-    frame = pd.DataFrame(
-        {
-            "visit": 0,
-            "arm": arm,
-            "spectrograph": int(spectrograph),
-            "reference": "visit",
-            "statusType": "RESERVED",
-            "description": species,
-            "cameraSet": cameraSet,
-            "obsType": obsType,
-            "robustRmsDeltaX": 0.0,
-            "robustRmsDeltaY": 0.0,
-        }
+    one = pd.Series([arm]), pd.Series([int(spectrograph)])
+    rows = pd.DataFrame(
+        [
+            {
+                "visit": int(visit),
+                "arm": arm,
+                "spectrograph": int(spectrograph),
+                "frameType": frameType,
+                "check": check.name,
+                "metric": metric,
+                "part": name,
+                "camera": gate.normalKey(check, *one).iloc[0],
+                "selector": name,
+                "value": 0.0,
+                "withM": False,
+            }
+            for name in species
+            for metric, check in _SCATTER_CHECKS.items()
+        ],
+        columns=list(gate.MEASUREMENT_COLUMNS),
     )
-    judged = gateJudge(frame, path)
-    out: dict[str, dict[str, tuple[float | None, float | None]]] = {sp: {} for sp in species}
-    for r in judged.itertuples():
-        if r.metric in ("robustRmsDeltaX", "robustRmsDeltaY"):
-            warn = None if pd.isna(r.warn) else float(r.warn)
-            fail = None if pd.isna(r.fail) else float(r.fail)
-            out[species[int(r.row)]][r.metric] = (warn, fail)
+    out: dict[str, dict[str, tuple[float | None, float | None]]] = {name: {} for name in species}
+    for row in gate.judge(rows, normalValues).itertuples():
+        check = _SCATTER_CHECKS[row.metric]
+        judged = frameType in check.frames and row.part not in UNJUDGED_SPECIES and pd.notna(row.normal)
+        out[row.part][row.metric] = (
+            _checkLimits(check.name, row.metric, row.normal) if judged else (None, None)
+        )
     return out
 
 
@@ -358,9 +476,9 @@ def detectorTable(
     visits: pd.DataFrame,
     iqMetrics: pd.DataFrame,
     lineMetrics: pd.DataFrame,
-    lineSummary: pd.DataFrame | None = None,
+    normalValues: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """One row per detector image of the set, with its verdicts and its place in the sequence.
+    """One row per detector image of the set, with the gate's verdict and its place in the sequence.
 
     Parameters
     ----------
@@ -368,49 +486,40 @@ def detectorTable(
         From `setVisits`.
     iqMetrics : `pandas.DataFrame`
         ``iqQaMetrics`` rows of the set's images: ``medFwhm``, ``fitReservedXRms``,
-        ``fitReservedYRms``, ``qaStatus``, ``qaReason``, ``traceOnly`` are used. A ``traceOnly``
-        image's FWHM is read from the fiberProfiles calibration, not measured on the image, so it
-        takes no part in the sequence comparison. An image whose gate judged nothing (``UNKNOWN``)
-        and that has no line species measured is left out: it is unassessed, and `goNoGo` reports
-        it as missing rather than go.
+        ``fitReservedYRms`` and ``traceOnly`` are used here, and what the gate reads
+        (`pfs.drp.qa.metrics.gate.measurements`). A ``traceOnly`` image's FWHM is read from the
+        fiberProfiles calibration, not measured on the image, so it takes no part in the sequence
+        comparison. An image the gate judged nothing on (``UNKNOWN``) and that has no width, fit
+        RMS or line species measured is left out: it is unassessed, and `goNoGo` reports it as
+        missing rather than go.
     lineMetrics : `pandas.DataFrame`
         ``dmLineResidualMetrics`` rows of the set's images (`speciesTable`).
-    lineSummary : `pandas.DataFrame`, optional
-        ``dmLineResidualSummary`` rows: only their ``qaReason`` is used, for the thresholds. The
-        line-residual verdict is taken from ``lineMetrics``: the worst ``status`` among the lamp's
-        own species (and traces) against the visit's own detectorMap. The summary's ``qaStatus``
-        also judges the drift against the calibration in use and species the lamp doesn't give,
-        neither of which is the image's doing.
+    normalValues : `pandas.DataFrame`, optional
+        The normal values the gate judges by
+        (`pfs.drp.qa.metrics.normalValues.NORMAL_COLUMNS`). Without them the gate gives no
+        verdict on a calibration frame, and the image is judged on the sequence rules and the
+        lamp alone (`judge`).
 
     Returns
     -------
     `pandas.DataFrame`
         ``visit``, ``arm``, ``spectrograph``, ``detector`` (``n4``), ``iic_sequence_id``, ``lamp``,
-        ``k``, ``n``, ``gateStatus``, ``gateReason``, ``lineStatus``, ``lineReason``, ``medFwhm``,
-        ``fwhmRatio`` (to the detector's sequence median), ``reservedRms`` (the larger of x and y),
-        ``rmsRatio`` (likewise), ``minLinesRatio`` (the lamp's weakest species, `speciesTable`),
-        ``nSpecies`` (species measured).
+        ``k``, ``n``, ``gateStatus``, ``gateDecidedBy``, ``gateReason``, ``gateChecks``,
+        ``gateUnjudged`` (`gateVerdicts`), ``medFwhm``, ``fwhmRatio`` (to the detector's sequence
+        median), ``fitReservedXRms``, ``fitReservedYRms``, ``reservedRms`` (the larger of x and
+        y), ``rmsRatio`` (likewise), ``minLinesRatio`` (the lamp's weakest species,
+        `speciesTable`), ``nSpecies`` (species measured).
     """
-    keep = [
-        "visit",
-        "arm",
-        "spectrograph",
-        "medFwhm",
-        "fitReservedXRms",
-        "fitReservedYRms",
-        "qaStatus",
-        "qaReason",
-        "traceOnly",
-    ]
-    iq = iqMetrics.reindex(columns=keep).rename(columns={"qaStatus": "gateStatus", "qaReason": "gateReason"})
+    keep = ["visit", "arm", "spectrograph", "medFwhm", "fitReservedXRms", "fitReservedYRms", "traceOnly"]
+    iq = iqMetrics.reindex(columns=keep)
     iq.loc[iq["traceOnly"].fillna(False).astype(bool), "medFwhm"] = float("nan")
     iq = iq.drop(columns="traceOnly")
     table = iq.merge(visits[["visit", "iic_sequence_id", "lamp", "k", "n"]], on="visit")
-    lines = lineVerdicts(visits, lineMetrics, lineSummary)
-    table = table.merge(lines, on=_DETECTOR, how="left")
-    table["lineStatus"] = table["lineStatus"].fillna("")
-    table["lineReason"] = table["lineReason"].fillna("")
-    table["gateReason"] = table["gateReason"].fillna("")
+    table = table.merge(gateVerdicts(iqMetrics, lineMetrics, normalValues), on=_DETECTOR, how="left")
+    table["gateStatus"] = table["gateStatus"].fillna("UNKNOWN")
+    for column in ("gateDecidedBy", "gateReason", "gateChecks"):
+        table[column] = table[column].fillna("")
+    table["gateUnjudged"] = table["gateUnjudged"].fillna(0).astype(int)
     table["detector"] = table["arm"].astype(str) + table["spectrograph"].astype(str)
     group = ["iic_sequence_id", "arm", "spectrograph"]
     table["fwhmRatio"] = table["medFwhm"] / table.groupby(group)["medFwhm"].transform("median")
@@ -437,9 +546,10 @@ def detectorTable(
         "k",
         "n",
         "gateStatus",
+        "gateDecidedBy",
         "gateReason",
-        "lineStatus",
-        "lineReason",
+        "gateChecks",
+        "gateUnjudged",
         "medFwhm",
         "fwhmRatio",
         "fitReservedXRms",
@@ -452,43 +562,31 @@ def detectorTable(
     return table.reindex(columns=columns).sort_values(_DETECTOR).reset_index(drop=True)
 
 
-def _gateText(reason: str) -> str:
-    """``FWHM 3.06 px (fail >= 2.95)`` from the gate's ``medFWHM=3.06px >= fail threshold 2.951px``."""
-    entries = parseReason(reason)
-    if not entries:
-        return reason
-    parts = []
-    for e in entries:
-        unit = " px" if e["unit"] == "px" else ""
-        parts.append(
-            f"{_METRIC_NAMES.get(e['metric'], e['metric'])} {e['value']:.3g}{unit} ({e['level']} {e['op']} {e['threshold']:.3g})"
-        )
-    return ", ".join(parts)
-
-
 def judge(detectors: pd.DataFrame, thresholds: Thresholds | None = None) -> pd.DataFrame:
-    """Add ``verdict`` (`Verdict`) and ``reason`` to a `detectorTable`.
+    """Add ``verdict`` (`Verdict`), ``reason`` and ``rules`` to a `detectorTable`.
 
-    *out*: the gate or the line residuals FAILed the image, or its reserved RMS is beyond ``rmsOut``
-    of the detector's sequence median, or its FWHM is beyond ``fwhmOut`` with the RMS also beyond
-    ``rmsCheck`` (a detector gone wrong shows in both; FWHM alone can be the measurement, e.g. a
-    faint lamp's few lines). *check*: a WARN, or FWHM or RMS beyond ``fwhmCheck`` / ``rmsCheck``.
-    *weak*: a species below ``weakLines`` of the detector's best. Otherwise *use*. A sequence of
-    one exposure has no median to compare with and gets no consistency verdict.
+    *out*: the gate FAILed the image, or its reserved RMS is beyond ``rmsOut`` of the detector's
+    sequence median, or its FWHM is beyond ``fwhmOut`` with the RMS also beyond ``rmsCheck`` (a
+    detector gone wrong shows in both; FWHM alone can be the measurement, e.g. a faint lamp's few
+    lines). *check*: a gate WARN, or FWHM or RMS beyond ``fwhmCheck`` / ``rmsCheck``. *weak*: a
+    species below ``weakLines`` of the detector's best. Otherwise *use*. A sequence of one
+    exposure has no median to compare with and gets no consistency verdict. An image the gate gave
+    no verdict on (``UNKNOWN``) is judged on the sequence and the lamp alone: that is not a gate
+    pass, and `buildReport` counts those images.
+
+    ``reason`` is the text of every rule behind the verdict, joined by ``"; "``; ``rules`` names
+    them (`Rule`), joined by ``", "``.
     """
     t = thresholds or Thresholds()
     table = detectors.copy()
-    verdicts, reasons = [], []
+    verdicts, reasons, rules = [], [], []
     for row in table.itertuples(index=False):
+        # Each entry is (rule, text).
         out, check, weak = [], [], []
         if row.gateStatus == "FAIL":
-            out.append(f"gate FAIL: {_gateText(row.gateReason)}")
+            out.append((Rule.GATE_FAIL, f"gate FAIL: {row.gateReason}"))
         elif row.gateStatus == "WARN":
-            check.append(f"gate WARN: {_gateText(row.gateReason)}")
-        if row.lineStatus == "FAIL":
-            out.append(f"line residuals FAIL: {row.lineReason}")
-        elif row.lineStatus == "WARN":
-            check.append(f"line residuals WARN: {row.lineReason}")
+            check.append((Rule.GATE_WARN, f"gate WARN: {row.gateReason}"))
         if row.n > 1:
             fwhmFar = pd.notna(row.fwhmRatio) and not (1 / t.fwhmOut <= row.fwhmRatio <= t.fwhmOut)
             fwhmOff = pd.notna(row.fwhmRatio) and not (1 / t.fwhmCheck <= row.fwhmRatio <= t.fwhmCheck)
@@ -497,29 +595,29 @@ def judge(detectors: pd.DataFrame, thresholds: Thresholds | None = None) -> pd.D
             fwhmText = f"FWHM {row.medFwhm:.2f} px ({row.fwhmRatio:.2f}x its sequence)"
             rmsText = f"reserved RMS {row.reservedRms:.2f} px ({row.rmsRatio:.1f}x its sequence)"
             if fwhmFar and rmsOff:
-                out.append(fwhmText)
+                out.append((Rule.FWHM, fwhmText))
             elif fwhmOff:
-                check.append(fwhmText)
+                check.append((Rule.FWHM, fwhmText))
             if rmsFar:
-                out.append(rmsText)
+                out.append((Rule.RMS, rmsText))
             elif rmsOff:
-                check.append(rmsText)
+                check.append((Rule.RMS, rmsText))
         if pd.notna(row.minLinesRatio) and row.minLinesRatio < t.weakLines:
-            weak.append(f"lines {row.minLinesRatio:.2f} of the detector's best exposure")
+            weak.append((Rule.LINES, f"lines {row.minLinesRatio:.2f} of the detector's best exposure"))
         if out:
-            verdicts.append(Verdict.OUT)
-            reasons.append("; ".join(out + check))
+            verdict, why = Verdict.OUT, out + check
         elif check:
-            verdicts.append(Verdict.CHECK)
-            reasons.append("; ".join(check))
+            verdict, why = Verdict.CHECK, check
         elif weak:
-            verdicts.append(Verdict.WEAK)
-            reasons.append("; ".join(weak))
+            verdict, why = Verdict.WEAK, weak
         else:
-            verdicts.append(Verdict.USE)
-            reasons.append("")
+            verdict, why = Verdict.USE, []
+        verdicts.append(verdict)
+        reasons.append("; ".join(text for _, text in why))
+        rules.append(", ".join(rule for rule, _ in why))
     table["verdict"] = pd.Categorical(verdicts, categories=list(Verdict.ORDER), ordered=True)
     table["reason"] = reasons
+    table["rules"] = rules
     return table
 
 
@@ -662,23 +760,6 @@ def _hst(value) -> str:
     return pd.Timestamp(value).strftime("%Y-%m-%d %H:%M")
 
 
-#: The short name of each kind of reason `judge` gives, by the text that opens it.
-_TAGS = (
-    ("gate FAIL", "gate FAIL"),
-    ("gate WARN", "gate WARN"),
-    ("line residuals FAIL", "line residuals FAIL"),
-    ("line residuals WARN", "line residuals WARN"),
-    ("FWHM", "FWHM off"),
-    ("reserved RMS", "reserved RMS off"),
-    ("lines", "few lines"),
-)
-
-
-def _tags(reason: str) -> set[str]:
-    """Return the kinds of reason in a `judge` reason string, as short tags."""
-    return {tag for opening, tag in _TAGS if any(part.startswith(opening) for part in reason.split("; "))}
-
-
 def summary(visits: pd.DataFrame, judged: pd.DataFrame, species: pd.DataFrame) -> list[str]:
     """Return the report's key points, one line each: what to leave out, what is weak, what is missing."""
     lines = []
@@ -686,7 +767,7 @@ def summary(visits: pd.DataFrame, judged: pd.DataFrame, species: pd.DataFrame) -
     if outs.empty:
         lines.append("Nothing to leave out: every measured detector image is usable.")
     for det, g in outs.groupby("detector", sort=False):
-        why = sorted({tag for reason in g["reason"] for tag in _tags(reason)})
+        why = sorted({rule for rules in g["rules"] for rule in rules.split(", ") if rule})
         lines.append(f"**Leave out {det} on {_ranges(g['visit'])}**: " + ", ".join(why) + ".")
     cov = coverage(judged, species)
     none = cov[cov["usable"] == 0] if not cov.empty else cov
@@ -729,6 +810,39 @@ def summary(visits: pd.DataFrame, judged: pd.DataFrame, species: pd.DataFrame) -
     return lines
 
 
+_JUDGED = ("PASS", "WARN", "FAIL")
+
+
+def _gateNotes(judged: pd.DataFrame) -> list[str]:
+    """Return the report's lines on what the gate gave no verdict on; none when it judged everything."""
+    if judged.empty:
+        return []
+    hasVerdict = judged["gateStatus"].isin(_JUDGED)
+    unknown = judged[~hasVerdict]
+    notes = []
+    if len(unknown):
+        why = (
+            "; ".join(dict.fromkeys(reason for reason in unknown["gateReason"] if reason)) or "nothing judged"
+        )
+        if hasVerdict.any():
+            notes.append(
+                f"- The gate gave no verdict on {len(unknown)} of {len(judged)} detector images ({why}): "
+                "those are judged on the sequence rules alone, which is not a gate pass."
+            )
+        else:
+            notes.append(
+                f"- **The gate gave no verdict on any detector image** ({why}): the go/no-go below is by "
+                "the sequence rules alone, which is not a gate pass."
+            )
+    partial = int((hasVerdict & (judged["gateUnjudged"] > 0)).sum())
+    if partial:
+        notes.append(
+            f"- On {partial} detector image(s) with a gate verdict, the gate left some numbers without one "
+            "(`gateUnjudged` in the CSV)."
+        )
+    return notes
+
+
 def buildReport(
     visits: pd.DataFrame,
     judged: pd.DataFrame,
@@ -742,8 +856,12 @@ def buildReport(
     exports: bool = False,
     detectorFigures: dict[str, str] | None = None,
     imageFigures: dict[tuple[str, int], str] | None = None,
+    normalValues: str = "",
 ) -> str:
     """Return the Markdown report: the go/no-go per detector and visit, then the no-go detectors in detail.
+
+    The report says how many detector images the gate gave no verdict on, and why (no normal
+    value): those are go or no-go by the sequence rules alone.
 
     Parameters
     ----------
@@ -767,14 +885,16 @@ def buildReport(
     detail : `bool`, optional
         Add the reasons for every no-go and check, the weak exposures and the lamp trends.
     exports : `bool`, optional
-        Whether ``source`` was read from `exportMetrics.py` exports rather than the Butler.
+        Whether ``source`` was read from parquet exports rather than the Butler.
     detectorFigures : `dict` [`str`, `str`], optional
         A figure per no-go detector (`pfs.drp.qa.plotting.calibInputs.plotDetectorDetail`), by
         detector name, as paths relative to the report: the closing section.
     imageFigures : `dict` [(`str`, `int`), `str`], optional
         A line-residual figure per no-go image (`pfs.drp.qa.plotting.calibInputs.plotLineResiduals`),
-        by (detector, visit), shown under its detector's figure; the driver makes one only where line
-        residuals or the reserved RMS are part of the reason.
+        by (detector, visit), shown under its detector's figure; the driver makes one only where the
+        line scatter or the reserved RMS is part of the reason.
+    normalValues : `str`, optional
+        The table of normal values the gate judged by, named in the header.
     """
     t = thresholds or Thresholds()
     now = now or datetime.datetime.now()
@@ -789,6 +909,8 @@ def buildReport(
         f"| From | {'exports of ' if exports else ''}`{source or 'comparison mode'}` |",
         f"| Detector images | {len(judged)} |",
     ]
+    if normalValues:
+        out.append(f"| Normal values | `{normalValues}` |")
     out.append("")
     outs = judged[judged["verdict"] == Verdict.OUT]
     if outs.empty:
@@ -807,6 +929,7 @@ def buildReport(
     missing = table.columns[(table == "missing").any(axis=0)]
     if len(missing):
         out.append(f"- Not measured (exposed, but no data in the Butler): {_ranges(missing)}.")
+    out += _gateNotes(judged)
     out.append("")
     figures = dict(figures or {})
     for caption, path in list(figures.items())[:1]:
@@ -850,8 +973,10 @@ def buildReport(
                 if d == det:
                     out += [f"![{det} {visit} line residuals]({lines})", ""]
     out.append(
-        f"*No-go: a gate or line-residual FAIL, reserved-line RMS beyond {t.rmsOut}x the detector's median over "
-        f"its sequence, or FWHM beyond {t.fwhmOut}x with the RMS also off; judged with no calibration built from the set. Per-image numbers and reasons are in the CSV beside this report.*"
+        "*No-go: a gate FAIL (width, lines per lit fiber and held-back line scatter, each against the camera's "
+        f"normal value), reserved-line RMS beyond {t.rmsOut}x the detector's median over its sequence, or FWHM "
+        f"beyond {t.fwhmOut}x with the RMS also off; judged with no calibration built from the set, and not on "
+        "the offset from the calibration in use. Per-image numbers and reasons are in the CSV beside this report.*"
     )
     out.append("")
     return "\n".join(out)

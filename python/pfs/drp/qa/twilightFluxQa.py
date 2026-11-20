@@ -4,8 +4,9 @@ A twilight is judged against the other exposures of its sequence
 (`pfs.drp.qa.metrics.twilight`), which a quantum of one visit cannot see. So
 this task stores what the judgement needs, per detector: each lit fiber's
 median flux / norm over the arm's window, its S/N and its focal-plane
-position, with the sequence id. ``bin.src/twilightQa.py`` judges the stored
-tables of a collection.
+position, with the sequence id. The qadb loader (`pfs.drp.qa.qadb.loader`,
+``drpQa.py load``) measures and judges a sequence from the stored tables once
+every visit of it has one.
 
 It runs in ``drpQA.yaml``, on every visit. A visit that is not a twilight is
 skipped from its raw header (`pfs.drp.qa.metrics.lineResiduals.frameType`)
@@ -13,8 +14,7 @@ before the pfsArm is read, so it costs the header and the pfsConfig.
 
 Raws from before the IIC wrote ``W_SEQTYP``, ``W_SEQNAM`` and ``W_SEQID``
 (Run21, 2025-03/04, has none) are not recognised: set ``assumeTwilight`` with
-a data query that selects twilights, and give ``bin.src/twilightQa.py`` the
-sequences (``--sequences``).
+a data query that selects twilights.
 """
 
 from typing import Any

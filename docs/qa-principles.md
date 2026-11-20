@@ -1,18 +1,18 @@
 # QA principles
 
-Rules for adding or changing a QA metric in `drp_qa`, the procedure for deriving its
-thresholds, and the checklist a metric's PR answers. The rules encode failures that have
-happened here; treat them as binding.
+Rules for adding or changing a QA metric or check in `drp_qa`, the procedure for setting a
+limit, and the checklist a PR answers. The rules encode failures that have happened here;
+treat them as binding.
 
 PFS QA answers one question per visit: *is this data good enough to reduce, and if not,
 what is wrong with the instrument?* A metric that cannot separate a good detector from a
-bad one is worse than none, because it teaches operators to ignore `qaStatus`.
+bad one is worse than none, because it teaches operators to ignore the verdict.
 
 ## Rules
 
 ### R1 — Every metric needs an external reference
 
-A statistic compared against a threshold derived from the same sample is self-referential
+A statistic compared against a limit derived from the same sample is self-referential
 and pinned near a constant:
 
 - the fraction of values above their own 95th percentile is always about 5 %;
@@ -22,21 +22,39 @@ and pinned near a constant:
 
 The reference must be external: a calibration product (`detectorMap_calib`,
 `fiberProfiles`), a detector constant (saturation level, gain, read noise), a physical
-constant, or the same measurement from another epoch.
+constant, or the same measurement from another epoch. `MetricSpec.reference` in
+`pfs.drp.qa.metrics.registry` states it for each metric.
 
-### R2 — Thresholds are measured, never invented
+### R2 — A limit is measured, never invented, and lives in one place
 
-No threshold enters the code before it has been derived from known-good data by the
-procedure in [`qa-thresholds.ipynb`](qa-thresholds.ipynb). Its provenance, in the
-thresholds file or the config field's `doc`, records the visits and the date it was derived
-from. A threshold whose origin is unknown
-says so ("origin unrecorded"), rather than guessing a history.
+A limit is one entry of `CHECKS` in `pfs.drp.qa.metrics.registry`: the metrics it reads,
+the frame types it applies to, a WARN and a FAIL. No task config, script or dashboard
+holds another. Before a limit enters the code it is shown on stored numbers: what the
+known-good frames measure, what the known faults measure, and that the limit separates
+them.
+
+A check is one of two kinds:
+
+- **Fixed**: limits in the metric's units, for a number that means the same on every
+  camera (an offset from the calibration, a sky-line residual in km/s).
+- **Relative**: limits in per cent from the camera's normal value, for a number on which
+  cameras differ by more than the tolerance (a width, a scatter, a line count). A relative
+  check needs a normal value for every camera or arm, frame type and lamp or species it
+  judges; without one it gives no verdict. Normal values are made from a run's calibration
+  frames and accepted by a person (`drpQa.py values`). They are rows of qadb's
+  `qa_normal_value`, each with who accepted it, when and why; they are not code.
+
+Whatever is measured and stored but not judged is one entry of `EXCLUSIONS`, with its
+reason. Nothing is left unjudged without being named.
 
 ### R3 — Separate measurement from judgement
 
-Tasks emit numbers; a separate gating step (`pfs.drp.qa.metrics.gate`) maps them to
-`PASS`/`WARN`/`FAIL`. Thresholds can then be re-tuned and re-applied to stored metrics
-without re-running the pipeline over the pixels, which is what makes R2 practical.
+Tasks emit numbers; `pfs.drp.qa.metrics.gate` alone maps them to `PASS`, `WARN`, `FAIL`
+or `UNKNOWN`. A task holds no limit and writes no verdict column. A limit can then be
+changed and applied to stored numbers (`drpQa.py judge`) without running the pipeline
+over the pixels again, which is what makes R2 practical.
+
+An image with no check judged is `UNKNOWN`, never `PASS`.
 
 ### R4 — Never duplicate an existing metric
 
@@ -63,35 +81,44 @@ tested code in `pfs.drp.qa.plotting`.
 
 Arc lamps have very different line densities and intensities in each arm (see
 [`qa-domain-notes.md`](qa-domain-notes.md): Ar and Xe are nearly absent in the blue, HgCd
-is dense). A metric aggregated across species measures the species mix. Compute and gate
-per species. The same holds for any mixture of populations: arms, and estimators (arc
-moments, calexp trace widths, sky frames).
+is dense). A metric aggregated across species measures the species mix. Compute and judge
+per species. The same holds for any mixture of populations: arms, frame types, and
+estimators (arc moments, calexp trace widths, sky frames). A normal value is kept per
+camera or arm, frame type and lamp or species for this reason.
 
-## Thresholds and the validation visit set
+## Adding or changing a check
 
-- [`validation-visits.md`](validation-visits.md): the visits with known verdicts that every
-  threshold and metric is checked against, and how to change the set.
-- [`qa-thresholds.ipynb`](qa-thresholds.ipynb): the step-by-step procedure, as a notebook,
-  from running `imageQualityQa` over those visits to adopting the thresholds.
+1. **Measure first.** The task stores the number on every frame it can be measured on, and
+   it is loaded into qadb. A check is added only for a number that is already stored.
+2. **Look at it on stored runs**, per camera, frame type and lamp or species (R7): the
+   known-good frames, and the known faults.
+3. **Choose fixed or relative** (R2). For a relative check, confirm that normal values can
+   be made: `pfs.drp.qa.metrics.normalValues.candidates` gives one per camera or arm,
+   frame type and lamp or species from the calibration frames, each resting on at least
+   3 frames.
+4. **Change one entry of `CHECKS`.** If something measured is left unjudged, add it to
+   `EXCLUSIONS` with the reason. `tests/metrics/test_registry.py` pins the checks and
+   their limits; change it with them.
+5. **Add the fault to the known-fault test.** `tests/metrics/test_knownFaults.py` holds a
+   table of faults beside the test, on stored numbers of engineering and calibration
+   visits (never science visits). Every fault must reach its verdict and the frames known
+   to be good must not fail. Add the fault the check is for, and keep the rest passing.
+6. **Judge stored frames again** with `drpQa.py judge --dry-run`, and compare the counts of
+   each verdict with those before. Explain each difference.
 
-In short: `WARN` at the 95th and `FAIL` at the 99th percentile of the reference run's
-(Run25's) known-good values,
-separately for each population (arm, observation type, lamp), rounded outwards to a step
-well under the scatter, or `FAIL` at a physical limit. Every known-bad visit must reach
-the verdict it expects, and other runs are compared against the result. Offsets from a
-calibration (`medDxCenter`) are not derived this way: they are near zero in the run the
-calibration came from, so their thresholds are a tolerance. Nor, first, is `medFwhm`: each
-detector and lamp is judged by a tolerance above its own known-good median in the reference
-run (`MetricSpec.tolerance`), since those populations are too small for a tail percentile and
-a per-arm percentile blends spectrographs and lamps (R7); the per-arm percentiles judge only
-what has no median.
+A change of normal values is not a change of code: it is `drpQa.py values` at the start
+of a run, or on a named calibration set during one. A value shifted beyond its check's
+FAIL is refused unless it is accepted with a reason.
 
-## Metric checklist
+## Checklist
 
-State in the PR that adds or changes a metric:
+State in the PR that adds or changes a metric or a check:
 
-1. The external reference it is measured against (R1).
-2. Where its thresholds came from: the provenance sentence (R2).
-3. The existing columns it does not duplicate (R4).
-4. Its result on the validation visit set: every `known_good` passes, every `known_bad`
-   naming it reaches its expected verdict.
+1. The external reference the metric is measured against (R1).
+2. The entry of `CHECKS`: fixed or relative, its limits, and the stored numbers they were
+   set from (R2). For a relative check, the normal values it needs, and that they can be
+   made.
+3. The existing columns the metric does not duplicate (R4).
+4. What is left unjudged: the entries of `EXCLUSIONS`, each with its reason.
+5. That `tests/metrics/test_knownFaults.py` passes, with the fault the check is for in its
+   table, and the counts of each verdict on stored runs before and after.

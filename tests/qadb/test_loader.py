@@ -1,46 +1,56 @@
-"""Tests for loading a collection from a (stub) Butler into qadb."""
+"""Tests for loading a collection from a (stub) Butler into qadb, and the verdict the load gives each image."""
 
 from datetime import datetime
-from pathlib import Path
 from types import SimpleNamespace
 
-import numpy as np
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.metrics.gate import (
-    configLayerName,
-    sha256Of,
-    taskThresholdsRecord,
-    thresholdsDocument,
-    thresholdsPath,
-    thresholdsRecord,
-)
+from pfs.drp.qa.metrics.gate import STATUS_ORDER, gate
+from pfs.drp.qa.metrics.registry import CHECKS, RELATIVE
+from pfs.drp.qa.qadb import loader
 from pfs.drp.qa.qadb.loader import (
-    CONFIG_LAYERS,
     MODES,
     SPECS,
     collectionExists,
-    configDocumentOf,
     drpQaVersionOf,
+    imageRuns,
     loadCollection,
     loadVisit,
     readTables,
-    thresholdsFilesOf,
 )
-from pfs.drp.qa.qadb.tables import GATE_ORDER, worstStatus
-from pfs.drp.qa.qadb.writer import UNKNOWN_VERSION, registerThresholds
+from pfs.drp.qa.qadb.reader import PROCESSING_ID, readGate, readNormalValues
+from pfs.drp.qa.qadb.writer import UNKNOWN_VERSION
 
 COLLECTION = "u/test/qa"
 RUN = "u/test/qa/20261026T000000Z"
 NOW = datetime(2026, 10, 26, 12, 0, 0)
+LATER = datetime(2026, 10, 26, 12, 5, 0)
 VISITS = [133025, 133040]
+IMAGE = ["visit", "arm", "spectrograph"]
+
+#: The numbers tables: none of them may hold a verdict.
+NUMBERS = (
+    "image_quality_qa",
+    "image_quality_qa_species",
+    "dm_line_residual_qa",
+    "dm_line_residual_qa_metric",
+    "twilight_qa",
+)
+
+#: Normal widths of the fixture's images (measured 2.76, 3.18 and 3.33 px): r1's arc is +10 % (FAIL), b1's
+#: quartz +2.4 % (PASS) and r1's quartz +3.9 % (WARN).
+WIDTHS = {
+    ("medFwhm", "r1", "arc", "Argon"): 2.5,
+    ("medFwhm", "b1", "quartz", ""): 3.1,
+    ("medFwhm", "r1", "quartz", ""): 3.2,
+}
 
 
 def species(iq: pd.DataFrame) -> pd.DataFrame:
     """Return a long ``iqQaSpeciesMetrics`` table for the images of ``iq``: two species, two metrics each."""
     rows = []
-    for image in iq[["visit", "arm", "spectrograph"]].itertuples(index=False):
+    for image in iq[IMAGE].itertuples(index=False):
         for description in ("ArI", "Trace"):
             for metric, value in (("fitXRms", 0.05), ("fitYRms", 0.07)):
                 rows.append({**image._asdict(), "description": description, "metric": metric, "value": value})
@@ -53,70 +63,39 @@ def tables(fixtures):
 
 
 @pytest.fixture
-def butler(StubButler, tables, configs):
-    return StubButler(
-        tables, datasets={"packages": {"drp_qa": "w.2026.44", "drp_stella": "w.2026.41"}, **configs}
-    )
-
-
-def recorded(
-    tables, iq=("iqQaThresholds-run25.yaml",), dm=("dmLineResidualThresholds-run25.yaml",), configs=None
-):
-    """Return the tables with the thresholds layers each task records judging with, as the tasks write them.
-
-    The files alone, as the tasks recorded before PIPE2D-1991; with ``configs`` (the ``*_config``
-    datasets), each task's config layer after them, as they record now.
-    """
-
-    def record(task, names):
-        if configs is None:
-            return thresholdsRecord(list(names))
-        return taskThresholdsRecord(task, list(names), CONFIG_LAYERS[task](configs[f"{task}_config"]))
-
-    return {
-        **tables,
-        "iqQaMetrics": tables["iqQaMetrics"].assign(**record("imageQualityQa", iq)),
-        "dmLineResidualSummary": tables["dmLineResidualSummary"].assign(**record("dmLineResiduals", dm)),
-    }
-
-
-#: The ``qa_processing_thresholds`` task of each former ``qa_gate`` column.
-FIRST_LAYER = {
-    "iq_thresholds_id": "imageQualityQa",
-    "dm_thresholds_id": "dmLineResiduals",
-    "twilight_thresholds_id": "twilightQa",
-}
-
-
-def firstLayers(qadb) -> pd.DataFrame:
-    """Return each gate row's first layer per task: ``pfs_visit_id``, ``camera_name``, ``iq_thresholds_id``, ...
-
-    The shape ``qa_gate`` had before the layers; null where the task cited nothing (or judged nothing).
-    """
-    rows = qadb.query_dataframe(
-        "SELECT g.pfs_visit_id, g.camera_name, t.task, t.thresholds_id FROM qa_gate g"
-        " LEFT JOIN qa_processing_thresholds t ON t.processing_id = g.processing_id AND t.layer = 0"
-        " ORDER BY g.pfs_visit_id, g.camera_name"
-    )
-    frame = rows[["pfs_visit_id", "camera_name"]].drop_duplicates(ignore_index=True)
-    for column, task in FIRST_LAYER.items():
-        cited = rows[rows["task"] == task].set_index(["pfs_visit_id", "camera_name"])["thresholds_id"]
-        frame[column] = [
-            cited.get((visit, camera)) for visit, camera in frame[["pfs_visit_id", "camera_name"]].to_numpy()
-        ]
-        frame[column] = frame[column].astype(object).where(frame[column].notna(), None)
-    return frame
-
-
-def distinct(qadb, column: str) -> list:
-    """Return the distinct first-layer ids of a task's former ``qa_gate`` column, as that query returned them."""
-    return sorted(set(firstLayers(qadb)[column].tolist()), key=lambda value: (value is None, value or 0))
+def butler(StubButler, tables):
+    return StubButler(tables, datasets={"packages": {"drp_qa": "w.2026.44", "drp_stella": "w.2026.41"}})
 
 
 def load(butler, qadb, **kwargs):
     kwargs.setdefault("pipelineVersions", False)
     kwargs.setdefault("now", lambda: NOW)
-    return loadCollection(butler, qadb, COLLECTION, visits=VISITS, log=lambda _: None, **kwargs)
+    kwargs.setdefault("visits", VISITS)
+    kwargs.setdefault("log", lambda _: None)
+    return loadCollection(butler, qadb, COLLECTION, **kwargs)
+
+
+def gateOf(qadb) -> pd.DataFrame:
+    """Return ``qa_gate``, by image."""
+    return qadb.query_dataframe("SELECT * FROM qa_gate ORDER BY pfs_visit_id, camera_name")
+
+
+def verdictOf(qadb) -> dict:
+    """Return each image's verdict, by ``(visit, camera)``."""
+    rows = gateOf(qadb)
+    return dict(
+        zip(zip(rows["pfs_visit_id"], rows["camera_name"], strict=True), rows["qa_status"], strict=True)
+    )
+
+
+def expected(tables, normalValues=None) -> pd.DataFrame:
+    """Return what the gate says of the Butler tables: the load must store exactly this."""
+    verdicts = gate(
+        iq=tables.get("iqQaMetrics"),
+        lines=tables.get("dmLineResidualMetrics"),
+        normalValues=normalValues,
+    )
+    return verdicts.assign(camera=verdicts["arm"] + verdicts["spectrograph"].astype(str))
 
 
 class TestReadTables:
@@ -130,15 +109,46 @@ class TestReadTables:
         butler = StubButler({"iqQaMetrics": fixtures["iqQaMetrics"]})
         read = readTables(butler, COLLECTION, visits=VISITS, log=lambda _: None)
         assert read["dmLineResidualSummary"].empty
-        assert list(read["dmLineResidualSummary"].columns) == ["visit", "arm", "spectrograph", "run"]
+        assert list(read["dmLineResidualSummary"].columns) == [*IMAGE, "run"]
+
+    def testNoVerdictDatasetIsRead(self, butler):
+        """The tasks' numbers are all the loader reads: no dataset of verdicts, no task config."""
+        readTables(butler, COLLECTION, visits=VISITS, log=lambda _: None)
+        asked = {datasetType for datasetType, _ in butler.queries}
+        assert asked == set(SPECS)
+        assert "twilightQaMetrics" not in asked and not any(name.endswith("_config") for name in asked)
+
+    def testALoadReadsNoVerdictDatasetEither(self, butler, tmp_path):
+        """A whole load of lamp frames asks for the numbers tables alone: nothing judged, no twilight flux."""
+        load(butler, None, dryRun=tmp_path)
+        asked = {datasetType for datasetType, _ in butler.queries}
+        assert asked == set(SPECS)
+        # Negative control: the stub does record what it is asked, by name.
+        assert "iqQaMetrics" in asked and len(butler.queries) == len(SPECS)
 
 
 def testHelpers(butler, StubButler):
     assert drpQaVersionOf(butler, RUN) == "w.2026.44"
-    assert [p.name for p in thresholdsFilesOf(butler, RUN, "imageQualityQa")] == ["iqQaThresholds-run25.yaml"]
-    bare = StubButler({})
-    assert thresholdsFilesOf(bare, RUN, "imageQualityQa") == []
-    assert drpQaVersionOf(bare, RUN) == UNKNOWN_VERSION  # never the loader's own version
+    assert drpQaVersionOf(StubButler({}), RUN) == UNKNOWN_VERSION  # never the loader's own version
+
+
+def testNoThresholdsMachinery():
+    """Nothing of the thresholds files is left to call."""
+    gone = {"CONFIG_LAYERS", "configDocumentOf", "thresholdsFilesOf", "registerThresholds"}
+    assert not gone & set(dir(loader))
+    # Negative control: the names the loader does export resolve.
+    assert all(hasattr(loader, name) for name in loader.__all__)
+
+
+def testImageRuns():
+    """An image takes the RUN of the first table, in the order given, with a row for it."""
+    first = pd.DataFrame({"visit": [1], "arm": ["b"], "spectrograph": [1], "run": ["iq"]})
+    second = pd.DataFrame({"visit": [1, 2], "arm": ["b", "b"], "spectrograph": [1, 1], "run": ["dm", "dm"]})
+    runs = imageRuns(first, second).set_index("visit")["run"]
+    assert runs.to_dict() == {1: "iq", 2: "dm"}
+    # Negative control: the order given decides, not the tables' content.
+    assert imageRuns(second, first).set_index("visit")["run"].to_dict() == {1: "dm", 2: "dm"}
+    assert imageRuns(first.iloc[:0], second.iloc[:0]).empty
 
 
 class TestCollectionExists:
@@ -178,7 +188,7 @@ def testProgressGoesToTheLog(butler):
 
 
 class TestLoadCollection:
-    def testCountsAndContent(self, butler, qadb, tables):
+    def testCountsAndContent(self, butler, qadb):
         counts = load(butler, qadb)
         assert counts == {
             "processings": 1,
@@ -188,7 +198,6 @@ class TestLoadCollection:
             "dm_line_residual_qa": 4,
             "dm_line_residual_qa_metric": 128,
             "qa_gate": 4,
-            "qa_processing_thresholds": 2,  # one file per task, once for the RUN; these configs have no fields
         }
         processing = qadb.query_dataframe(
             "SELECT * FROM data_processing_pipe2d WHERE collection_name = :c", params={"c": COLLECTION}
@@ -198,45 +207,44 @@ class TestLoadCollection:
         assert processing.loc[0, "run_name"] == RUN
         assert processing.loc[0, "drp_qa_version"] == "w.2026.44"
         assert pd.isna(processing.loc[0, "pipe2d_version"])  # pipelineVersions=False
-        assert qadb.count("qa_thresholds") == 2
-        gate = qadb.query_dataframe("SELECT * FROM qa_gate ORDER BY pfs_visit_id, camera_name")
-        assert gate["camera_name"].tolist() == ["b1", "r1", "b1", "r1"]
-        first = firstLayers(qadb)
-        assert first["iq_thresholds_id"].notna().all() and first["dm_thresholds_id"].notna().all()
-        assert (gate["mode"] == "backfill").all()
-        # The gate is the worst of the two tasks' stored verdicts, image by image.
-        iq = tables["iqQaMetrics"].set_index(["visit", "arm", "spectrograph"])["qaStatus"]
-        dm = tables["dmLineResidualSummary"].set_index(["visit", "arm", "spectrograph"])["qaStatus"]
-        for row in gate.itertuples():
-            key = (row.pfs_visit_id, row.camera_name[0], int(row.camera_name[1]))
-            assert row.qa_status == worstStatus([iq[key], dm[key]])
-            assert row.qa_status in GATE_ORDER
+        assert qadb.count("twilight_qa") == 0  # no twilight among them
 
     def testLoadingTwiceChangesNothing(self, butler, qadb, tables, scope):
         first = load(butler, qadb)
         before = {table: qadb.count(table, scope.get(table, "")) for table in first if table != "processings"}
+        gateBefore = gateOf(qadb)
         again = load(butler, qadb)
         assert again == first
         assert {table: qadb.count(table, scope.get(table, "")) for table in before} == before
         assert qadb.count("data_processing_pipe2d", scope["data_processing_pipe2d"]) == 1
-        # Negative control: a re-judged image is replaced, not duplicated.
-        tables["iqQaMetrics"].loc[0, "qaStatus"] = "FAIL"
-        tables["iqQaMetrics"].loc[0, "qaReason"] = "test"
-        load(butler, qadb)
-        assert qadb.count("image_quality_qa") == 4
-        status = qadb.query_scalar(
-            "SELECT qa_status FROM image_quality_qa WHERE pfs_visit_id = :v AND camera_name = :c",
+        pd.testing.assert_frame_equal(gateOf(qadb), gateBefore)
+        # Negative control: an image measured again is replaced, not duplicated, and judged on the new number.
+        tables["iqQaMetrics"].loc[0, "medFwhm"] = 9.0
+        metrics = tables["dmLineResidualMetrics"]
+        offset = (
+            (metrics["visit"] == 133025)
+            & (metrics["arm"] == "b")
+            & (metrics["description"] == "Trace")
+            & (metrics["reference"] == "calib")
+            & (metrics["metric"] == "medianDeltaX")
+        )
+        assert offset.sum() == 1
+        metrics.loc[offset, "value"] = 2.5
+        load(butler, qadb, now=lambda: LATER)
+        assert qadb.count("image_quality_qa") == 4 and qadb.count("qa_gate") == 4
+        width = qadb.query_scalar(
+            "SELECT med_fwhm FROM image_quality_qa WHERE pfs_visit_id = :v AND camera_name = :c",
             params={"v": 133025, "c": "b1"},
         )
-        assert status == "FAIL"
-        gate = qadb.query_scalar(
-            "SELECT qa_status FROM qa_gate WHERE pfs_visit_id = :v AND camera_name = :c",
-            params={"v": 133025, "c": "b1"},
-        )
-        assert gate == "FAIL"
+        assert width == 9.0
+        row = gateOf(qadb).iloc[0]
+        assert (row["pfs_visit_id"], row["camera_name"]) == (133025, "b1")
+        assert (row["qa_status"], row["qa_decided_by"]) == ("FAIL", "calibOffset")
+        assert gateBefore.loc[0, "qa_status"] == "PASS"
+        assert pd.Timestamp(row["decided_at"]) == pd.Timestamp(LATER)
 
-    def testReloadDropsRowsTheNewJudgementLacks(self, butler, qadb, tables, scope):
-        """A species or metric missing from a re-judged image is removed, not left with its old value."""
+    def testReloadDropsRowsTheNewMeasurementLacks(self, butler, qadb, tables):
+        """A species or metric missing from an image measured again is removed, not left with its old value."""
         load(butler, qadb)
         assert qadb.count("image_quality_qa_species") == 16
         assert qadb.count("dm_line_residual_qa_metric") == 128
@@ -260,7 +268,7 @@ class TestLoadCollection:
         assert qadb.count("image_quality_qa") == 4
 
     def testReloadWithNoLongRowsLeftRemovesThem(self, butler, qadb, tables):
-        """An image whose re-judgement has no species rows at all loses its old ones."""
+        """An image whose new measurement has no species rows at all loses its old ones."""
         load(butler, qadb)
         species = tables["iqQaSpeciesMetrics"]
         tables["iqQaSpeciesMetrics"] = species[species["visit"] != 133025]
@@ -274,13 +282,13 @@ class TestLoadCollection:
         assert qadb.count("image_quality_qa_species") == 0
         assert qadb.count("image_quality_qa") == 4
 
-    def testVersionsSurviveARealtimeReload(self, StubButler, tables, configs, qadb):
+    def testVersionsSurviveARealtimeReload(self, StubButler, tables, qadb):
         """QaActor's loadVisit reads no pipeline versions; the backfill's stay."""
         tables = dict(tables)
         iq = tables["iqQaMetrics"].assign(calexpRun="u/test/reduce")
         tables["iqQaMetrics"] = iq
-        tables["pfsArm"] = iq[["visit", "arm", "spectrograph"]]
-        butler = StubButler(tables, datasets={"packages": {"drp_qa": "w.2026.44"}, **configs})
+        tables["pfsArm"] = iq[IMAGE]
+        butler = StubButler(tables, datasets={"packages": {"drp_qa": "w.2026.44"}})
         butler.getURI = lambda ref: ref
         header = {
             "VERSION_DATAMODEL": "w.2026.40",
@@ -288,7 +296,7 @@ class TestLoadCollection:
             "VERSION_DRP_STELLA": "w.2026.41",
         }
         load(butler, qadb, pipelineVersions=True, readHeader=lambda ref: header)
-        bare = StubButler(tables, datasets=configs)  # no packages dataset this time either
+        bare = StubButler(tables)  # no packages dataset this time either
         loadVisit(bare, qadb, COLLECTION, 133040, pipelineVersions=False, log=lambda _: None, now=lambda: NOW)
         row = qadb.query_dataframe(
             "SELECT * FROM data_processing_pipe2d WHERE collection_name = :c", params={"c": COLLECTION}
@@ -296,91 +304,28 @@ class TestLoadCollection:
         assert row["pipe2d_version"] == "w.2026.41"
         assert row["drp_qa_version"] == "w.2026.44"
 
-    def testThresholdsPerRun(self, StubButler, tables, configs, qadb):
-        """Each RUN's gate rows cite the thresholds its own config named."""
-        runs = {
-            (133025, "b", 1): "r1",
-            (133025, "r", 1): "r1",
-            (133040, "b", 1): "r2",
-            (133040, "r", 1): "r2",
-        }
-        other = str(Path(__file__).parents[1] / "metrics" / "data" / "dmLineResidualThresholds-run25.yaml")
-        datasets = {
-            "packages": {"drp_qa": "x"},
-            **configs,
-            ("dmLineResiduals_config", "r2"): SimpleNamespace(thresholdsFile=other),
-        }
-        butler = StubButler(tables, runs=runs, datasets=datasets)
-        load(butler, qadb)
-        gate = firstLayers(qadb)
-        assert gate["iq_thresholds_id"].nunique() == 1
-        assert gate.loc[gate["pfs_visit_id"] == 133025, "dm_thresholds_id"].nunique() == 1
-        assert gate.loc[gate["pfs_visit_id"] == 133040, "dm_thresholds_id"].nunique() == 1
-        assert set(gate["dm_thresholds_id"]).__len__() == 2  # r1 and r2 differ
-        assert qadb.count("qa_thresholds") == 3
-
-    def testExtraThresholdsFilesAreRegistered(self, StubButler, tables, configs, qadb):
-        """ImageQualityQa's further layers are registered too; qa_gate cites the first."""
-        iq = SimpleNamespace(
-            thresholdsFile="iqQaThresholds-run25.yaml", extraThresholdsFiles=["iqQaThresholds-iis-run30.yaml"]
-        )
-        butler = StubButler(tables, datasets={**configs, "imageQualityQa_config": iq})
-        load(butler, qadb)
-        names = qadb.query_dataframe("SELECT thresholds_id, name FROM qa_thresholds ORDER BY thresholds_id")
-        assert set(names["name"]) == {
-            "iqQaThresholds-run25.yaml",
-            "iqQaThresholds-iis-run30.yaml",
-            "dmLineResidualThresholds-run25.yaml",
-        }
-        first = int(names.loc[names["name"] == "iqQaThresholds-run25.yaml", "thresholds_id"].iloc[0])
-        assert distinct(qadb, "iq_thresholds_id") == [first]
-        iis = int(names.loc[names["name"] == "iqQaThresholds-iis-run30.yaml", "thresholds_id"].iloc[0])
-        assert qadb.count("qa_threshold_entry", f"thresholds_id = {iis} AND illumination = 'iis'") > 0
-        assert qadb.count("qa_threshold_entry", f"thresholds_id = {first} AND illumination IS NOT NULL") == 0
-
-    def testMissingThresholdsFileIsLogged(self, StubButler, tables, configs, qadb):
-        datasets = {**configs, "dmLineResiduals_config": SimpleNamespace(thresholdsFile="gone.yaml")}
-        butler = StubButler(tables, datasets=datasets)
-        messages = []
-        loadCollection(
-            butler,
-            qadb,
-            COLLECTION,
-            visits=VISITS,
-            pipelineVersions=False,
-            log=messages.append,
-            now=lambda: NOW,
-        )
-        assert any("gone.yaml" in m and "no longer has" in m for m in messages)
-        assert firstLayers(qadb)["dm_thresholds_id"].tolist() == [None] * 4
-        assert distinct(qadb, "iq_thresholds_id") != [None]
-
     def testNeedsADatabaseOrADryRun(self, butler):
         with pytest.raises(ValueError, match="dryRun"):
             load(butler, None)
 
-    def testDeletingAProcessingCascades(self, butler, qadb, scope):
+    def testDeletingAProcessingCascades(self, butler, qadb, storeValues, scope):
         """Removing a processing row takes every QA row of it along (the schema's ON DELETE CASCADE)."""
+        storeValues(qadb, COLLECTION, WIDTHS, validFrom=1)
         load(butler, qadb)
         qadb.commit("DELETE FROM data_processing_pipe2d WHERE collection_name = :c", params={"c": COLLECTION})
-        for table in (
-            "image_quality_qa",
-            "image_quality_qa_species",
-            "dm_line_residual_qa",
-            "dm_line_residual_qa_metric",
-            "qa_gate",
-        ):
+        for table in (*NUMBERS, "qa_gate"):
             assert qadb.count(table) == 0, table
-        assert qadb.count("qa_thresholds") == 2  # thresholds outlive the processings that used them
+        # The normal values are the collection's, not a processing's: they outlive it.
+        assert qadb.count("qa_normal_value", scope["qa_normal_value"]) == len(WIDTHS)
 
-    def testOneProcessingPerRun(self, StubButler, tables, configs, qadb):
+    def testOneProcessingPerRun(self, StubButler, tables, qadb):
         runs = {
             (133025, "b", 1): "r1",
             (133025, "r", 1): "r1",
             (133040, "b", 1): "r2",
             (133040, "r", 1): "r2",
         }
-        butler = StubButler(tables, runs=runs, datasets={"packages": {"drp_qa": "x"}, **configs})
+        butler = StubButler(tables, runs=runs, datasets={"packages": {"drp_qa": "x"}})
         counts = load(butler, qadb)
         assert counts["processings"] == 2
         ids = qadb.query_dataframe(
@@ -394,29 +339,16 @@ class TestLoadCollection:
         # The species rows take their image's processing: visit 133025's are in r1, 133040's in r2.
         assert byRun["processing_id"].tolist() == ids["processing_id"].tolist()
         assert byRun["n"].tolist() == [8, 8]
+        # And so does each image's gate row.
+        gateRuns = gateOf(qadb).groupby("pfs_visit_id")["processing_id"].agg(set)
+        assert gateRuns[133025] == {ids.loc[0, "processing_id"]}
+        assert gateRuns[133040] == {ids.loc[1, "processing_id"]}
 
-    def testImageQualityAlone(self, StubButler, fixtures, configs, qadb):
-        butler = StubButler({"iqQaMetrics": fixtures["iqQaMetrics"]}, datasets=configs)
-        counts = load(butler, qadb)
-        assert counts["dm_line_residual_qa"] == 0 if "dm_line_residual_qa" in counts else True
-        assert counts["qa_gate"] == 4
-        assert set(qadb.query_scalars("SELECT decided_by_task FROM qa_gate")) == {"imageQualityQa"}
-        assert firstLayers(qadb)["dm_thresholds_id"].tolist() == [None] * 4
-
-    def testLongRowsWithoutTheirImageAreSkipped(self, StubButler, tables, configs, qadb):
+    def testLongRowsWithoutTheirImageAreSkipped(self, StubButler, tables, qadb):
         tables = dict(tables)
         tables["iqQaMetrics"] = tables["iqQaMetrics"].iloc[:3]  # one image's species rows lose their image
-        butler = StubButler(tables, datasets=configs)
         messages = []
-        counts = loadCollection(
-            butler,
-            qadb,
-            COLLECTION,
-            visits=VISITS,
-            pipelineVersions=False,
-            log=messages.append,
-            now=lambda: NOW,
-        )
+        counts = load(StubButler(tables), qadb, log=messages.append)
         assert counts["image_quality_qa_species"] == 12
         assert any("4 rows without a iqQaMetrics row" in m for m in messages)
 
@@ -436,7 +368,7 @@ class TestLoadCollection:
         assert counts["image_quality_qa"] == 2 and counts["pfs_visit"] == 1
         assert set(qadb.query_scalars("SELECT mode FROM qa_gate")) == {"realtime"}
 
-    def testDryRun(self, butler, tmp_path):
+    def testDryRun(self, butler, tmp_path, tables):
         counts = load(butler, None, dryRun=tmp_path)
         assert counts["qa_gate"] == 4 and "pfs_visit" not in counts
         written = {path.stem for path in tmp_path.glob("*.parquet")}
@@ -446,22 +378,28 @@ class TestLoadCollection:
             "dm_line_residual_qa",
             "dm_line_residual_qa_metric",
             "qa_gate",
-            "qa_processing_thresholds",
         }
-        gate = pd.read_parquet(tmp_path / "qa_gate.parquet")
-        assert (gate["processing_id"] < 0).all()  # placeholders: no database was asked
-        assert not any("thresholds" in column for column in gate.columns)
-        assert pd.read_parquet(
-            tmp_path / "qa_processing_thresholds.parquet"
-        ).empty  # nothing registered, nothing cited
+        stored = pd.read_parquet(tmp_path / "qa_gate.parquet")
+        assert (stored["processing_id"] < 0).all()  # placeholders: no database was asked
+        # Without a database there are no normal values, unless they are given.
+        assert stored["qa_status"].tolist() == expected(tables)["qaStatus"].tolist() == ["PASS"] * 4
 
-    def testPipelineVersions(self, StubButler, tables, configs, qadb):
+    def testDryRunJudgesWithTheNormalValuesGiven(self, butler, tmp_path, tables, SqliteQaDB, storeValues):
+        other = SqliteQaDB()
+        storeValues(other, COLLECTION, WIDTHS, validFrom=1)
+        values = readNormalValues(other, COLLECTION)
+        load(butler, None, dryRun=tmp_path, normalValues=values)
+        stored = pd.read_parquet(tmp_path / "qa_gate.parquet")
+        assert stored["qa_status"].tolist() == ["PASS", "FAIL", "PASS", "WARN"]
+        assert stored["qa_status"].tolist() == expected(tables, values)["qaStatus"].tolist()
+
+    def testPipelineVersions(self, StubButler, tables, qadb):
         """The reduction's versions come from the pfsArm beside each judged calexp."""
         tables = dict(tables)
         iq = tables["iqQaMetrics"].assign(calexpRun="u/test/reduce")
         tables["iqQaMetrics"] = iq
-        tables["pfsArm"] = iq[["visit", "arm", "spectrograph"]]
-        butler = StubButler(tables, datasets={"packages": {"drp_qa": "x"}, **configs})
+        tables["pfsArm"] = iq[IMAGE]
+        butler = StubButler(tables, datasets={"packages": {"drp_qa": "x"}})
         butler.getURI = lambda ref: ref
         header = {
             "VERSION_DATAMODEL": "w.2026.40",
@@ -479,388 +417,276 @@ class TestLoadCollection:
     def testUnknownPipelineStaysNull(self, butler, qadb):
         """Metrics written before calexpRun existed have no known pipeline; the load goes on."""
         messages = []
-        loadCollection(
-            butler,
-            qadb,
-            COLLECTION,
-            visits=VISITS,
-            pipelineVersions=True,
-            log=messages.append,
-            now=lambda: NOW,
-        )
+        load(butler, qadb, pipelineVersions=True, log=messages.append)
         row = qadb.query_dataframe(
             "SELECT * FROM data_processing_pipe2d WHERE collection_name = :c", params={"c": COLLECTION}
         ).iloc[0]
         assert pd.isna(row["pipe2d_version"])
         assert any("no single reduction pipeline" in m for m in messages)
 
+    def testVisitDescriptionsComeFromTheOpdb(self, butler, qadb):
+        """With an opdb, each visit's description, design and time are copied; an arc asks it nothing else."""
 
-class TestRecordedThresholds:
-    """The gate cites the files each image records judging with, by content."""
+        class OpDB:
+            asked: list
 
-    #: Today's imageQualityQa config: a layer added after the tables below were judged.
-    TODAY = SimpleNamespace(
-        thresholdsFile="iqQaThresholds-run25.yaml", extraThresholdsFiles=["iqQaThresholds-iis-run30.yaml"]
-    )
+            def __init__(self):
+                self.asked = []
 
-    def gate(self, qadb):
-        return firstLayers(qadb)
+            def query_dataframe(self, sql, /, *, params=None, conn=None):
+                self.asked.append(sql)
+                assert "FROM pfs_visit" in sql
+                return pd.DataFrame(
+                    {
+                        "pfs_visit_id": [133025],
+                        "pfs_visit_description": ["Arc: Argon"],
+                        "pfs_design_id": [0x1234],
+                        "issued_at": pd.to_datetime(["2025-11-12 20:00"]),
+                    }
+                )
 
-    def idOf(self, qadb, name):
-        return qadb.query_scalar(
-            "SELECT thresholds_id FROM qa_thresholds WHERE name = :n", params={"n": name}
+        opdb = OpDB()
+        counts = load(butler, qadb, opdb=opdb)
+        assert counts["pfs_visit"] == 2 and len(opdb.asked) == 1
+        visits = qadb.query_dataframe(
+            "SELECT * FROM pfs_visit WHERE pfs_visit_id IN (133025, 133040) ORDER BY pfs_visit_id"
         )
+        assert visits["pfs_visit_description"].tolist()[0] == "Arc: Argon"
+        assert pd.isna(visits.loc[1, "pfs_visit_description"])  # unknown to the opdb: its id alone
 
-    def testRecordedFilesNotTheConfig(self, StubButler, SqliteQaDB, tables, configs, qadb):
-        """A layer the RUN's config gains from today's config class is not registered."""
-        datasets = {**configs, "imageQualityQa_config": self.TODAY}
-        load(StubButler(recorded(tables), datasets=datasets), qadb)
-        names = set(qadb.query_scalars("SELECT name FROM qa_thresholds"))
-        assert names == {"iqQaThresholds-run25.yaml", "dmLineResidualThresholds-run25.yaml"}
-        gate = self.gate(qadb)
-        assert gate["iq_thresholds_id"].tolist() == [self.idOf(qadb, "iqQaThresholds-run25.yaml")] * 4
-        assert (
-            gate["dm_thresholds_id"].tolist() == [self.idOf(qadb, "dmLineResidualThresholds-run25.yaml")] * 4
+
+class TestGate:
+    """The load gives each image one verdict: the gate's, in ``qa_gate`` and nowhere else."""
+
+    def testOneRowPerImageWithTheGatesVerdict(self, butler, qadb, tables):
+        load(butler, qadb, mode="comparison")
+        rows = gateOf(qadb)
+        want = expected(tables)
+        assert len(rows) == 4 and not rows.duplicated(["pfs_visit_id", "camera_name"]).any()
+        assert rows["pfs_visit_id"].tolist() == want["visit"].tolist()
+        assert rows["camera_name"].tolist() == want["camera"].tolist() == ["b1", "r1", "b1", "r1"]
+        assert rows["frame_type"].tolist() == want["frameType"].tolist() == ["arc", "arc", "quartz", "quartz"]
+        assert rows["qa_status"].tolist() == want["qaStatus"].tolist()
+        assert rows["qa_decided_by"].tolist() == want["qaDecidedBy"].tolist()
+        assert rows["qa_reason"].tolist() == want["qaReason"].tolist()
+        assert set(rows["qa_status"]) <= set(STATUS_ORDER)
+        assert (rows["mode"] == "comparison").all()
+        assert (pd.to_datetime(rows["decided_at"]) == pd.Timestamp(NOW)).all()
+        assert not {"decided_by_task", "provisional"} & set(rows.columns)
+
+    def testNoNumbersTableGetsAVerdict(self, StubButler, tables, qadb):
+        """Even from Butler tables that still carry the tasks' old verdict columns."""
+        old = dict(tables)
+        old["iqQaMetrics"] = tables["iqQaMetrics"].assign(qaStatus="FAIL", qaReason="then")
+        old["dmLineResidualSummary"] = tables["dmLineResidualSummary"].assign(
+            qaStatus="FAIL", recommendedAction="RECALIBRATE"
         )
-        # Negative control: the same tables recording nothing are read through the config, extra layer and all.
-        legacy = SqliteQaDB()
-        load(StubButler(tables, datasets=datasets), legacy)
-        assert "iqQaThresholds-iis-run30.yaml" in set(legacy.query_scalars("SELECT name FROM qa_thresholds"))
+        old["dmLineResidualMetrics"] = tables["dmLineResidualMetrics"].assign(status="FAIL")
+        load(StubButler(old), qadb)
+        verdictColumns = {"qa_status", "qa_decided_by", "qa_reason", "recommended_action", "status"}
+        for table in NUMBERS:
+            columns = set(qadb.query_dataframe(f"SELECT * FROM {table}").columns)
+            assert not verdictColumns & columns, table
+        # The old verdicts decide nothing: the gate judges the numbers.
+        assert set(gateOf(qadb)["qa_status"]) == {"PASS"}
+        # Negative control: the gate table is where the verdict columns are.
+        assert verdictColumns & set(gateOf(qadb).columns) == {"qa_status", "qa_decided_by", "qa_reason"}
 
-    def testEveryLayerIsRegisteredAndTheFirstCited(self, StubButler, tables, configs, qadb):
-        iq = ("iqQaThresholds-run25.yaml", "iqQaThresholds-iis-run30.yaml")
-        load(StubButler(recorded(tables, iq=iq), datasets=configs), qadb)
-        assert qadb.count("qa_thresholds") == 3
-        assert set(self.gate(qadb)["iq_thresholds_id"]) == {self.idOf(qadb, iq[0])}
-        iis = self.idOf(qadb, iq[1])
-        assert qadb.count("qa_threshold_entry", f"thresholds_id = {iis}") > 0
-
-    def testChangedFileIsCitedByTheContentThatJudged(self, StubButler, tables, configs, qadb, tmp_path):
-        """A file edited since judgement is cited as qadb registered it then, not as it is now."""
-        name = "iqQaThresholds-run25.yaml"
-        then = tmp_path / name
-        then.write_bytes(thresholdsPath(name).read_bytes() + b"\n# as it was\n")
-        judgedWith = registerThresholds(qadb, then, NOW)  # an earlier load, before the file changed
-        iq = recorded(tables)["iqQaMetrics"].assign(thresholdsFiles=name, thresholdsSha256=sha256Of(then))
-        load(StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs), qadb)
-        assert set(self.gate(qadb)["iq_thresholds_id"]) == {judgedWith}
-        # Negative control: today's file under that name was not registered, so not cited.
-        shipped = sha256Of(thresholdsPath(name))
-        assert (
-            qadb.query_scalar("SELECT count(*) FROM qa_thresholds WHERE sha256 = :s", params={"s": shipped})
-            == 0
+    def testAFixedCheckThatFailsIsNamedWithItsReason(self, butler, qadb, tables):
+        metrics = tables["dmLineResidualMetrics"]
+        offset = (
+            (metrics["visit"] == 133040)
+            & (metrics["arm"] == "r")
+            & (metrics["description"] == "Trace")
+            & (metrics["reference"] == "calib")
+            & (metrics["statusType"] == "BOTH")
+            & (metrics["metric"] == "medianDeltaX")
         )
+        assert offset.sum() == 1
+        metrics.loc[offset, "value"] = -1.5  # beyond WARN (1 px), short of FAIL (2 px), in either direction
+        load(butler, qadb)
+        row = gateOf(qadb).set_index(["pfs_visit_id", "camera_name"]).loc[(133040, "r1")]
+        assert (row["qa_status"], row["qa_decided_by"]) == ("WARN", "calibOffset")
+        assert row["qa_reason"] == "x offset -1.50 px, limit 1 px"
+        # Negative control: the other images, whose offsets are a fraction of a pixel, pass.
+        assert [status for key, status in verdictOf(qadb).items() if key != (133040, "r1")] == ["PASS"] * 3
 
-    def testRenamedFileIsFoundByContent(self, StubButler, tables, configs, qadb):
-        """A file shipped under a new name is registered under the name it judged with."""
-        shipped = sha256Of(thresholdsPath("iqQaThresholds-run25.yaml"))
-        iq = recorded(tables)["iqQaMetrics"].assign(
-            thresholdsFiles="iqQaThresholds-old.yaml", thresholdsSha256=shipped
-        )
-        load(StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs), qadb)
-        row = qadb.query_dataframe(
-            "SELECT * FROM qa_thresholds WHERE sha256 = :s", params={"s": shipped}
-        ).iloc[0]
-        assert row["name"] == "iqQaThresholds-old.yaml"
-        assert set(self.gate(qadb)["iq_thresholds_id"]) == {row["thresholds_id"]}
-        assert qadb.count("qa_threshold_entry", f"thresholds_id = {row['thresholds_id']}") > 0
+    def testNormalValuesInQadbJudgeTheRelativeChecks(self, butler, qadb, tables, storeValues):
+        """A relative check needs the camera's normal value; the load takes the collection's from qadb."""
+        load(butler, qadb)
+        without = gateOf(qadb)
+        # Without normal values only the fixed checks judge: nothing here is decided by a relative one.
+        assert without["qa_status"].tolist() == ["PASS"] * 4 and set(without["qa_decided_by"]) == {""}
 
-    def testUnknownContentIsNullAndLogged(self, StubButler, tables, configs, qadb):
-        iq = recorded(tables)["iqQaMetrics"].assign(thresholdsSha256="f" * 64)
-        messages = []
-        loadCollection(
-            StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs),
-            qadb,
-            COLLECTION,
-            visits=VISITS,
-            pipelineVersions=False,
-            log=messages.append,
-            now=lambda: NOW,
-        )
-        gate = self.gate(qadb)
-        assert gate["iq_thresholds_id"].isna().all()
-        assert gate["dm_thresholds_id"].notna().all()
-        assert sum("iqQaThresholds-run25.yaml" in m and "neither in qadb" in m for m in messages) == 1
+        storeValues(qadb, COLLECTION, WIDTHS, validFrom=133000)
+        load(butler, qadb, now=lambda: LATER)
+        rows = gateOf(qadb)
+        assert rows["qa_status"].tolist() == ["PASS", "FAIL", "PASS", "WARN"]
+        assert rows["qa_decided_by"].tolist() == ["", "width", "", "width"]
+        assert CHECKS["width"].kind == RELATIVE
+        assert rows.loc[1, "qa_reason"] == "width 2.76 px is +10.3 % from normal 2.50 px, limit +5 %"
+        assert rows.loc[3, "qa_reason"] == "width 3.33 px is +3.9 % from normal 3.20 px, limit +3 %"
+        want = expected(tables, readNormalValues(qadb, COLLECTION))
+        assert rows["qa_status"].tolist() == want["qaStatus"].tolist()
+        assert rows["qa_reason"].tolist() == want["qaReason"].tolist()
 
-    def testNoFileRecordedIsNull(self, StubButler, tables, configs, qadb):
-        """Judged by the config's fields alone: no thresholds, though the config names a file."""
-        load(StubButler(recorded(tables, iq=()), datasets=configs), qadb)
-        assert self.gate(qadb)["iq_thresholds_id"].isna().all()
-        assert set(qadb.query_scalars("SELECT name FROM qa_thresholds")) == {
-            "dmLineResidualThresholds-run25.yaml"
-        }
+        # Negative control: wider is worse, narrower is not. The same widths against normal values as far
+        # above them pass.
+        narrower = {key: value * 1.2 for key, value in WIDTHS.items()}
+        storeValues(qadb, COLLECTION, narrower, validFrom=133000)
+        load(butler, qadb)
+        assert gateOf(qadb)["qa_status"].tolist() == ["PASS"] * 4
 
-    def testImagesOfOneRunDisagreeing(self, StubButler, tables, configs, qadb):
-        """A RUN has one config, so its images record the same layers; should they not, the first image's are cited."""
-        iq = recorded(tables)["iqQaMetrics"]
-        later = iq["visit"] == 133040
-        iq.loc[later, list(thresholdsRecord([]))] = list(
-            thresholdsRecord(["iqQaThresholds-iis-run30.yaml"]).values()
-        )
-        messages = self.logged(StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs), qadb)
-        gate = self.gate(qadb).set_index("pfs_visit_id")["iq_thresholds_id"]
-        assert set(gate) == {self.idOf(qadb, "iqQaThresholds-run25.yaml")}
-        assert (
-            messages.count(
-                f"{RUN}: imageQualityQa's images record different thresholds layers; citing the first image's"
-            )
-            == 1
-        )
-        # Both files are registered all the same: every recorded layer is.
-        assert self.idOf(qadb, "iqQaThresholds-iis-run30.yaml") is not None
+    def testWithoutNormalValuesTheRelativeChecksAreUnknown(self, StubButler, fixtures, qadb, storeValues):
+        """Image quality alone has only relative checks on a lamp frame: no normal value, no verdict."""
+        butler = StubButler({"iqQaMetrics": fixtures["iqQaMetrics"]})
+        counts = load(butler, qadb)
+        assert "dm_line_residual_qa" not in counts and counts["qa_gate"] == 4
+        rows = gateOf(qadb)
+        assert rows["qa_status"].tolist() == ["UNKNOWN"] * 4
+        assert set(rows["qa_reason"]) == {"no normal value"} and set(rows["qa_decided_by"]) == {""}
+        assert rows["frame_type"].tolist() == ["arc", "arc", "quartz", "quartz"]
+        # Negative control: with the normal values in qadb the same load judges them.
+        storeValues(qadb, COLLECTION, WIDTHS, validFrom=133000)
+        load(butler, qadb)
+        assert gateOf(qadb)["qa_status"].tolist() == ["UNKNOWN", "FAIL", "PASS", "WARN"]
+        # 133025 b1 stays unjudged: an arc under the floor of lines per lit fiber has no width to judge.
+        assert fixtures["iqQaMetrics"].loc[0, "linesPerFiber"] < 5
 
-    def logged(self, butler, qadb):
-        messages = []
-        loadCollection(
-            butler,
-            qadb,
-            COLLECTION,
-            visits=VISITS,
-            pipelineVersions=False,
-            log=messages.append,
-            now=lambda: NOW,
-        )
-        return messages
+    def testANormalValueJudgesFromItsFirstVisitOn(self, butler, qadb, storeValues):
+        """``valid_from`` is the first visit a value judges: an earlier frame is not judged by it."""
+        storeValues(qadb, COLLECTION, WIDTHS, validFrom=133030)
+        load(butler, qadb)
+        rows = gateOf(qadb)
+        # 133040 is judged by them; 133025, before them, only by its fixed checks.
+        assert rows["qa_status"].tolist() == ["PASS", "PASS", "PASS", "WARN"]
+        # Negative control: valid from the frame itself, the value judges it (at or before, not strictly before).
+        storeValues(qadb, COLLECTION, WIDTHS, validFrom=133025)
+        load(butler, qadb)
+        assert gateOf(qadb)["qa_status"].tolist() == ["PASS", "FAIL", "PASS", "WARN"]
 
-    def testOldAndNewTablesTogether(self, StubButler, tables, configs, qadb):
-        """A RUN written before PIPE2D-1976 falls back on its config; one written after, in the same load, does not."""
+    def testTheLatestValueInForceJudges(self, butler, qadb, storeValues):
+        """Of two accepted values, the later one at or before the frame is the one in force."""
+        storeValues(qadb, COLLECTION, WIDTHS, validFrom=133000)
+        wide = {("medFwhm", "r1", "quartz", ""): 3.3}  # 3.33 px is +0.8 % from it
+        storeValues(qadb, COLLECTION, wide, validFrom=133035)
+        load(butler, qadb)
+        assert verdictOf(qadb)[(133040, "r1")] == "PASS"
+        # Negative control: the earlier value alone warned on that image.
+        qadb.commit("DELETE FROM qa_normal_value WHERE valid_from = 133035")
+        load(butler, qadb)
+        assert verdictOf(qadb)[(133040, "r1")] == "WARN"
+
+    def testAnotherCollectionsNormalValuesJudgeNothing(self, butler, qadb, storeValues):
+        storeValues(qadb, "u/test/other", WIDTHS, validFrom=133000)
+        load(butler, qadb)
+        assert gateOf(qadb)["qa_status"].tolist() == ["PASS"] * 4
+        # Negative control: the same values under this collection do judge.
+        storeValues(qadb, COLLECTION, WIDTHS, validFrom=133000)
+        load(butler, qadb)
+        assert gateOf(qadb)["qa_status"].tolist() == ["PASS", "FAIL", "PASS", "WARN"]
+
+    def testNormalValuesGivenAreUsedInsteadOfQadbs(self, butler, qadb, storeValues, SqliteQaDB):
+        other = SqliteQaDB()
+        storeValues(other, COLLECTION, WIDTHS, validFrom=133000)
+        load(butler, qadb, normalValues=readNormalValues(other, COLLECTION))
+        assert gateOf(qadb)["qa_status"].tolist() == ["PASS", "FAIL", "PASS", "WARN"]
+        assert qadb.count("qa_normal_value", "collection_name = 'u/test/qa'") == 0  # judged with, not stored
+
+    def testLineResidualsAloneLeaveALampFrameUnknown(self, StubButler, tables, qadb):
+        """A lamp frame's type needs its illumination, which only iqQaMetrics records: no row, no verdict."""
+        dm = {name: table for name, table in tables.items() if name.startswith("dmLineResidual")}
+        load(StubButler(dm), qadb)
+        rows = gateOf(qadb)
+        assert len(rows) == 4 and set(rows["qa_status"]) == {"UNKNOWN"}
+        assert set(rows["qa_reason"]) == {"nothing to judge was measured"}
+        # Negative control: the same residuals beside their iqQaMetrics rows are judged.
+        load(StubButler(tables), qadb)
+        assert set(gateOf(qadb)["qa_status"]) == {"PASS"}
+
+    def testTheGateRowTakesTheFirstTablesProcessing(self, StubButler, tables, qadb):
+        """ImageQualityQa and dmLineResiduals in two RUNs: one gate row per image, under imageQualityQa's."""
         runs = {
-            (133025, "b", 1): "new",
-            (133025, "r", 1): "new",
-            (133040, "b", 1): "old",
-            (133040, "r", 1): "old",
+            (name, *image): "u/test/qa/dm"
+            for name in ("dmLineResidualSummary", "dmLineResidualMetrics")
+            for image in tables["iqQaMetrics"][IMAGE].itertuples(index=False, name=None)
         }
-        iq = recorded(tables, iq=["iqQaThresholds-iis-run30.yaml"])["iqQaMetrics"]
-        old = (iq["visit"] == 133040).to_numpy()
-        iq.loc[old, ["thresholdsFiles", "thresholdsSha256"]] = (
-            np.nan
-        )  # as concatenation with an old table leaves it
-        messages = self.logged(
-            StubButler({**recorded(tables), "iqQaMetrics": iq}, runs=runs, datasets=configs), qadb
+        counts = load(StubButler(tables, runs=runs), qadb)
+        assert counts["processings"] == 2 and counts["qa_gate"] == 4
+        rows = qadb.query_dataframe(
+            "SELECT g.pfs_visit_id, g.camera_name, p.run_name FROM qa_gate g"
+            " JOIN data_processing_pipe2d p ON p.processing_id = g.processing_id"
         )
-        gate = self.gate(qadb).set_index("pfs_visit_id")["iq_thresholds_id"]
-        assert set(gate[133025]) == {self.idOf(qadb, "iqQaThresholds-iis-run30.yaml")}
-        assert set(gate[133040]) == {
-            self.idOf(qadb, "iqQaThresholds-run25.yaml")
-        }  # what the old RUN's config names
-        fallbacks = [m for m in messages if "recorded no thresholds layers" in m]
-        assert fallbacks == [
-            "old: imageQualityQa recorded no thresholds layers; citing those its stored config gives,"
-            " as this drp_qa has them"
-        ]
+        assert len(rows) == 4 and set(rows["run_name"]) == {RUN}
+        # Negative control: the line residuals themselves sit under their own RUN's processing.
+        dmRuns = qadb.query_scalars(
+            "SELECT DISTINCT p.run_name FROM dm_line_residual_qa t"
+            " JOIN data_processing_pipe2d p ON p.processing_id = t.processing_id"
+        )
+        assert dmRuns == ["u/test/qa/dm"]
 
-    def testInterruptedRegistrationIsRepaired(self, StubButler, tables, configs, qadb):
-        """A row whose entries were never written gets them on the next load of a table recording its file."""
-        thresholdsId = registerThresholds(qadb, thresholdsPath("iqQaThresholds-run25.yaml"), NOW)
-        complete = qadb.count("qa_threshold_entry", f"thresholds_id = {thresholdsId}")
-        qadb.commit("DELETE FROM qa_threshold_entry WHERE thresholds_id = :i", params={"i": thresholdsId})
-        assert (
-            qadb.count("qa_threshold_entry", f"thresholds_id = {thresholdsId}") == 0
-        )  # the interrupted state
-        load(StubButler(recorded(tables), datasets=configs), qadb)
-        assert qadb.count("qa_threshold_entry", f"thresholds_id = {thresholdsId}") == complete > 0
-        assert set(self.gate(qadb)["iq_thresholds_id"]) == {thresholdsId}
-
-    def testIncompleteRowWithoutACopyIsCitedAndLogged(self, StubButler, tables, configs, qadb, tmp_path):
-        then = tmp_path / "iqQaThresholds-run25.yaml"
-        then.write_bytes(thresholdsPath(then.name).read_bytes() + b"\n# as it was\n")
-        thresholdsId = registerThresholds(qadb, then, NOW)
-        qadb.commit("DELETE FROM qa_threshold_entry WHERE thresholds_id = :i", params={"i": thresholdsId})
-        iq = recorded(tables)["iqQaMetrics"].assign(thresholdsSha256=sha256Of(then))
-        messages = self.logged(StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs), qadb)
-        assert set(self.gate(qadb)["iq_thresholds_id"]) == {thresholdsId}
-        assert sum("entries missing" in m for m in messages) == 1
-
-    def testMalformedRecordIsNullAndLogged(self, StubButler, tables, configs, qadb):
-        """A record naming one file with two hashes is logged and left to the RUN's other images; the load goes on."""
-        iq = recorded(tables)["iqQaMetrics"]
-        bad = (iq["visit"] == 133025).to_numpy()
-        iq.loc[bad, "thresholdsSha256"] = "f" * 64 + "," + "e" * 64
-        messages = self.logged(StubButler({**recorded(tables), "iqQaMetrics": iq}, datasets=configs), qadb)
-        gate = self.gate(qadb).set_index("pfs_visit_id")
-        # The layers are the RUN's: the images with a readable record decide them, for the unreadable one too.
-        assert gate["iq_thresholds_id"].notna().all() and gate["dm_thresholds_id"].notna().all()
-        assert not any("different thresholds layers" in m for m in messages)
-        assert (
-            sum("1 thresholds layers recorded with 2 SHA-256s" in m for m in messages) == 2
-        )  # one per image
-
-
-class TestConfigLayers:
-    """A task's config fields are its last thresholds layer, registered by content and cited with the rest."""
-
-    def layers(self, qadb):
-        return qadb.query_dataframe(
-            "SELECT p.processing_id, p.task, p.layer, t.name FROM qa_processing_thresholds p"
-            " JOIN qa_thresholds t ON t.thresholds_id = p.thresholds_id"
-            " ORDER BY p.processing_id, p.task, p.layer"
+    def testAVisitMeasuredAgainInANewerRunIsGatedUnderIt(self, StubButler, tables, qadb):
+        """Numbers measured again into a new RUN: the gate row goes under the new processing, not the old row's."""
+        load(StubButler(tables), qadb)
+        before = readGate(qadb, COLLECTION)
+        assert before["qaStatus"].tolist() == ["PASS"] * 4
+        # The newer RUN's measurement of 133040 finds its traces 2.5 px from the calibration.
+        metrics = tables["dmLineResidualMetrics"].copy()
+        offset = (
+            (metrics["visit"] == 133040)
+            & (metrics["description"] == "Trace")
+            & (metrics["reference"] == "calib")
+            & (metrics["metric"] == "medianDeltaX")
+        )
+        metrics.loc[offset, "value"] = 2.5
+        newer = "u/test/qa/20261027T000000Z"
+        runs = {(133040, "b", 1): newer, (133040, "r", 1): newer}
+        again = StubButler({**tables, "dmLineResidualMetrics": metrics}, runs=runs)
+        loadVisit(
+            again, qadb, COLLECTION, 133040, pipelineVersions=False, log=lambda _: None, now=lambda: LATER
         )
 
-    def logged(self, butler, qadb):
+        ids = qadb.query_dataframe(
+            "SELECT processing_id, run_name FROM data_processing_pipe2d WHERE collection_name = :c",
+            params={"c": COLLECTION},
+        ).set_index("run_name")["processing_id"]
+        stored = gateOf(qadb)
+        # The first RUN's rows stay; the visit measured again has a second row, under the newer processing.
+        assert len(stored) == 6
+        assert stored.groupby("pfs_visit_id")["processing_id"].agg(set).to_dict() == {
+            133025: {ids[RUN]},
+            133040: {ids[RUN], ids[newer]},
+        }
+        new = stored[stored["processing_id"] == ids[newer]]
+        assert new["qa_status"].tolist() == ["FAIL", "FAIL"] and set(new["qa_decided_by"]) == {"calibOffset"}
+        # Negative control: the row under the first RUN's processing was not overwritten by the new verdict.
+        old = stored[(stored["processing_id"] == ids[RUN]) & (stored["pfs_visit_id"] == 133040)]
+        assert old["qa_status"].tolist() == ["PASS", "PASS"]
+        assert (pd.to_datetime(old["decided_at"]) == pd.Timestamp(NOW)).all()
+        # Readers take the newer RUN's row.
+        after = readGate(qadb, COLLECTION).set_index("visit")
+        assert after.loc[133040, "qaStatus"].tolist() == ["FAIL", "FAIL"]
+        assert set(after.loc[133040, PROCESSING_ID]) == {ids[newer]} and set(after.loc[133040, "run"]) == {
+            newer
+        }
+        assert set(after.loc[133025, PROCESSING_ID]) == {ids[RUN]}
+
+    def testLineResidualsWithoutAnyImageRowAreNotGated(self, StubButler, tables, qadb):
+        """Residuals with neither a summary nor an iqQaMetrics row have no processing to take: skipped, and said."""
+        orphaned = dict(tables)
+        orphaned["dmLineResidualSummary"] = tables["dmLineResidualSummary"].iloc[:3]
+        orphaned["iqQaMetrics"] = tables["iqQaMetrics"].iloc[:3]
+        del orphaned["iqQaSpeciesMetrics"]
         messages = []
-        loadCollection(
-            butler,
-            qadb,
-            COLLECTION,
-            visits=VISITS,
-            pipelineVersions=False,
-            log=messages.append,
-            now=lambda: NOW,
+        counts = load(StubButler(orphaned), qadb, log=messages.append)
+        assert counts["qa_gate"] == 3 and (133040, "r1") not in verdictOf(qadb)
+        assert any("qa_gate: 1 images with line residuals and no summary row, skipped" in m for m in messages)
+        assert any(
+            "dmLineResidualMetrics: 24 rows without a dmLineResidualSummary row" in m for m in messages
         )
-        return messages
 
-    def testConfigLayerIsRebuiltFromTheStoredConfigAndCited(self, StubButler, tables, fullConfigs, qadb):
-        """The RUN cites each task's file, then its config layer, in ``qa_processing_thresholds``."""
-        datasets = {"packages": {"drp_qa": "x"}, **fullConfigs}
-        counts = load(StubButler(recorded(tables, configs=fullConfigs), datasets=datasets), qadb)
-        names = qadb.query_dataframe("SELECT thresholds_id, name, n_entries FROM qa_thresholds")
-        assert set(names["name"]) == {
-            "iqQaThresholds-run25.yaml",
-            "dmLineResidualThresholds-run25.yaml",
-            "imageQualityQa.config",
-            "dmLineResiduals.config",
-        }
-        layers = self.layers(qadb)
-        assert counts["qa_processing_thresholds"] == len(layers) == 4  # one RUN x 2 tasks x 2 layers
-        assert layers["processing_id"].nunique() == 1
-        byTask = layers.groupby("task")["name"].agg(tuple)
-        assert byTask["imageQualityQa"] == ("iqQaThresholds-run25.yaml", "imageQualityQa.config")
-        assert byTask["dmLineResiduals"] == ("dmLineResidualThresholds-run25.yaml", "dmLineResiduals.config")
-        assert layers["layer"].tolist() == [0, 1] * 2
-        # qa_gate itself cites nothing: the layers are the one record.
-        assert not {"iq_thresholds_id", "dm_thresholds_id", "twilight_thresholds_id"} & set(
-            qadb.query_dataframe("SELECT * FROM qa_gate").columns
-        )
-        # The config layer's entries are the task's config table: the drift rows a run25 file lacks.
-        dm = int(names.loc[names["name"] == "dmLineResiduals.config", "thresholds_id"].iloc[0])
-        entries = qadb.query_dataframe(
-            "SELECT metric, reference, description, warn, fail FROM qa_threshold_entry WHERE thresholds_id = :i",
-            params={"i": dm},
-        )
-        assert set(entries["metric"]) == {
-            "medianDeltaX",
-            "medianDeltaY",
-            "robustRmsDeltaX",
-            "robustRmsDeltaY",
-        }
-        drift = entries.set_index("metric").loc["medianDeltaX"]
-        assert (drift["reference"], drift["description"], drift["warn"], drift["fail"]) == (
-            "calib",
-            "Trace",
-            1.0,
-            2.0,
-        )
-        assert (
-            entries.set_index("metric").loc["robustRmsDeltaX", ["warn", "fail"]].isna().all()
-        )  # NaN: not judged
-
-    def testStoredConfigThatBuildsOtherThresholdsIsNotCited(self, StubButler, tables, fullConfigs, qadb):
-        """A config layer is cited only when the RUN's stored config rebuilds the recorded content."""
-        other = SimpleNamespace(**vars(fullConfigs["imageQualityQa_config"]))
-        other.fwhmWarnThreshold = 9.0  # the stored config says otherwise than what the task recorded
-        datasets = {"packages": {"drp_qa": "x"}, **fullConfigs, "imageQualityQa_config": other}
-        messages = self.logged(StubButler(recorded(tables, configs=fullConfigs), datasets=datasets), qadb)
-        layers = self.layers(qadb)
-        assert set(layers.loc[layers["task"] == "imageQualityQa", "name"]) == {"iqQaThresholds-run25.yaml"}
-        assert set(layers.loc[layers["task"] == "dmLineResiduals", "name"]) == {
-            "dmLineResidualThresholds-run25.yaml",
-            "dmLineResiduals.config",
-        }
-        assert "imageQualityQa.config" not in set(qadb.query_scalars("SELECT name FROM qa_thresholds"))
-        mismatch = [m for m in messages if "imageQualityQa.config" in m]
-        assert len(mismatch) == 1 and "what this drp_qa builds from the RUN's stored config" in mismatch[0]
-        # Negative control: the same stored config as recorded is cited.
-        again = SqliteQaDBOf(qadb)
-        load(StubButler(recorded(tables, configs=fullConfigs), datasets={**datasets, **fullConfigs}), again)
-        assert "imageQualityQa.config" in set(again.query_scalars("SELECT name FROM qa_thresholds"))
-
-    def testStoredConfigWithoutTheFieldsIsNotCited(self, StubButler, tables, fullConfigs, configs, qadb):
-        """A stored config read without threshold fields (an old config class) gives no config layer."""
-        datasets = {"packages": {"drp_qa": "x"}, **configs}  # thresholdsFile alone
-        messages = self.logged(StubButler(recorded(tables, configs=fullConfigs), datasets=datasets), qadb)
-        assert set(self.layers(qadb)["name"]) == {
-            "iqQaThresholds-run25.yaml",
-            "dmLineResidualThresholds-run25.yaml",
-        }
-        assert sum("given by the RUN's stored config" in m for m in messages) == 2  # one per task
-        assert configDocumentOf(StubButler({}, datasets=datasets), RUN, "imageQualityQa") is None
-        assert (
-            configDocumentOf(StubButler({}, datasets=datasets), RUN, "twilightQa") is None
-        )  # no config layer
-
-    def testRecordedLayerAlreadyInQadbNeedsNoConfig(self, StubButler, tables, fullConfigs, configs, qadb):
-        """Once registered, a config layer is cited by its hash alone, whatever the RUN's config now reads as."""
-        full = {"packages": {"drp_qa": "x"}, **fullConfigs}
-        load(StubButler(recorded(tables, configs=fullConfigs), datasets=full), qadb)
-        bare = {"packages": {"drp_qa": "x"}, **configs}
-        messages = self.logged(StubButler(recorded(tables, configs=fullConfigs), datasets=bare), qadb)
-        assert not any("stored config" in m for m in messages)
-        assert set(self.layers(qadb)["name"]) >= {"imageQualityQa.config", "dmLineResiduals.config"}
-
-    def testFallbackRegistersTheConfigLayerToo(self, StubButler, tables, fullConfigs, qadb):
-        """A table recording nothing gets its RUN's config: the files it names, then its fields."""
-        datasets = {"packages": {"drp_qa": "x"}, **fullConfigs}
-        messages = self.logged(StubButler(tables, datasets=datasets), qadb)
-        byTask = self.layers(qadb).groupby("task")["name"].agg(tuple)
-        assert byTask["imageQualityQa"] == ("iqQaThresholds-run25.yaml", "imageQualityQa.config")
-        assert byTask["dmLineResiduals"] == ("dmLineResidualThresholds-run25.yaml", "dmLineResiduals.config")
-        assert sum("recorded no thresholds layers" in m for m in messages) == 2
-
-    def testReloadReplacesTheLayers(self, StubButler, tables, fullConfigs, qadb):
-        """A new judgement's layers replace the old ones: none linger from a judgement with more."""
-        datasets = {"packages": {"drp_qa": "x"}, **fullConfigs}
-        load(StubButler(recorded(tables, configs=fullConfigs), datasets=datasets), qadb)
-        assert len(self.layers(qadb)) == 4
-        load(StubButler(recorded(tables), datasets=datasets), qadb)  # judged with the files alone
-        layers = self.layers(qadb)
-        assert len(layers) == 2 and set(layers["name"]) == {
-            "iqQaThresholds-run25.yaml",
-            "dmLineResidualThresholds-run25.yaml",
-        }
-        assert qadb.count("qa_thresholds") == 4  # the config layers outlive the judgements that cited them
-
-    def testReloadOfOneTaskKeepsTheOthers(self, StubButler, tables, fullConfigs, qadb):
-        """Only the processings and tasks loaded have their layers replaced."""
-        datasets = {"packages": {"drp_qa": "x"}, **fullConfigs}
-        load(StubButler(recorded(tables, configs=fullConfigs), datasets=datasets), qadb)
-        iqOnly = {k: v for k, v in recorded(tables, configs=fullConfigs).items() if k.startswith("iq")}
-        load(StubButler(iqOnly, datasets=datasets), qadb)
-        layers = self.layers(qadb)
-        assert set(layers["task"]) == {"imageQualityQa", "dmLineResiduals"} and len(layers) == 4
-
-    def testMissingLayerKeepsTheOthersPositions(self, StubButler, tables, fullConfigs, qadb):
-        """A layer that cannot be cited leaves a gap: the config layer stays at position 1."""
-        iq = recorded(tables, configs=fullConfigs)["iqQaMetrics"]
-        files, digests = iq["thresholdsFiles"].iloc[0], iq["thresholdsSha256"].iloc[0]
-        unknown = "f" * 64 + digests[digests.index(",") :]  # a file this drp_qa never had
-        iq = iq.assign(
-            thresholdsFiles=files.replace("iqQaThresholds-run25.yaml", "gone.yaml"), thresholdsSha256=unknown
-        )
-        datasets = {"packages": {"drp_qa": "x"}, **fullConfigs}
-        load(
-            StubButler({**recorded(tables, configs=fullConfigs), "iqQaMetrics": iq}, datasets=datasets), qadb
-        )
-        layers = self.layers(qadb)
-        iqLayers = layers[layers["task"] == "imageQualityQa"]
-        assert set(iqLayers["name"]) == {"imageQualityQa.config"} and set(iqLayers["layer"]) == {1}
-        assert distinct(qadb, "iq_thresholds_id") == [None]  # the first layer is unknown
-
-    def testDocumentHashesAsTheTaskRecorded(self, fullConfigs):
-        """The loader's rebuild is byte-for-byte what `taskThresholdsRecord` hashed."""
-        config = fullConfigs["imageQualityQa_config"]
-        record = taskThresholdsRecord(
-            "imageQualityQa", ["iqQaThresholds-run25.yaml"], CONFIG_LAYERS["imageQualityQa"](config)
-        )
-        document = thresholdsDocument(
-            CONFIG_LAYERS["imageQualityQa"](config), configLayerName("imageQualityQa")
-        )
-        assert record["thresholdsSha256"].split(",")[1] == sha256Of(document)
-
-
-def SqliteQaDBOf(qadb):
-    """Return a fresh database of the same kind as ``qadb`` (SQLite only: PostgreSQL tests reuse theirs)."""
-    import pytest
-
-    if type(qadb).__name__ != "SqliteQaDB":
-        pytest.skip("a second database is only made for SQLite")
-    return type(qadb)()
+    def testTheTallyIsLogged(self, butler, qadb, storeValues):
+        storeValues(qadb, COLLECTION, WIDTHS, validFrom=133000)
+        messages = []
+        load(butler, qadb, log=messages.append)
+        assert "verdicts: 2 PASS, 1 WARN, 1 FAIL" in messages
