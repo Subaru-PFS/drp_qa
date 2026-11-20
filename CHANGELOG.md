@@ -10,6 +10,28 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Changed
+
+- **AG second moments are read as the stars' variance, for any exposure** (INSTRM-3114) — ics_agccActor stored
+  half the variance and now stores the variance; the exposures at half scale are those whose
+  `agc_exposure.version_actor` is the literal `"git"`. `guiders.queries.readAgcData` (`mxx`, `myy`, `mxy`) and
+  `readAgRun` (`cameras.sigma_pix`) double the moments of those exposures in the query, except on `BAD_SHAPE`
+  spots, whose moments are unweighted, so everything downstream is on one scale across the change. `rms_pix`,
+  `sigma_pix`, `rms_left_pix`, `rms_right_pix` and `compat`'s `rms` are therefore the stars' sigma, sqrt(2) larger
+  than before for the same exposures, and `mxx`, `myy`, `mxy` twice as large. `FOCUS_PISTON_MM_PER_PIX2` is 0.0043,
+  half of 0.0086, as in ics_agActor, and the FWHM is 2.05 times the sigma: `fwhm_arcsec` and the run report's FWHM
+  are what they were, and so is `focus_error_um` from stars without `BAD_SHAPE` (`plotFocus` and `plotFocusFit`
+  use only those). `estimateFocusErrors` now leaves `BAD_SHAPE` detections out, as ics_agActor's focus does:
+  their moments are unweighted, and they used to enter the medians sqrt(2) above the other stars. Where good
+  matches are `BAD_SHAPE` the result changes: in visit 142916 (27% of them) 83 of 236 camera values go, a half of
+  the detector being left without a star, and 61 of the other 153 change, by a median of 6 µm (66 µm at most).
+  The 1,120 exposures of May 2022 with no `version_actor` are not doubled, so their FWHM is sqrt(2)
+  smaller and their focus slope term half what it was. A run fetched before this (its stamp has no `sigmaPix`) is
+  rescaled when it is loaded, which is right while every exposure in it was stored at half the variance; fetch
+  again a period that reaches past the ics_agccActor release. The fixtures in `tests/guiders/data` hold the
+  moments as `readAgcData` now returns them. Needs the pfs_utils release with `variancePerMoment`, set up
+  together with this: drp_qa 0.4.0 with that pfs_utils reports FWHM sqrt(2) too small.
+
 ## [0.4.0] - 2026-11-19
 
 ### Added

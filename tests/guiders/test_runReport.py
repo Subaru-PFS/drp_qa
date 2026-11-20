@@ -64,10 +64,17 @@ def testReadAgRunBindsFlagValues(opdb):
     (cameras,) = [call for call in opdb.calls if "sigma_pix" in call.sql]
     assert cameras.params["badShape"] == int(SourceDetectionFlags.BAD_SHAPE)
     assert re.search(r"agc_data\.flags, 0\) & :badShape = 0\) AS sigma_pix", cameras.sql)
-    # sigma_pix is the radius storedRadiusToFwhm takes, sqrt((mxx + myy) / 2), and only it leaves BAD_SHAPE out.
-    assert re.search(r"moment_20_pix \+ agc_data\.central_image_moment_02_pix, 0\) / 2\)", cameras.sql)
+    # sigma_pix is the radius storedRadiusToFwhm takes, sqrt((mxx + myy) / 2) of the variance: the stored
+    # moments times 2 where the exposure's agcc stored half of it. Only sigma_pix leaves BAD_SHAPE out.
+    assert cameras.params["halvedMoments"] == 2.0
+    assert re.search(
+        r"moment_20_pix \+ agc_data\.central_image_moment_02_pix, 0\) / 2\s+\* CASE\s+"
+        r"WHEN agc_exposure\.version_actor = 'git' AND COALESCE\(agc_data\.flags, 0\) & :badShape = 0\s+"
+        r"THEN :halvedMoments ELSE 1\s+END\s+\)",
+        cameras.sql,
+    )
     assert re.search(r"FILTER \(WHERE agc_match\.flags = :goodMatch\) AS n_good", cameras.sql)
-    assert cameras.sql.count(":badShape") == 1
+    assert cameras.sql.count(":badShape") == 2 and cameras.sql.count(":halvedMoments") == 1
     # Negative control: the pattern finds the literals the SQL used to hold.
     assert re.search(literal, "FILTER (WHERE agc_match.flags = 1)")
     assert re.search(literal, "AS INTEGER)) & 1 AS right_half")
@@ -125,7 +132,28 @@ def testFetchAndLoad(opdb, tmp_path):
     assert set(paths) == set(AG_RUN_TABLES)
     assert stamp["rows"]["exposures"] == 320
     assert stamp["readUntil"] == str(PERIOD.end)
+    assert stamp["sigmaPix"] == "variance"
     pd.testing.assert_frame_equal(tables["exposures"], opdb.tables["exposures"].reset_index(drop=True))
+    pd.testing.assert_frame_equal(tables["cameras"], opdb.tables["cameras"].reset_index(drop=True))
+
+
+def testLoadRescalesSigmaPixOfAnOlderFetch(opdb, tmp_path):
+    """A fetch from when sigma_pix was the radius of half the variance loads as the radius of the variance."""
+    fetchRun(opdb, PERIOD, tmp_path, now=datetime.datetime(2026, 10, 1))
+    fetched, _ = loadRun(PERIOD, tmp_path)
+    stampPath = tmp_path / "opdb" / "agRun-runX-fetched.json"
+    stamp = json.loads(stampPath.read_text())
+    del stamp["sigmaPix"]
+    stampPath.write_text(json.dumps(stamp))
+
+    older, _ = loadRun(PERIOD, tmp_path)
+
+    np.testing.assert_allclose(older["cameras"].sigma_pix, np.sqrt(2) * fetched["cameras"].sigma_pix)
+    pd.testing.assert_frame_equal(
+        older["cameras"].drop(columns="sigma_pix"), fetched["cameras"].drop(columns="sigma_pix")
+    )
+    # Negative control: a fetch stamped with the variance is read as it is.
+    assert not np.allclose(fetched["cameras"].sigma_pix, older["cameras"].sigma_pix)
 
 
 def testFetchStopsNow(opdb, tmp_path):

@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 from pfs.drp.qa.guiders.coordinates import opdbToHardware
+from pfs.utils import agMetrics
 from pfs.utils.datamodel.ag import SourceDetectionFlags, SourceMatchingFlags
 
 __all__ = [
@@ -69,9 +70,9 @@ AGC_DATA_COLUMNS = {
     "image_moment_00_pix": "zeroth image moment (flux)",
     "centroid_x_pix": "centroid on the AG detector (pix)",
     "centroid_y_pix": "centroid on the AG detector (pix)",
-    "mxx": "central second moment, xx (pix^2)",
-    "myy": "central second moment, yy (pix^2)",
-    "mxy": "central second moment, xy (pix^2)",
+    "mxx": "central second moment, xx (pix^2): the star's variance, whatever scale the exposure stored",
+    "myy": "central second moment, yy (pix^2), likewise",
+    "mxy": "central second moment, xy (pix^2), likewise",
     "peak_pixel_x_pix": "peak pixel (pix)",
     "peak_pixel_y_pix": "peak pixel (pix)",
     "peak_intensity": "peak pixel value",
@@ -93,9 +94,23 @@ AGC_DATA_COLUMNS = {
     **{f"guide_delta_z{i}": f"focus offset for AG{i} (mm)" for i in range(1, 7)},
 }
 
+# A spot's variance over its second moments as stored. ics_agccActor stores the variance; while it wrote the
+# literal "git" as its version it stored half of it (:halvedMoments is pfs_utils's VARIANCE_PER_AGC_MOMENT).
+# A :badShape (BAD_SHAPE) spot holds unweighted moments instead, about the variance in any exposure.
+_VARIANCE_PER_MOMENT_SQL = """CASE
+        WHEN agc_exposure.version_actor = 'git' AND COALESCE(agc_data.flags, 0) & :badShape = 0
+        THEN :halvedMoments ELSE 1
+    END"""
+
+# The values the SQL above binds.
+MOMENT_SCALE_PARAMS = {
+    "badShape": int(SourceDetectionFlags.BAD_SHAPE),
+    "halvedMoments": float(agMetrics.VARIANCE_PER_AGC_MOMENT),
+}
+
 # One row per matched spot. The SpS exposures are aggregated per visit before
 # the join, so the join doesn't repeat rows per camera.
-_AGC_DATA_SQL = """
+_AGC_DATA_SQL = f"""
 SELECT
     agc_exposure.pfs_visit_id,
     agc_exposure.agc_exposure_id,
@@ -127,9 +142,9 @@ SELECT
     agc_data.image_moment_00_pix,
     agc_data.centroid_x_pix,
     agc_data.centroid_y_pix,
-    agc_data.central_image_moment_20_pix AS mxx,
-    agc_data.central_image_moment_02_pix AS myy,
-    agc_data.central_image_moment_11_pix AS mxy,
+    agc_data.central_image_moment_20_pix * {_VARIANCE_PER_MOMENT_SQL} AS mxx,
+    agc_data.central_image_moment_02_pix * {_VARIANCE_PER_MOMENT_SQL} AS myy,
+    agc_data.central_image_moment_11_pix * {_VARIANCE_PER_MOMENT_SQL} AS mxy,
     agc_data.peak_pixel_x_pix,
     agc_data.peak_pixel_y_pix,
     agc_data.peak_intensity,
@@ -313,8 +328,9 @@ def readAgcData(
     _checkOpdb(opdb)
     visits = _visitList(visits)
     params = {"visits": visits}
+    agcParams = {**params, **MOMENT_SCALE_PARAMS}
 
-    agcData = opdb.query_dataframe(_AGC_DATA_SQL, params=params)
+    agcData = opdb.query_dataframe(_AGC_DATA_SQL, params=agcParams)
     missing = sorted(set(visits) - set(agcData.pfs_visit_id))
     if missing:
         _log.warning("No AG data for pfs_visit_id %s", ", ".join(str(v) for v in missing))
@@ -683,9 +699,9 @@ _AG_RUN_SQL = {
     # One row per (AG exposure, camera, detector half) with at least one detection. A good match is
     # agc_match.flags = :goodMatch (GOOD_MATCH alone since ics_agActor 1.1.78; before that 1, the same value, for
     # any match). The no-glass half is :right (RIGHT), inferred from the centroid where flags is NULL, as in
-    # readAgcData. sigma_pix leaves out :badShape (BAD_SHAPE) detections, whose moments are unweighted and so
-    # twice the others'.
-    "cameras": """
+    # readAgcData. sigma_pix is the radius of the spots' variance, the stored moments scaled as in readAgcData;
+    # it leaves out :badShape (BAD_SHAPE) detections, whose moments are unweighted.
+    "cameras": f"""
     SELECT
         agc_data.agc_exposure_id,
         agc_data.agc_camera_id,
@@ -693,7 +709,10 @@ _AG_RUN_SQL = {
         count(*) AS n_spots,
         count(*) FILTER (WHERE agc_match.flags = :goodMatch) AS n_good,
         percentile_cont(0.5) WITHIN GROUP (
-            ORDER BY sqrt(greatest(agc_data.central_image_moment_20_pix + agc_data.central_image_moment_02_pix, 0) / 2)
+            ORDER BY sqrt(
+                greatest(agc_data.central_image_moment_20_pix + agc_data.central_image_moment_02_pix, 0) / 2
+                * {_VARIANCE_PER_MOMENT_SQL}
+            )
         ) FILTER (WHERE agc_match.flags = :goodMatch AND COALESCE(agc_data.flags, 0) & :badShape = 0) AS sigma_pix,
         percentile_cont(0.5) WITHIN GROUP (ORDER BY agc_data.background) AS background
     FROM agc_exposure
@@ -814,8 +833,8 @@ def readAgRun(
             One row per (``agc_exposure_id``, ``agc_camera_id``,
             ``right_half``) with a detection: ``n_spots`` detections,
             ``n_good`` good matches, and the median ``sigma_pix`` (the
-            radius of the second moments as stored, sqrt(2) below the
-            stars' sigma) of the good matches without ``BAD_SHAPE`` (a NULL
+            radius of the stars' variance, sqrt((mxx + myy) / 2) with the
+            moments scaled as in `readAgcData`) of the good matches without ``BAD_SHAPE`` (a NULL
             ``agc_data.flags`` counts as without) and median
             ``background`` of the detections. ``right_half`` is 1 on the
             no-glass half.
@@ -847,7 +866,7 @@ def readAgRun(
     for name, sql in _AG_RUN_SQL.items():
         bound = {
             "designStars": {**params, "magLimit": float(magLimit)},
-            "cameras": {**params, **AG_RUN_FLAGS, "badShape": int(SourceDetectionFlags.BAD_SHAPE)},
+            "cameras": {**params, **AG_RUN_FLAGS, **MOMENT_SCALE_PARAMS},
             "grid": {**params, **AG_GRID_CELL_PIX, **AG_RUN_FLAGS},
         }.get(name, params)
         tables[name] = opdb.query_dataframe(sql, params=bound).reset_index(drop=True)

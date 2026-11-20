@@ -38,11 +38,13 @@ def testPrepareRunOneRowPerExposure(makeAgRunTables):
     assert list(run.plottedNights) == [pd.Timestamp("2026-09-01"), pd.Timestamp("2026-09-02")]
     assert (run.frames.n_good == 6 * 6).all()  # 3 good matches on each half of six cameras
     assert (run.frames.n_cams == 6).all()
-    # sigma_pix is the radius of the stored moments; an AG spot's FWHM is 2.9 times it (2.05 sigma).
-    perPix = 2.05 * np.sqrt(2) * 13 / 94.7
+    # sigma_pix is the radius of the stars' variance, their sigma; an AG spot's FWHM is 2.05 times it.
+    perPix = 2.05 * 13 / 94.7
     assert run.cameras.fwhm.round(3).isin([round(s * perPix, 3) for s in (2.0, 2.2)]).all()
-    # Negative control: the stored radius read as a Gaussian's sigma gives a FWHM 19% smaller.
-    assert not run.cameras.fwhm.round(3).isin([round(s * 2.3548 * 13 / 94.7, 3) for s in (2.0, 2.2)]).any()
+    # Negative controls: sigma_pix read as the radius of half the variance gives a FWHM sqrt(2) larger; a
+    # Gaussian of that sigma has one 15% larger.
+    for wrong in (np.sqrt(2) * perPix, 2.3548 * 13 / 94.7):
+        assert not run.cameras.fwhm.round(3).isin([round(s * wrong, 3) for s in (2.0, 2.2)]).any()
 
 
 def testCameraStates(makeAgRunTables):
