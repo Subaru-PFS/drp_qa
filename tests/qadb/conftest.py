@@ -11,7 +11,9 @@ at load. It is the proposal
 ``spt_qa_database``'s migration follows; change both together. Set
 ``PFS_QADB_TEST_DSN`` (``dbname=... user=... host=... port=...``) to run the
 same tests against a scratch PostgreSQL through
-`pfs.utils.database.qadb.QaDB` as well.
+`pfs.utils.database.qadb.QaDB` as well. The fixture empties its QA tables, so
+it refuses a database whose name does not end in ``_test`` or ``_tests``
+(`SCRATCH_SUFFIXES`): make one with ``CREATE DATABASE qadb_tests TEMPLATE qadb``.
 
 CI runs this directory in the ``deps`` job; the standard-library job ignores it.
 """
@@ -174,8 +176,46 @@ QA_TABLES = [
 ]
 
 
+#: How the name of a database the PostgreSQL fixture may empty ends: ``qadb_tests``, never ``qadb``.
+SCRATCH_SUFFIXES = ("_test", "_tests")
+
+
+class NotScratchError(RuntimeError):
+    """The database is not one the tests may empty."""
+
+
+def clearTestRows(db):
+    """Empty the QA tables of ``db`` and remove its test rows, once its name says it is a scratch database.
+
+    Parameters
+    ----------
+    db
+        A database with ``query_scalar`` and ``commit``.
+
+    Raises
+    ------
+    NotScratchError
+        If the database's name does not end in one of `SCRATCH_SUFFIXES`; nothing is deleted.
+    """
+    name = db.query_scalar("SELECT current_database()")
+    if not str(name).endswith(SCRATCH_SUFFIXES):
+        raise NotScratchError(
+            f"PFS_QADB_TEST_DSN names the database {name!r}: the qadb tests empty its QA tables, so they run only"
+            f" on a database whose name ends in {' or '.join(SCRATCH_SUFFIXES)}"
+            f" (CREATE DATABASE {name}_tests TEMPLATE {name})"
+        )
+    for table in reversed(QA_TABLES):
+        db.commit(f"DELETE FROM {table}")
+    db.commit(f"DELETE FROM qa_normal_value WHERE {TEST_PROCESSINGS}")
+    db.commit(f"DELETE FROM data_processing_pipe2d WHERE {TEST_PROCESSINGS}")
+    db.commit(f"DELETE FROM pfs_visit WHERE {TEST_VISITS}")
+
+
 def _postgres():
-    """Return a `QaDB` on the scratch PostgreSQL ``PFS_QADB_TEST_DSN`` names, its test rows removed; or None."""
+    """Return a `QaDB` on the scratch PostgreSQL ``PFS_QADB_TEST_DSN`` names, its test rows removed; or None.
+
+    Stops the test run, deleting nothing, when the database is not a scratch one (`clearTestRows`).
+    """
     dsn = os.environ.get("PFS_QADB_TEST_DSN")
     if not dsn:
         return None
@@ -188,11 +228,10 @@ def _postgres():
             )
 
     db = TestQaDB(dsn)
-    for table in reversed(QA_TABLES):
-        db.commit(f"DELETE FROM {table}")
-    db.commit(f"DELETE FROM qa_normal_value WHERE {TEST_PROCESSINGS}")
-    db.commit(f"DELETE FROM data_processing_pipe2d WHERE {TEST_PROCESSINGS}")
-    db.commit(f"DELETE FROM pfs_visit WHERE {TEST_VISITS}")
+    try:
+        clearTestRows(db)
+    except NotScratchError as error:
+        pytest.exit(str(error), returncode=pytest.ExitCode.USAGE_ERROR)
     return db
 
 
@@ -294,6 +333,12 @@ def stubButlerFixture():
 @pytest.fixture(name="SqliteQaDB")
 def sqliteFixture():
     return SqliteQaDB
+
+
+@pytest.fixture(name="scratchGuard")
+def scratchGuardFixture():
+    """Return what guards the PostgreSQL fixture: `clearTestRows`, `NotScratchError` and `QA_TABLES`."""
+    return SimpleNamespace(clearTestRows=clearTestRows, NotScratchError=NotScratchError, QA_TABLES=QA_TABLES)
 
 
 def quartzFrames(

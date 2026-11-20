@@ -10,6 +10,12 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The qadb tests refuse a database that is not a scratch one** (PIPE2D-2013) — with `PFS_QADB_TEST_DSN` set,
+  `tests/qadb` empties the database's QA tables. It now stops, deleting nothing, unless the database's name ends
+  in `_test` or `_tests`; run them on a copy (`CREATE DATABASE qadb_tests TEMPLATE qadb`).
+
 ## [0.6.0] - 2026-11-20
 
 ### Changed
