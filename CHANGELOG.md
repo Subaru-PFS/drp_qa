@@ -88,7 +88,7 @@ made, and earlier sections to the weekly tag alone.
   --visits FIRST-LAST ...` prints the comparison; with `--accept [NAME]` it stores them in `qa_normal_value`, valid
   from the visit after the calibration frames (`--valid-from`), and judges again every frame from there on. A
   value shifted beyond its check's FAIL is refused, and the value in force kept, unless `--reason` is given; one
-  resting on fewer than 3 frames is left out. `--arms` restricts it to some arms and `--all` lists every value.
+  resting on fewer than 3 exposures is left out. `--arms` restricts it to some arms and `--all` lists every value.
 - **`drpQa.py judge`** (PIPE2D-2012) — `-c COLLECTION --visits FIRST LAST` judges the numbers qadb holds again,
   with the limits and normal values as they are, and replaces the `qa_gate` rows (`qadb.judge.judgeStored`);
   `--dry-run` writes nothing. For use after a change to `CHECKS`.

@@ -98,10 +98,24 @@ class TestCandidates:
             103,
             "100-103",
         )
-        # Lines per lit fiber are kept per arm: the two spectrographs' frames together.
+        # Lines per lit fiber are kept per arm: the two spectrographs' images together, over four exposures.
         perFiber = made[made["metric"] == "linesPerFiber"].set_index(["camera", "frameType", "selector"])
-        assert perFiber.loc[("r", "arc", "Neon"), "count"] == 7
+        assert perFiber.loc[("r", "arc", "Neon"), "count"] == 4
         assert set(perFiber.index) == {("r", "arc", "Neon"), ("r", "arc", "Argon"), ("r", "quartz", "")}
+
+    def testCountIsExposuresNotImages(self):
+        """One exposure of four spectrographs is one frame: no per-arm normal value comes from it."""
+        one = pd.concat([iqRows([2.0], spectrograph=spectrograph) for spectrograph in (1, 2, 3, 4)])
+        made = compare(candidates(one), None, 200).set_index("metric")
+        assert made.loc["linesPerFiber", "count"] == 1 and made.loc["linesPerFiber", "status"] == "TOO_FEW"
+        assert accepted(made.reset_index(), "collection", 200, "someone")[0].empty
+        # Negative control: images of two spectrographs over three exposures are enough.
+        three = pd.concat(
+            [iqRows([2.0] * MIN_NORMAL_FRAMES, spectrograph=spectrograph) for spectrograph in (1, 2)]
+        )
+        made = compare(candidates(three), None, 200).set_index("metric")
+        assert made.loc["linesPerFiber", "count"] == MIN_NORMAL_FRAMES
+        assert made.loc["linesPerFiber", "status"] == "NEW"
 
     def testOnlyWhatTheGateWouldJudge(self):
         """Science frames, unmeasured widths and widths on too few lines give no normal value."""

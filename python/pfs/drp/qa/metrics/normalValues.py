@@ -116,8 +116,10 @@ def candidates(
     -------
     `pandas.DataFrame`
         `CANDIDATE_COLUMNS`, sorted: per metric, camera or arm, frame type
-        and lamp or species, the median ``value`` and the ``count`` of images
-        it rests on, with their visits. The m-arm offsets
+        and lamp or species, the median ``value`` over the images and the
+        ``count`` of exposures (visits) it rests on, with those visits. A value
+        kept per arm takes an image from each spectrograph of an exposure, and
+        still counts the exposure once. The m-arm offsets
         (`pfs.drp.qa.metrics.registry.M_ARM_OFFSETS`) have an empty frame
         type, and count the visits of the mode with fewer.
     """
@@ -136,7 +138,7 @@ def candidates(
             dict(zip(keys, key, strict=True))
             | {
                 "value": float(group["value"].median()),
-                "count": len(group),
+                "count": int(group["visit"].nunique()),
                 "firstVisit": int(group["visit"].min()),
                 "lastVisit": int(group["visit"].max()),
                 "sourceVisits": visitRanges(group["visit"]),

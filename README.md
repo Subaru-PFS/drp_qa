@@ -95,8 +95,8 @@ but not judged, each with its reason:
   lines for a median: this covers b-arm Argon.
 - Line residuals on frames lit through the engineering fibers. No normal values are kept for them. Their width
   and lines per lit fiber are judged, against their own.
-- A relative check whose normal value rests on fewer than 3 frames, or that has none. A median of one or two
-  frames is not a normal value.
+- A relative check whose normal value rests on fewer than 3 exposures, or that has none. A median of one or two
+  exposures is not a normal value, however many detectors each gave.
 - Flagged-line rate (`pctFlagged`). It is a property of the line list and the fit's flags, not of the frame.
 - Saturation (`nSaturatedLines`, `pctSaturatedPixels`) and line flux. Stored for cross-visit comparison; no limit
   has been set.
@@ -146,7 +146,7 @@ why.
    python bin.src/drpQa.py values -c qaActor/reductions --visits 152652-152705
    ```
 
-   Each candidate has a status: `NEW` (no value in force), `TOO_FEW` (fewer than 3 frames), else `PASS`, `WARN`
+   Each candidate has a status: `NEW` (no value in force), `TOO_FEW` (fewer than 3 exposures), else `PASS`, `WARN`
    or `FAIL` by the limits of the check the value is for. Only the rows that are not `PASS` are listed; `--all`
    lists every row. `--visits` takes several ranges, and `--arms brn` keeps only those arms. An image that fails
    a fixed check is left out of the medians.

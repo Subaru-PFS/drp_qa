@@ -68,7 +68,7 @@ FRAME_TYPES = (SCIENCE, ALLSKY, ARC, QUARTZ, TWILIGHT, IIS_ARC, IIS_QUARTZ)
 #: Kinds of `Check`: limits in the metric's own units, or in per cent from the normal value.
 FIXED, RELATIVE = "fixed", "relative"
 
-#: A normal value made from fewer frames than this judges nothing.
+#: A normal value made from fewer exposures than this judges nothing, however many detectors each gave.
 MIN_NORMAL_FRAMES = 3
 
 #: A width or a line count resting on fewer lines per lit fiber than this is not judged.
@@ -592,8 +592,8 @@ EXCLUSIONS = (
     ),
     (
         "A relative check whose normal value rests on fewer than "
-        f"{MIN_NORMAL_FRAMES} frames, or that has none",
-        "A median of one or two frames is not a normal value.",
+        f"{MIN_NORMAL_FRAMES} exposures, or that has none",
+        "A median of one or two exposures is not a normal value, however many detectors each gave.",
     ),
     (
         "Flagged-line rate (pctFlagged)",
