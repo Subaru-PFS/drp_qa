@@ -42,8 +42,6 @@ from pfs.utils.datamodel.ag import SourceCatalogFlags, SourceDetectionFlags, Sou
 __all__ = [
     "AGACTOR_FOCUS_FIX_VISIT",
     "AG_WAVELENGTH_UM",
-    "FOCUS_PISTON_MM_PER_PIX2",
-    "FOCUS_PISTON_OFFSET_MM",
     "GAUSSIAN_FWHM_PER_SIGMA",
     "GUIDE_STAR_EPOCH",
     "DriftFit",
@@ -75,14 +73,6 @@ __all__ = [
 ]
 
 GAUSSIAN_FWHM_PER_SIGMA = 2 * np.sqrt(2 * np.log(2))
-
-# ics_agActor's focus calibration (momentdifference2focuserror): the focus
-# error is FOCUS_PISTON_MM_PER_PIX2 times the difference of the 2-D second
-# moments of the two halves of a detector, less FOCUS_PISTON_OFFSET_MM. The
-# moments are the stars' variance, as `queries.readAgcData` returns them.
-# Both numbers are pfs_utils's, which ics_agActor uses.
-FOCUS_PISTON_MM_PER_PIX2 = agMetrics.AG_FOCUS_MM_PER_PIX2
-FOCUS_PISTON_OFFSET_MM = agMetrics.AG_FOCUS_OFFSET_MM
 
 # ics_agActor's guide_delta_z* were 4 times too large, less the offset, before
 # this visit (INSTRM-2501, fixed on 2025-03-23).
@@ -1375,16 +1365,16 @@ def momentDifferenceToPiston(deltaMxx_pix2: ArrayLike, includePistonCorrection: 
         The difference of a 1-D second moment (e.g. ``rms_pix**2``) between
         the left and right halves of a detector (pix^2).
     includePistonCorrection : `bool`
-        Subtract `FOCUS_PISTON_OFFSET_MM`, as ics_agActor does.
+        Subtract `pfs.utils.agMetrics.AG_FOCUS_OFFSET_MM`, as ics_agActor does.
 
     Returns
     -------
     piston : array-like
         The focus error (mm).
     """
-    piston = np.multiply(2 * FOCUS_PISTON_MM_PER_PIX2, deltaMxx_pix2)
+    piston = np.multiply(2 * agMetrics.AG_FOCUS_MM_PER_PIX2, deltaMxx_pix2)
     if includePistonCorrection:
-        piston = np.subtract(piston, FOCUS_PISTON_OFFSET_MM)
+        piston = np.subtract(piston, agMetrics.AG_FOCUS_OFFSET_MM)
 
     return piston
 

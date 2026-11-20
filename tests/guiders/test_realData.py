@@ -15,7 +15,6 @@ import pandas as pd
 import pytest
 
 from pfs.drp.qa.guiders.analysis import (
-    FOCUS_PISTON_OFFSET_MM,
     GUIDE_STAR_EPOCH,
     GuiderFitConfig,
     addImageSizes,
@@ -35,6 +34,7 @@ from pfs.drp.qa.guiders.coordinates import (
     opdbToHardware,
 )
 from pfs.drp.qa.guiders.queries import AGC_DATA_COLUMNS
+from pfs.utils import agMetrics
 from pfs.utils.coordinates import CoordTransp
 from pfs.utils.datamodel.ag import SourceDetectionFlags
 
@@ -117,9 +117,9 @@ def estimateFocusErrorsWithAgActor(agcData: pd.DataFrame) -> pd.DataFrame:
     """Return the focus error of each AG exposure, with the AG actor's."""
     focusErrors = estimateFocusErrors(agcData, byCamera=False)
     agActor = agcData.groupby("agc_exposure_id").guide_delta_z.first()
-    # The AG actor subtracts FOCUS_PISTON_OFFSET_MM; estimateFocusErrors doesn't.
+    # The AG actor subtracts AG_FOCUS_OFFSET_MM; estimateFocusErrors doesn't.
     focusErrors["ag_actor_focus_error_um"] = 1e3 * (
-        focusErrors.agc_exposure_id.map(agActor) + FOCUS_PISTON_OFFSET_MM
+        focusErrors.agc_exposure_id.map(agActor) + agMetrics.AG_FOCUS_OFFSET_MM
     )
 
     return focusErrors

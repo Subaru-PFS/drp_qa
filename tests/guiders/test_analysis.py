@@ -14,7 +14,6 @@ import pytest
 
 from pfs.drp.qa.guiders import analysis
 from pfs.drp.qa.guiders.analysis import (
-    FOCUS_PISTON_MM_PER_PIX2,
     GuiderFitConfig,
     MeasureXYRot,
     addImageSizes,
@@ -45,6 +44,7 @@ from pfs.drp.qa.guiders.coordinates import (
     rotXY,
     zenithToPfi,
 )
+from pfs.utils import agMetrics
 from pfs.utils.datamodel.ag import SourceCatalogFlags, SourceDetectionFlags, SourceMatchingFlags
 
 VISITS = [120000, 120001, 120002]
@@ -848,7 +848,9 @@ def testMomentDifferenceToPiston():
     np.testing.assert_allclose(momentDifferenceToPiston(variance), 2 * 0.0086 * (variance / 2))
     # Negative control: the slope for halved moments, on the variance, doubles it.
     assert not np.allclose(momentDifferenceToPiston(variance), 2 * 0.0086 * variance)
-    np.testing.assert_allclose(momentDifferenceToPiston([0.0, -1.0]), [0.0, -2 * FOCUS_PISTON_MM_PER_PIX2])
+    np.testing.assert_allclose(
+        momentDifferenceToPiston([0.0, -1.0]), [0.0, -2 * agMetrics.AG_FOCUS_MM_PER_PIX2]
+    )
 
 
 def testCorrectAgActorFocus(makeAgcData):

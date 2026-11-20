@@ -58,7 +58,6 @@ from numpy.typing import ArrayLike
 
 from pfs.drp.qa.guiders import analysis
 from pfs.drp.qa.guiders.analysis import (
-    FOCUS_PISTON_OFFSET_MM,
     DriftFit,
     GuiderFit,
     PfsUtilsComparison,
@@ -86,6 +85,7 @@ from pfs.drp.qa.guiders.coordinates import (
     umToMm,
 )
 from pfs.drp.qa.plotting.palettes import opaqueColorbar
+from pfs.utils import agMetrics
 
 __all__ = [
     "FormatCoord",
@@ -2196,7 +2196,7 @@ def plotFocus(
     showPfiFocusPosition : `bool`
         Mark the focus of the PFI: 0 for the AG actor, which corrects for the
         offset between the AG and PFI focal planes, and
-        `pfs.drp.qa.guiders.analysis.FOCUS_PISTON_OFFSET_MM` for the stars.
+        `pfs.utils.agMetrics.AG_FOCUS_OFFSET_MM` for the stars.
     averageByFocusPosition : `bool`
         Plot the median focus error of each camera at each focus position.
     showMedian : `bool`
@@ -2442,7 +2442,7 @@ def plotFocus(
 
             ax.axhline(0, color="black", alpha=0.5)
             if showPfiFocusPosition:
-                pfiFocus_um = 0 if row == "agActor" else mmToUm(FOCUS_PISTON_OFFSET_MM)
+                pfiFocus_um = 0 if row == "agActor" else mmToUm(agMetrics.AG_FOCUS_OFFSET_MM)
                 ax.axhline(pfiFocus_um, color="red", label="PFI")
             if colorBy == "camera" and not plotPerCamera:
                 _focusCameraLegend(
