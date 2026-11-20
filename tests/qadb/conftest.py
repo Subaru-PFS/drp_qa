@@ -1,12 +1,14 @@
-"""The ``pfs.drp.qa.qadb`` tests need pandas, pyyaml, pyarrow and SQLAlchemy, but not the stack.
+"""The ``pfs.drp.qa.qadb`` tests need pandas, scipy, pyarrow and SQLAlchemy, but not the stack.
 
 The database is SQLite in memory through SQLAlchemy, behind the same
 ``commit``/``query_scalar``/``query_dataframe`` surface as
 `pfs.utils.database.db.DB`: the ``INSERT ... ON CONFLICT DO UPDATE ...
 RETURNING`` statements the writer builds run unchanged on both. ``DDL`` below
-mirrors the tables of ``spt_qa_database`` 0.5.0 (migration ``acbd1a9681d6``);
-change both together. Set ``PFS_QADB_TEST_DSN`` (``dbname=... user=... host=...
-port=...``) to run the same tests against a scratch PostgreSQL through
+is the schema the code here writes to: numbers tables without a verdict, one
+``qa_gate`` row per image, and ``qa_normal_value``. It is the proposal
+``spt_qa_database``'s migration follows; change both together. Set
+``PFS_QADB_TEST_DSN`` (``dbname=... user=... host=... port=...``) to run the
+same tests against a scratch PostgreSQL through
 `pfs.utils.database.qadb.QaDB` as well.
 
 CI runs this directory in the ``deps`` job; the standard-library job ignores it.
@@ -16,20 +18,22 @@ import os
 import re
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pandas as pd
 import pyarrow  # noqa: F401
 import pytest
+import scipy  # noqa: F401
 import sqlalchemy
-import yaml  # noqa: F401
 from sqlalchemy import text
 from sqlalchemy.pool import StaticPool
 
 DATA = Path(__file__).parent / "data"
 
-#: The qadb tables the loader writes, as ``spt_qa_database`` 0.5.0 defines them.
+#: The qadb tables the loader and the judge write: the schema the gate's redesign proposes for ``spt_qa_database``.
 DDL = """
 CREATE TABLE pfs_visit (
     pfs_visit_id INTEGER PRIMARY KEY, pfs_visit_description TEXT, pfs_design_id BIGINT, issued_at TIMESTAMP);
@@ -43,7 +47,7 @@ CREATE TABLE image_quality_qa (
     camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1), obs_type TEXT, seq_name TEXT,
     illumination TEXT, trace_only BOOLEAN, med_fwhm REAL, med_dx_center REAL, dx_center_rms REAL, pct_flagged REAL,
     pct_low_sn REAL, pct_meas_fail REAL, n_lines INTEGER, lines_per_fiber REAL, n_lit_fibers INTEGER,
-    n_fibers INTEGER, n_trace_rows INTEGER, qa_status TEXT, qa_decided_by TEXT, qa_reason TEXT,
+    n_fibers INTEGER, n_trace_rows INTEGER, n_saturated_lines INTEGER, pct_saturated_pixels REAL,
     calexp_run TEXT, isr_bad_pixels INTEGER, isr_time REAL, cosmic_ray_count INTEGER,
     cosmic_ray_pixels INTEGER, cosmic_ray_time REAL, reduce_exposure_time REAL, fit_chi2 REAL,
     fit_dof INTEGER, fit_x_rms REAL, fit_y_rms REAL, fit_x_soften REAL, fit_y_soften REAL,
@@ -61,33 +65,20 @@ CREATE TABLE dm_line_residual_qa (
     processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
     pfs_visit_id INTEGER REFERENCES pfs_visit,
     camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1), camera_set TEXT, obs_type TEXT,
-    fitted BOOLEAN, n_species INTEGER, n_species_measured INTEGER, qa_status TEXT, qa_decided_by TEXT,
-    qa_reason TEXT, recommended_action TEXT, calib_id TEXT, calib_run TEXT, calib_created TIMESTAMP,
-    calib_first_visit INTEGER, calib_last_visit INTEGER,
+    fitted BOOLEAN, n_species INTEGER, n_species_measured INTEGER, calib_id TEXT, calib_run TEXT,
+    calib_created TIMESTAMP, calib_first_visit INTEGER, calib_last_visit INTEGER,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
 CREATE TABLE dm_line_residual_qa_metric (
     processing_id INTEGER, pfs_visit_id INTEGER, camera_name VARCHAR(2), reference TEXT, description TEXT,
-    status_type TEXT, metric TEXT, value REAL, status TEXT,
+    status_type TEXT, metric TEXT, value REAL,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name, reference, description, status_type, metric),
     FOREIGN KEY (processing_id, pfs_visit_id, camera_name)
         REFERENCES dm_line_residual_qa (processing_id, pfs_visit_id, camera_name) ON DELETE CASCADE);
-CREATE TABLE qa_thresholds (
-    thresholds_id INTEGER PRIMARY KEY AUTOINCREMENT, sha256 VARCHAR(64) NOT NULL UNIQUE, name TEXT,
-    derived_on TIMESTAMP, collection TEXT, reference_runs TEXT, drp_qa_version TEXT, datamodel_version TEXT,
-    obs_pfs_version TEXT, drp_stella_version TEXT, n_entries INTEGER, registered_at TIMESTAMP);
-CREATE TABLE qa_threshold_entry (
-    thresholds_id INTEGER REFERENCES qa_thresholds ON DELETE CASCADE, metric TEXT, population TEXT, arm VARCHAR(1),
-    spectrograph INTEGER, obs_type TEXT, description TEXT, camera_set TEXT, reference TEXT,
-    status_type TEXT, illumination TEXT, higher_is_worse BOOLEAN, absolute BOOLEAN, method TEXT, warn DOUBLE PRECISION,
-    fail DOUBLE PRECISION,
-    n_good INTEGER, n_good_visits INTEGER, visit_range TEXT, reliable BOOLEAN, fail_bounded BOOLEAN,
-    degenerate BOOLEAN, provenance TEXT,
-    PRIMARY KEY (thresholds_id, metric, population));
 CREATE TABLE qa_gate (
     processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
     pfs_visit_id INTEGER REFERENCES pfs_visit,
-    camera_name VARCHAR(2), qa_status TEXT, decided_by_task TEXT, qa_decided_by TEXT, qa_reason TEXT,
-    provisional BOOLEAN, mode TEXT, decided_at TIMESTAMP,
+    camera_name VARCHAR(2), frame_type TEXT, qa_status TEXT, qa_decided_by TEXT, qa_reason TEXT,
+    mode TEXT, decided_at TIMESTAMP,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
 CREATE TABLE twilight_qa (
     processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
@@ -95,13 +86,14 @@ CREATE TABLE twilight_qa (
     camera_name VARCHAR(2), spectrograph INTEGER, arm VARCHAR(1), iic_sequence_id INTEGER, seq_name TEXT,
     n_exposures INTEGER, snr REAL, brightness REAL, too_faint BOOLEAN, n_reference INTEGER, noise REAL,
     sat_fraction REAL, n_measured INTEGER, twilight_level_offset REAL, twilight_resid_rms REAL,
-    twilight_patch REAL, twilight_arm_mean REAL, twilight_arm_half_diff REAL, qa_status TEXT,
-    qa_decided_by TEXT, qa_reason TEXT,
+    twilight_patch REAL, twilight_arm_mean REAL, twilight_arm_half_diff REAL,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
-CREATE TABLE qa_processing_thresholds (
-    processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE, task TEXT, layer INTEGER,
-    thresholds_id INTEGER NOT NULL REFERENCES qa_thresholds,
-    PRIMARY KEY (processing_id, task, layer));
+CREATE TABLE qa_normal_value (
+    normal_value_id INTEGER PRIMARY KEY AUTOINCREMENT, collection_name TEXT NOT NULL, metric TEXT NOT NULL,
+    camera TEXT NOT NULL, frame_type TEXT NOT NULL DEFAULT '', selector TEXT NOT NULL DEFAULT '',
+    valid_from INTEGER NOT NULL, value DOUBLE PRECISION NOT NULL, n_frames INTEGER NOT NULL,
+    source_visits TEXT, accepted_by TEXT, accepted_at TIMESTAMP, reason TEXT,
+    CONSTRAINT uq_normal_value UNIQUE (collection_name, metric, camera, frame_type, selector, valid_from));
 """
 
 #: The tables `DDL` makes, in dependency order.
@@ -171,8 +163,11 @@ class SqliteQaDB:
 TEST_PROCESSINGS = "collection_name LIKE 'u/test/%'"
 TEST_VISITS = "pfs_visit_id < 1000"
 
-#: The new QA tables, which the PostgreSQL fixture empties (the dump has none of their rows).
-QA_TABLES = [table for table in TABLES if table not in ("pfs_visit", "data_processing_pipe2d")]
+#: The QA tables, which the PostgreSQL fixture empties (the dump has none of their rows): all but the normal
+#: values, which name their collection and lose the test collections' alone.
+QA_TABLES = [
+    table for table in TABLES if table not in ("pfs_visit", "data_processing_pipe2d", "qa_normal_value")
+]
 
 
 def _postgres():
@@ -191,6 +186,7 @@ def _postgres():
     db = TestQaDB(dsn)
     for table in reversed(QA_TABLES):
         db.commit(f"DELETE FROM {table}")
+    db.commit(f"DELETE FROM qa_normal_value WHERE {TEST_PROCESSINGS}")
     db.commit(f"DELETE FROM data_processing_pipe2d WHERE {TEST_PROCESSINGS}")
     db.commit(f"DELETE FROM pfs_visit WHERE {TEST_VISITS}")
     return db
@@ -230,8 +226,7 @@ class StubButler:
         one dataset type's by ``(datasetType, visit, arm, spectrograph)``;
         default one RUN.
     datasets : `dict` [`str`, object], optional
-        What ``get(name, collections=...)`` returns for ``packages`` and the
-        tasks' ``*_config``.
+        What ``get(name, collections=...)`` returns for ``packages``.
     """
 
     def __init__(self, tables, runs=None, datasets=None):
@@ -297,57 +292,308 @@ def sqliteFixture():
     return SqliteQaDB
 
 
-@pytest.fixture
-def configs():
-    """Return the tasks' configs as the Butler stores them: the packaged thresholds files they name."""
-    return {
-        "imageQualityQa_config": SimpleNamespace(thresholdsFile="iqQaThresholds-run25.yaml"),
-        "dmLineResiduals_config": SimpleNamespace(thresholdsFile="dmLineResidualThresholds-run25.yaml"),
-    }
+def quartzFrames(
+    visits,
+    cameras=("b1", "r1"),
+    width=3.0,
+    scatter=0.04,
+    offset=0.0,
+    linesPerFiber=4000.0,
+    cameraSet="brn",
+    obsType="trace",
+):
+    """Return the Butler tables of synthetic quartz frames: one image per visit and camera.
 
+    Each image has what the gate reads on a quartz: its trace width and rows per
+    lit fiber (``iqQaMetrics``), and the trace centroids' offset from the
+    calibration in x and scatter about the visit's detectorMap
+    (``dmLineResidualMetrics``). With ``obsType="science"`` the same numbers
+    are a science frame's, of which the gate reads the offset alone.
 
-@pytest.fixture
-def fullConfigs():
-    """Return the tasks' configs with their threshold fields too, as the real configs store them.
+    Parameters
+    ----------
+    visits : iterable of `int`
+        The visits.
+    cameras : iterable of `str`
+        The cameras (``b1``) of each visit.
+    width, scatter, offset, linesPerFiber : `float` or `dict`
+        The value on every image; or a `dict` by ``(visit, camera)``, visit or
+        camera, in that order, with the value for the others under `None`.
+    cameraSet : `str`
+        The arms the visits were read with.
+    obsType : `str`
+        The frames' observation type, as the tasks record it: ``trace`` for a quartz.
 
-    The fields are the tasks' defaults (``flagRate*Threshold`` cut down), so the config layer
-    each builds is what `pfs.drp.qa.metrics.gate.configThresholds` and
-    `pfs.drp.qa.metrics.lineResiduals.residualConfigThresholds` give for them.
+    Returns
+    -------
+    `dict` [`str`, `pandas.DataFrame`]
+        ``iqQaMetrics``, ``dmLineResidualSummary`` and ``dmLineResidualMetrics``.
     """
+
+    def pick(value, visit, camera):
+        if not isinstance(value, dict):
+            return float(value)
+        for key in ((visit, camera), visit, camera, None):
+            if key in value:
+                return float(value[key])
+        raise KeyError(f"no value for {visit} {camera}, and none under None")
+
+    iq, summary, metrics = [], [], []
+    for visit in visits:
+        for camera in cameras:
+            image = {"visit": int(visit), "arm": camera[0], "spectrograph": int(camera[1:])}
+            iq.append(
+                image
+                | {
+                    "obsType": obsType,
+                    "seqName": "Trace" if obsType == "trace" else "",
+                    "illumination": "full",
+                    "traceOnly": False,
+                    "medFwhm": pick(width, visit, camera),
+                    "medDxCenter": 0.0,
+                    "nLines": 2_400_000,
+                    "linesPerFiber": pick(linesPerFiber, visit, camera),
+                    "nLitFibers": 600,
+                    "nFibers": 600,
+                }
+            )
+            lines = image | {"cameraSet": cameraSet, "obsType": obsType}
+            summary.append(lines | {"fitted": True, "nSpecies": 1, "nSpeciesMeasured": 1})
+            for reference, statusType, metric, value in (
+                ("calib", "BOTH", "medianDeltaX", pick(offset, visit, camera)),
+                ("visit", "RESERVED", "robustRmsDeltaX", pick(scatter, visit, camera)),
+            ):
+                metrics.append(
+                    lines
+                    | {
+                        "reference": reference,
+                        "description": "Trace",
+                        "statusType": statusType,
+                        "metric": metric,
+                        "value": value,
+                    }
+                )
     return {
-        "imageQualityQa_config": SimpleNamespace(
-            thresholdsFile="iqQaThresholds-run25.yaml",
-            extraThresholdsFiles=[],
-            fwhmWarnThreshold=3.2,
-            fwhmFailThreshold=3.5,
-            flagRateWarnThreshold={"b": 55.0, "r": 15.0, "b:HgCd": 20.0},
-            flagRateFailThreshold={"b": 60.0, "r": 20.0, "b:HgCd": 25.0},
-            dxCenterWarnThreshold=1.0,
-            dxCenterFailThreshold=2.0,
-        ),
-        "dmLineResiduals_config": SimpleNamespace(
-            thresholdsFile="dmLineResidualThresholds-run25.yaml",
-            xWarnThreshold=1.0,
-            xFailThreshold=2.0,
-            yWarnThreshold=1.0,
-            yFailThreshold=2.0,
-            xRmsWarnThreshold=float("nan"),
-            xRmsFailThreshold=float("nan"),
-            yRmsWarnThreshold=float("nan"),
-            yRmsFailThreshold=float("nan"),
-        ),
+        "iqQaMetrics": pd.DataFrame(iq),
+        "dmLineResidualSummary": pd.DataFrame(summary),
+        "dmLineResidualMetrics": pd.DataFrame(metrics),
     }
+
+
+@pytest.fixture(name="quartzFrames")
+def quartzFramesFixture():
+    return quartzFrames
+
+
+def storeValues(qadb, collection, values, validFrom, count=5, when=datetime(2026, 10, 1)):
+    """Write normal values straight to ``qa_normal_value``, as accepted ones are stored.
+
+    Parameters
+    ----------
+    qadb
+        The database.
+    collection : `str`
+        The collection they judge.
+    values : `dict` [`tuple`, `float`]
+        The value by ``(metric, camera, frameType, selector)``.
+    validFrom : `int`
+        The first visit they judge.
+    count : `int`
+        The frames each rests on.
+    when : `datetime.datetime`
+        When they were accepted.
+    """
+    from pfs.drp.qa.metrics.normalValues import NORMAL_COLUMNS
+    from pfs.drp.qa.qadb.tables import NORMAL_VALUE_KEYS, normalValueRows
+    from pfs.drp.qa.qadb.writer import upsert
+
+    rows = [
+        {
+            "metric": metric,
+            "camera": camera,
+            "frameType": frameType,
+            "selector": selector,
+            "value": value,
+            "count": count,
+            "collection": collection,
+            "validFrom": validFrom,
+            "sourceVisits": "",
+            "acceptedBy": "tester",
+            "acceptedAt": when,
+            "reason": "",
+        }
+        for (metric, camera, frameType, selector), value in values.items()
+    ]
+    frame = pd.DataFrame(rows, columns=list(NORMAL_COLUMNS))
+    upsert(qadb, "qa_normal_value", normalValueRows(frame), list(NORMAL_VALUE_KEYS))
+
+
+@pytest.fixture(name="storeValues")
+def storeValuesFixture():
+    return storeValues
+
+
+#: The synthetic twilight sequence: its IIC sequence, visits, arms and spectrographs.
+TWILIGHT_SEQUENCE = 54787
+TWILIGHT_VISITS = (501, 502, 503, 504)
+TWILIGHT_ARMS = ("b", "r", "n")
+TWILIGHT_SPECTROGRAPHS = (1, 2, 3, 4)
+
+#: The fault in it: in the third exposure the r2 detector reads 10 % low.
+TWILIGHT_STEP = (503, "r", 2, 0.90)
+
+
+def twilightFibers(visits=TWILIGHT_VISITS, fibersPerDetector=40, seed=3) -> pd.DataFrame:
+    """Return ``twilightFiberFlux`` rows of a twilight sequence, as ``twilightFluxQa`` stores them.
+
+    Each fiber has a fixed throughput per arm, the sky a smooth gradient that
+    changes through the sequence, and each fiber's median the photon noise of
+    its S/N. `TWILIGHT_STEP` dims one detector in one exposure. The header's
+    sequence id is -1, as on a frame whose header lacks ``W_SEQID``: the opdb
+    names the sequence.
+
+    Parameters
+    ----------
+    visits : iterable of `int`
+        The visits of `TWILIGHT_VISITS` to return; each has the same numbers
+        whichever others are asked for.
+    fibersPerDetector : `int`
+        Fibers on each spectrograph.
+    seed : `int`
+        Seed of the noise.
+    """
+    rng = np.random.default_rng(seed)
+    numFibers = len(TWILIGHT_SPECTROGRAPHS) * fibersPerDetector
+    fiberId = np.arange(1, numFibers + 1)
+    spectrograph = np.repeat(TWILIGHT_SPECTROGRAPHS, fibersPerDetector)
+    angle, radius = rng.uniform(0, 2 * np.pi, numFibers), 220 * np.sqrt(rng.uniform(0, 1, numFibers))
+    x, y = radius * np.cos(angle), radius * np.sin(angle)
+    throughput = {arm: rng.normal(1, 0.05, numFibers) for arm in TWILIGHT_ARMS}
+    numGood = 3000
+    rows = []
+    for index, visit in enumerate(TWILIGHT_VISITS):
+        snr = 30.0 + 15.0 * index
+        sky = 1 + 0.002 * index * x / 100 + 0.001 * y / 100
+        for arm in TWILIGHT_ARMS:
+            noise = rng.normal(0, np.sqrt(np.pi / 2) / (snr * np.sqrt(numGood)), numFibers)
+            flux = 100.0 * (index + 1) * throughput[arm] * sky * (1 + noise)
+            if (visit, arm) == TWILIGHT_STEP[:2]:
+                flux = np.where(spectrograph == TWILIGHT_STEP[2], flux * TWILIGHT_STEP[3], flux)
+            if visit not in visits:
+                continue
+            rows.append(
+                pd.DataFrame(
+                    {
+                        "visit": visit,
+                        "arm": arm,
+                        "spectrograph": spectrograph,
+                        "sequence": -1,
+                        "seqName": "Twilight sky",
+                        "fiberId": fiberId,
+                        "x": x,
+                        "y": y,
+                        "flux": flux,
+                        "snr": snr,
+                        "nGood": numGood,
+                        "satFraction": 0.0,
+                    }
+                )
+            )
+    return pd.concat(rows, ignore_index=True)
+
+
+def twilightIq(visits=TWILIGHT_VISITS) -> pd.DataFrame:
+    """Return the ``iqQaMetrics`` rows of the twilights: what marks a visit as one for the load."""
+    rows = [
+        {
+            "visit": visit,
+            "arm": arm,
+            "spectrograph": spectrograph,
+            "obsType": "twilight",
+            "seqName": "Twilight sky",
+            "illumination": "full",
+            "traceOnly": True,
+            "medFwhm": 3.0,
+            "linesPerFiber": 4000.0,
+        }
+        for visit in visits
+        for arm in TWILIGHT_ARMS
+        for spectrograph in TWILIGHT_SPECTROGRAPHS
+    ]
+    return pd.DataFrame(rows)
+
+
+def twilightButler(measured=TWILIGHT_VISITS, reduced=TWILIGHT_VISITS, flux=None, **kwargs) -> StubButler:
+    """Return a Butler holding the QA tables of the visits ``measured``, and a pfsArm for those ``reduced``.
+
+    ``flux`` replaces the per-fiber table of the visits measured.
+    """
+    fibers = twilightFibers(measured) if flux is None else flux
+    tables = {
+        "iqQaMetrics": twilightIq(measured),
+        "pfsArm": twilightIq(reduced)[["visit", "arm", "spectrograph"]],
+    }
+    if len(fibers):
+        tables["twilightFiberFlux"] = fibers
+    return StubButler(tables, datasets={"packages": {"drp_qa": "w.2026.44"}}, **kwargs)
+
+
+def twilightSequence(
+    visits=TWILIGHT_VISITS, name="Twilight sky", finished="2026-10-26 05:15:00", sequence=TWILIGHT_SEQUENCE
+) -> pd.DataFrame:
+    """Rows as `pfs.drp.qa.comparison.queries.readSequenceOfVisit` returns them; none for a visit in no sequence."""
+    return pd.DataFrame(
+        {
+            "pfs_visit_id": list(visits),
+            "iic_sequence_id": sequence,
+            "sequence_type": "scienceObject",
+            "sequence_name": name,
+            "finished_at": pd.to_datetime(finished),
+            "sequence_status": "complete" if finished else None,
+        }
+    )
+
+
+class Sequences:
+    """Stand in for `readSequenceOfVisit`: one answer, and a record of the visits asked about."""
+
+    def __init__(self, answer=None):
+        self.answer = twilightSequence() if answer is None else answer
+        self.calls = []
+
+    def __call__(self, opdb, visit):
+        self.calls.append(int(visit))
+        return self.answer.copy()
+
+
+class VisitsOnlyOpDB:
+    """An opdb that knows no visit's description, and refuses any query but `ensureVisits`'."""
+
+    def __init__(self):
+        self.queries = []
+
+    def query_dataframe(self, sql, /, *, params=None, conn=None):
+        self.queries.append(sql)
+        assert "FROM pfs_visit" in sql and "iic_sequence" not in sql, sql
+        return pd.DataFrame(columns=["pfs_visit_id", "pfs_visit_description", "pfs_design_id", "issued_at"])
 
 
 @pytest.fixture
-def thresholdsFiles(configs):
-    """Return the packaged thresholds file of each task, by task."""
-    from pfs.drp.qa.metrics.gate import thresholdsPath
-
-    return {
-        task.removesuffix("_config"): thresholdsPath(config.thresholdsFile)
-        for task, config in configs.items()
-    }
+def twilight():
+    """Return the synthetic twilight sequence's makers and stand-ins, by name."""
+    return SimpleNamespace(
+        SEQUENCE=TWILIGHT_SEQUENCE,
+        VISITS=list(TWILIGHT_VISITS),
+        ARMS=TWILIGHT_ARMS,
+        SPECTROGRAPHS=TWILIGHT_SPECTROGRAPHS,
+        STEP=TWILIGHT_STEP,
+        fibers=twilightFibers,
+        iq=twilightIq,
+        butler=twilightButler,
+        sequence=twilightSequence,
+        Sequences=Sequences,
+        OpDB=VisitsOnlyOpDB,
+    )
 
 
 @pytest.fixture
@@ -370,4 +616,8 @@ def ddlColumns():
 @pytest.fixture
 def scope():
     """Return the WHERE clauses that pick the tests' own rows of the shared tables."""
-    return {"data_processing_pipe2d": TEST_PROCESSINGS, "pfs_visit": TEST_VISITS}
+    return {
+        "data_processing_pipe2d": TEST_PROCESSINGS,
+        "pfs_visit": TEST_VISITS,
+        "qa_normal_value": TEST_PROCESSINGS,
+    }

@@ -1,27 +1,22 @@
-"""Read a collection's QA tables from a Butler and load them into qadb.
+"""Read a collection's QA numbers from a Butler, load them into qadb, and judge them.
 
 `loadCollection` is the one entry point: qaActor calls it for a visit as soon
-as its pipetask has run (`loadVisit`), comparison mode for a run, and
-``bin.src/loadQadb.py`` for a backfill. Each Butler RUN found becomes a
-``data_processing_pipe2d`` row, with the drp_qa that wrote it (from the RUN's
-``packages`` dataset) and the pipeline that reduced the images it judged (from
-their ``pfsArm`` headers, as comparison mode reads them); the thresholds layers
-each image was judged with are registered and cited, in order, per processing
-and task in ``qa_processing_thresholds`` (a RUN has one config, so its images
-share them), and its gate verdict is written to ``qa_gate``.
+as its pipetask has run (`loadVisit`), and ``drpQa.py load`` for a backfill.
+Each Butler RUN found becomes a ``data_processing_pipe2d`` row, with the drp_qa
+that wrote it (from the RUN's ``packages`` dataset) and the pipeline that reduced
+its images (from their ``pfsArm`` headers).
 
-The tasks record those layers with each image, by name and SHA-256 as they were
-at judgement time (`pfs.drp.qa.metrics.gate.thresholdsRecord`), so what the
-gate cites does not depend on the drp_qa that loads: its thresholds files, then
-its config's threshold fields as a document of their own
-(`pfs.drp.qa.metrics.gate.thresholdsDocument`, named by
-`pfs.drp.qa.metrics.gate.configLayerName`). A file is registered from the copy
-this drp_qa ships with the recorded content; the config layer is rebuilt from
-the RUN's stored task config (`CONFIG_LAYERS`) and registered when it hashes as
-recorded, so a layer this drp_qa would build differently is left out, and
-logged, rather than misattributed. A table written before the tasks recorded
-anything has its RUN's stored config read instead: through today's config class,
-with today's files under those names, and its fields as the config layer.
+The tasks store numbers only. The verdict is given here, once per image, by
+`pfs.drp.qa.metrics.gate.gate`, from the numbers just read and the collection's
+normal values in qadb, and written to ``qa_gate``.
+
+A twilight exposure is judged against the other exposures of its sequence, so
+it has no numbers to judge until the sequence is complete. When a visit being
+loaded is a twilight, its IIC sequence is looked up in the opdb; once the
+sequence has finished and every visit of it has its ``twilightFiberFlux``, the
+whole sequence is measured (`pfs.drp.qa.metrics.twilight.sequenceConsistency`),
+stored in ``twilight_qa`` and judged, the visits loaded earlier included. Until
+then, and without an opdb, a twilight image is ``UNKNOWN``.
 """
 
 import time
@@ -32,19 +27,10 @@ from typing import Any
 
 import pandas as pd
 
-from pfs.drp.qa.metrics.gate import (
-    THRESHOLDS_COLUMNS,
-    configLayerName,
-    configThresholds,
-    isConfigLayer,
-    recordedThresholds,
-    sha256Of,
-    thresholdsDocument,
-    thresholdsNames,
-    thresholdsPath,
-)
-from pfs.drp.qa.metrics.lineResiduals import residualConfigThresholds
-from pfs.drp.qa.metrics.readers import readMetrics, readReductionPipelines
+from pfs.drp.qa.metrics.gate import gate
+from pfs.drp.qa.metrics.readers import datasetDetectors, readMetrics, readReductionPipelines
+from pfs.drp.qa.metrics.twilight import isTwilightSequence, sequenceConsistency, sequenceReadiness
+from pfs.drp.qa.qadb.reader import PROCESSING_ID, readGate, readNormalValues
 from pfs.drp.qa.qadb.tables import (
     IMAGE_KEYS,
     IMAGE_QUALITY,
@@ -53,54 +39,40 @@ from pfs.drp.qa.qadb.tables import (
     LINE_RESIDUAL,
     LINE_RESIDUAL_METRIC,
     QA_GATE,
-    QA_PROCESSING_THRESHOLDS,
-    TASK_TABLES,
     TWILIGHT_QA,
     TableSpec,
     gateRows,
     imageRows,
-    processingTasks,
-    processingThresholdsRows,
 )
-from pfs.drp.qa.qadb.writer import (
-    UNKNOWN_VERSION,
-    deleteRows,
-    ensureVisits,
-    processingId,
-    registerThresholds,
-    registerThresholdsContent,
-    upsert,
-)
+from pfs.drp.qa.qadb.writer import UNKNOWN_VERSION, deleteRows, ensureVisits, processingId, upsert
 from pfs.drp.qa.utils.provenance import commonPipeline
 
 __all__ = [
-    "CONFIG_LAYERS",
     "MODES",
     "SPECS",
+    "TABLES",
     "collectionExists",
-    "configDocumentOf",
     "drpQaVersionOf",
+    "imageRuns",
     "loadCollection",
     "loadVisit",
     "readTables",
-    "thresholdsFilesOf",
+    "twilightMetrics",
 ]
 
-#: How each task's config threshold fields become its last thresholds layer: the table the task judges with
-#: after its files, built from its config as the task builds it. ``twilightQa`` has no config layer.
-CONFIG_LAYERS: dict[str, Callable[[Any], pd.DataFrame]] = {
-    "imageQualityQa": configThresholds,
-    "dmLineResiduals": residualConfigThresholds,
-}
-
-#: How a load came about: qaActor as the run goes, comparison mode over a run, or later.
+#: How a load came about, recorded in ``qa_gate``.
 MODES = ("realtime", "comparison", "backfill")
+
+#: The Butler tables loaded: each per-image table with the long table whose rows take the image's processing.
+TABLES = (("iqQaMetrics", "iqQaSpeciesMetrics"), ("dmLineResidualSummary", "dmLineResidualMetrics"))
 
 #: The qadb table of each Butler dataset type loaded.
 SPECS: dict[str, TableSpec] = {
-    spec.source: spec
-    for spec in (IMAGE_QUALITY, IMAGE_QUALITY_SPECIES, LINE_RESIDUAL, LINE_RESIDUAL_METRIC, TWILIGHT_QA)
+    spec.source: spec for spec in (IMAGE_QUALITY, IMAGE_QUALITY_SPECIES, LINE_RESIDUAL, LINE_RESIDUAL_METRIC)
 }
+
+#: The per-fiber table ``twilightFluxQa`` stores, which a sequence's metrics are measured from.
+TWILIGHT_FLUX = "twilightFiberFlux"
 
 
 def collectionExists(butler: Any, collection: str) -> bool:
@@ -157,11 +129,86 @@ def readTables(
                 log=log,
             )
         except LookupError:
-            # Not a problem by itself: a task that did not run on these visits (twilightFluxQa on a science
-            # visit, say) leaves none.
+            # Not a problem by itself: a task that did not run on these visits leaves none.
             log(f"{datasetType}: none for these visits in {collection}")
             tables[datasetType] = pd.DataFrame(columns=[*IMAGE_KEYS, "run"])
     return tables
+
+
+def twilightMetrics(
+    butler: Any,
+    opdb: Any,
+    collection: str,
+    visits: Iterable[int],
+    log: Callable[[str], None] = print,
+    readSequence: Callable[[Any, int], pd.DataFrame] | None = None,
+) -> pd.DataFrame:
+    """Measure the complete twilight sequences some twilight visits belong to.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        A Butler; read-only is enough.
+    opdb : `pfs.utils.database.opdb.OpDB`
+        The opdb, read-only: which IIC sequence a visit belongs to, and
+        whether it has finished.
+    collection : `str`
+        The collection holding ``twilightFiberFlux``.
+    visits : iterable of `int`
+        Twilight visits being loaded.
+    log : callable, optional
+        Where progress goes.
+    readSequence : callable, optional
+        ``(opdb, visit)`` to the sequence's visits; default
+        `pfs.drp.qa.comparison.queries.readSequenceOfVisit`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        `pfs.drp.qa.metrics.twilight.sequenceConsistency` rows, one per image
+        of every visit of each sequence that is ready (a finished twilight
+        with every visit's table stored), with ``run``, the Butler RUN of the
+        image's ``twilightFiberFlux``. No rows when none is ready: what each
+        is waiting for is logged.
+    """
+    if readSequence is None:
+        from pfs.drp.qa.comparison.queries import readSequenceOfVisit as readSequence
+    parts, seen = [], set()
+    for visit in sorted({int(visit) for visit in visits}):
+        if visit in seen:
+            continue
+        sequence = readSequence(opdb, visit)
+        members = [int(member) for member in sequence["pfs_visit_id"]]
+        seen.update(members)
+        if not isTwilightSequence(sequence):
+            log(f"twilight: visit {visit}: {sequenceReadiness(sequence, {}, {})[1]}")
+            continue
+        reduced = datasetDetectors(butler, "pfsArm", members, collections=[collection])
+        stored = datasetDetectors(butler, TWILIGHT_FLUX, members, collections=[collection])
+        ready, why = sequenceReadiness(sequence, reduced, stored)
+        log(f"twilight: visit {visit}: {why}")
+        if not ready:
+            continue
+        fibers = readMetrics(
+            butler, members, TWILIGHT_FLUX, collections=[collection], progress=True, withRun=True, log=log
+        )
+        fibers["sequence"] = int(sequence["iic_sequence_id"].iloc[0])
+        metrics = sequenceConsistency(fibers.drop(columns=["run"]))
+        runs = fibers[[*IMAGE_KEYS, "run"]].drop_duplicates(list(IMAGE_KEYS))
+        parts.append(metrics.merge(runs, on=list(IMAGE_KEYS), how="left"))
+    if not parts:
+        return pd.DataFrame(columns=[*IMAGE_KEYS, "run"])
+    return pd.concat(parts, ignore_index=True)
+
+
+def imageRuns(*tables: pd.DataFrame) -> pd.DataFrame:
+    """Return the Butler RUN of each image: that of the first table, in the order given, with a row for it."""
+    keys = list(IMAGE_KEYS)
+    parts = [table[[*keys, "run"]] for table in tables if len(table)]
+    if not parts:
+        return pd.DataFrame(columns=[*keys, "run"])
+    runs = pd.concat(parts, ignore_index=True).dropna(subset=["run"]).drop_duplicates(keys)
+    return runs.astype({"visit": "int64", "spectrograph": "int64"}).reset_index(drop=True)
 
 
 def drpQaVersionOf(butler: Any, run: str) -> str:
@@ -180,209 +227,6 @@ def drpQaVersionOf(butler: Any, run: str) -> str:
     except Exception:  # any Butler failure means the RUN recorded none
         pass
     return UNKNOWN_VERSION
-
-
-def thresholdsFilesOf(butler: Any, run: str, task: str) -> list[Path]:
-    """Return the thresholds files a RUN's stored config for a task names, as this drp_qa ships them.
-
-    The config's ``thresholdsFile`` first, then its ``extraThresholdsFiles``
-    (``imageQualityQa``'s further layers, judged after it). Empty when the RUN
-    has no config for the task, or it names no file. Only for tables that
-    record none themselves: the config is read through today's config class,
-    so a field added since has today's default.
-    """
-    try:
-        config = butler.get(f"{task}_config", collections=[run])
-    except Exception:  # a RUN without the task has no config
-        return []
-    return [thresholdsPath(name) for name in thresholdsNames(config)]
-
-
-def configDocumentOf(butler: Any, run: str, task: str) -> bytes | None:
-    """Return a RUN's stored config for a task as the task's config thresholds layer.
-
-    The table `CONFIG_LAYERS` builds from the config, as a
-    `pfs.drp.qa.metrics.gate.thresholdsDocument`: what the task recorded the
-    SHA-256 of, when its drp_qa built the same table from the same fields.
-
-    Parameters
-    ----------
-    butler : `lsst.daf.butler.Butler`
-        A Butler.
-    run : `str`
-        The RUN, whose ``<task>_config`` is read.
-    task : `str`
-        The task.
-
-    Returns
-    -------
-    `bytes` or `None`
-        The document; `None` when the task has no config layer
-        (``twilightQa``), the RUN has no config for it, or the config lacks
-        the threshold fields (read through today's config class, a config
-        stored by a drp_qa without them has none).
-    """
-    build = CONFIG_LAYERS.get(task)
-    if build is None:
-        return None
-    try:
-        config = butler.get(f"{task}_config", collections=[run])
-    except Exception:  # a RUN without the task has no config
-        return None
-    try:
-        table = build(config)
-    except (AttributeError, KeyError, TypeError, ValueError):
-        return None
-    return thresholdsDocument(table, configLayerName(task))
-
-
-def _thresholdsIdsOf(
-    qadb: Any, butler: Any, run: str, task: str, now: datetime, log: Callable
-) -> list[int | None]:
-    """Register the thresholds layers a RUN's stored config gives; return their ids in the order judged.
-
-    For tables written before the tasks recorded their layers. Every file the
-    config names is registered, so each is in ``qa_thresholds`` by content,
-    then the config's fields as the task's config layer (`configDocumentOf`).
-    `None` in a file's place, with a log line, when this drp_qa no longer
-    ships it.
-    """
-    log(
-        f"{run}: {task} recorded no thresholds layers; citing those its stored config gives, as this drp_qa has them"
-    )
-    ids: list[int | None] = []
-    for path in thresholdsFilesOf(butler, run, task):
-        try:
-            ids.append(registerThresholds(qadb, path, now))
-        except FileNotFoundError:
-            log(
-                f"{run}: {task} judged with {path.name}, which this drp_qa no longer has; thresholds left null"
-            )
-            ids.append(None)
-    document = configDocumentOf(butler, run, task)
-    if document is not None:
-        ids.append(registerThresholdsContent(qadb, document, configLayerName(task), now))
-    elif task in CONFIG_LAYERS:
-        log(f"{run}: {task}'s stored config gives no threshold fields; its config layer is not cited")
-    return ids
-
-
-def _shippedWith(name: str, digest: str) -> Path | None:
-    """Return a thresholds file this drp_qa ships with a given content: under its name, or renamed."""
-    shipped = thresholdsPath(name)
-    for path in [shipped, *sorted(thresholdsPath("").glob("*.yaml"))]:
-        if path.is_file() and sha256Of(path) == digest:
-            return path
-    return None
-
-
-def _recordedId(
-    qadb: Any,
-    name: str,
-    digest: str,
-    now: datetime,
-    log: Callable,
-    rebuild: Callable[[], bytes | None] | None = None,
-) -> int | None:
-    """Return the ``thresholds_id`` of a layer an image records judging with, registering it if needed.
-
-    By content: qadb's row with that SHA-256, else the same content found
-    again and registered under the name judged with: for a file, a copy this
-    drp_qa ships (`_shippedWith`); for a config layer, the document
-    ``rebuild`` returns (`configDocumentOf` on the RUN's stored config) when it
-    hashes as recorded. `None`, with a log line, when there is neither: the
-    file changed or went before it was registered, or this drp_qa builds the
-    config layer differently. A row with fewer entries than it counts (a
-    registration that stopped between its two writes) is registered again
-    when the content is at hand.
-    """
-    found = qadb.query_dataframe(
-        "SELECT t.thresholds_id, t.n_entries,"
-        " (SELECT count(*) FROM qa_threshold_entry e WHERE e.thresholds_id = t.thresholds_id) AS stored"
-        " FROM qa_thresholds t WHERE t.sha256 = :sha256",
-        params={"sha256": digest},
-    )
-    complete = found.empty or (
-        pd.notna(found["n_entries"].iloc[0]) and found["stored"].iloc[0] >= found["n_entries"].iloc[0]
-    )
-    if not found.empty and complete:
-        return int(found["thresholds_id"].iloc[0])
-    content, why = None, "shipped with this drp_qa"
-    if isConfigLayer(name):
-        document = rebuild() if rebuild is not None else None
-        if document is None:
-            why = "given by the RUN's stored config"
-        elif sha256Of(document) != digest:
-            why = f"what this drp_qa builds from the RUN's stored config (sha256 {sha256Of(document)[:12]})"
-        else:
-            content = document
-    else:
-        path = _shippedWith(name, digest)
-        content = path.read_bytes() if path is not None else None
-    if content is None and not found.empty:
-        log(
-            f"thresholds {name} (sha256 {digest[:12]}) has entries missing in qadb, and is not {why} to restore them"
-        )
-        return int(found["thresholds_id"].iloc[0])
-    if content is None:
-        log(f"thresholds {name} (sha256 {digest[:12]}) is neither in qadb nor {why}; layer left null")
-        return None
-    return registerThresholdsContent(qadb, content, Path(name).name, now)
-
-
-def _thresholdsIds(
-    qadb: Any,
-    butler: Any,
-    task: str,
-    judged: pd.DataFrame,
-    registered: dict[tuple, int | None],
-    now: datetime,
-    log: Callable[[str], None],
-) -> list[list[int | None]]:
-    """Return the ``thresholds_id`` of each layer each image of a task was judged with, in the order judged.
-
-    Every recorded layer is registered (``registered`` caches them across the
-    load: a file by name and SHA-256, a config layer by those and the RUN,
-    whose stored config rebuilds it); a layer that cannot be cited is `None`
-    in its place. An image that records none falls back on its RUN's stored
-    config (`_thresholdsIdsOf`); one whose record is unreadable gets no
-    layers.
-    """
-    recorded = (
-        judged[list(THRESHOLDS_COLUMNS)].itertuples(index=False, name=None)
-        if set(THRESHOLDS_COLUMNS) <= set(judged.columns)
-        else [(None, None)] * len(judged)
-    )
-    fromConfig: dict[str, list[int | None]] = {}
-    ids: list[list[int | None]] = []
-    for (files, digests), run in zip(recorded, judged["run"], strict=True):
-        try:
-            layers = recordedThresholds(files, digests)
-        except ValueError as error:
-            # One unreadable record must not stop the load (qaActor runs it for every visit).
-            log(f"{run}: {task} {error}; thresholds left null")
-            ids.append([])
-            continue
-        if layers is None:
-            if run not in fromConfig:
-                fromConfig[run] = _thresholdsIdsOf(qadb, butler, run, task, now, log)
-            ids.append(fromConfig[run])
-            continue
-        found: list[int | None] = []
-        for name, digest in layers:
-            if isConfigLayer(name):
-                key: tuple = (name, digest, run)
-
-                def rebuild(run: str = run) -> bytes | None:
-                    return configDocumentOf(butler, run, task)
-
-            else:
-                key, rebuild = (name, digest), None  # type: ignore[assignment]
-            if key not in registered:
-                registered[key] = _recordedId(qadb, name, digest, now, log, rebuild=rebuild)
-            found.append(registered[key])
-        ids.append(found)
-    return ids
 
 
 def _pipelineByRun(
@@ -434,11 +278,13 @@ def loadCollection(
     mode: str = "backfill",
     pipelineVersions: bool = True,
     dryRun: Path | str | None = None,
+    normalValues: pd.DataFrame | None = None,
     log: Callable[[str], None] = print,
     now: Callable[[], datetime] = datetime.now,
     readHeader: Callable[[Any], Mapping[str, Any]] | None = None,
+    readSequence: Callable[[Any, int], pd.DataFrame] | None = None,
 ) -> dict[str, int]:
-    """Load a collection's QA tables, thresholds and gate verdicts into qadb.
+    """Load a collection's QA numbers into qadb, and judge every image loaded.
 
     Parameters
     ----------
@@ -453,28 +299,36 @@ def loadCollection(
         Which visits; see `pfs.drp.qa.metrics.readers.readMetrics`.
     opdb : `pfs.utils.database.opdb.OpDB`, optional
         To copy each visit's description, design and issue time into qadb's
-        ``pfs_visit``; see `pfs.drp.qa.qadb.writer.ensureVisits`.
+        ``pfs_visit`` (`pfs.drp.qa.qadb.writer.ensureVisits`), and to find
+        the sequence of a twilight visit (`twilightMetrics`). Without it no
+        twilight is judged.
     mode : `str`, optional
         One of `MODES`; recorded in ``qa_gate``.
     pipelineVersions : `bool`, optional
-        Read the reducing pipeline's versions from the judged images' pfsArm
-        headers (one file read per image). `False` leaves them null.
+        Read the reducing pipeline's versions from the images' pfsArm headers
+        (one file read per image). `False` leaves them null.
     dryRun : `pathlib.Path` or `str`, optional
         Write what would be loaded to parquet files in this directory, one per
         table, and touch no database. Processing ids are then negative
-        placeholders and thresholds are not registered.
+        placeholders.
+    normalValues : `pandas.DataFrame`, optional
+        The normal values to judge with
+        (`pfs.drp.qa.metrics.normalValues.NORMAL_COLUMNS`); default the
+        collection's in qadb. With ``dryRun`` and none given, the checks that
+        need one give no verdict.
     log : callable, optional
         Where progress goes.
     now : callable, optional
-        The clock, for ``decided_at`` and ``registered_at``.
+        The clock, for ``decided_at``.
     readHeader : callable, optional
         For `pfs.drp.qa.metrics.readers.readReductionPipelines`.
+    readSequence : callable, optional
+        For `twilightMetrics`.
 
     Returns
     -------
     `dict` [`str`, `int`]
-        Rows written per table (``qa_processing_thresholds`` counts layers cited),
-        and ``processings``: the RUNs found.
+        Rows written per table, and ``processings``: the RUNs found.
 
     Raises
     ------
@@ -493,17 +347,34 @@ def loadCollection(
     if all(table.empty for table in tables.values()):
         raise LookupError(f"No QA tables for these visits in {collection}")
     sink = _DryRun(dryRun) if dryRun is not None else None
+    iq, summary = tables["iqQaMetrics"], tables["dmLineResidualSummary"]
 
-    # The per-image tables; a long table's rows take the processing of the image they belong to.
-    images = {task: tables[perImage] for task, (perImage, _) in TASK_TABLES.items()}
+    # A twilight is measured with its sequence, once that is complete.
+    twilightVisits = sorted(set(iq.loc[iq["obsType"] == "twilight", "visit"])) if "obsType" in iq else []
+    twilight = pd.DataFrame(columns=[*IMAGE_KEYS, "run"])
+    if twilightVisits and opdb is None:
+        log(
+            f"twilight: {len(twilightVisits)} twilight visit(s) not judged: no opdb to find their sequence in"
+        )
+    elif twilightVisits:
+        twilight = twilightMetrics(
+            butler, opdb, collection, twilightVisits, log=log, readSequence=readSequence
+        )
+
     runs = sorted(
-        {run for table in images.values() for run in table.get("run", pd.Series(dtype=object)).dropna()}
+        {
+            run
+            for table in (iq, summary, twilight)
+            for run in table.get("run", pd.Series(dtype=object)).dropna()
+        }
     )
     log(f"{len(runs)} RUN(s) in {collection}: {', '.join(runs)}")
     pipeline = (
-        _pipelineByRun(butler, tables["iqQaMetrics"], runs, log, readHeader)
+        _pipelineByRun(
+            butler, iq, sorted(set(iq.get("run", pd.Series(dtype=object)).dropna())), log, readHeader
+        )
         if pipelineVersions
-        else dict.fromkeys(runs)
+        else {}
     )
     ids: dict[str, int] = {}
     for run in runs:
@@ -512,19 +383,9 @@ def loadCollection(
         else:
             ids[run] = processingId(qadb, collection, run, drpQaVersionOf(butler, run), pipeline.get(run))
 
-    # The thresholds each image was judged with, as its task recorded them: every layer, in order.
-    if sink is None:
-        registered: dict[tuple, int | None] = {}
-        cited = {}
-        for task, judged in images.items():
-            if judged.empty:
-                cited[task] = judged
-                continue
-            layers = _thresholdsIds(qadb, butler, task, judged, registered, now(), log)
-            cited[task] = judged.assign(thresholdsIds=pd.Series(layers, index=judged.index, dtype=object))
-        images = cited
-
-    allVisits = {int(v) for table in images.values() for v in table.get("visit", pd.Series(dtype=object))}
+    allVisits = {
+        int(v) for table in (iq, summary, twilight) for v in table.get("visit", pd.Series(dtype=object))
+    }
     counts: dict[str, int] = {"processings": len(runs)}
     if sink is None:
         counts["pfs_visit"] = ensureVisits(qadb, allVisits, opdb)
@@ -535,15 +396,13 @@ def loadCollection(
         )
         log(f"{table}: {counts[table]} rows")
 
-    for perImage, longTable in TASK_TABLES.values():
+    for perImage, longTable in TABLES:
         spec = SPECS[perImage]
         image = tables[perImage]
         if image.empty:
             continue
         imageKeys = imageRows(image, spec, ids)
         write(spec.name, imageKeys, list(spec.keys))
-        if longTable is None:
-            continue
         longSpec = SPECS[longTable]
         rows = tables[longTable]
         # The long table's rows belong to the image's processing, whatever RUN they were read from.
@@ -556,29 +415,50 @@ def loadCollection(
         if sink is not None:
             write(longSpec.name, longRows, list(longSpec.keys))
             continue
-        # A reload replaces every loaded image's rows, in one transaction: what the new judgement no
-        # longer has must go, and no reader sees an image with a verdict and no rows in between.
+        # A reload replaces every loaded image's rows, in one transaction: what the new measurement no
+        # longer has must go.
         with qadb.connection() as conn:
             deleteRows(qadb, longSpec.name, imageKeys[list(KEYS)], conn=conn)
             write(longSpec.name, longRows, list(longSpec.keys), conn=conn)
+    if not twilight.empty:
+        write(TWILIGHT_QA.name, imageRows(twilight, TWILIGHT_QA, ids), list(TWILIGHT_QA.keys))
 
-    # One gate row per image across every task's RUN: the twilight judge stores its verdict in a RUN of
-    # its own beside pipetask's, and the gate is the worst of all the image's tasks. The row
-    # takes the first present task's processing (`gateRows`, in TASK_TABLES order), so a sequence's reload
-    # replaces the row the per-visit load wrote under pipetask's RUN rather than adding one.
-    present = {task: table for task, table in images.items() if not table.empty}
-    gate = gateRows(present, ids, mode, now()) if present else gateRows({}, 0, mode, now())
-    layers = processingThresholdsRows(present, ids, log)
-    if sink is not None:
-        write("qa_gate", gate, list(QA_GATE[:3]))
-        write("qa_processing_thresholds", layers, list(QA_PROCESSING_THRESHOLDS[:3]))
-    else:
-        # The layers of each processing and task loaded replace the old ones, with the gate rows, in one
-        # transaction: a re-judgement with fewer layers leaves none behind.
-        with qadb.connection() as conn:
-            write("qa_gate", gate, list(QA_GATE[:3]), conn=conn)
-            deleteRows(qadb, "qa_processing_thresholds", processingTasks(present, ids), conn=conn)
-            write("qa_processing_thresholds", layers, list(QA_PROCESSING_THRESHOLDS[:3]), conn=conn)
+    # One verdict per image, from every number it has. The row takes the processing of the image's first
+    # table loaded (imageQualityQa's, then dmLineResiduals', then the twilight's), so a later load replaces it.
+    if normalValues is None and sink is None:
+        normalValues = readNormalValues(qadb, collection)
+    verdicts = gate(
+        iq=iq, lines=tables["dmLineResidualMetrics"], twilight=twilight, normalValues=normalValues
+    )
+    verdicts = verdicts.merge(imageRuns(iq, summary, twilight), on=list(IMAGE_KEYS), how="left")
+    orphans = verdicts["run"].isna()
+    if orphans.any():
+        log(f"qa_gate: {int(orphans.sum())} images with line residuals and no summary row, skipped")
+        verdicts = verdicts[~orphans]
+    verdicts = verdicts.assign(run=verdicts["run"].map(ids).astype("int64"))
+    # A twilight sequence judged now includes visits loaded earlier: their verdict replaces the gate row
+    # they have, whatever RUN their fiber fluxes are in.
+    loaded = set(iq.get("visit", pd.Series(dtype="int64"))) | set(
+        summary.get("visit", pd.Series(dtype="int64"))
+    )
+    earlier = ~verdicts["visit"].isin(loaded)
+    if sink is None and earlier.any():
+        visitsEarlier = verdicts.loc[earlier, "visit"]
+        existing = readGate(qadb, collection, int(visitsEarlier.min()), int(visitsEarlier.max()))
+        existing = existing[[*IMAGE_KEYS, PROCESSING_ID]].drop_duplicates(list(IMAGE_KEYS))
+        verdicts = verdicts.merge(existing, on=list(IMAGE_KEYS), how="left")
+        replace = earlier.to_numpy() & verdicts[PROCESSING_ID].notna().to_numpy()
+        verdicts.loc[replace, "run"] = verdicts.loc[replace, PROCESSING_ID].astype("int64")
+        verdicts = verdicts.drop(columns=[PROCESSING_ID])
+    processings = {int(value): int(value) for value in verdicts["run"].unique()}
+    write("qa_gate", gateRows(verdicts, processings, mode, now()), list(QA_GATE[:3]))
+    tally = verdicts["qaStatus"].value_counts().to_dict()
+    log(
+        "verdicts: "
+        + ", ".join(
+            f"{tally[status]} {status}" for status in ("PASS", "WARN", "FAIL", "UNKNOWN") if status in tally
+        )
+    )
     log(f"loaded {collection} in {time.monotonic() - start:.0f} s")
     return counts
 
@@ -586,5 +466,5 @@ def loadCollection(
 def loadVisit(
     butler: Any, qadb: Any, collection: str, visit: int, mode: str = "realtime", **kwargs: Any
 ) -> dict[str, int]:
-    """Load one visit's QA tables: `loadCollection` for qaActor, after the visit's pipetask."""
+    """Load one visit's QA numbers and judge it: `loadCollection` for qaActor, after the visit's pipetask."""
     return loadCollection(butler, qadb, collection, visits=[int(visit)], mode=mode, **kwargs)

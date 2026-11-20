@@ -2,23 +2,17 @@
 
 Every write is ``INSERT ... ON CONFLICT (keys) DO UPDATE``: loading an image
 again replaces its rows, so a collection can be loaded as often as it is
-re-judged, and a load that stopped halfway is finished by running it again.
+judged again, and a load that stopped halfway is finished by running it again.
 The database is a `pfs.utils.database.qadb.QaDB` (or anything with its
 ``commit`` and ``query_scalar``), queried with bound parameters only.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from sqlalchemy import text
-
-from pfs.drp.qa.metrics.calibration import parseThresholds
-from pfs.drp.qa.metrics.gate import sha256Of
-from pfs.drp.qa.qadb.tables import QA_THRESHOLD_ENTRY, QA_THRESHOLDS, thresholdRows
 
 __all__ = [
     "PIPELINE_VERSION_COLUMNS",
@@ -27,9 +21,6 @@ __all__ = [
     "ensureVisits",
     "processingId",
     "records",
-    "registerThresholds",
-    "registerThresholdsContent",
-    "sha256Of",
     "upsert",
     "upsertSql",
 ]
@@ -254,80 +245,3 @@ def processingId(
     if found is None:
         raise RuntimeError(f"No processing_id returned for {collection!r} run {run!r}")
     return int(found)
-
-
-def registerThresholds(
-    qadb: Any, path: Path | str, registeredAt: datetime | None = None, name: str | None = None
-) -> int:
-    """Register a thresholds file, returning its ``thresholds_id``.
-
-    The file is identified by its content: registering the same thresholds
-    again, under any name, returns the existing id and leaves
-    ``registered_at`` as it was. Its entries are written to
-    ``qa_threshold_entry``.
-
-    Parameters
-    ----------
-    qadb : `pfs.utils.database.qadb.QaDB`
-        The database.
-    path : `pathlib.Path` or `str`
-        The file, as `pfs.drp.qa.metrics.calibration.writeThresholds` writes it.
-    registeredAt : `datetime.datetime`, optional
-        Default now.
-    name : `str`, optional
-        The name to record, when the file judged under another (it was
-        renamed since); default the file's own.
-
-    Returns
-    -------
-    `int`
-        The id.
-    """
-    path = Path(path)
-    return registerThresholdsContent(
-        qadb, path.read_bytes(), Path(name).name if name else path.name, registeredAt
-    )
-
-
-def registerThresholdsContent(
-    qadb: Any, content: bytes, name: str, registeredAt: datetime | None = None
-) -> int:
-    """Register a thresholds document by its bytes: a file's, or a layer that was never a file.
-
-    `registerThresholds` for a `pfs.drp.qa.metrics.gate.thresholdsDocument`
-    (a task config's threshold fields, named by
-    `pfs.drp.qa.metrics.gate.configLayerName`): identified by the SHA-256 of
-    ``content``, which is what the task recorded with each image.
-
-    Parameters
-    ----------
-    qadb : `pfs.utils.database.qadb.QaDB`
-        The database.
-    content : `bytes`
-        The document.
-    name : `str`
-        The name to record (``qa_thresholds.name``).
-    registeredAt : `datetime.datetime`, optional
-        Default now.
-
-    Returns
-    -------
-    `int`
-        The id.
-    """
-    digest = sha256Of(content)
-    metadata, thresholds = parseThresholds(content, name)
-    header, _ = thresholdRows(metadata, thresholds, 0, name, digest, registeredAt or datetime.now())
-    columns = [column for column in QA_THRESHOLDS if column != "thresholds_id"]
-    params = records(header[columns])[0]
-    sql = (
-        f"INSERT INTO qa_thresholds ({', '.join(columns)}) VALUES ({', '.join(f':{c}' for c in columns)})"
-        " ON CONFLICT (sha256) DO UPDATE SET name = EXCLUDED.name RETURNING thresholds_id"
-    )
-    found = qadb.query_scalar(sql, params=params)
-    if found is None:
-        raise RuntimeError(f"No thresholds_id returned for {name}")
-    thresholdsId = int(found)
-    _, entries = thresholdRows(metadata, thresholds, thresholdsId, name, digest, registeredAt)
-    upsert(qadb, "qa_threshold_entry", entries, list(QA_THRESHOLD_ENTRY[:3]))
-    return thresholdsId
