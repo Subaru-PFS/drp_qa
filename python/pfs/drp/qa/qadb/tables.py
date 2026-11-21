@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 
 __all__ = [
+    "DETECTOR_HEALTH",
     "IMAGE_KEYS",
     "IMAGE_QUALITY",
     "IMAGE_QUALITY_SPECIES",
@@ -164,6 +165,14 @@ IMAGE_QUALITY = TableSpec(
 
 IMAGE_QUALITY_SPECIES = TableSpec(
     "image_quality_qa_species", "iqQaSpeciesMetrics", {"value": "float"}, extraKeys=("description", "metric")
+)
+
+#: ``detector_health_qa``: the reduction's detector statistics, long format. Keyed by the
+#: image, the amplifier (empty for a whole-detector statistic, as on the n arm) and the
+#: metric. Stored, not judged: no check reads it. Its rows do not belong to an image-quality
+#: row, so it is loaded on its own rather than as a long partner of a per-image table.
+DETECTOR_HEALTH = TableSpec(
+    "detector_health_qa", "reductionStats", {"value": "float"}, extraKeys=("amplifier", "metric")
 )
 
 LINE_RESIDUAL = TableSpec(
