@@ -18,6 +18,14 @@ made, and earlier sections to the weekly tag alone.
   them long format (amplifier, metric, value; the measurement is stack-free in `metrics.reductionStats`). The
   loader copies them into qadb's `detector_health_qa`. Stored, not judged: no check reads them, limits come after
   a run of values. The per-amplifier overscan level is not yet recorded by ISR and is not read.
+- **Redo a run with an updated pipeline in one command** (PIPE2D-2016) — `drpQa.py redo <run>` reduces the run's
+  raw frames (drp_stella's `reduceExposure` with drpActor's per-sequence-type configuration, unless `--reductions`
+  names a collection already reduced), measures them with `drpQA.yaml`'s `imageQualityQa`, `dmLineResiduals` and
+  `reductionStats`, loads the numbers into qadb, makes the collection's normal values from its own calibration
+  frames and prints each beside the same run's value under the previous pipeline (`--previous-collection`, default
+  `qaActor/reductions`), judges every frame, and prints the `pfs_qa_dashboard` command that renders the run report
+  from qadb. `--only` runs a subset of the stages (`process`, `load`, `values`, `judge`) to resume. It folds in
+  comparison mode's old `fetch`/`plan`/`run`, reads the opdb in memory, and writes no parquet and no report.
 
 ### Changed
 
@@ -27,6 +35,20 @@ made, and earlier sections to the weekly tag alone.
   reads on a measured run), which keeps the dashboard responsive while reading a busy summit qadb. An index on
   `(pfs_visit_id, camera_name)` on the number tables turns the remaining scan into a seek — a separate
   `spt_qa_database` change that helps only together with this one.
+- **The reduction and measurement are two pipetask commands** (PIPE2D-2016) — comparison mode and `calib validate`
+  reduced and measured in one run through `pipelines/qaThresholds.yaml`; they now run `reduceExposure` (less
+  `mergeArms`) and then `drpQA.yaml`'s tasks as separate commands, so measurement uses `drpQA.yaml` directly. The
+  reduce/measure pipeline labels moved to `comparison.reduction` (the version-bearing module), so adding a task
+  bumps the collection version. `pfs.drp.qa.qadb.judge.makeValues` gained a `baseline` collection: a redo's shift
+  is against the previous pipeline while the values are stored for and judged on the redo collection.
+- **`calib inputs` and `calib validate` read the opdb, not a parquet cache** (PIPE2D-2016) — they take the
+  period's visit listing from the opdb (`--opdb-host`) and the measured numbers from the Butler collection; their
+  `--data-dir`/`--exports`/`--residuals` no-database mode is gone.
+
+### Removed
+
+- **`pipelines/qaThresholds.yaml` and `bin.src/qaComparison.py`** (PIPE2D-2016) — the combined reduce-and-measure
+  pipeline and the separate comparison-mode entry point; `drpQa.py redo` replaces them.
 
 ## [0.6.1] - 2026-11-20
 
