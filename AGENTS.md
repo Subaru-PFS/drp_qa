@@ -34,9 +34,9 @@ the pipeline/config glue to run them.
 ### Key components
 
 - **QA pipeline (`pipelines/drpQA.yaml`)** — defines the sequence of QA tasks. It
-  currently registers **five** task labels, and only these run under `pipetask`:
+  currently registers **six** task labels, and only these run under `pipetask`:
   `extractionQa`, `extractionQaCombined`, `imageQualityQa`, `dmLineResiduals`,
-  `twilightFluxQa`.
+  `twilightFluxQa`, `reductionStats`.
 - **Reduce-and-measure pipeline (`pipelines/qaThresholds.yaml`)** — drp_stella's `reduceExposure`
   (less `mergeArms`) plus `imageQualityQa` and `dmLineResiduals`, for comparison mode and
   `drpQa.py calib validate`, which apply `drpActor`'s per-sequence-type config.
@@ -51,6 +51,10 @@ the pipeline/config glue to run them.
     (`twilightFiberFlux`; other visits stop at the header, before the pfsArm is read);
     `drpQa.py load` measures and judges a sequence's exposures against each other once the
     sequence is complete, with the stack-free `metrics/twilight.py`
+  - `reductionStats.py` — detector health read from the reduction's task metadata
+    (`isr_metadata`, `reduceExposure_metadata`) and the ISR header: ISR counts, per-amp
+    gain/read-noise and the detectorMap fit scalars, long format; stored, not judged, with
+    the stack-free measurement in `metrics/reductionStats.py`. Loaded into `detector_health_qa`.
 - **QA modules *not* wired into `drpQA.yaml`** — these exist as `PipelineTask`s or CLIs
   but must be run via their own pipeline/entry point:
   - `skySubtractionQa.py` — sky subtraction accuracy (`SkyArmSubtractionTask`,

@@ -10,6 +10,15 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Added
+
+- **Detector health from the reduction's metadata** (PIPE2D-2014) — a new `reductionStats` task in `drpQA.yaml`
+  reads the detectorMap fit, scattered-light and PFI-correction scalars from `reduceExposure_metadata`, the n-arm
+  counts and dark scale from `isr_metadata`, and per-amplifier gain and read noise from the ISR header, and writes
+  them long format (amplifier, metric, value; the measurement is stack-free in `metrics.reductionStats`). The
+  loader copies them into qadb's `detector_health_qa`. Stored, not judged: no check reads them, limits come after
+  a run of values. The per-amplifier overscan level is not yet recorded by ISR and is not read.
+
 ### Changed
 
 - **The live qadb reader reads only what changed** (PIPE2D-2025) — `readQadb` with `since` now restricts its

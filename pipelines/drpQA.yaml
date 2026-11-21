@@ -10,3 +10,5 @@ tasks:
     class: pfs.drp.qa.dmLineResiduals.DmLineResidualsTask
   twilightFluxQa:
     class: pfs.drp.qa.twilightFluxQa.TwilightFluxQaTask
+  reductionStats:
+    class: pfs.drp.qa.reductionStats.ReductionStatsTask

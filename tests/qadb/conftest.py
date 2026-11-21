@@ -66,6 +66,11 @@ CREATE TABLE image_quality_qa_species (
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name, description, metric),
     FOREIGN KEY (processing_id, pfs_visit_id, camera_name)
         REFERENCES image_quality_qa (processing_id, pfs_visit_id, camera_name) ON DELETE CASCADE);
+CREATE TABLE detector_health_qa (
+    processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
+    pfs_visit_id INTEGER REFERENCES pfs_visit,
+    camera_name VARCHAR(2), amplifier TEXT DEFAULT '', metric TEXT, value DOUBLE PRECISION,
+    PRIMARY KEY (processing_id, pfs_visit_id, camera_name, amplifier, metric));
 CREATE TABLE dm_line_residual_qa (
     processing_id INTEGER REFERENCES data_processing_pipe2d ON DELETE CASCADE,
     pfs_visit_id INTEGER REFERENCES pfs_visit,

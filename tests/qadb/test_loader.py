@@ -690,3 +690,97 @@ class TestGate:
         messages = []
         load(butler, qadb, log=messages.append)
         assert "verdicts: 2 PASS, 1 WARN, 1 FAIL" in messages
+
+
+def reductionRows(iq: pd.DataFrame) -> pd.DataFrame:
+    """Return a long ``reductionStats`` table for the images of ``iq``.
+
+    Two whole-detector metrics (empty amplifier) and two per-amplifier metrics on ``c1``.
+    """
+    rows = []
+    for image in iq[IMAGE].itertuples(index=False):
+        base = image._asdict()
+        rows.append({**base, "amplifier": "", "metric": "fitXRms", "value": 0.02})
+        rows.append({**base, "amplifier": "", "metric": "nDefects", "value": 201178.0})
+        rows.append({**base, "amplifier": "c1", "metric": "readNoise", "value": 3.9})
+        rows.append({**base, "amplifier": "c1", "metric": "gain", "value": 1.2})
+    return pd.DataFrame(rows)
+
+
+PACKAGES = {"packages": {"drp_qa": "w.2026.44", "drp_stella": "w.2026.41"}}
+
+
+class TestDetectorHealth:
+    """``reductionStats`` loads into ``detector_health_qa``: a standalone long table, not judged."""
+
+    def butlerWithHealth(self, StubButler, tables):
+        """Return a stub Butler whose tables also carry a ``reductionStats`` dataset."""
+        tables["reductionStats"] = reductionRows(tables["iqQaMetrics"])
+        return StubButler(tables, datasets=PACKAGES)
+
+    def testLoadsRows(self, StubButler, tables, qadb):
+        butler = self.butlerWithHealth(StubButler, tables)
+        counts = load(butler, qadb)
+        assert counts["detector_health_qa"] == 16  # 4 images x 4 metrics
+        health = qadb.query_dataframe(
+            "SELECT * FROM detector_health_qa ORDER BY pfs_visit_id, camera_name, amplifier, metric"
+        )
+        assert len(health) == 16
+        # A whole-detector statistic has an empty amplifier; a per-amp one names the amplifier.
+        assert (health.loc[health["metric"] == "fitXRms", "amplifier"] == "").all()
+        assert (health.loc[health["metric"] == "readNoise", "amplifier"] == "c1").all()
+        # The value is stored as double precision, keyed to the image.
+        value = qadb.query_scalar(
+            "SELECT value FROM detector_health_qa"
+            " WHERE pfs_visit_id = :v AND camera_name = :c AND amplifier = '' AND metric = 'nDefects'",
+            params={"v": 133025, "c": "b1"},
+        )
+        assert value == 201178.0
+        # It is not judged: no verdict mentions a detector-health metric.
+        assert qadb.count("qa_gate", "qa_decided_by IN ('fitXRms', 'nDefects', 'readNoise')") == 0
+
+    def testOnlyReductionStatsCollection(self, StubButler, fixtures, qadb):
+        """A collection with reductionStats but no QA numbers loads detector health and no verdicts.
+
+        reductionStats keeps the load alive where the QA-number tables are all empty (it would
+        otherwise raise ``LookupError``), and gate() gives no verdict without any numbers.
+        """
+        butler = StubButler({"reductionStats": reductionRows(fixtures["iqQaMetrics"])}, datasets=PACKAGES)
+        counts = load(butler, qadb)
+        assert counts["detector_health_qa"] == 16
+        assert qadb.count("detector_health_qa") == 16
+        assert qadb.count("qa_gate") == 0
+
+    def testMissingDatasetLoadsNothing(self, butler, qadb):
+        """A collection without ``reductionStats`` loads as before, with no detector-health rows."""
+        counts = load(butler, qadb)
+        assert "detector_health_qa" not in counts
+        assert qadb.count("detector_health_qa") == 0
+
+    def testReloadReplacesAndDrops(self, StubButler, tables, qadb):
+        """A reload replaces an image's rows and removes a metric the new measurement lacks."""
+        butler = self.butlerWithHealth(StubButler, tables)
+        load(butler, qadb)
+        assert qadb.count("detector_health_qa") == 16
+        # Change one value and drop the 'gain' rows, then reload.
+        rs = tables["reductionStats"]
+        one = (
+            (rs["visit"] == 133025)
+            & (rs["arm"] == "b")
+            & (rs["spectrograph"] == 1)
+            & (rs["metric"] == "fitXRms")
+        )
+        assert one.sum() == 1
+        rs.loc[one, "value"] = 0.09
+        tables["reductionStats"] = rs[rs["metric"] != "gain"]
+        counts = load(butler, qadb, now=lambda: LATER)
+        assert counts["detector_health_qa"] == 12  # 4 images x 3 metrics
+        assert qadb.count("detector_health_qa") == 12
+        # Negative control: the gain metric is gone, not left at its old value.
+        assert qadb.count("detector_health_qa", "metric = 'gain'") == 0
+        updated = qadb.query_scalar(
+            "SELECT value FROM detector_health_qa"
+            " WHERE pfs_visit_id = :v AND camera_name = :c AND amplifier = '' AND metric = 'fitXRms'",
+            params={"v": 133025, "c": "b1"},
+        )
+        assert updated == 0.09
