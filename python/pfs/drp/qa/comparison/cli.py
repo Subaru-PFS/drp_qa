@@ -469,30 +469,34 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
         ):
             print(f"\n# {item.name} ({', '.join(item.types)}): {len(item.visits)} visits, skipped (--pass)")
             continue
-        configFile = None
+        print(f"\n# {item.name} ({', '.join(item.types)}): {len(item.visits)} visits")
+        # A reducing pass runs two pipetask commands, reduce then measure; a judge-only pass measures only.
+        phases = []
         if not item.judgeOnly:
             configFile = workDir / f"cosmicray-{period.name}-{item.name}.py"
             configFile.write_text(item.cosmicrayConfig())
-        command = pipetaskCommand(
-            item,
-            butler=args.butler,
-            pipeline=args.pipeline,
-            # Earlier collections are inputs but not skipped: their QA outputs are an older drp_qa's,
-            # to be measured again.
-            inputs=[*earlier, *args.inputs],
-            output=output,
-            skipExistingIn=skip,
-            cosmicrayConfigFile=None if configFile is None else str(configFile),
-            jobs=args.jobs,
-            # The first pass creates the output chain when it doesn't exist yet; every later pass finds it,
-            # and must rebase it in case drpActor added a reduction RUN meanwhile (it does, daily).
-            rebase=outputExists or bool(commands),
-        )
-        if args.dry_run:
-            command = _qgraph(command)
-        commands.append((item.name, command))
-        print(f"\n# {item.name} ({', '.join(item.types)}): {len(item.visits)} visits")
-        print(f"cmd = {command!r}")
+            phases.append((f"{item.name}-reduce", "reduce", str(configFile)))
+        phases.append((item.name, "measure", None))
+        for name, phase, configFile in phases:
+            command = pipetaskCommand(
+                item,
+                phase=phase,
+                butler=args.butler,
+                # Earlier collections are inputs but not skipped: their QA outputs are an older drp_qa's,
+                # to be measured again. The measure phase reads this run's reductions from the output chain.
+                inputs=[*earlier, *args.inputs],
+                output=output,
+                skipExistingIn=skip,
+                cosmicrayConfigFile=configFile,
+                jobs=args.jobs,
+                # The first command creates the output chain when it doesn't exist yet; every later one
+                # finds it, and must rebase in case drpActor added a reduction RUN meanwhile (daily).
+                rebase=outputExists or bool(commands),
+            )
+            if args.dry_run:
+                command = _qgraph(command)
+            commands.append((name, command))
+            print(f"cmd = {command!r}")
     if not commands:
         print("Nothing to do: every detector image is judged or has no raw data.")
     if args.command == "plan":
@@ -636,7 +640,6 @@ def _qgraph(command: list[str]) -> list[str]:
 
 
 def _parser() -> argparse.ArgumentParser:
-    drpQaDir = os.environ.get("DRP_QA_DIR", ".")
     parser = argparse.ArgumentParser(prog="qaComparison.py", description=__doc__.split("\n\n")[0])
     parser.add_argument("command", choices=["fetch", "plan", "run"])
     parser.add_argument("--period", required=True, help="e.g. run30 or run30-pre")
@@ -677,9 +680,6 @@ def _parser() -> argparse.ArgumentParser:
         "--pipeline-version",
         default=None,
         help="with --fresh: the label naming the reductions (default: from getPfsVersions)",
-    )
-    parser.add_argument(
-        "--pipeline", default=f"{drpQaDir}/pipelines/qaThresholds.yaml", help="the reduction and QA pipeline"
     )
     parser.add_argument("-j", "--jobs", type=int, default=8, help="pipetask processes")
     parser.add_argument(

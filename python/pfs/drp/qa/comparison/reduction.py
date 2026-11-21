@@ -7,7 +7,26 @@ names the output collection (`pfs.drp.qa.comparison.cli.drpQaVersion`): a change
 
 import pandas as pd
 
-__all__ = ["cosmicrayConfig", "cosmicrayGroups", "drpActorConfig"]
+__all__ = [
+    "MEASURE_LABELS",
+    "MEASURE_PIPELINE",
+    "REDUCE_LABELS",
+    "REDUCE_PIPELINE",
+    "cosmicrayConfig",
+    "cosmicrayGroups",
+    "drpActorConfig",
+]
+
+#: drp_stella's reduction pipeline, and the labels of it a reduce pass runs: all but ``mergeArms``,
+#: which combines arms into a product the QA tasks don't read.
+REDUCE_PIPELINE = "$DRP_STELLA_DIR/pipelines/reduceExposure.yaml"
+REDUCE_LABELS = ("isr", "cosmicray", "reduceExposure")
+
+#: drp_qa's QA pipeline, and the labels a measure pass runs on the reductions: the image quality, the
+#: line residuals against the calibration and the visit's detectorMap, and the reduction statistics.
+#: Which tasks run changes what a pass writes, so this module, not the neutral ``plan``, holds them.
+MEASURE_PIPELINE = "$DRP_QA_DIR/pipelines/drpQA.yaml"
+MEASURE_LABELS = ("imageQualityQa", "dmLineResiduals", "reductionStats")
 
 
 def drpActorConfig(sequenceType: str) -> dict[str, bool]:

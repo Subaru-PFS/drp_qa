@@ -1,8 +1,8 @@
 r"""``drpQa.py calib validate``: validate candidate detectorMap calibrations against each other on the same visits.
 
 ``run`` reduces the chosen visits once per candidate, with the candidate's collection first in the
-inputs so its ``detectorMap_calib`` is the one used, through ``pipelines/qaThresholds.yaml``
-(reduceExposure, imageQualityQa, dmLineResiduals) with drpActor's arc/trace configuration, into
+inputs so its ``detectorMap_calib`` is the one used, in two ``pipetask`` commands — ``reduceExposure``
+with drpActor's arc/trace configuration, then ``dmLineResiduals`` on the reductions — into
 ``<prefix>/<label>``. ``report`` reads each candidate's ``dmLineResidualMetrics`` from the Butler
 (or ``--exports`` directories, one per candidate) and writes the Markdown comparison of
 `pfs.drp.qa.comparison.calibValidate` with a figure per detector.
@@ -18,7 +18,6 @@ The visits are the period's set-cadence arcs and traces plus its daily arcs and 
 
 import argparse
 import datetime
-import os
 import shlex
 import subprocess
 import sys
@@ -29,7 +28,12 @@ import pandas as pd
 from pfs.drp.qa.comparison.calibInputs import lampsOf, setVisits
 from pfs.drp.qa.comparison.calibValidate import buildValidationReport, compareCalibrations
 from pfs.drp.qa.comparison.classify import classifyVisits
-from pfs.drp.qa.comparison.reduction import drpActorConfig
+from pfs.drp.qa.comparison.reduction import (
+    MEASURE_PIPELINE,
+    REDUCE_LABELS,
+    REDUCE_PIPELINE,
+    drpActorConfig,
+)
 from pfs.drp.qa.comparison.runs import loadPeriods
 
 
@@ -80,33 +84,36 @@ def candidates(args) -> dict[str, str]:
     return out
 
 
-def runCommand(args, label: str, collection: str, visits: pd.DataFrame, detectors: list[str]) -> list[str]:
+def candidateCommands(
+    args, label: str, collection: str, visits: pd.DataFrame, detectors: list[str]
+) -> list[tuple[str, list[str]]]:
+    """Return the ``reduce`` then ``measure`` ``pipetask`` commands for one candidate.
+
+    The candidate's collection goes first in the inputs so its ``detectorMap_calib`` is the one
+    used. The reduce phase runs ``reduceExposure`` with drpActor's arc configuration; the measure
+    phase runs ``dmLineResiduals`` alone (its report reads only ``dmLineResidualMetrics``) on the
+    reductions, which it finds in the output chain.
+    """
     inputs = ([collection] if collection else []) + list(args.inputs)
     where = " OR ".join(f"(arm = '{d[0]}' AND spectrograph = {d[1:]})" for d in detectors)
     visitList = ", ".join(str(int(v)) for v in sorted(visits["pfs_visit_id"]))
-    config = drpActorConfig("scienceArc")
-    command = [
-        "pipetask",
-        "--long-log",
-        "--log-level",
-        "pfs=INFO",
-        "run",
-        "-j",
-        str(args.jobs),
-        "-b",
-        args.butler,
-        "-p",
-        args.pipeline,
-        "-i",
-        ",".join(inputs),
-        "-o",
-        f"{args.prefix}/{label}",
-        "-d",
-        f"instrument = 'PFS' AND ({where}) AND visit IN ({visitList})",
-    ]
-    for key, value in config.items():
-        command += ["-c", f"{key}={value}"]
-    return command
+    output = f"{args.prefix}/{label}"
+    data = f"instrument = 'PFS' AND ({where}) AND visit IN ({visitList})"
+
+    def base(subset: str, rebase: bool) -> list[str]:
+        command = ["pipetask", "--long-log", "--log-level", "pfs=INFO", "run", "-j", str(args.jobs)]
+        command += ["-b", args.butler, "-p", subset, "-i", ",".join(inputs), "-o", output]
+        if rebase:
+            command += ["--rebase"]
+        return command
+
+    reduce = base(f"{REDUCE_PIPELINE}#{','.join(REDUCE_LABELS)}", rebase=False)
+    for key, value in drpActorConfig("scienceArc").items():
+        reduce += ["-c", f"{key}={value}"]
+    reduce += ["-d", data]
+    # The reduce phase makes the output chain; the measure phase rebases onto it to read the reductions.
+    measure = [*base(f"{MEASURE_PIPELINE}#dmLineResiduals", rebase=True), "-d", data]
+    return [("reduce", reduce), ("measure", measure)]
 
 
 def main(argv=None) -> int:
@@ -125,7 +132,6 @@ def main(argv=None) -> int:
     )
     parser.add_argument("--detectors", nargs="+", required=True, help="e.g. b1 r2")
     parser.add_argument("--butler", default="/work/datastore")
-    parser.add_argument("--pipeline", default=None, help="default: drp_qa's pipelines/qaThresholds.yaml")
     parser.add_argument(
         "--inputs", nargs="+", default=["PFS/defaults"], help="the inputs after the candidate"
     )
@@ -153,25 +159,23 @@ def main(argv=None) -> int:
         flush=True,
     )
     if args.command == "run":
-        if args.pipeline is None:
-            checkout = os.environ.get("DRP_QA_DIR") or Path(__file__).resolve().parents[5]
-            args.pipeline = str(Path(checkout) / "pipelines" / "qaThresholds.yaml")
         failed = []
         for label, collection in cands.items():
-            command = runCommand(args, label, collection, visits, args.detectors)
-            print(f"\n# {label}\n{shlex.join(command)}", flush=True)
-            if args.dry_run:
-                continue
-            log = (
-                Path(args.data_dir)
-                / f"validate-{args.period}-{label}-{datetime.datetime.now():%Y%m%dT%H%M%S}.log"
-            )
-            print(f"running {label}; log: {log}", flush=True)
-            with log.open("w") as stream:
-                result = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT)
-            print(f"{label}: exit {result.returncode}", flush=True)
-            if result.returncode:
-                failed.append(label)
+            for phase, command in candidateCommands(args, label, collection, visits, args.detectors):
+                print(f"\n# {label} ({phase})\n{shlex.join(command)}", flush=True)
+                if args.dry_run:
+                    continue
+                log = (
+                    Path(args.data_dir)
+                    / f"validate-{args.period}-{label}-{phase}-{datetime.datetime.now():%Y%m%dT%H%M%S}.log"
+                )
+                print(f"running {label} ({phase}); log: {log}", flush=True)
+                with log.open("w") as stream:
+                    result = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT)
+                print(f"{label} ({phase}): exit {result.returncode}", flush=True)
+                if result.returncode:
+                    failed.append(f"{label} ({phase})")
+                    break  # a candidate whose reduction failed is not measured
         if failed:
             print(f"failed: {', '.join(failed)}", file=sys.stderr, flush=True)
             return 1

@@ -290,13 +290,18 @@ def testRunReducesAndRunsTheQaTasksAndJudgesNothing(planned, capsys):
 
     planned.holdings += [(visit, arm, 1, True, visit != 3, False) for visit in (1, 2, 3) for arm in "br"]
     assert main(["run", *planned.arguments]) == 0
-    judge, reduce = planned.commands
-    # The reduced arcs get the QA tasks alone; the trace the whole pipeline, the QA tasks included.
-    assert judge[judge.index("-p") + 1].endswith("qaThresholds.yaml#imageQualityQa,dmLineResiduals")
-    assert reduce[reduce.index("-p") + 1].endswith("qaThresholds.yaml")
-    assert judge[-1] == "instrument = 'PFS' AND visit IN (1..2)"
+    # The reduced arcs are measured alone; the trace is reduced then measured: three pipetask commands.
+    measureJudge, reduce, measure = planned.commands
+    measureSubset = "drpQA.yaml#imageQualityQa,dmLineResiduals,reductionStats"
+    assert measureJudge[measureJudge.index("-p") + 1].endswith(measureSubset)
+    assert reduce[reduce.index("-p") + 1].endswith("reduceExposure.yaml#isr,cosmicray,reduceExposure")
+    assert measure[measure.index("-p") + 1].endswith(measureSubset)
+    assert measureJudge[-1] == "instrument = 'PFS' AND visit IN (1..2)"
     assert reduce[-1] == "instrument = 'PFS' AND visit IN (3)"
-    assert "--rebase" not in judge and "--rebase" in reduce  # the first pass makes the output chain
+    assert measure[-1] == "instrument = 'PFS' AND visit IN (3)"
+    assert "-C" in reduce and "-C" not in measure  # only the reduce phase configures cosmicray
+    # The first command makes the output chain; the rest rebase onto it.
+    assert "--rebase" not in measureJudge and "--rebase" in reduce and "--rebase" in measure
     assert "calibration: Executed 4 quanta successfully, 0 failed" in capsys.readouterr().out
     # run stores what the tasks measure in the Butler and leaves the verdict to the gate: beside the
     # coverage and the cosmicray config it writes only the pipetask logs.
@@ -306,7 +311,7 @@ def testRunReducesAndRunsTheQaTasksAndJudgesNothing(planned, capsys):
         "cosmicray-run1-calibration.py",
         "coverage-run1.parquet",
     ]
-    assert len([name for name in names if name.startswith("pipetask-run1-")]) == 2
+    assert len([name for name in names if name.startswith("pipetask-run1-")]) == 3
     # Negative control: the files the report's judging used to write are not among them.
     assert not [name for name in names if "findings" in name.lower() or name.endswith((".html", ".csv"))]
 
