@@ -123,17 +123,28 @@ PFI_METRICS = ("correctionMean", "correctionStd", "skyNormsMean", "skyNormsStd",
 def _section(metadata: Mapping[str, Any] | None, label: str) -> Mapping[str, Any]:
     """Return the sub-mapping for a subtask label, or an empty mapping.
 
-    Tolerant of how task metadata nests a subtask: tries the whole label
-    (``reduceExposure:adjustDetectorMap``) and its last colon-separated
-    component (``adjustDetectorMap``).
+    Tolerant of how task metadata nests a subtask. ``reduceExposure_metadata`` is
+    already scoped to the task, so a subtask is normally reached by its bare name
+    (``adjustDetectorMap``); the full label (``reduceExposure:adjustDetectorMap``)
+    and a flattened form, whose keys are the sub-keys prefixed with the label and a
+    ``:`` or ``.``, are accepted too.
     """
     if not isinstance(metadata, Mapping):
         return {}
-    for key in (label, label.rsplit(":", 1)[-1]):
+    tail = label.rsplit(":", 1)[-1]
+    for key in (label, tail):
         section = metadata.get(key)
         if isinstance(section, Mapping):
             return section
-    return metadata if label.rsplit(":", 1)[-1] in metadata else {}
+    # A flattened mapping: keys like ``adjustDetectorMap.fitChi2`` or ``...:fitChi2``.
+    flattened = {}
+    for prefix in (f"{tail}.", f"{tail}:", f"{label}.", f"{label}:"):
+        for key, value in metadata.items():
+            if isinstance(key, str) and key.startswith(prefix):
+                flattened[key[len(prefix) :]] = value
+        if flattened:
+            return flattened
+    return {}
 
 
 def _toFloat(value: Any) -> float | None:

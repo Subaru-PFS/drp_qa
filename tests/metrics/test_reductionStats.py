@@ -90,6 +90,29 @@ def testFitStatsSkippedWhenNotApplied():
     assert not any(name.startswith(("fit", "reserved")) for name in present if name in FIT_METRICS)
 
 
+def testBareSubtaskKey():
+    """The subtask is found by its bare name, as reduceExposure_metadata records it."""
+    metadata = {
+        "detectorMapAdjustment": "applied",
+        "adjustDetectorMap": {"fitXRms": 0.021, "fitYRms": 0.034},
+    }
+    frame = reductionStatsFrame(DATA_ID, reduceExposureMetadata=metadata)
+    assert _value(frame, "fitXRms") == 0.021
+    assert _value(frame, "fitYRms") == 0.034
+
+
+def testFlattenedSubtaskKeys():
+    """A flattened metadata mapping (dotted keys) is navigated too."""
+    metadata = {
+        "detectorMapAdjustment": "applied",
+        "adjustDetectorMap.fitXRms": 0.021,
+        "adjustDetectorMap.fitYRms": 0.034,
+    }
+    frame = reductionStatsFrame(DATA_ID, reduceExposureMetadata=metadata)
+    assert _value(frame, "fitXRms") == 0.021
+    assert _value(frame, "fitYRms") == 0.034
+
+
 def testScatteredAndPfiNamespaced():
     """Scattered-light and PFI scalars are namespaced so generic keys don't collide."""
     frame = reductionStatsFrame(DATA_ID, reduceExposureMetadata=_adjustMetadata())
