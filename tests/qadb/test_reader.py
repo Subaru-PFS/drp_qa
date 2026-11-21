@@ -175,6 +175,30 @@ def testSinceReadsOnlyNewerLoads(butler, qadb):
     assert set(newer["dmLineResidualMetrics"]["visit"]) == {133040}
 
 
+def testSinceReadEqualsFullReadFiltered(butler, qadb):
+    """A ``since`` read returns exactly the rows a full read holds for images decided at or after it.
+
+    Pins the incremental read's contract against the full read (the two share no SQL), so a later change
+    to one path that diverges from the other is caught.
+    """
+    load(butler, qadb)
+    load(butler, qadb, visits=[133040], now=LATER)  # a later load, so decidedAt differs across images
+    full = readQadb(qadb, COLLECTION)
+    for stamp in (full["iqQaMetrics"]["decidedAt"].min(), full["iqQaMetrics"]["decidedAt"].max()):
+        incr = readQadb(qadb, COLLECTION, since=stamp)
+        for name in ("iqQaMetrics", "dmLineResidualSummary", "dmLineResidualMetrics"):
+            table = full[name]
+            expected = table[table["decidedAt"] >= stamp]
+            keys = [c for c in (*IMAGE, "reference", "description", "statusType", "metric") if c in table]
+            pd.testing.assert_frame_equal(
+                incr[name].sort_values(keys, ignore_index=True),
+                expected.sort_values(keys, ignore_index=True),
+            )
+    # Negative control: a since read is a strict subset here, not the whole table.
+    latest = readQadb(qadb, COLLECTION, since=full["iqQaMetrics"]["decidedAt"].max())
+    assert 0 < len(latest["iqQaMetrics"]) < len(full["iqQaMetrics"])
+
+
 def testATaskRerunAloneReadsBackItsNewRows(StubButler, fixtures, qadb):
     """A dmLineResiduals rerun alone into a newer RUN: its new rows come back, beside the older IQ rows."""
     load(StubButler(fixtures), qadb)

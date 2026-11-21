@@ -110,6 +110,28 @@ _NORMAL_SQL = (
 def _tableSql(table: str, since: bool) -> str:
     # The table name is _SPECS', never input. Each image's rows come from the newest processing of the
     # collection that wrote this table for it; the gate row (latest) gives decided_at and the since filter.
+    if since:
+        # Incremental read: only images whose latest gate row was decided at or after :since. A `changed`
+        # set of those images drives ``newest`` and the result, so this reads just what changed rather than
+        # rebuilding over the whole collection every call; the rows are identical to the full read below
+        # filtered by :since. (With an index on (pfs_visit_id, camera_name) the table scan becomes a seek.)
+        return (
+            _LATEST + f""", changed AS (
+    SELECT pfs_visit_id, camera_name, decided_at FROM latest WHERE n = 1 AND decided_at >= :since
+), newest AS (
+    SELECT t.pfs_visit_id, t.camera_name, MAX(t.processing_id) AS processing_id
+    FROM {table} t
+        JOIN changed c ON c.pfs_visit_id = t.pfs_visit_id AND c.camera_name = t.camera_name
+        JOIN data_processing_pipe2d p ON p.processing_id = t.processing_id
+    WHERE p.collection_name = :collection AND t.pfs_visit_id BETWEEN :first AND :last
+    GROUP BY t.pfs_visit_id, t.camera_name
+)
+SELECT t.*, c.decided_at FROM {table} t"""
+            " JOIN newest w ON w.processing_id = t.processing_id"
+            " AND w.pfs_visit_id = t.pfs_visit_id AND w.camera_name = t.camera_name"
+            " JOIN changed c ON c.pfs_visit_id = t.pfs_visit_id AND c.camera_name = t.camera_name"
+        )
+    # Full read: the newest processing per image over the whole collection, every image.
     return (
         _LATEST + f""", newest AS (
     SELECT t.pfs_visit_id, t.camera_name, MAX(t.processing_id) AS processing_id
@@ -121,7 +143,6 @@ SELECT t.*, l.decided_at FROM {table} t"""
         " JOIN newest w ON w.processing_id = t.processing_id"
         " AND w.pfs_visit_id = t.pfs_visit_id AND w.camera_name = t.camera_name"
         " JOIN latest l ON l.pfs_visit_id = t.pfs_visit_id AND l.camera_name = t.camera_name WHERE l.n = 1"
-        + (" AND l.decided_at >= :since" if since else "")
     )
 
 
