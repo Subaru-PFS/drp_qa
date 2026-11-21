@@ -308,10 +308,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     say(f"output collection: {output}")
     say(f"stages: {', '.join(stage for stage in STAGES if stage in stages)}")
 
+    processRc = 0
     if "process" in stages:
-        rc = _plan(args, period, visits, output, workDir)
-        if rc or args.dry_run:
-            return rc
+        processRc = _plan(args, period, visits, output, workDir)
+        if args.dry_run:
+            return processRc
+        if processRc:
+            # A failed quantum (an engineering frame, say) fails its pass but is marked failed and not
+            # rescheduled: load, judge and value the images that did succeed rather than abort them all.
+            say(
+                f"\n!! some process quanta failed (exit {processRc}); their images are marked failed. "
+                "Continuing to load, value and judge the images that succeeded."
+            )
 
     if stages & {"load", "values", "judge"}:
         qadb = _qadb(args)
@@ -323,7 +331,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             _judge(args, output, visits, qadb)
 
     _reportPointer(args, output, visits)
-    return 0
+    return processRc
 
 
 def _stages(only: Sequence[str] | None) -> set[str]:

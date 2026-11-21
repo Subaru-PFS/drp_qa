@@ -400,3 +400,20 @@ def testLaterStagesRunInOrder(planned, monkeypatch):
     planned.holdings += [(1, "b", 1, True, True, True)]
     assert redo.main(arguments) == 0
     assert called == ["load", "values", "judge"]
+
+
+def testProcessFailureDoesNotBlockLaterStages(planned, monkeypatch):
+    """A failed process pass (an engineering frame, say) still loads, values and judges what succeeded."""
+    from pfs.drp.qa.comparison import redo
+
+    called = []
+    monkeypatch.setattr(redo, "_plan", lambda *a, **k: 1)  # a pass reported a failed quantum
+    monkeypatch.setattr(redo, "_qadb", lambda args: "QADB")
+    monkeypatch.setattr(redo, "_load", lambda *a, **k: called.append("load"))
+    monkeypatch.setattr(redo, "_values", lambda *a, **k: called.append("values"))
+    monkeypatch.setattr(redo, "_judge", lambda *a, **k: called.append("judge"))
+    planned.holdings += [(1, "b", 1, True, True, True)]
+    arguments = [a for a in planned.arguments if a not in ("--only", "process")]  # all stages
+    # The later stages run, and the exit status still reflects the process failure.
+    assert redo.main(arguments) == 1
+    assert called == ["load", "values", "judge"]
