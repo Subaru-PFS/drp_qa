@@ -5,6 +5,8 @@ when it is asked for, so those that read only qadb (``values``, ``judge``,
 ``summary``) run without the LSST stack.
 
 =================== ====================================================================================
+``redo``            Redo a run with an updated pipeline: reduce, measure, load, make its normal values,
+                    judge every frame, and point at the dashboard for the run report.
 ``load``            Copy a collection's QA numbers from the Butler to qadb and judge them (qaActor, after
                     each visit). A twilight sequence is measured and judged once it is complete.
 ``values``          Make, compare and accept a run's normal values, then judge the frames they cover.
@@ -28,6 +30,11 @@ __all__ = ["COMMANDS", "main"]
 #: Each subcommand: the module and function that run it (called with the remaining arguments, returning the
 #: exit status), and one line of help.
 COMMANDS: dict[tuple[str, ...], tuple[str, str, str]] = {
+    ("redo",): (
+        "pfs.drp.qa.comparison.redo",
+        "main",
+        "redo a run with an updated pipeline, end to end",
+    ),
     ("load",): (
         "pfs.drp.qa.qadb.cli",
         "loadMain",

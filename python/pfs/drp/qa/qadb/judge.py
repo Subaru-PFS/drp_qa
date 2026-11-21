@@ -162,6 +162,7 @@ def makeValues(
     store: bool = False,
     acceptedBy: str = "",
     reason: str = "",
+    baseline: str | None = None,
     log: Callable[[str], None] = print,
     now: Callable[[], datetime] = datetime.now,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -188,6 +189,12 @@ def makeValues(
     reason : `str`, optional
         Why values shifted beyond FAIL are accepted; without it they are
         refused, and the values in force stay.
+    baseline : `str`, optional
+        The collection whose values in force each candidate is set beside, and
+        which pre-judges the calibration frames; default ``collection``. A redo
+        passes the previous pipeline's collection, so the shift printed is
+        against the same run under the previous pipeline. The values are still
+        stored for, and judged on, ``collection``.
     log : callable, optional
         Where progress goes.
     now : callable, optional
@@ -212,7 +219,7 @@ def makeValues(
         + ", ".join(f"{lo} to {hi}" for lo, hi in visitRanges)
     )
     numbers = storedNumbers(qadb, collection, visitRanges, arms)
-    inForce = readNormalValues(qadb, collection)
+    inForce = readNormalValues(qadb, baseline or collection)
     # The calibration frames are first judged by the values in force: the start-of-run check. A frame that
     # fails a fixed check is not a calibration frame to take a normal value from.
     judged = judge(measurements(numbers["iq"], numbers["lines"]), inForce[inForce["validFrom"] < validFrom])

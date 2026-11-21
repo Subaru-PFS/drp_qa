@@ -1,4 +1,4 @@
-"""Tests for `pfs.drp.qa.comparison.cli` that need neither the opdb nor a Butler."""
+"""Tests for `pfs.drp.qa.comparison.redo` that need neither the opdb nor a Butler."""
 
 import datetime
 import sys
@@ -7,10 +7,10 @@ from types import ModuleType, SimpleNamespace
 import pandas as pd
 import pytest
 
-from pfs.drp.qa.comparison.cli import fetch, fetchSummary, loadFetched
+from pfs.drp.qa.comparison.redo import fetch, fetchSummary
 
 
-def testFetchAndLoad(tmp_path, periods, visit, listing, FakeOpDB):
+def testFetch(periods, visit, listing, FakeOpDB):
     answer = listing(
         visit(1, "2026-01-03 18:00", "scienceArc"),
         visit(2, "2026-01-03 20:00", "scienceObject", design=10),
@@ -32,25 +32,19 @@ def testFetchAndLoad(tmp_path, periods, visit, listing, FakeOpDB):
     )
     period = periods["run1"]
     now = datetime.datetime(2026, 1, 4, 9)  # during the run: read up to now
-    paths = fetch(opdb, period, tmp_path, now=now)
+    frames, readUntil = fetch(opdb, period, now=now)
 
     assert opdb.calls[0].params == {"start": period.start, "end": now}
     telCall = next(call for call in opdb.calls if "tel_status" in call.sql)
     assert telCall.params == {"visits": [2]}  # sky visits only
-    frames, stamp = loadFetched(period, tmp_path)
-    assert set(paths) == set(frames) == {"listing", "notes", "telStatus", "designs"}
+    assert set(frames) == {"listing", "notes", "telStatus", "designs"}
     assert frames["listing"]["pfs_visit_id"].tolist() == [1, 2]
     assert frames["designs"]["category"].tolist() == ["QF"]
-    assert "proposal_id" not in frames["designs"]
-    assert stamp["readUntil"] == str(now)
+    assert "proposal_id" not in frames["designs"]  # proposal IDs stay out of what the package returns
+    assert readUntil == str(now)
 
 
-def testLoadBeforeFetch(tmp_path, periods):
-    with pytest.raises(FileNotFoundError, match="run 'fetch' first"):
-        loadFetched(periods["run1"], tmp_path)
-
-
-def testFetchSummary(tmp_path, periods, visit, listing, FakeOpDB):
+def testFetchSummary(periods, visit, listing, FakeOpDB):
     answer = listing(
         visit(1, "2026-01-03 18:00", "scienceArc", sequence=10),
         visit(2, "2026-01-03 20:00", "scienceObject", design=10),
@@ -71,9 +65,8 @@ def testFetchSummary(tmp_path, periods, visit, listing, FakeOpDB):
             ),
         }
     )
-    fetch(opdb, periods["run1"], tmp_path, now=datetime.datetime(2026, 2, 1))
-    frames, stamp = loadFetched(periods["run1"], tmp_path)
-    text = fetchSummary(frames, stamp, periods["run1"], periods)
+    frames, readUntil = fetch(opdb, periods["run1"], now=datetime.datetime(2026, 2, 1))
+    text = fetchSummary(frames, readUntil, periods["run1"], periods)
     assert "3 visits in 3 sequences, on 2 nights" in text
     assert (
         "1 gated" in text
@@ -86,15 +79,73 @@ def testFetchSummary(tmp_path, periods, visit, listing, FakeOpDB):
     assert "notes: 1 (1 on sequences)" in text
 
 
+def testClassifiedVisits(periods, visit, listing, FakeOpDB):
+    from pfs.drp.qa.comparison.redo import classifiedVisits
+
+    opdb = FakeOpDB(
+        {
+            "FROM pfs_visit": listing(visit(1, "2026-01-03 18:00", "scienceArc", sequence=10)),
+            "obslog_visit_set_note": pd.DataFrame(columns=["iic_sequence_id", "note"]),
+            "obslog_visit_note": pd.DataFrame(
+                columns=["pfs_visit_id", "camera", "data_flag", "note", "source"]
+            ),
+            "FROM tel_status": pd.DataFrame(columns=["pfs_visit_id", "n_status", "focus_offset_max"]),
+            "pfs_design_fiber": pd.DataFrame(columns=["pfs_design_id", "proposal_id", "n_fibers"]),
+        }
+    )
+    frames, _ = fetch(opdb, periods["run1"], now=datetime.datetime(2026, 2, 1))
+    visits = classifiedVisits(frames, periods["run1"], periods)
+    assert visits["pfs_visit_id"].tolist() == [1]
+    assert (visits["period"] == "run1").all()
+
+
+def testStageSelection():
+    from pfs.drp.qa.comparison.redo import STAGES, _parser, _stages
+
+    args = _parser().parse_args(["run31", "--only", "process", "--only", "load,judge"])
+    assert _stages(args.only) == {"process", "load", "judge"}
+    assert _stages([]) == set(STAGES)  # default: every stage
+    with pytest.raises(SystemExit, match="unknown stage"):
+        _stages(["bogus"])
+
+
+def testRunIsPositionalAndPrefixDefaultsToRedo():
+    from pfs.drp.qa.comparison.redo import _parser
+
+    args = _parser().parse_args(["run31"])
+    assert args.run == "run31"
+    assert args.prefix.endswith("/redo")
+    assert args.previous_collection == "qaActor/reductions"
+    # Negative control: the old fetch/plan/run subcommands are gone.
+    with pytest.raises(SystemExit):
+        _parser().parse_args(["fetch", "--period", "run31"])
+
+
+def testCalibRangesAreTheSetCadenceGatedVisits():
+    from pfs.drp.qa.comparison.redo import _calibRanges
+
+    visits = pd.DataFrame(
+        {
+            "pfs_visit_id": [10, 11, 12, 20, 30],
+            "validated": [True, True, True, True, False],
+            "cadence": ["set", "set", "set", "daily", "set"],
+        }
+    )
+    # The set-cadence gated visits, as contiguous ranges; the daily and the unvalidated are left out.
+    assert _calibRanges(SimpleNamespace(calib_visits=None), visits) == [(10, 12)]
+    # --calib-visits overrides.
+    assert _calibRanges(SimpleNamespace(calib_visits=[5, 9]), visits) == [(5, 9)]
+
+
 def testQgraphFromRun():
-    from pfs.drp.qa.comparison.cli import _qgraph
+    from pfs.drp.qa.comparison.redo import _qgraph
 
     command = ["pipetask", "--long-log", "run", "-j", "8", "-b", "/repo", "-d", "visit IN (1)"]
     assert _qgraph(command) == ["pipetask", "--long-log", "qgraph", "-b", "/repo", "-d", "visit IN (1)"]
 
 
 def testPipetaskFailures():
-    from pfs.drp.qa.comparison.cli import pipetaskFailures
+    from pfs.drp.qa.comparison.redo import pipetaskFailures
 
     log = "\n".join(
         [
@@ -118,7 +169,7 @@ def testPipetaskFailures():
 
 
 def testResolveCollections():
-    from pfs.drp.qa.comparison.cli import resolveCollections
+    from pfs.drp.qa.comparison.redo import resolveCollections
 
     assert resolveCollections(False, "PFS/defaults", None, None) == (
         ["drpActor/reductions"],
@@ -133,7 +184,7 @@ def testResolveCollections():
 
 
 def testPipelineVersion():
-    from pfs.drp.qa.comparison.cli import pipelineVersion
+    from pfs.drp.qa.comparison.redo import pipelineVersion
 
     weekly = {"DATAMODEL": "w.2026.40", "OBS_PFS": "w.2026.40", "DRP_STELLA": "w.2026.40"}
     assert pipelineVersion(weekly) == "pfs-w.2026.40"
@@ -147,7 +198,7 @@ def testPipelineVersion():
 def testOnlyTheReductionConfigCountsTowardsTheVersion():
     from pathlib import Path
 
-    from pfs.drp.qa.comparison.cli import RESULT_NEUTRAL_PATHS
+    from pfs.drp.qa.comparison.redo import RESULT_NEUTRAL_PATHS
 
     package = Path(__file__).parents[2] / "python" / "pfs" / "drp" / "qa" / "comparison"
     neutral = {
@@ -158,53 +209,28 @@ def testOnlyTheReductionConfigCountsTowardsTheVersion():
 
 
 def testUnexpectedPipeline():
-    """A --fresh run that would reduce everything again under a new label is called out."""
-    from pfs.drp.qa.comparison.cli import unexpectedPipeline
+    """A fresh run that would reduce everything again under a new label is called out."""
+    from pfs.drp.qa.comparison.redo import unexpectedPipeline
 
     warning = unexpectedPipeline("pfs-w.2026.39", [], ["datamodel-w.2026.40+drp_stella-w.2026.41"], 2152)
     assert warning and "2152 detector images" in warning and "'pfs-w.2026.39'" in warning
     assert "'datamodel-w.2026.40+drp_stella-w.2026.41' has" in warning
-    # Not amiss: the label already has reductions, nothing to reduce, no other label, or not --fresh.
-    assert (
-        unexpectedPipeline("pfs-w.2026.39", ["u/me/comparison/run25/v1/pfs-w.2026.39"], ["other"], 2152)
-        is None
-    )
+    # Not amiss: the label already has reductions, nothing to reduce, no other label, or not fresh.
+    assert unexpectedPipeline("pfs-w.2026.39", ["u/me/redo/run25/v1/pfs-w.2026.39"], ["other"], 2152) is None
     assert unexpectedPipeline("pfs-w.2026.39", [], ["other"], 0) is None
     assert unexpectedPipeline("pfs-w.2026.39", [], [], 2152) is None
     assert unexpectedPipeline("", [], ["other"], 2152) is None
 
 
-def testPassOption():
-    """--pass names a pass to run, repeatable; without it every pass runs."""
-    from pfs.drp.qa.comparison.cli import _parser
-
-    args = _parser().parse_args(["run", "--period", "run25", "--pass", "calibration", "--pass", "sky-judge"])
-    assert args.passes == ["calibration", "sky-judge"]
-    assert _parser().parse_args(["run", "--period", "run25"]).passes == []
-
-
-def testCommandsAndOptions():
-    """fetch, plan and run are the commands; there is no report, and no option of one."""
-    from pfs.drp.qa.comparison.cli import _parser
-
-    for command in ("fetch", "plan", "run"):
-        assert _parser().parse_args([command, "--period", "run25"]).command == command
-    # Negative control: the report and the options only it took are refused, not ignored.
-    with pytest.raises(SystemExit):
-        _parser().parse_args(["report", "--period", "run25"])
-    for option in ("--reference", "--reference-version"):
-        with pytest.raises(SystemExit):
-            _parser().parse_args(["run", "--period", "run25", option, "run25"])
-
-
 @pytest.fixture
 def planned(tmp_path, periods, visit, listing, FakeOpDB, monkeypatch):
-    """Fetch a period of one arc sequence and one trace, and stand in for the Butler and pipetask.
+    """Stand in for the opdb, the Butler and pipetask for a run of one arc sequence and one trace.
 
-    Returns the arguments of ``main`` after the command, the holdings to fill (one row per detector
-    image: visit, arm, spectrograph, raw, reduced, judged) and the pipetask commands run.
+    Returns ``main``'s arguments (``--only process``, reusing drpActor's reductions so no fresh
+    pipeline version is read), the holdings to fill (one row per detector image: visit, arm,
+    spectrograph, raw, reduced, judged) and the pipetask commands run.
     """
-    from pfs.drp.qa.comparison import butlerQueries, cli
+    from pfs.drp.qa.comparison import butlerQueries, redo
 
     answer = listing(
         visit(1, "2026-01-03 18:00", "scienceArc", sequence=50, cameras="b1,r1"),
@@ -222,7 +248,7 @@ def planned(tmp_path, periods, visit, listing, FakeOpDB, monkeypatch):
             "pfs_design_fiber": pd.DataFrame(columns=["pfs_design_id", "proposal_id", "n_fibers"]),
         }
     )
-    fetch(opdb, periods["run1"], tmp_path, now=datetime.datetime(2026, 2, 1))
+    monkeypatch.setattr(redo, "_opdb", lambda args: opdb)
 
     holdings = []
     butlerModule = ModuleType("lsst.daf.butler")
@@ -250,46 +276,31 @@ def planned(tmp_path, periods, visit, listing, FakeOpDB, monkeypatch):
         stdout.flush()
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr(cli.subprocess, "run", pipetask)
+    monkeypatch.setattr(redo.subprocess, "run", pipetask)
     arguments = [
-        "--period",
         "run1",
+        "--only",
+        "process",
+        "--reductions",
+        "drpActor/reductions",
         "--runs",
         str(tmp_path / "runs.yaml"),
-        "--data-dir",
+        "--work-dir",
         str(tmp_path),
         "--version",
         "v1",
         "--prefix",
-        "u/me/comparison",
+        "u/me/redo",
     ]
     return SimpleNamespace(arguments=arguments, holdings=holdings, commands=commands, directory=tmp_path)
 
 
-def testPlanPrintsThePassesAndRunsNothing(planned, capsys):
-    from pfs.drp.qa.comparison.cli import main
+def testProcessReducesThenMeasures(planned, capsys):
+    from pfs.drp.qa.comparison.redo import main
 
     # The arcs are reduced but not measured; the trace has only raw data.
     planned.holdings += [(visit, arm, 1, True, visit != 3, False) for visit in (1, 2, 3) for arm in "br"]
-    assert main(["plan", *planned.arguments]) == 0
-    printed = capsys.readouterr().out
-    assert "output collection: u/me/comparison/run1/v1" in printed
-    assert "detector images: 0 judged, 4 to judge, 2 to reduce" in printed
-    assert "# calibration-judge (scienceArc): 2 visits" in printed
-    assert "# calibration (scienceTrace): 1 visits" in printed
-    assert planned.commands == []  # plan runs nothing
-    workDir = planned.directory / "run1" / "qa" / "v1"
-    assert sorted(path.name for path in workDir.iterdir()) == [
-        "cosmicray-run1-calibration.py",
-        "coverage-run1.parquet",
-    ]
-
-
-def testRunReducesAndRunsTheQaTasksAndJudgesNothing(planned, capsys):
-    from pfs.drp.qa.comparison.cli import main
-
-    planned.holdings += [(visit, arm, 1, True, visit != 3, False) for visit in (1, 2, 3) for arm in "br"]
-    assert main(["run", *planned.arguments]) == 0
+    assert main(planned.arguments) == 0
     # The reduced arcs are measured alone; the trace is reduced then measured: three pipetask commands.
     measureJudge, reduce, measure = planned.commands
     measureSubset = "drpQA.yaml#imageQualityQa,dmLineResiduals,reductionStats"
@@ -300,32 +311,57 @@ def testRunReducesAndRunsTheQaTasksAndJudgesNothing(planned, capsys):
     assert reduce[-1] == "instrument = 'PFS' AND visit IN (3)"
     assert measure[-1] == "instrument = 'PFS' AND visit IN (3)"
     assert "-C" in reduce and "-C" not in measure  # only the reduce phase configures cosmicray
-    # The first command makes the output chain; the rest rebase onto it.
     assert "--rebase" not in measureJudge and "--rebase" in reduce and "--rebase" in measure
     assert "calibration: Executed 4 quanta successfully, 0 failed" in capsys.readouterr().out
-    # run stores what the tasks measure in the Butler and leaves the verdict to the gate: beside the
-    # coverage and the cosmicray config it writes only the pipetask logs.
-    workDir = planned.directory / "run1" / "qa" / "v1"
+    # The collection is under the redo prefix; no "qa" sub-path and no variant when reductions are reused.
+    workDir = planned.directory / "run1" / "v1"
     names = sorted(path.name for path in workDir.iterdir())
-    assert [name for name in names if not name.startswith("pipetask-")] == [
-        "cosmicray-run1-calibration.py",
-        "coverage-run1.parquet",
-    ]
+    assert [name for name in names if not name.startswith("pipetask-")] == ["cosmicray-run1-calibration.py"]
     assert len([name for name in names if name.startswith("pipetask-run1-")]) == 3
-    # Negative control: the files the report's judging used to write are not among them.
-    assert not [name for name in names if "findings" in name.lower() or name.endswith((".html", ".csv"))]
+    # Negative control: no parquet, no report files are written.
+    assert not [name for name in names if name.endswith((".parquet", ".html", ".csv"))]
 
 
-def testRunReportsAFailedPass(planned, monkeypatch, capsys):
-    from pfs.drp.qa.comparison import cli
+def testProcessDryRunBuildsGraphs(planned, capsys):
+    from pfs.drp.qa.comparison.redo import main
+
+    planned.holdings += [(visit, arm, 1, True, visit != 3, False) for visit in (1, 2, 3) for arm in "br"]
+    assert main([*planned.arguments, "--dry-run"]) == 0
+    printed = capsys.readouterr().out
+    assert "output collection: u/me/redo/run1/v1" in printed
+    assert "# calibration-judge (scienceArc): 2 visits" in printed
+    # Negative control: a dry run builds each graph (qgraph), it does not run the pipeline.
+    assert planned.commands and all(
+        "qgraph" in command and "run" not in command for command in planned.commands
+    )
+
+
+def testProcessReportsAFailedPass(planned, monkeypatch, capsys):
+    from pfs.drp.qa.comparison import redo
 
     planned.holdings += [(visit, arm, 1, True, True, False) for visit in (1, 2, 3) for arm in "br"]
     monkeypatch.setattr(
-        cli.subprocess, "run", lambda command, stdout=None, stderr=None: SimpleNamespace(returncode=1)
+        redo.subprocess, "run", lambda command, stdout=None, stderr=None: SimpleNamespace(returncode=1)
     )
-    assert cli.main(["run", *planned.arguments]) == 1
+    assert redo.main(planned.arguments) == 1
     assert "1 of 1 passes failed: calibration-judge" in capsys.readouterr().err
-    # Negative control: with nothing left to do, run does nothing and succeeds.
+    # Negative control: with nothing left to do, the process stage does nothing and succeeds.
     planned.holdings[:] = [(visit, arm, 1, True, True, True) for visit in (1, 2, 3) for arm in "br"]
-    assert cli.main(["run", *planned.arguments]) == 0
+    assert redo.main(planned.arguments) == 0
     assert "Nothing to do" in capsys.readouterr().out
+
+
+def testLaterStagesRunInOrder(planned, monkeypatch):
+    """With the process stage skipped, redo loads, makes values and judges, then points at the report."""
+    from pfs.drp.qa.comparison import redo
+
+    called = []
+    monkeypatch.setattr(redo, "_qadb", lambda args: "QADB")
+    monkeypatch.setattr(redo, "_load", lambda *a, **k: called.append("load"))
+    monkeypatch.setattr(redo, "_values", lambda *a, **k: called.append("values"))
+    monkeypatch.setattr(redo, "_judge", lambda *a, **k: called.append("judge"))
+    arguments = planned.arguments[:]
+    arguments[arguments.index("process")] = "load,values,judge"  # skip process: no Butler needed
+    planned.holdings += [(1, "b", 1, True, True, True)]
+    assert redo.main(arguments) == 0
+    assert called == ["load", "values", "judge"]

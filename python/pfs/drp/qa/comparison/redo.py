@@ -1,34 +1,27 @@
-"""Command line of comparison mode: ``bin.src/qaComparison.py``.
+"""``drpQa.py redo``: redo an observing run with an updated pipeline, end to end.
 
-Three steps, each safe to repeat:
+For one run it reads the run's visits from the opdb, reduces the raw frames with drp_stella's
+``reduceExposure`` and ``drpActor``'s per-sequence-type configuration (unless ``--reductions`` names
+a collection already reduced), measures them with the QA tasks of ``pipelines/drpQA.yaml``, loads the
+numbers into qadb, makes the collection's normal values from its own calibration frames and prints
+each beside the same run's value under the previous pipeline, judges every frame, and points at the
+dashboard for the run report.
 
-``fetch``
-    Read a period's visits and what describes them from the opdb, read-only, into parquet.
-``plan``
-    Classify the visits, ask the Butler what it holds, and print the coverage and the
-    ``pipetask`` commands that would complete it. Writes nothing to the Butler.
-``run``
-    Plan, then run those commands: reduce what is missing and run the QA tasks on it.
-    ``--dry-run`` only builds their graphs, and ``--pass`` picks passes (``calibration``, ``sky``,
-    ``unvalidated-calibration``).
+The reductions and QA go to ``<prefix>/<run>/<drp_qa version>/<pipeline>`` (the pipeline from
+drp_stella's ``getPfsVersions``, so a different stack starts a fresh collection); with
+``--reductions`` the reductions are reused and the collection is ``<prefix>/<run>/<drp_qa version>``.
+Nothing is written to the opdb, and no file is left behind but the ``pipetask`` logs and cosmic-ray
+configs under ``--work-dir``. The QA tasks give no verdict until the numbers are loaded: the gate
+judges them (`pfs.drp.qa.metrics.gate`).
 
-``run`` measures and gives no verdict: the QA tasks store numbers, and an image is judged when
-they are loaded into qadb (`pfs.drp.qa.metrics.gate`, ``drpQa.py load``).
-
-By default the reductions in ``drpActor/reductions`` are reused, each made with the pipeline of its
-day, and so are those an earlier drp_qa version's comparison of the period made beside them.
-``--fresh`` reduces everything with the current pipeline instead, so that runs are compared on a
-level field. Its collection and files are named after that pipeline (`pipelineVersion`, from
-drp_stella's ``getPfsVersions``), and a later drp_qa version reuses the fresh reductions of the
-same pipeline. Either way the QA tasks run again on the earlier collections' reductions.
-
-Files go under ``--data-dir``: the opdb reads in ``opdb/``, and everything for one drp_qa
-version in ``<run>/qa/<version>/``. A pre-run period's files sit with its run's.
+The opdb (``--opdb-host``), the Butler (``--butler``) and qadb (``--qadb-host``/``--qadb-port``) must
+all be reachable, so this runs on the processing host. ``--only`` runs a subset of the stages
+(``process``, ``load``, ``values``, ``judge``) to resume after an interruption.
 """
 
 import argparse
 import datetime
-import json
+import getpass
 import os
 import re
 import shlex
@@ -54,10 +47,11 @@ from pfs.drp.qa.comparison.runs import Period, loadPeriods
 
 __all__ = [
     "DRPACTOR_REDUCTIONS",
+    "STAGES",
+    "classifiedVisits",
     "drpQaVersion",
     "fetch",
     "fetchSummary",
-    "loadFetched",
     "main",
     "pipelineVersion",
     "pipetaskFailures",
@@ -68,10 +62,14 @@ __all__ = [
 #: Where drpActor writes its reductions.
 DRPACTOR_REDUCTIONS = "drpActor/reductions"
 
-_FETCHED = ("listing", "notes", "telStatus", "designs")
+#: The default collection whose normal values a redo compares against: the previous pipeline's.
+PREVIOUS_COLLECTION = "qaActor/reductions"
+
+#: The stages ``redo`` runs, in order; ``--only`` picks a subset. ``process`` is reduce and measure.
+STAGES = ("process", "load", "values", "judge")
 
 
-def fetch(opdb, period: Period, dataDir: Path, now: datetime.datetime | None = None) -> dict[str, Path]:
+def fetch(opdb, period: Period, now: datetime.datetime | None = None) -> tuple[dict[str, pd.DataFrame], str]:
     """Read a period's visits, notes, telescope status and design categories from the opdb.
 
     Parameters
@@ -80,15 +78,15 @@ def fetch(opdb, period: Period, dataDir: Path, now: datetime.datetime | None = N
         The opdb, read-only.
     period : `Period`
         The period.
-    dataDir : `pathlib.Path`
-        Where to write, under ``opdb/``.
     now : `datetime.datetime`, optional
         The current time (HST); a period still under way is read up to it.
 
     Returns
     -------
-    `dict` [`str`, `pathlib.Path`]
-        The files written, by name.
+    frames : `dict` [`str`, `pandas.DataFrame`]
+        ``listing``, ``notes``, ``telStatus`` and ``designs``.
+    readUntil : `str`
+        The time the listing was read up to (HST).
     """
     from pfs.drp.qa.comparison import queries
 
@@ -102,27 +100,20 @@ def fetch(opdb, period: Period, dataDir: Path, now: datetime.datetime | None = N
         "telStatus": queries.readTelStatus(opdb, sky["pfs_visit_id"]),
         "designs": queries.readDesignCategories(opdb, sky["pfs_design_id"].dropna()),
     }
-    directory = dataDir / "opdb"
-    directory.mkdir(parents=True, exist_ok=True)
-    paths = {name: directory / f"comparison-{period.name}-{name}.parquet" for name in frames}
-    for name, frame in frames.items():
-        frame.to_parquet(paths[name])
-    stamp = {"period": period.name, "fetchedAt": now.isoformat(timespec="seconds"), "readUntil": str(end)}
-    (directory / f"comparison-{period.name}-fetched.json").write_text(json.dumps(stamp, indent=1) + "\n")
-    return paths
+    return frames, str(end)
 
 
 def fetchSummary(
-    frames: dict[str, pd.DataFrame], stamp: dict, period: Period, periods: dict[str, Period]
+    frames: dict[str, pd.DataFrame], readUntil: str, period: Period, periods: dict[str, Period]
 ) -> str:
     """Return what a fetch read, in a few lines.
 
     Parameters
     ----------
     frames : `dict` [`str`, `pandas.DataFrame`]
-        From `loadFetched`.
-    stamp : `dict`
-        From `loadFetched`.
+        From `fetch`.
+    readUntil : `str`
+        The time the listing was read up to (HST), from `fetch`.
     period : `Period`
         The period fetched.
     periods : `dict` [`str`, `Period`]
@@ -140,7 +131,7 @@ def fetchSummary(
     )
     visits = visits[visits["period"] == period.name]
     lines = [
-        f"{period.name}: nights {period.firstNight} to {period.lastNight}, read until {stamp['readUntil']}",
+        f"{period.name}: nights {period.firstNight} to {period.lastNight}, read until {readUntil}",
         f"  {len(visits):,} visits in {visits['iic_sequence_id'].nunique():,} sequences,"
         f" on {visits['night'].nunique()} nights",
     ]
@@ -175,36 +166,29 @@ def fetchSummary(
     return "\n".join(lines)
 
 
-def loadFetched(period: Period, dataDir: Path) -> tuple[dict[str, pd.DataFrame], dict]:
-    """Read back what `fetch` wrote.
+def classifiedVisits(
+    frames: dict[str, pd.DataFrame], period: Period, periods: dict[str, Period]
+) -> pd.DataFrame:
+    """Classify a fetch's visits and keep the period's.
 
     Parameters
     ----------
+    frames : `dict` [`str`, `pandas.DataFrame`]
+        From `fetch`.
     period : `Period`
         The period.
-    dataDir : `pathlib.Path`
-        As given to `fetch`.
+    periods : `dict` [`str`, `Period`]
+        Every period, to classify against.
 
     Returns
     -------
-    frames : `dict` [`str`, `pandas.DataFrame`]
-        ``listing``, ``notes``, ``telStatus`` and ``designs``.
-    stamp : `dict`
-        When they were read.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the period hasn't been fetched.
+    `pandas.DataFrame`
+        `pfs.drp.qa.comparison.classify.classifyVisits` restricted to the period.
     """
-    directory = dataDir / "opdb"
-    stampPath = directory / f"comparison-{period.name}-fetched.json"
-    if not stampPath.exists():
-        raise FileNotFoundError(f"{period.name} hasn't been fetched into {directory}: run 'fetch' first")
-    frames = {
-        name: pd.read_parquet(directory / f"comparison-{period.name}-{name}.parquet") for name in _FETCHED
-    }
-    return frames, json.loads(stampPath.read_text())
+    visits = classifyVisits(
+        frames["listing"], periods.values(), designKinds(frames["designs"]), frames["telStatus"]
+    )
+    return visits[visits["period"] == period.name].reset_index(drop=True)
 
 
 #: Paths that can't change what the pipeline writes: they don't name the output collection.
@@ -221,10 +205,10 @@ RESULT_NEUTRAL_PATHS = (
             "calibValidate.py",
             "calibValidateCli.py",
             "classify.py",
-            "cli.py",
             "data",
             "plan.py",
             "queries.py",
+            "redo.py",
             "runs.py",
         )
     ),
@@ -236,7 +220,6 @@ RESULT_NEUTRAL_PATHS = (
     "python/pfs/drp/qa/metrics/visitRollup.py",
     "python/pfs/drp/qa/qadb",
     "python/pfs/drp/qa/cli.py",
-    "bin.src/qaComparison.py",
     "bin.src/drpQa.py",
     "tests",
     "docs",
@@ -281,34 +264,37 @@ def drpQaVersion(directory: Path | str | None = None) -> str:
     return version
 
 
+def say(line: str) -> None:
+    """Print a line, flushed: the stages stream their progress into a log over ssh."""
+    print(line, flush=True)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the command line."""
+    """Redo a run end to end: reduce, measure, load, make normal values, judge, point at the report."""
     args = _parser().parse_args(argv)
     periods = loadPeriods(args.runs)
-    if args.period not in periods:
-        raise SystemExit(f"Unknown period {args.period!r}; known: {', '.join(periods)}")
-    period = periods[args.period]
-    dataDir = Path(args.data_dir).expanduser()
+    if args.run not in periods:
+        raise SystemExit(f"Unknown run {args.run!r}; known: {', '.join(periods)}")
+    period = periods[args.run]
+    stages = _stages(args.only)
 
-    if args.command == "fetch":
-        from pfs.utils.database.opdb import OpDB
+    opdb = _opdb(args)
+    frames, readUntil = fetch(opdb, period)
+    visits = selectCadences(classifiedVisits(frames, period, periods), args.cadence)
+    say(fetchSummary(frames, readUntil, period, periods))
 
-        opdb = OpDB(host=args.host, user="public_user")
-        paths = fetch(opdb, period, dataDir)
-        frames, stamp = loadFetched(period, dataDir)
-        print(fetchSummary(frames, stamp, period, periods))
-        print(f"written to {paths['listing'].parent}")
-        return 0
-
-    visits, stamp = _classified(period, periods, dataDir)
-    visits = selectCadences(visits, args.cadence)
+    # Redo reduces afresh with the current pipeline unless given an already-reduced collection.
+    fresh = not args.reductions
     try:
-        args.reductions, args.inputs = resolveCollections(args.fresh, args.raw, args.reductions, args.inputs)
+        args.reductions, args.inputs = resolveCollections(fresh, args.raw, args.reductions or None, None)
     except ValueError as error:
         raise SystemExit(str(error)) from None
+    args.fresh = fresh
+    args.command = "run"  # redo always runs the passes; --dry-run builds the graphs only
+    args.passes = []  # redo processes every pass; --cadence subsets the arcs and traces
     version = args.version or drpQaVersion()
     args.variant = ""
-    if args.fresh:
+    if fresh:
         try:
             args.variant = args.pipeline_version or pipelineVersion()
         except RuntimeError as error:
@@ -317,12 +303,148 @@ def main(argv: Sequence[str] | None = None) -> int:
         output = outputCollection(args.prefix, period.name, version, args.variant)
     except ValueError as error:
         raise SystemExit(str(error)) from None
-    workDir = dataDir / period.run / "qa" / version / args.variant
+    workDir = Path(args.work_dir).expanduser() / period.run / version / args.variant
     workDir.mkdir(parents=True, exist_ok=True)
-    print(f"{period.name}: {len(visits)} visits read from the opdb up to {stamp['readUntil']}")
-    print(f"output collection: {output}")
+    say(f"output collection: {output}")
+    say(f"stages: {', '.join(stage for stage in STAGES if stage in stages)}")
 
-    return _plan(args, period, visits, output, workDir)
+    if "process" in stages:
+        rc = _plan(args, period, visits, output, workDir)
+        if rc or args.dry_run:
+            return rc
+
+    if stages & {"load", "values", "judge"}:
+        qadb = _qadb(args)
+        if "load" in stages:
+            _load(args, output, visits, opdb, qadb)
+        if "values" in stages:
+            _values(args, output, visits, qadb)
+        if "judge" in stages:
+            _judge(args, output, visits, qadb)
+
+    _reportPointer(args, output, visits)
+    return 0
+
+
+def _stages(only: Sequence[str] | None) -> set[str]:
+    """Return the stages to run: all of `STAGES`, or the ``--only`` subset."""
+    if not only:
+        return set(STAGES)
+    chosen = {stage.strip() for item in only for stage in item.split(",") if stage.strip()}
+    unknown = chosen - set(STAGES)
+    if unknown:
+        raise SystemExit(f"unknown stage(s) {', '.join(sorted(unknown))}; known: {', '.join(STAGES)}")
+    return chosen
+
+
+def _opdb(args):
+    """Return the read-only opdb."""
+    from pfs.utils.database.opdb import OpDB
+
+    return OpDB(host=args.opdb_host, port=args.opdb_port, dbname=args.opdb_dbname, user="public_user")
+
+
+def _qadb(args):
+    """Return the qadb, with a user that may write."""
+    from pfs.utils.database.qadb import QaDB
+
+    return QaDB(host=args.qadb_host, port=args.qadb_port, user=args.qadb_user, dbname=args.qadb_dbname)
+
+
+def _load(args, output: str, visits: pd.DataFrame, opdb, qadb) -> None:
+    """Load the collection's numbers into qadb and judge them."""
+    from lsst.daf.butler import Butler
+
+    from pfs.drp.qa.qadb.loader import loadCollection
+
+    judged = sorted(int(v) for v in visits.loc[visits["judged"], "pfs_visit_id"])
+    say(f"\nloading {len(judged)} visits of {output} into qadb")
+    counts = loadCollection(
+        Butler(args.butler, writeable=False),
+        qadb,
+        output,
+        visits=judged,
+        opdb=opdb,
+        mode="comparison",
+        log=say,
+    )
+    for table, count in counts.items():
+        say(f"{table}: {count}")
+
+
+def _values(args, output: str, visits: pd.DataFrame, qadb) -> None:
+    """Make the collection's normal values from its calibration frames, against the previous pipeline."""
+    from pfs.drp.qa.metrics.normalValues import formatComparison
+    from pfs.drp.qa.qadb.judge import makeValues
+
+    ranges = _calibRanges(args, visits)
+    if not ranges:
+        say("\nno calibration-set arcs or traces in the run; no normal values made")
+        return
+    say(f"\nnormal values from the calibration set, each beside its value in {args.previous_collection}")
+    compared, stored, refused = makeValues(
+        qadb,
+        output,
+        ranges,
+        baseline=args.previous_collection,
+        store=args.accept is not None,
+        acceptedBy=args.accept or "",
+        reason=args.reason,
+        log=say,
+    )
+    say(formatComparison(compared, onlyShifted=not args.all_values))
+    failed = refused[refused["status"] == "FAIL"]
+    if len(failed):
+        say(f"{len(failed)} values shifted beyond FAIL and were refused; give --reason to accept them")
+    if args.accept is None:
+        say(f"nothing stored: {len(stored)} values would be, with --accept")
+    else:
+        say(f"{len(stored)} values stored for {output}, accepted by {args.accept}")
+
+
+def _judge(args, output: str, visits: pd.DataFrame, qadb) -> None:
+    """Judge every frame of the collection again, from the numbers in qadb."""
+    from pfs.drp.qa.qadb.judge import judgeStored
+
+    judged = visits.loc[visits["judged"], "pfs_visit_id"]
+    if judged.empty:
+        say("\nno judged visits to judge")
+        return
+    say("")
+    judgeStored(qadb, output, int(judged.min()), int(judged.max()), mode="comparison", log=say)
+
+
+def _calibRanges(args, visits: pd.DataFrame) -> list[tuple[int, int]]:
+    """Return the run's calibration-frame visit ranges: ``--calib-visits``, or its set arcs and traces."""
+    if args.calib_visits:
+        return [tuple(args.calib_visits)]
+    calib = visits.loc[visits["validated"] & (visits["cadence"] == "set"), "pfs_visit_id"]
+    return _ranges(int(v) for v in calib)
+
+
+def _ranges(values) -> list[tuple[int, int]]:
+    """Return sorted distinct ints as contiguous ``(first, last)`` ranges."""
+    ordered = sorted({int(value) for value in values})
+    ranges: list[list[int]] = []
+    for value in ordered:
+        if ranges and value == ranges[-1][1] + 1:
+            ranges[-1][1] = value
+        else:
+            ranges.append([value, value])
+    return [(first, last) for first, last in ranges]
+
+
+def _reportPointer(args, output: str, visits: pd.DataFrame) -> None:
+    """Say how to render the run report from qadb with the dashboard (which reads qadb, judging nothing)."""
+    judged = visits.loc[visits["judged"], "pfs_visit_id"]
+    first = int(judged.min()) if not judged.empty else 0
+    say("")
+    say(f"Run report: {output} is in qadb. Render it with pfs_qa_dashboard, e.g.")
+    say(
+        f"  qaDashboard.py report --collection {output} --first-visit {first}"
+        f" --qadb-host {args.qadb_host} --qadb-port {args.qadb_port} --out <dir>"
+    )
+    say(f"then serve the page it writes (named {args.run}.html).")
 
 
 def pipelineVersion(versions: dict[str, str] | None = None) -> str:
@@ -398,17 +520,8 @@ def resolveCollections(
     return reductions, list(inputs) if inputs is not None else [*reductions, raw]
 
 
-def _classified(period: Period, periods: dict[str, Period], dataDir: Path):
-    """Return a fetched period's classified visits and the stamp of their fetch."""
-    frames, stamp = loadFetched(period, dataDir)
-    visits = classifyVisits(
-        frames["listing"], periods.values(), designKinds(frames["designs"]), frames["telStatus"]
-    )
-    return visits[visits["period"] == period.name].reset_index(drop=True), stamp
-
-
 def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path) -> int:
-    """Run the ``plan`` and ``run`` commands."""
+    """Plan the reduce and measure passes and run them (the ``process`` stage)."""
     from lsst.daf.butler import Butler
 
     from pfs.drp.qa.comparison.butlerQueries import (
@@ -433,7 +546,6 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
     )
     failed = None if args.retry_failed else _failedImages(workDir, period)
     detectors = coverage(visits, holdings, failed)
-    detectors.to_parquet(workDir / f"coverage-{period.name}.parquet")
     summary = summarize(visits, detectors)
     with pd.option_context("display.width", 200, "display.max_rows", 200):
         print(summary.to_string(index=False))
@@ -640,78 +752,88 @@ def _qgraph(command: list[str]) -> list[str]:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="qaComparison.py", description=__doc__.split("\n\n")[0])
-    parser.add_argument("command", choices=["fetch", "plan", "run"])
-    parser.add_argument("--period", required=True, help="e.g. run30 or run30-pre")
-    parser.add_argument(
-        "--data-dir",
-        default="~/.cache/drp_qa/comparison",
-        help="where opdb reads and each run's files are kept",
-    )
+    parser = argparse.ArgumentParser(prog="drpQa.py redo", description=__doc__.split("\n\n")[0])
+    parser.add_argument("run", help="the run to redo, e.g. run31 or run31-pre")
     parser.add_argument("--runs", default=None, help="the run table (default: the packaged one)")
-    parser.add_argument("--host", default="pfsa-db", help="opdb host, for fetch")
-    parser.add_argument("--butler", default="/work/datastore", help="Butler repository")
     parser.add_argument(
-        "--prefix",
-        default=f"u/{os.environ.get('USER', 'unknown')}/comparison",
-        help="output collection prefix",
+        "--only",
+        action="append",
+        default=[],
+        metavar="STAGE[,STAGE]",
+        help=f"run only these stages ({', '.join(STAGES)}), to resume; repeatable (default: all)",
     )
-    parser.add_argument("--version", default=None, help="drp_qa version (default: git describe)")
-    parser.add_argument("--raw", default="PFS/defaults", help="collection holding the raw data")
     parser.add_argument(
         "--reductions",
         nargs="+",
         default=None,
-        help=f"collections whose reductions are reused (default: {DRPACTOR_REDUCTIONS})",
+        metavar="COLLECTION",
+        help="reuse these collections' reductions instead of reducing afresh (e.g. drpActor/reductions)",
     )
     parser.add_argument(
-        "--inputs",
-        nargs="+",
-        default=None,
-        help="pipetask input collections (default: the reductions, then --raw)",
-    )
-    parser.add_argument(
-        "--fresh",
-        action="store_true",
-        help="reduce everything with the current pipeline, reusing nothing of drpActor's; the collection and"
-        " files are named after the pipeline (pfs-<weekly>, from getPfsVersions)",
+        "--version", default=None, help="drp_qa version naming the collection (default: git describe)"
     )
     parser.add_argument(
         "--pipeline-version",
         default=None,
-        help="with --fresh: the label naming the reductions (default: from getPfsVersions)",
+        help="the pipeline label naming fresh reductions (default: from drp_stella's getPfsVersions)",
+    )
+    parser.add_argument("--new-pipeline", action="store_true", help=argparse.SUPPRESS)
+    # Butler / collections.
+    parser.add_argument("--butler", default="/work/datastore", help="Butler repository")
+    parser.add_argument(
+        "--prefix",
+        default=f"u/{os.environ.get('USER', 'unknown')}/redo",
+        help="output collection prefix (the collection is <prefix>/<run>/<version>[/<pipeline>])",
+    )
+    parser.add_argument("--raw", default="PFS/defaults", help="collection holding the raw data")
+    parser.add_argument(
+        "--work-dir",
+        default="~/.cache/drp_qa/redo",
+        help="where the pipetask logs and cosmic-ray configs go",
     )
     parser.add_argument("-j", "--jobs", type=int, default=8, help="pipetask processes")
-    parser.add_argument(
-        "--pass",
-        dest="passes",
-        action="append",
-        default=[],
-        help="only this pass, as plan names it: calibration, sky, unvalidated-calibration, ... (with its"
-        " -judge pass), or sky-judge, ...; repeatable",
-    )
     parser.add_argument(
         "--cadence",
         action="append",
         default=[],
         choices=["set", "daily", "single"],
-        help="measure only the arcs and traces of this cadence, e.g. set for the calibration sets; repeatable",
+        help="process only the arcs and traces of this cadence, e.g. set for the calibration sets; repeatable",
+    )
+    parser.add_argument("--retry-failed", action="store_true", help="retry images whose quanta failed before")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="process stage: build each pass's graph, write nothing"
+    )
+    # opdb (read-only).
+    parser.add_argument("--opdb-host", default="pfsa-db", help="opdb host")
+    parser.add_argument("--opdb-port", type=int, default=5432, help="opdb port")
+    parser.add_argument("--opdb-dbname", default="opdb", help="opdb database name")
+    # qadb (writable), for load, values and judge.
+    parser.add_argument("--qadb-host", default="pfsa-db", help="qadb host")
+    parser.add_argument("--qadb-port", type=int, default=5436, help="qadb port")
+    parser.add_argument("--qadb-user", default="pfs", help="qadb user; must be allowed to write")
+    parser.add_argument("--qadb-dbname", default="qadb", help="qadb database name")
+    # Normal values (the values stage).
+    parser.add_argument(
+        "--previous-collection",
+        default=PREVIOUS_COLLECTION,
+        help="the collection whose normal values the new ones are compared with (the previous pipeline's)",
     )
     parser.add_argument(
-        "--new-pipeline",
-        action="store_true",
-        help="with run --fresh: reduce the period again under this pipeline label although another label"
-        " already has fresh reductions of it and this one none (otherwise run stops, since that is the whole"
-        " reduction again; plan and --dry-run only warn)",
+        "--calib-visits",
+        type=int,
+        nargs=2,
+        metavar=("FIRST", "LAST"),
+        help="the calibration frames for the normal values (default: the run's set-cadence arcs and traces)",
     )
     parser.add_argument(
-        "--retry-failed",
-        action="store_true",
-        help="with plan or run: reschedule the images whose quanta failed in an earlier run",
+        "--accept",
+        nargs="?",
+        const=getpass.getuser(),
+        metavar="NAME",
+        help="store the normal values, accepted by NAME (default: the user); without it they are only compared",
     )
+    parser.add_argument("--reason", default="", help="why normal values shifted beyond FAIL are accepted")
     parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="with run: build each pass's graph (pipetask qgraph), write nothing",
+        "--all-values", action="store_true", help="list every normal value, not only those moved"
     )
     return parser

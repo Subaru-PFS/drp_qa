@@ -1,7 +1,7 @@
 """How comparison mode configures the reduction: what changes the products it writes.
 
 This module, unlike the rest of `pfs.drp.qa.comparison`, counts towards the drp_qa version that
-names the output collection (`pfs.drp.qa.comparison.cli.drpQaVersion`): a change here changes what
+names the output collection (`pfs.drp.qa.comparison.redo.drpQaVersion`): a change here changes what
 ``pipetask`` writes, so it must start a new collection rather than reuse the old one's quanta.
 """
 
