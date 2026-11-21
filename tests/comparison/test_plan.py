@@ -255,6 +255,19 @@ def testPipetaskCommand():
         pipetaskCommand(item, phase="judge", butler="b", inputs=[], output="o", skipExistingIn=[])
 
 
+def testPipetaskCommandDetectorSubset():
+    """--arm / --spectrograph restrict the data query to a subset of the detectors, e.g. to skip n."""
+    item = Pass(name="calibration", types=("scienceArc",), visits=(10, 11), config={}, groups={})
+    common = {"butler": "/b", "inputs": ["c"], "output": "o", "skipExistingIn": []}
+    data = pipetaskCommand(item, phase="measure", arms=["b", "r", "m"], spectrographs=[1, 2], **common)[-1]
+    assert data.startswith("instrument = 'PFS' AND visit IN (10..11)")
+    assert "AND arm IN ('b', 'r', 'm')" in data
+    assert "AND spectrograph IN (1, 2)" in data
+    # Negative control: no restriction by default.
+    plain = pipetaskCommand(item, phase="measure", **common)[-1]
+    assert "arm IN" not in plain and "spectrograph IN" not in plain
+
+
 def testOutputCollection():
     assert (
         outputCollection("u/me/comparison/", "run30-pre", "w.2026.41")

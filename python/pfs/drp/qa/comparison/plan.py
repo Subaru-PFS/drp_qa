@@ -450,6 +450,8 @@ def pipetaskCommand(
     jobs: int = 8,
     instrument: str = "PFS",
     rebase: bool = False,
+    arms: Sequence[str] | None = None,
+    spectrographs: Sequence[int] | None = None,
 ) -> list[str]:
     """Return the ``pipetask run`` command of one phase of a pass, as a list.
 
@@ -491,6 +493,10 @@ def pipetaskCommand(
         ``drpActor/reductions`` is a chain that grows with every reduction, so
         without it pipetask refuses an output whose recorded inputs no longer
         match.
+    arms, spectrographs : sequence, optional
+        Restrict the data query to these arms (``b``, ``r``, ``m``, ``n``) and
+        spectrographs; `None` or empty means every one. Used to process a subset
+        of the detectors, e.g. to skip the slow ``n`` arm.
 
     Returns
     -------
@@ -519,7 +525,12 @@ def pipetaskCommand(
         for key, value in item.config.items():
             command += ["-c", f"{key}={value}"]
         command += ["-C", f"cosmicray:{cosmicrayConfigFile}"]
-    command += ["-d", f"instrument = '{instrument}' AND {visitExpression(item.visits)}"]
+    data = f"instrument = '{instrument}' AND {visitExpression(item.visits)}"
+    if arms:
+        data += " AND arm IN (" + ", ".join(f"'{arm}'" for arm in arms) + ")"
+    if spectrographs:
+        data += " AND spectrograph IN (" + ", ".join(str(int(s)) for s in spectrographs) + ")"
+    command += ["-d", data]
     return command
 
 

@@ -24,8 +24,10 @@ made, and earlier sections to the weekly tag alone.
   `reductionStats`, loads the numbers into qadb, makes the collection's normal values from its own calibration
   frames and prints each beside the same run's value under the previous pipeline (`--previous-collection`, default
   `qaActor/reductions`), judges every frame, and prints the `pfs_qa_dashboard` command that renders the run report
-  from qadb. `--only` runs a subset of the stages (`process`, `load`, `values`, `judge`) to resume. It folds in
-  comparison mode's old `fetch`/`plan`/`run`, reads the opdb in memory, and writes no parquet and no report.
+  from qadb. `--only` runs a subset of the stages (`process`, `load`, `values`, `judge`) to resume, and
+  `--arm`/`--spectrograph` process only a subset of the detectors (e.g. `--arm b r m` to skip the slow `n`).
+  It folds in comparison mode's old `fetch`/`plan`/`run`, reads the opdb in memory, and writes no parquet and
+  no report.
 
 ### Changed
 

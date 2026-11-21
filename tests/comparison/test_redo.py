@@ -121,6 +121,18 @@ def testRunIsPositionalAndPrefixDefaultsToRedo():
         _parser().parse_args(["fetch", "--period", "run31"])
 
 
+def testArmAndSpectrographSelection():
+    from pfs.drp.qa.comparison.redo import _parser
+
+    args = _parser().parse_args(["run31", "--arm", "b", "r", "m", "--spectrograph", "1", "2"])
+    assert args.arm == ["b", "r", "m"]
+    assert args.spectrograph == [1, 2]
+    assert _parser().parse_args(["run31"]).arm is None  # every arm by default
+    # Negative control: an unknown arm is refused, not silently processed.
+    with pytest.raises(SystemExit):
+        _parser().parse_args(["run31", "--arm", "x"])
+
+
 def testCalibRangesAreTheSetCadenceGatedVisits():
     from pfs.drp.qa.comparison.redo import _calibRanges
 
@@ -320,6 +332,17 @@ def testProcessReducesThenMeasures(planned, capsys):
     assert len([name for name in names if name.startswith("pipetask-run1-")]) == 3
     # Negative control: no parquet, no report files are written.
     assert not [name for name in names if name.endswith((".parquet", ".html", ".csv"))]
+
+
+def testProcessRestrictsToSelectedArms(planned):
+    from pfs.drp.qa.comparison.redo import main
+
+    planned.holdings += [(visit, arm, 1, True, visit != 3, False) for visit in (1, 2, 3) for arm in "br"]
+    assert main([*planned.arguments, "--arm", "b"]) == 0
+    assert planned.commands  # something ran
+    # Every pipetask command's data query is restricted to arm b, so the r (and any n) images are skipped.
+    for command in planned.commands:
+        assert "AND arm IN ('b')" in command[-1]
 
 
 def testProcessDryRunBuildsGraphs(planned, capsys):

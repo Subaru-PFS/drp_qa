@@ -733,7 +733,8 @@ python bin.src/drpQa.py redo run31 --only load,values,judge --accept wtg
 
 The stages are `process` (reduce then measure), `load`, `values` and `judge`; `--only` runs a subset to resume
 after an interruption. `-j` sets the `pipetask` processes (default 8); `--cadence set` (or `daily`, `single`;
-repeatable) processes only the arcs and traces of those cadences; `--dry-run` builds each pass's graph
+repeatable) processes only the arcs and traces of those cadences; `--arm b r m` and `--spectrograph 1 2`
+process only some detectors (e.g. `--arm b r m` skips the slow `n` arm); `--dry-run` builds each pass's graph
 (`pipetask qgraph`) and writes nothing.
 
 By default redo reduces every frame afresh with the current pipeline, into

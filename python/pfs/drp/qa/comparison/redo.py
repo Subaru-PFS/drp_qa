@@ -387,6 +387,7 @@ def _values(args, output: str, visits: pd.DataFrame, qadb) -> None:
         output,
         ranges,
         baseline=args.previous_collection,
+        arms=args.arm or None,
         store=args.accept is not None,
         acceptedBy=args.accept or "",
         reason=args.reason,
@@ -546,6 +547,13 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
     )
     failed = None if args.retry_failed else _failedImages(workDir, period)
     detectors = coverage(visits, holdings, failed)
+    if args.arm:
+        detectors = detectors[detectors["arm"].isin(args.arm)]
+    if args.spectrograph:
+        detectors = detectors[detectors["spectrograph"].isin(args.spectrograph)]
+    if args.arm or args.spectrograph:
+        detectors = detectors.reset_index(drop=True)
+        print(f"detectors restricted to arm {args.arm or 'any'}, spectrograph {args.spectrograph or 'any'}")
     summary = summarize(visits, detectors)
     with pd.option_context("display.width", 200, "display.max_rows", 200):
         print(summary.to_string(index=False))
@@ -604,6 +612,8 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
                 # The first command creates the output chain when it doesn't exist yet; every later one
                 # finds it, and must rebase in case drpActor added a reduction RUN meanwhile (daily).
                 rebase=outputExists or bool(commands),
+                arms=args.arm or None,
+                spectrographs=args.spectrograph or None,
             )
             if args.dry_run:
                 command = _qgraph(command)
@@ -798,6 +808,19 @@ def _parser() -> argparse.ArgumentParser:
         default=[],
         choices=["set", "daily", "single"],
         help="process only the arcs and traces of this cadence, e.g. set for the calibration sets; repeatable",
+    )
+    parser.add_argument(
+        "--arm",
+        nargs="+",
+        choices=["b", "r", "m", "n"],
+        help="process only these arms, e.g. b r m to skip the slow n arm (default: every arm)",
+    )
+    parser.add_argument(
+        "--spectrograph",
+        nargs="+",
+        type=int,
+        choices=[1, 2, 3, 4],
+        help="process only these spectrographs (default: every spectrograph)",
     )
     parser.add_argument("--retry-failed", action="store_true", help="retry images whose quanta failed before")
     parser.add_argument(
