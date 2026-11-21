@@ -25,7 +25,7 @@ from lsst.pipe.base import (
 from lsst.pipe.base.connectionTypes import Input as InputConnection
 from lsst.pipe.base.connectionTypes import Output as OutputConnection
 
-from pfs.drp.qa.metrics.reductionStats import REDUCTION_COLUMNS, reductionStatsFrame
+from pfs.drp.qa.metrics.reductionStats import reductionStatsFrame
 
 __all__ = ["ReductionStatsConfig", "ReductionStatsTask"]
 
@@ -155,4 +155,4 @@ class ReductionStatsTask(PipelineTask):
         )
         if frame.empty:
             self.log.info("ReductionStatsTask: no statistics recorded for %s", dataId)
-        return Struct(reductionStats=frame.astype(REDUCTION_COLUMNS))
+        return Struct(reductionStats=frame)

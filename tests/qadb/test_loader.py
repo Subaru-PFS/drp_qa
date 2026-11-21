@@ -739,6 +739,18 @@ class TestDetectorHealth:
         # It is not judged: no verdict mentions a detector-health metric.
         assert qadb.count("qa_gate", "qa_decided_by IN ('fitXRms', 'nDefects', 'readNoise')") == 0
 
+    def testOnlyReductionStatsCollection(self, StubButler, fixtures, qadb):
+        """A collection with reductionStats but no QA numbers loads detector health and no verdicts.
+
+        reductionStats keeps the load alive where the QA-number tables are all empty (it would
+        otherwise raise ``LookupError``), and gate() gives no verdict without any numbers.
+        """
+        butler = StubButler({"reductionStats": reductionRows(fixtures["iqQaMetrics"])}, datasets=PACKAGES)
+        counts = load(butler, qadb)
+        assert counts["detector_health_qa"] == 16
+        assert qadb.count("detector_health_qa") == 16
+        assert qadb.count("qa_gate") == 0
+
     def testMissingDatasetLoadsNothing(self, butler, qadb):
         """A collection without ``reductionStats`` loads as before, with no detector-health rows."""
         counts = load(butler, qadb)

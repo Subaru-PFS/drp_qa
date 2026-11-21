@@ -244,9 +244,11 @@ def reductionStatsFrame(
         for name, value in _metrics(pfi, PFI_METRICS):
             rows.append(("", f"pfiCorrection.{name}", value))
 
-    # Per-amplifier gain and read noise, from the ISR header.
-    for amplifier, metric, value in _ampMetrics(header):
-        rows.append((amplifier, metric, value))
+    # Per-amplifier gain and read noise, from the ISR header. CCD arms only: the n arm is an
+    # H4 with channels, not the CCD amplifiers these keys name.
+    if arm != "n":
+        for amplifier, metric, value in _ampMetrics(header):
+            rows.append((amplifier, metric, value))
 
     frame = pd.DataFrame(
         {

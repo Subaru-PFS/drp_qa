@@ -157,6 +157,16 @@ def testPerAmplifierHeader():
     assert "W_SEQTYP" not in set(frame["metric"])
 
 
+def testPerAmplifierHeaderCcdOnly():
+    """Per-amp header keys are read on a CCD arm, not on the n arm (an H4, not CCD amps)."""
+    header = {"LSST GAIN c1": 1.24, "LSST READNOISE c1": 3.91}
+    ccd = reductionStatsFrame({"visit": 155486, "arm": "r", "spectrograph": 1}, header=header)
+    assert _value(ccd, "gain", amplifier="c1") == 1.24
+    # Negative control: the same keys on the n arm produce no rows.
+    narm = reductionStatsFrame({"visit": 155486, "arm": "n", "spectrograph": 3}, header=header)
+    assert len(narm) == 0
+
+
 def testDarkScale():
     """Dark statistics are recorded on a CCD that has a dark."""
     frame = reductionStatsFrame(
