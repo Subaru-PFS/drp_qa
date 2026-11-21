@@ -67,8 +67,12 @@ def storedNumbers(
     reads = [readQadb(qadb, collection, int(lo), int(hi)) for lo, hi in visitRanges]
 
     def select(source: str) -> pd.DataFrame:
-        table = pd.concat([read[source] for read in reads], ignore_index=True)
-        table = table.drop_duplicates().reset_index(drop=True) if len(reads) > 1 else table
+        # Concatenate only the non-empty reads: an empty range would otherwise drag the dtypes to
+        # object (and warn) when a metric was measured in some ranges but not others.
+        frames = [read[source] for read in reads]
+        nonEmpty = [frame for frame in frames if not frame.empty]
+        table = pd.concat(nonEmpty, ignore_index=True) if nonEmpty else frames[0]
+        table = table.drop_duplicates().reset_index(drop=True) if len(nonEmpty) > 1 else table
         return table[table["arm"].isin(list(arms))].reset_index(drop=True) if arms is not None else table
 
     return {name: select(source) for name, source in names.items()}
