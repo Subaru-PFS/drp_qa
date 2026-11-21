@@ -753,12 +753,24 @@ def _earlier(butler, args, period: Period, output: str) -> list[str]:
 
 
 def _qgraph(command: list[str]) -> list[str]:
-    """Turn a ``pipetask run`` command into the ``pipetask qgraph`` that builds its graph only."""
+    """Turn a ``pipetask run`` command into the ``pipetask qgraph`` that builds its graph only.
+
+    Drops the run-only options ``-j`` (with its value) and ``--register-dataset-types``, which
+    ``pipetask qgraph`` does not accept.
+    """
     index = command.index("run")
     rest = command[index + 1 :]
-    if rest[:1] == ["-j"]:
-        rest = rest[2:]
-    return [*command[:index], "qgraph", *rest]
+    out: list[str] = []
+    i = 0
+    while i < len(rest):
+        if rest[i] == "-j":
+            i += 2
+        elif rest[i] == "--register-dataset-types":
+            i += 1
+        else:
+            out.append(rest[i])
+            i += 1
+    return [*command[:index], "qgraph", *out]
 
 
 def _parser() -> argparse.ArgumentParser:

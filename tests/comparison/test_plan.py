@@ -228,6 +228,8 @@ def testPipetaskCommand():
         jobs=4,
     )
     assert reduce[:7] == ["pipetask", "--long-log", "--log-level", "pfs=INFO", "run", "-j", "4"]
+    # A QA task new to the Butler (reductionStats) needs its output types registered.
+    assert "--register-dataset-types" in reduce
     # Negative control: the tasks' loggers are lowercase pfs.<task>, which PFS=INFO and INFO miss.
     assert "PFS=INFO" not in reduce and "INFO" not in reduce
     assert reduce[reduce.index("-p") + 1] == f"{REDUCE_PIPELINE}#" + ",".join(REDUCE_LABELS)

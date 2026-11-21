@@ -152,8 +152,20 @@ def testCalibRangesAreTheSetCadenceGatedVisits():
 def testQgraphFromRun():
     from pfs.drp.qa.comparison.redo import _qgraph
 
-    command = ["pipetask", "--long-log", "run", "-j", "8", "-b", "/repo", "-d", "visit IN (1)"]
-    assert _qgraph(command) == ["pipetask", "--long-log", "qgraph", "-b", "/repo", "-d", "visit IN (1)"]
+    command = [
+        "pipetask",
+        "--long-log",
+        "run",
+        "-j",
+        "8",
+        "--register-dataset-types",
+        "-b",
+        "/repo",
+        "-d",
+        "v",
+    ]
+    # qgraph does not build or write, so it takes neither -j nor --register-dataset-types.
+    assert _qgraph(command) == ["pipetask", "--long-log", "qgraph", "-b", "/repo", "-d", "v"]
 
 
 def testPipetaskFailures():
