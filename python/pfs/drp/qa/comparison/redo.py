@@ -442,9 +442,9 @@ def _reportPointer(args, output: str, visits: pd.DataFrame) -> None:
     say(f"Run report: {output} is in qadb. Render it with pfs_qa_dashboard, e.g.")
     say(
         f"  qaDashboard.py report --collection {output} --first-visit {first}"
-        f" --qadb-host {args.qadb_host} --qadb-port {args.qadb_port} --out <dir>"
+        f" --qadb-host {args.qadb_host} --qadb-port {args.qadb_port} --name {args.run} --out <dir>"
     )
-    say(f"then serve the page it writes (named {args.run}.html).")
+    say(f"then serve the page it writes ({args.run}.html).")
 
 
 def pipelineVersion(versions: dict[str, str] | None = None) -> str:
