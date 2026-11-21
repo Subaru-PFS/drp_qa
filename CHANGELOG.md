@@ -10,6 +10,15 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Changed
+
+- **The live qadb reader reads only what changed** (PIPE2D-2025) — `readQadb` with `since` now restricts its
+  CTEs to the images whose latest gate was decided at or after `since`, instead of rebuilding `latest`/`newest`
+  over the whole collection every call. The output is identical; a live poll does far less work (≈10× fewer heap
+  reads on a measured run), which keeps the dashboard responsive while reading a busy summit qadb. An index on
+  `(pfs_visit_id, camera_name)` on the number tables turns the remaining scan into a seek — a separate
+  `spt_qa_database` change that helps only together with this one.
+
 ## [0.6.1] - 2026-11-20
 
 ### Fixed
