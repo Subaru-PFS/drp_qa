@@ -34,6 +34,7 @@ from pfs.drp.qa.metrics.readers import datasetDetectors, readMetrics, readReduct
 from pfs.drp.qa.metrics.twilight import isTwilightSequence, sequenceConsistency, sequenceReadiness
 from pfs.drp.qa.qadb.reader import PROCESSING_ID, readGate, readNormalValues, readTwilight
 from pfs.drp.qa.qadb.tables import (
+    DETECTOR_HEALTH,
     IMAGE_KEYS,
     IMAGE_QUALITY,
     IMAGE_QUALITY_SPECIES,
@@ -70,7 +71,14 @@ TABLES = (("iqQaMetrics", "iqQaSpeciesMetrics"), ("dmLineResidualSummary", "dmLi
 
 #: The qadb table of each Butler dataset type loaded.
 SPECS: dict[str, TableSpec] = {
-    spec.source: spec for spec in (IMAGE_QUALITY, IMAGE_QUALITY_SPECIES, LINE_RESIDUAL, LINE_RESIDUAL_METRIC)
+    spec.source: spec
+    for spec in (
+        IMAGE_QUALITY,
+        IMAGE_QUALITY_SPECIES,
+        LINE_RESIDUAL,
+        LINE_RESIDUAL_METRIC,
+        DETECTOR_HEALTH,
+    )
 }
 
 #: The per-fiber table ``twilightFluxQa`` stores, which a sequence's metrics are measured from.
@@ -350,6 +358,7 @@ def loadCollection(
         raise LookupError(f"No QA tables for these visits in {collection}")
     sink = _DryRun(dryRun) if dryRun is not None else None
     iq, summary = tables["iqQaMetrics"], tables["dmLineResidualSummary"]
+    reduction = tables["reductionStats"]  # detector health: standalone, not a long partner of a table
 
     # A twilight is measured with its sequence, once that is complete.
     twilightVisits = sorted(set(iq.loc[iq["obsType"] == "twilight", "visit"])) if "obsType" in iq else []
@@ -366,7 +375,7 @@ def loadCollection(
     runs = sorted(
         {
             run
-            for table in (iq, summary, twilight)
+            for table in (iq, summary, twilight, reduction)
             for run in table.get("run", pd.Series(dtype=object)).dropna()
         }
     )
@@ -386,7 +395,9 @@ def loadCollection(
             ids[run] = processingId(qadb, collection, run, drpQaVersionOf(butler, run), pipeline.get(run))
 
     allVisits = {
-        int(v) for table in (iq, summary, twilight) for v in table.get("visit", pd.Series(dtype=object))
+        int(v)
+        for table in (iq, summary, twilight, reduction)
+        for v in table.get("visit", pd.Series(dtype=object))
     }
     counts: dict[str, int] = {"processings": len(runs)}
     if sink is None:
@@ -424,6 +435,17 @@ def loadCollection(
             write(longSpec.name, longRows, list(longSpec.keys), conn=conn)
     if not twilight.empty:
         write(TWILIGHT_QA.name, imageRows(twilight, TWILIGHT_QA, ids), list(TWILIGHT_QA.keys))
+
+    # Detector health stands alone: its rows key to the image, not to a per-image row, so a reload
+    # replaces every loaded image's rows (what the new measurement no longer records must go).
+    if not reduction.empty:
+        healthRows = imageRows(reduction, DETECTOR_HEALTH, ids)
+        if sink is not None:
+            write(DETECTOR_HEALTH.name, healthRows, list(DETECTOR_HEALTH.keys))
+        else:
+            with qadb.connection() as conn:
+                deleteRows(qadb, DETECTOR_HEALTH.name, healthRows[list(KEYS)].drop_duplicates(), conn=conn)
+                write(DETECTOR_HEALTH.name, healthRows, list(DETECTOR_HEALTH.keys), conn=conn)
 
     # One verdict per image, from every number it has. The row takes the processing of the image's first
     # table loaded (imageQualityQa's, then dmLineResiduals', then the twilight's), so a later load replaces it.
