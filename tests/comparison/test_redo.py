@@ -346,13 +346,17 @@ def testProcessReducesThenMeasures(planned, capsys):
     assert not [name for name in names if name.endswith((".parquet", ".html", ".csv"))]
 
 
-def testProcessRestrictsToSelectedArms(planned):
+def testProcessRestrictsToSelectedArms(planned, capsys):
     from pfs.drp.qa.comparison.redo import main
 
+    # Visits 1-3 each exposed b and r; the arcs are reduced, the trace is not.
     planned.holdings += [(visit, arm, 1, True, visit != 3, False) for visit in (1, 2, 3) for arm in "br"]
     assert main([*planned.arguments, "--arm", "b"]) == 0
+    printed = capsys.readouterr().out
+    # The coverage itself is filtered to arm b: 3 b images (2 reduced, 1 not), not the 6 b+r images.
+    assert "detector images: 0 judged, 2 to judge, 1 to reduce" in printed
     assert planned.commands  # something ran
-    # Every pipetask command's data query is restricted to arm b, so the r (and any n) images are skipped.
+    # And every pipetask command's data query is restricted to arm b, so the r (and any n) images are skipped.
     for command in planned.commands:
         assert "AND arm IN ('b')" in command[-1]
 
