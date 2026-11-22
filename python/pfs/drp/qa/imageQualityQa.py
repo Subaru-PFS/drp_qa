@@ -6,7 +6,6 @@ calexp (`pfs.drp.qa.crossDispersion`), or fiber profile calibrations.
 It writes numbers only: `pfs.drp.qa.metrics.gate` gives the verdicts.
 """
 
-import re
 from typing import Any
 
 import lsst.afw.image
@@ -35,7 +34,8 @@ from lsst.pipe.base.connectionTypes import (
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
 from pfs.drp.qa.crossDispersion import measureImageWidths, profileFwhm
 from pfs.drp.qa.metrics.lineFlux import speciesLineFlux
-from pfs.drp.qa.metrics.longFormat import metricsFrame, parseSpeciesStats, speciesFrame
+from pfs.drp.qa.metrics.longFormat import metricsFrame, speciesFrame
+from pfs.drp.qa.metrics.reductionStats import speciesFitStats
 from pfs.drp.qa.metrics.registry import observationType, sequenceOf
 from pfs.drp.qa.metrics.saturation import measureSaturation
 from pfs.drp.stella import ArcLineSet, DetectorMap, FiberProfileSet
@@ -197,7 +197,7 @@ class ImageQualityQaConnections(
         doc=(
             "Per-species metrics in long format: ``visit``, ``arm``, ``spectrograph``,"
             " ``description`` (line species, ``Trace`` included), ``metric``, ``value``."
-            " From the reduceExposure log, the detectorMap fit's ``fitXRms``, ``fitYRms``"
+            " From ``reduceExposure_metadata``, the detectorMap fit's ``fitXRms``, ``fitYRms``"
             " (weighted RMS) and ``fitXSoften``, ``fitYSoften`` (the softening that brings"
             " chi^2/dof to 1). From ``lines``, on lit fibers: ``medLineFlux``,"
             " ``robustRmsLineFlux`` and ``nFluxLines`` (the good lines they are over), and with"
@@ -265,26 +265,17 @@ class ImageQualityQaConnections(
         minimum=0,
     )
 
-    isrLog = InputConnection(
-        name="isr_log",
-        doc="ISR task execution log",
-        storageClass="ButlerLogRecords",
-        dimensions=("instrument", "visit", "arm", "spectrograph"),
-        minimum=0,
-    )
-
-    cosmicrayLog = InputConnection(
-        name="cosmicray_log",
-        doc="Cosmic Ray task execution log",
-        storageClass="ButlerLogRecords",
-        dimensions=("instrument", "visit", "arm", "spectrograph"),
-        minimum=0,
-    )
-
-    reduceExposureLog = InputConnection(
-        name="reduceExposure_log",
-        doc="reduceExposure task execution log",
-        storageClass="ButlerLogRecords",
+    reduceExposureMetadata = InputConnection(
+        name="reduceExposure_metadata",
+        doc=(
+            "reduceExposure task metadata: the detectorMap fit's per-species statistics"
+            " (``speciesName`` and the parallel ``speciesXRms`` … arrays recorded by"
+            " ``fitDetectorMap``), read into ``iqQaSpeciesMetrics`` when the adjustment applied"
+            " (`pfs.drp.qa.metrics.reductionStats.speciesFitStats`). Absent when only ISR and"
+            " fitDetectorMap ran. The whole-detector fit scalars and the ISR/CR counts are read"
+            " from the same metadata by ``reductionStats``, not here."
+        ),
+        storageClass="TaskMetadata",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
         minimum=0,
     )
@@ -442,9 +433,7 @@ class ImageQualityQaTask(PipelineTask):
         calexp: lsst.afw.image.Exposure | None,
         pfsConfig: PfsConfig | None,
         dataId: dict,
-        isrLog: Any = None,
-        cosmicrayLog: Any = None,
-        reduceExposureLog: Any = None,
+        reduceExposureMetadata: Any = None,
     ) -> Struct:
         """Compute image quality metrics.
 
@@ -519,7 +508,7 @@ class ImageQualityQaTask(PipelineTask):
             ``dxCenterRms``, ``pctFlagged``, ``nLines``, ``linesPerFiber``,
             ``nLitFibers``, ``nFibers``, ``nTraceRows``, ``nSaturatedLines``,
             ``pctSaturatedPixels``, ``traceOnly``,
-            ``obsType``, ``illumination``, ``seqName``, ``seqType``, ``lamps``, the log-derived columns,
+            ``obsType``, ``illumination``, ``seqName``, ``seqType``, ``lamps``,
             the flag breakdown (``pct<Bit>``), ``visit``, ``arm``,
             ``spectrograph``.  Numbers only: no verdict column.
         iqQaSpeciesMetrics : `pandas.DataFrame`
@@ -991,13 +980,6 @@ class ImageQualityQaTask(PipelineTask):
 
         title = "{visit} {arm}{spectrograph}".format(**dataId)
 
-        # Parse log metrics if logs are provided
-        logMetrics = self._parseLogs(
-            self._logToString(isrLog),
-            self._logToString(cosmicrayLog),
-            self._logToString(reduceExposureLog),
-        )
-
         metricsDict = {
             "medFwhm": [med_fwhm],
             "medDxCenter": [medDxCenter],
@@ -1016,34 +998,6 @@ class ImageQualityQaTask(PipelineTask):
             "seqName": [seq_nam],
             "seqType": [seq_typ],
             "lamps": [lamps],
-            # Log-derived metrics
-            "isrBadPixels": [logMetrics["isrBadPixels"]],
-            "isrTime": [logMetrics["isrTime"]],
-            "cosmicRayCount": [logMetrics["cosmicRayCount"]],
-            "cosmicRayPixels": [logMetrics["cosmicRayPixels"]],
-            "cosmicRayTime": [logMetrics["cosmicRayTime"]],
-            "reduceExposureTime": [logMetrics["reduceExposureTime"]],
-            "fitChi2": [logMetrics["fitChi2"]],
-            "fitDof": [logMetrics["fitDof"]],
-            "fitXRms": [logMetrics["fitXRms"]],
-            "fitYRms": [logMetrics["fitYRms"]],
-            "fitXSoften": [logMetrics["fitXSoften"]],
-            "fitYSoften": [logMetrics["fitYSoften"]],
-            "fitNLines": [logMetrics["fitNLines"]],
-            "fitTotalLines": [logMetrics["fitTotalLines"]],
-            "fitReservedChi2": [logMetrics["fitReservedChi2"]],
-            "fitReservedXRms": [logMetrics["fitReservedXRms"]],
-            "fitReservedYRms": [logMetrics["fitReservedYRms"]],
-            "fitReservedXSoften": [logMetrics["fitReservedXSoften"]],
-            "fitReservedYSoften": [logMetrics["fitReservedYSoften"]],
-            "fitReservedNLines": [logMetrics["fitReservedNLines"]],
-            "fitTraceXRms": [logMetrics["fitTraceXRms"]],
-            "fitTraceYRms": [logMetrics["fitTraceYRms"]],
-            # Fiber arrays
-            "fiberIds": [logMetrics["fiberIds"]],
-            "fiberXRms": [logMetrics["fiberXRms"]],
-            "fiberYRms": [logMetrics["fiberYRms"]],
-            "fiberNLines": [logMetrics["fiberNLines"]],
         }
         for bitName, pct in flagBreakdown.items():
             metricsDict[f"pct{bitName}"] = [pct]
@@ -1067,7 +1021,7 @@ class ImageQualityQaTask(PipelineTask):
         species_frames = [
             frame
             for frame in (
-                speciesFrame(dataId, logMetrics["speciesStats"]),
+                speciesFrame(dataId, speciesFitStats(reduceExposureMetadata)),
                 metricsFrame(dataId, species_flux),
             )
             if len(frame)
@@ -1081,162 +1035,6 @@ class ImageQualityQaTask(PipelineTask):
             iqQaMetrics=metrics,
             iqQaSpeciesMetrics=species_metrics,
         )
-
-    @staticmethod
-    def _logToString(logData: Any) -> str:
-        """Convert log input to standard string."""
-        if logData is None:
-            return ""
-        if isinstance(logData, str):
-            return logData
-        if hasattr(logData, "text"):
-            return str(logData.text)
-        if hasattr(logData, "read"):
-            return str(logData.read())
-        if hasattr(logData, "readlines"):
-            return "\n".join(logData.readlines())
-        if isinstance(logData, (list, tuple)):
-            return "\n".join(str(r) for r in logData)
-        return str(logData)
-
-    def _parseLogs(
-        self,
-        isrLog: str,
-        cosmicrayLog: str,
-        reduceExposureLog: str,
-    ) -> dict:
-        """Parse raw log contents and return a dict of extracted metrics."""
-        metrics = {
-            "isrBadPixels": 0,
-            "isrTime": 0.0,
-            "cosmicRayCount": 0,
-            "cosmicRayPixels": 0,
-            "cosmicRayTime": 0.0,
-            "reduceExposureTime": 0.0,
-            "fitChi2": float("nan"),
-            "fitDof": 0,
-            "fitXRms": float("nan"),
-            "fitYRms": float("nan"),
-            "fitXSoften": float("nan"),
-            "fitYSoften": float("nan"),
-            "fitNLines": 0,
-            "fitTotalLines": 0,
-            "fitReservedChi2": float("nan"),
-            "fitReservedXRms": float("nan"),
-            "fitReservedYRms": float("nan"),
-            "fitReservedXSoften": float("nan"),
-            "fitReservedYSoften": float("nan"),
-            "fitReservedNLines": 0,
-            "fitTraceXRms": float("nan"),
-            "fitTraceYRms": float("nan"),
-            "speciesStats": {},  # species -> (xRms, yRms, xSoften, ySoften); see longFormat
-            "fiberIds": [],
-            "fiberXRms": [],
-            "fiberYRms": [],
-            "fiberNLines": [],
-        }
-
-        re_bad_pixels = re.compile(r"Set (\d+) BAD pixels to")
-        re_cr = re.compile(r"(?:Found|Identified) (\d+) cosmic rays (?:\(|covering )(\d+) pixels")
-        # Newer drp_stella prefixes its fit summary messages with the detector
-        # they belong to ("Final result: arm=b spectrograph=1 chi2=...").  The
-        # prefix is optional so that both log formats parse.
-        armSpec = r"(?:arm=\S+ spectrograph=\d+ )?"
-        re_fit_result = re.compile(
-            r"Final result: "
-            + armSpec
-            + r"chi2=(\S+) dof=(\d+) xRMS=(\S+) yRMS=(\S+) xSoften=(\S+) ySoften=(\S+) from (\d+) lines"
-        )
-        re_fit_lines = re.compile(r"Final fit:.*from (\d+)/(\d+) lines")
-        re_reserved_fit = re.compile(
-            r"Fit quality from reserved lines:\s*chi2=(\S+)\s+xRMS=(\S+)\s+yRMS=(\S+)(?:\s+\([^\)]+\))?\s+xSoften=(\S+)\s+ySoften=(\S+)\s+from\s+(\d+)\s+lines"
-        )
-        re_fiber = re.compile(
-            r"Stats for fiberId=(\d+): "
-            + armSpec
-            + r"chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+).*from (\d+) lines"
-        )
-        re_task_time = re.compile(r"Execution of task '(\w+)' on quantum .* took ([\d\.]+) seconds")
-
-        # 1. Parse ISR log
-        if isrLog:
-            for line in isrLog.splitlines():
-                m = re_bad_pixels.search(line)
-                if m:
-                    metrics["isrBadPixels"] = int(m.group(1))
-                m = re_task_time.search(line)
-                if m and m.group(1) == "isr":
-                    metrics["isrTime"] = float(m.group(2))
-
-        # 2. Parse Cosmic Ray log
-        if cosmicrayLog:
-            for line in cosmicrayLog.splitlines():
-                m = re_cr.search(line)
-                if m:
-                    metrics["cosmicRayCount"] += int(m.group(1))
-                    metrics["cosmicRayPixels"] += int(m.group(2))
-                m = re_task_time.search(line)
-                if m and m.group(1) == "cosmicray":
-                    metrics["cosmicRayTime"] = float(m.group(2))
-
-        # 3. Parse reduceExposure log
-        if reduceExposureLog:
-            for line in reduceExposureLog.splitlines():
-                m = re_fit_result.search(line)
-                if m:
-                    try:
-                        metrics["fitChi2"] = float(m.group(1))
-                        metrics["fitDof"] = int(m.group(2))
-                        metrics["fitXRms"] = float(m.group(3))
-                        metrics["fitYRms"] = float(m.group(4))
-                        metrics["fitXSoften"] = float(m.group(5))
-                        metrics["fitYSoften"] = float(m.group(6))
-                        metrics["fitNLines"] = int(m.group(7))
-                    except ValueError:
-                        pass
-                m = re_fit_lines.search(line)
-                if m:
-                    try:
-                        metrics["fitNLines"] = int(m.group(1))
-                        metrics["fitTotalLines"] = int(m.group(2))
-                    except ValueError:
-                        pass
-                m = re_reserved_fit.search(line)
-                if m:
-                    try:
-                        metrics["fitReservedChi2"] = float(m.group(1))
-                        metrics["fitReservedXRms"] = float(m.group(2))
-                        metrics["fitReservedYRms"] = float(m.group(3))
-                        metrics["fitReservedXSoften"] = float(m.group(4))
-                        metrics["fitReservedYSoften"] = float(m.group(5))
-                        metrics["fitReservedNLines"] = int(m.group(6))
-                    except ValueError:
-                        pass
-                parsed = parseSpeciesStats(line)
-                if parsed is not None:
-                    sp, values = parsed
-                    metrics["speciesStats"][sp] = values
-                    if sp == "Trace":
-                        metrics["fitTraceXRms"], metrics["fitTraceYRms"] = values[:2]
-                m = re_fiber.search(line)
-                if m:
-                    try:
-                        fid = int(m.group(1))
-                        x_rms = float(m.group(2))
-                        y_rms = float(m.group(3))
-                        n_lines = int(m.group(4))
-                        if fid not in metrics["fiberIds"]:
-                            metrics["fiberIds"].append(fid)
-                            metrics["fiberXRms"].append(x_rms)
-                            metrics["fiberYRms"].append(y_rms)
-                            metrics["fiberNLines"].append(n_lines)
-                    except ValueError:
-                        pass
-                m = re_task_time.search(line)
-                if m and m.group(1) == "reduceExposure":
-                    metrics["reduceExposureTime"] = float(m.group(2))
-
-        return metrics
 
     def _classifyVisit(
         self,

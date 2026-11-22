@@ -53,12 +53,7 @@ CREATE TABLE image_quality_qa (
     dx_center_rms REAL, pct_flagged REAL, pct_low_sn REAL, pct_meas_fail REAL, n_lines INTEGER,
     lines_per_fiber DOUBLE PRECISION, n_lit_fibers INTEGER,
     n_fibers INTEGER, n_trace_rows INTEGER, n_saturated_lines INTEGER, pct_saturated_pixels REAL,
-    calexp_run TEXT, isr_bad_pixels INTEGER, isr_time REAL, cosmic_ray_count INTEGER,
-    cosmic_ray_pixels INTEGER, cosmic_ray_time REAL, reduce_exposure_time REAL, fit_chi2 REAL,
-    fit_dof INTEGER, fit_x_rms REAL, fit_y_rms REAL, fit_x_soften REAL, fit_y_soften REAL,
-    fit_n_lines INTEGER, fit_total_lines INTEGER, fit_reserved_chi2 REAL, fit_reserved_x_rms REAL,
-    fit_reserved_y_rms REAL, fit_reserved_x_soften REAL, fit_reserved_y_soften REAL,
-    fit_reserved_n_lines INTEGER,
+    calexp_run TEXT,
     PRIMARY KEY (processing_id, pfs_visit_id, camera_name));
 CREATE TABLE image_quality_qa_species (
     processing_id INTEGER, pfs_visit_id INTEGER, camera_name VARCHAR(2), description TEXT, metric TEXT,

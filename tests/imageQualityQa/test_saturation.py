@@ -154,3 +154,43 @@ def testSaturationLeavesTheOtherMetricsAsMeasured(runTask, fakes):
     assert saturated[others].tolist() == clean[others].tolist()
     # Negative control: the saturation columns do tell the two frames apart.
     assert (clean["pctSaturatedPixels"], clean["nSaturatedLines"]) == (0.0, 0)
+
+
+def testPerSpeciesFitStatsComeFromReduceExposureMetadata(runTask, fakes):
+    """The per-species detectorMap fit statistics in ``iqQaSpeciesMetrics`` come from the metadata.
+
+    They replace the ``Stats for <species>`` log scraping: the reduceExposure metadata's
+    ``speciesName`` and the parallel ``speciesXRms`` … arrays become the ``fitXRms``, ``fitYRms``,
+    ``fitXSoften`` and ``fitYSoften`` rows, ``Trace`` among them, beside the line-flux rows.
+    """
+    detectorMap, lines, calexp = makeInputs(fakes)
+    metadata = {
+        "detectorMapAdjustment": "applied",
+        "reduceExposure:adjustDetectorMap": {
+            "speciesName": ["NeI", "Trace"],
+            "speciesXRms": [0.021, 0.040],
+            "speciesYRms": [0.034, float("nan")],
+            "speciesXSoften": [0.011, 0.020],
+            "speciesYSoften": [0.0, 0.0],
+        },
+    }
+    species = runTask(
+        lines, detectorMap=detectorMap, calexp=calexp, reduceExposureMetadata=metadata
+    ).iqQaSpeciesMetrics
+    assert longValue(species, "NeI", "fitXRms") == pytest.approx(0.021)
+    assert longValue(species, "NeI", "fitYSoften") == pytest.approx(0.0)
+    assert longValue(species, "Trace", "fitXRms") == pytest.approx(0.040)
+    # The line-flux rows still share the table with the fit statistics.
+    assert longValue(species, "NeI", "medLineFlux") == pytest.approx(1000.0)
+
+
+def testNoFitStatsWithoutMetadata(runTask, fakes):
+    """Without reduceExposure metadata the species table has the line fluxes but no fit statistics.
+
+    Negative control: the fit-stat rows appear only when the metadata provides them (and the
+    adjustment applied), so an absent adjustment leaves ``fitXRms`` out rather than defaulting it.
+    """
+    detectorMap, lines, calexp = makeInputs(fakes)
+    species = runTask(lines, detectorMap=detectorMap, calexp=calexp).iqQaSpeciesMetrics
+    assert "fitXRms" not in set(species["metric"])
+    assert longValue(species, "NeI", "medLineFlux") == pytest.approx(1000.0)

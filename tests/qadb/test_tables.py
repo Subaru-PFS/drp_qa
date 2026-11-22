@@ -106,7 +106,7 @@ class TestImageRows:
         assert rows["pfs_visit_id"].tolist() == [133025, 133025, 133040, 133040]
         assert rows["camera_name"].tolist() == ["b1", "r1", "b1", "r1"]
         # Columns the fixture lacks are null; the ones it has are Python scalars of the declared type.
-        assert rows["fit_chi2"].isna().all()
+        assert rows["pct_meas_fail"].isna().all()
         assert all(isinstance(v, int) for v in rows["n_lit_fibers"])
         assert all(isinstance(v, float) for v in rows["med_fwhm"])
         assert all(isinstance(v, bool) for v in rows["trace_only"])

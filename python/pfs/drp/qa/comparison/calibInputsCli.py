@@ -2,7 +2,7 @@ r"""``drpQa.py calib inputs``: report which exposures of a calibration set to bu
 
 Reads the period's visits from the opdb (``--opdb-host``), takes the set's arcs and traces (cadence
 ``set``, or ``--visits``), reads what a redo (or any collection) measured on them (``iqQaMetrics``,
-``dmLineResidualMetrics``) from its Butler output collection, and writes the Markdown report of
+``dmLineResidualMetrics``, ``reductionStats``) from its Butler output collection, and writes the Markdown report of
 `pfs.drp.qa.comparison.calibInputs`: a go/no-go for every detector and visit, as a grid, a table and a
 CSV, with the reasons and the lamp trends behind ``--detail``. Blind: it uses no calibration built from the set.
 
@@ -38,7 +38,7 @@ from pfs.drp.qa.comparison.runs import loadPeriods
 from pfs.drp.qa.metrics.normalValues import NORMAL_COLUMNS
 from pfs.drp.qa.metrics.registry import ARC, IIS_ARC
 
-TABLES = ("iqQaMetrics", "dmLineResidualMetrics")
+TABLES = ("iqQaMetrics", "dmLineResidualMetrics", "reductionStats")
 
 
 def readNormalValues(path: str | None) -> pd.DataFrame | None:
@@ -157,7 +157,13 @@ def main(argv=None) -> int:
             "no --normal-values: the gate gives no verdict; judging on the sequence rules alone", flush=True
         )
     judged = judge(
-        detectorTable(visits, tables["iqQaMetrics"], tables["dmLineResidualMetrics"], normalValues),
+        detectorTable(
+            visits,
+            tables["iqQaMetrics"],
+            tables["dmLineResidualMetrics"],
+            tables["reductionStats"],
+            normalValues,
+        ),
         thresholds,
     )
     numbers = gateNumbers(tables["iqQaMetrics"], tables["dmLineResidualMetrics"], normalValues)

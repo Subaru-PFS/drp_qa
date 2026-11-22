@@ -10,6 +10,28 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Changed
+
+- **`imageQualityQa` no longer parses logs** (PIPE2D-2016) — the ISR, cosmic-ray and reduceExposure log
+  connections (`isr_log`, `cosmicray_log`, `reduceExposure_log`) are gone, and with them the ISR/cosmic-ray,
+  task-timing and detectorMap-fit scalar columns of `iqQaMetrics` (`isrBadPixels`, `isrTime`, `cosmicRayCount`,
+  `cosmicRayPixels`, `cosmicRayTime`, `reduceExposureTime`, `fitChi2`, `fitDof`, `fitXRms`, `fitYRms`,
+  `fitXSoften`, `fitYSoften`, `fitNLines`, `fitTotalLines`, `fitReserved*`, `fitTrace*`, `fiber*`). The fit scalars
+  and ISR/cosmic-ray counts are read from the reduction's task metadata by `reductionStats` (into
+  `detector_health_qa`); the task-timing and per-fiber arrays had no other source and are dropped.
+- **Per-species fit statistics from `reduceExposure_metadata`** (PIPE2D-2016) — `iqQaSpeciesMetrics`' `fitXRms`,
+  `fitYRms`, `fitXSoften` and `fitYSoften` are read from the `adjustDetectorMap` metadata (`speciesName` and the
+  parallel `speciesXRms` … arrays, `metrics.reductionStats.speciesFitStats`), replacing the `Stats for <species>`
+  log scraping. `imageQualityQa` gains a `reduceExposure_metadata` input for this. No QA task parses a log now.
+- **`calibInputs` reserved RMS from `reductionStats`** (PIPE2D-2016) — `calib inputs`' detector table reads the
+  detectorMap fit's reserved-line RMS from the `reductionStats` dataset (`reservedXRms`/`reservedYRms`) rather
+  than from `iqQaMetrics`.
+
+### Removed
+
+- **`iqQaMetrics` log-derived columns** (PIPE2D-2016) — as above; the matching `image_quality_qa` columns are
+  dropped from qadb (spt_qa_database 0.7.0, revision `3f9b7c1e5a24`).
+
 ## [0.8.0] - 2026-11-21
 
 ### Added

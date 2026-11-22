@@ -3,9 +3,8 @@
 import math
 
 import pandas as pd
-import pytest
 
-from pfs.drp.qa.metrics.longFormat import SPECIES_COLUMNS, parseSpeciesStats, speciesFrame, speciesStats
+from pfs.drp.qa.metrics.longFormat import SPECIES_COLUMNS, speciesFrame, speciesStats
 
 DATA_ID = {"instrument": "PFS", "visit": 12345, "arm": "r", "spectrograph": 1}
 
@@ -45,28 +44,3 @@ def testSoftening():
     assert back == {"NeI": (0.02, 0.03)}
     # Negative control: Trace is in the frame, only the lamp-species mapping leaves it out.
     assert "Trace" in set(frame["description"])
-
-
-@pytest.mark.parametrize(
-    "line, expected",
-    [
-        (
-            "Stats for NeI: chi2=0.9 dof=30 xRMS=0.028 yRMS=0.038 xSoften=0.011 ySoften=0.000 from 31 lines",
-            ("NeI", (0.028, 0.038, 0.011, 0.0)),
-        ),
-        (
-            "Stats for Trace: arm=b spectrograph=1 chi2=0.9 dof=30 xRMS=0.05 yRMS=nan xSoften=0.02 ySoften=0",
-            ("Trace", (0.05, math.nan, 0.02, 0.0)),
-        ),
-        ("Stats for HgI: chi2=0.9 dof=30 xRMS=0.028 yRMS=0.038", ("HgI", (0.028, 0.038, math.nan, math.nan))),
-        ("Stats for fiberId=42: chi2=0.8 dof=10 xRMS=0.025 yRMS=0.035 xSoften=0 ySoften=0", None),
-        ("Final result: chi2=0.9 dof=30 xRMS=0.028 yRMS=0.038 xSoften=0 ySoften=0 from 3 lines", None),
-    ],
-)
-def testParseSpeciesStats(line, expected):
-    parsed = parseSpeciesStats(line)
-    if expected is None:
-        assert parsed is None
-        return
-    assert parsed[0] == expected[0]
-    assert parsed[1] == pytest.approx(expected[1], nan_ok=True)

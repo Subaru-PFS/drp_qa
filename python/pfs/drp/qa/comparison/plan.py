@@ -507,8 +507,9 @@ def pipetaskCommand(
         raise ValueError(f"phase must be 'reduce' or 'measure', not {phase!r}")
     reducing = phase == "reduce"
     # The tasks log as pfs.<task>, lowercase, as drpActor sets them (CliLog.setLogLevels): PFS=INFO
-    # misses them, and a bare INFO sets only lsst. The fit statistics imageQualityQa reads from
-    # the stored reduceExposure_log are INFO lines, so the reduction is logged at pfs=INFO.
+    # misses them, and a bare INFO sets only lsst. The reduction is logged at pfs=INFO so the pfs
+    # tasks' progress and errors reach the stored log (the QA tasks read their numbers from the
+    # task metadata now, not from the log).
     # --register-dataset-types: a QA task new to this Butler (e.g. reductionStats) has unregistered
     # output types; it is a no-op for tasks whose types already exist, and `pipetask qgraph` drops it.
     command = ["pipetask", "--long-log", "--log-level", "pfs=INFO", "run", "-j", str(jobs)]

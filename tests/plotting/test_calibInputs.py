@@ -68,16 +68,19 @@ def _visits():
 
 
 def _metrics(visits, bad=()):
-    """Return iqQaMetrics and dmLineResidualMetrics rows of the set: numbers, no verdicts.
+    """Return iqQaMetrics, dmLineResidualMetrics and reductionStats rows of the set: numbers, no verdicts.
 
     ``bad`` holds the (visit, spectrograph) of images with a tiny FWHM and a huge reserved RMS.
     """
-    iq, dm = [], []
+    iq, dm, reduction = [], [], []
     for row in visits.itertuples():
         obsType = "trace" if row.species == ("Trace",) else "arc"
         for sp in (1, 2):
             fwhm, rms = (0.7, 2.0) if (row.visit, sp) in bad else (2.9, 0.08)
-            iq.append((row.visit, "n", sp, obsType, "full", row.sequence_name, fwhm, 12.0, rms, rms))
+            iq.append((row.visit, "n", sp, obsType, "full", row.sequence_name, fwhm, 12.0))
+            # The reserved-line RMS lives in reductionStats now (whole-detector, empty amplifier).
+            reduction.append((row.visit, "n", sp, "", "reservedXRms", rms))
+            reduction.append((row.visit, "n", sp, "", "reservedYRms", rms))
             for species in row.species:
                 for statusType, factor in (("BOTH", 1.0), ("RESERVED", 0.1)):
                     for metric, value in (
@@ -100,8 +103,6 @@ def _metrics(visits, bad=()):
             "seqName",
             "medFwhm",
             "linesPerFiber",
-            "fitReservedXRms",
-            "fitReservedYRms",
         ],
     )
     dm = pd.DataFrame(
@@ -119,7 +120,10 @@ def _metrics(visits, bad=()):
             "value",
         ],
     )
-    return iq, dm
+    reduction = pd.DataFrame(
+        reduction, columns=["visit", "arm", "spectrograph", "amplifier", "metric", "value"]
+    )
+    return iq, dm, reduction
 
 
 def _set(withNormalValues=True):
@@ -128,12 +132,12 @@ def _set(withNormalValues=True):
     The normal values are what the same set measures with nothing wrong.
     """
     visits = _visits()
-    iq, dm = _metrics(visits, bad={(102, 2)})
+    iq, dm, reduction = _metrics(visits, bad={(102, 2)})
     normalValues = None
     if withNormalValues:
-        made = candidates(*_metrics(visits))
+        made = candidates(*_metrics(visits)[:2])
         normalValues = made.assign(count=9, validFrom=1).reindex(columns=list(NORMAL_COLUMNS))
-    judged = judge(detectorTable(visits, iq, dm, normalValues))
+    judged = judge(detectorTable(visits, iq, dm, reduction, normalValues))
     return visits, judged, speciesTable(visits, dm), gateNumbers(iq, dm, normalValues)
 
 

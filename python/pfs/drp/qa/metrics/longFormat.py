@@ -16,8 +16,9 @@ visit arm spectrograph description metric  value
 `~pfs.drp.qa.metrics.registry.addSpecies`).
 
 Two sets of metrics share the table. The fit statistics (`STAT_METRICS`,
-`speciesFrame`) are drp_stella's own, read from the ``Stats for <species>`` lines
-``fitDetectorMap`` logs during ``reduceExposure``, over the lines the fit used:
+`speciesFrame`) are drp_stella's own, read from ``reduceExposure_metadata`` (the
+``speciesName`` and parallel ``speciesXRms`` … arrays ``fitDetectorMap`` records,
+via `pfs.drp.qa.metrics.reductionStats.speciesFitStats`), over the lines the fit used:
 the error-weighted RMS (``fitXRms``, ``fitYRms``) and the softening that brings
 chi^2/dof to 1 (``fitXSoften``, ``fitYSoften``). ``dmLineResiduals`` gives the
 robust RMS beside them, and does not recompute these. The line fluxes
@@ -25,7 +26,6 @@ robust RMS beside them, and does not recompute these. The line fluxes
 ``lines``: a species has rows of either set or both.
 """
 
-import re
 from collections.abc import Mapping, Sequence
 
 import pandas as pd
@@ -34,7 +34,6 @@ __all__ = [
     "SPECIES_COLUMNS",
     "STAT_METRICS",
     "metricsFrame",
-    "parseSpeciesStats",
     "speciesFrame",
     "speciesStats",
 ]
@@ -51,38 +50,6 @@ SPECIES_COLUMNS = {
 
 #: The metric names of the values of a ``speciesStats`` entry, in order.
 STAT_METRICS = ("fitXRms", "fitYRms", "fitXSoften", "fitYSoften")
-
-#: ``Stats for <species>:`` lines of ``fitDetectorMap``; newer drp_stella puts
-#: the detector after the colon. Not the ``Stats for fiberId=...`` lines.
-_SPECIES_STATS = re.compile(
-    r"Stats for (\w+): (?:arm=\S+ spectrograph=\d+ )?chi2=\S+ dof=\d+ xRMS=(\S+) yRMS=(\S+)"
-    r"(?: xSoften=(\S+) ySoften=(\S+))?"
-)
-
-
-def parseSpeciesStats(line: str) -> tuple[str, tuple[float, ...]] | None:
-    """Return the species and `STAT_METRICS` values of one ``reduceExposure`` log line.
-
-    Parameters
-    ----------
-    line : `str`
-        A log line.
-
-    Returns
-    -------
-    `tuple` [`str`, `tuple` [`float`, ...]] or `None`
-        ``(species, (xRms, yRms, xSoften, ySoften))``, the softening NaN in
-        a log that lacks it; `None` when the line is not a species' stats or
-        a value is not a number.
-    """
-    match = _SPECIES_STATS.search(line)
-    if match is None:
-        return None
-    try:
-        values = tuple(float("nan") if value is None else float(value) for value in match.groups()[1:])
-    except ValueError:
-        return None
-    return match.group(1), values
 
 
 def speciesFrame(dataId: Mapping[str, object], stats: Mapping[str, Sequence[float]]) -> pd.DataFrame:

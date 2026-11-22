@@ -10,7 +10,6 @@ This replaces the log scraping ``imageQualityQa`` used to do for the detectorMap
 ISR counts: the same numbers are read here from the task metadata, not from log text.
 """
 
-from collections.abc import Mapping
 from typing import Any
 
 from lsst.pipe.base import (
@@ -25,7 +24,7 @@ from lsst.pipe.base import (
 from lsst.pipe.base.connectionTypes import Input as InputConnection
 from lsst.pipe.base.connectionTypes import Output as OutputConnection
 
-from pfs.drp.qa.metrics.reductionStats import reductionStatsFrame
+from pfs.drp.qa.metrics.reductionStats import asMapping, reductionStatsFrame
 
 __all__ = ["ReductionStatsConfig", "ReductionStatsTask"]
 
@@ -86,21 +85,6 @@ class ReductionStatsConfig(PipelineTaskConfig, pipelineConnections=ReductionStat
     """Configuration for `ReductionStatsTask` (no tunables: it reads and records)."""
 
 
-def _asMapping(obj: Any) -> Mapping[str, Any] | None:
-    """Return task metadata or a header as a plain mapping.
-
-    ``TaskMetadata`` (``to_dict``) and ``PropertyList``/``PropertySet`` (``toDict``) are
-    converted to nested dictionaries; a mapping is returned as is; anything else is `None`.
-    """
-    if obj is None:
-        return None
-    for method in ("to_dict", "toDict"):
-        convert = getattr(obj, method, None)
-        if callable(convert):
-            return convert()
-    return obj if isinstance(obj, Mapping) else None
-
-
 class ReductionStatsTask(PipelineTask):
     """Read one detector's reduction statistics into a long-format table."""
 
@@ -149,9 +133,9 @@ class ReductionStatsTask(PipelineTask):
         """
         frame = reductionStatsFrame(
             dataId,
-            isrMetadata=_asMapping(isrMetadata),
-            reduceExposureMetadata=_asMapping(reduceExposureMetadata),
-            header=_asMapping(header),
+            isrMetadata=asMapping(isrMetadata),
+            reduceExposureMetadata=asMapping(reduceExposureMetadata),
+            header=asMapping(header),
         )
         if frame.empty:
             self.log.info("ReductionStatsTask: no statistics recorded for %s", dataId)

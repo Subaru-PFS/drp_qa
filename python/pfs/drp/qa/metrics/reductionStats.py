@@ -30,13 +30,15 @@ fit statistics that were scraped from the ``reduceExposure`` log are read here f
 Metadata layout this reads (as recorded by drp_stella and obs_pfs):
 
 - ``reduceExposure_metadata``
-    - top level ``detectorMapAdjustment``: ``applied``, ``failed`` or ``skipped``.
+    - ``reduceExposure.detectorMapAdjustment``: ``applied``, ``failed`` or ``skipped``
+      (the top task's own scalar, under the ``reduceExposure`` key; `_adjustmentApplied`).
       The ``fit*`` and ``reserved*`` statistics are read only when it is ``applied``,
       as they can linger from a fit that later failed.
     - section ``reduceExposure:adjustDetectorMap``: the ``fit*``, ``reserved*`` and
-      ``final*`` scalars (`FIT_METRICS`). The per-species and per-QA-fiber arrays are
-      not read here: the per-species fit statistics keep their own table, which has a
-      species column.
+      ``final*`` scalars (`FIT_METRICS`) read by `reductionStatsFrame`, and the per-species
+      arrays (``speciesName``, ``speciesXRms`` …) read by `speciesFitStats` into the
+      per-species table (``iqQaSpeciesMetrics``), which has a species column and is kept
+      separate from this whole-detector table. The per-QA-fiber arrays are not read.
     - section ``reduceExposure:scatteredLight``: `SCATTERED_METRICS`.
     - section ``reduceExposure:pfiCorrection``: `PFI_METRICS`.
 - ``isr_metadata``: the n-arm whole-detector counts (`ISR_COUNT_METRICS`) and, on a
@@ -58,7 +60,10 @@ __all__ = [
     "PFI_METRICS",
     "REDUCTION_COLUMNS",
     "SCATTERED_METRICS",
+    "SPECIES_STAT_SUFFIXES",
+    "asMapping",
     "reductionStatsFrame",
+    "speciesFitStats",
 ]
 
 #: The columns of a detector-health table, in order, with their dtypes.
@@ -119,6 +124,42 @@ SCATTERED_METRICS = ("top", "bottom", "modelMean", "modelMax")
 #: ``pfiCorrection`` scalars (``skyNorms*`` are NaN without sky norms).
 PFI_METRICS = ("correctionMean", "correctionStd", "skyNormsMean", "skyNormsStd", "numBad")
 
+#: The ``adjustDetectorMap`` per-species array suffixes read into one ``speciesStats`` entry,
+#: in the order of `~pfs.drp.qa.metrics.longFormat.STAT_METRICS`: (xRms, yRms, xSoften, ySoften).
+#: The arrays (``speciesXRms`` …) run parallel to ``speciesName``.
+SPECIES_STAT_SUFFIXES = ("XRms", "YRms", "XSoften", "YSoften")
+
+
+def asMapping(obj: Any) -> Mapping[str, Any] | None:
+    """Return task metadata or a header as a plain mapping.
+
+    ``TaskMetadata`` (``to_dict``) and ``PropertyList``/``PropertySet`` (``toDict``) are
+    converted to nested dictionaries; a mapping is returned as is; anything else is `None`.
+    """
+    if obj is None:
+        return None
+    for method in ("to_dict", "toDict"):
+        convert = getattr(obj, method, None)
+        if callable(convert):
+            return convert()
+    return obj if isinstance(obj, Mapping) else None
+
+
+def _asList(value: Any) -> list:
+    """Return a metadata array as a list; a scalar as a one-element list, `None` as empty.
+
+    A string (a single species name) or a mapping counts as one element, not a sequence to
+    iterate; any other iterable (list, tuple, numpy array) becomes a list of its elements.
+    """
+    if value is None:
+        return []
+    if isinstance(value, (str, bytes, Mapping)):
+        return [value]
+    try:
+        return list(value)
+    except TypeError:
+        return [value]
+
 
 def _section(metadata: Mapping[str, Any] | None, label: str) -> Mapping[str, Any]:
     """Return the sub-mapping for a subtask label, or an empty mapping.
@@ -145,6 +186,21 @@ def _section(metadata: Mapping[str, Any] | None, label: str) -> Mapping[str, Any
         if flattened:
             return flattened
     return {}
+
+
+def _adjustmentApplied(metadata: Mapping[str, Any]) -> bool:
+    """Whether the detectorMap adjustment applied, from wherever reduceExposure recorded it.
+
+    ``reduceExposure`` records ``detectorMapAdjustment`` on its own task metadata. The serialized
+    ``reduceExposure_metadata`` nests the top task's scalars under the ``reduceExposure`` key
+    (beside the subtask sections ``reduceExposure:adjustDetectorMap`` …), so it is read from there,
+    falling back to a flattened or top-level mapping.
+    """
+    for source in (_section(metadata, "reduceExposure"), metadata):
+        value = source.get("detectorMapAdjustment")
+        if value is not None:
+            return str(value) == "applied"
+    return False
 
 
 def _toFloat(value: Any) -> float | None:
@@ -231,7 +287,7 @@ def reductionStatsFrame(
     # detectorMap fit, scattered light and PFI correction.
     if reduceExposureMetadata is not None:
         adjust = _section(reduceExposureMetadata, "reduceExposure:adjustDetectorMap")
-        applied = str(reduceExposureMetadata.get("detectorMapAdjustment", "")) == "applied"
+        applied = _adjustmentApplied(reduceExposureMetadata)
         gated = FIT_METRICS if applied else _FIT_UNGATED
         for name, value in _metrics(adjust, gated):
             rows.append(("", name, value))
@@ -261,3 +317,46 @@ def reductionStatsFrame(
         }
     )
     return frame.astype(REDUCTION_COLUMNS)
+
+
+def speciesFitStats(reduceExposureMetadata: Any) -> dict[str, tuple[float, ...]]:
+    """Return the per-species detectorMap fit statistics from the reduceExposure metadata.
+
+    drp_stella's ``fitDetectorMap`` records, in the ``reduceExposure:adjustDetectorMap``
+    metadata section, the species it fitted (``speciesName``) and parallel arrays of the
+    error-weighted RMS and the softening per species (``speciesXRms``, ``speciesYRms``,
+    ``speciesXSoften``, ``speciesYSoften``), ``Trace`` among them. This reads them into the
+    ``{species: (xRms, yRms, xSoften, ySoften)}`` mapping `~pfs.drp.qa.metrics.longFormat`'s
+    ``speciesFrame`` takes, the source that replaces the ``Stats for <species>`` log scraping
+    ``imageQualityQa`` used to do.
+
+    The statistics are read only when the detectorMap adjustment applied: a fit that later
+    failed can leave stale arrays in the metadata, as for the scalar `FIT_METRICS`.
+
+    Parameters
+    ----------
+    reduceExposureMetadata : `lsst.pipe.base.TaskMetadata` or mapping or `None`
+        The ``reduceExposure`` task metadata (converted with `asMapping`).
+
+    Returns
+    -------
+    `dict` [`str`, `tuple` [`float`, ...]]
+        ``{species: (xRms, yRms, xSoften, ySoften)}``; empty when the metadata is absent, the
+        adjustment did not apply, or no species were recorded. A value a fit left undefined is
+        NaN, so every species has the four `SPECIES_STAT_SUFFIXES` values.
+    """
+    metadata = asMapping(reduceExposureMetadata)
+    if metadata is None:
+        return {}
+    if not _adjustmentApplied(metadata):
+        return {}
+    adjust = _section(metadata, "reduceExposure:adjustDetectorMap")
+    names = _asList(adjust.get("speciesName"))
+    if not names:
+        return {}
+    columns = [_asList(adjust.get(f"species{suffix}")) for suffix in SPECIES_STAT_SUFFIXES]
+    stats: dict[str, tuple[float, ...]] = {}
+    for index, species in enumerate(names):
+        values = tuple(_toFloat(column[index]) if index < len(column) else None for column in columns)
+        stats[str(species)] = tuple(float("nan") if value is None else value for value in values)
+    return stats
