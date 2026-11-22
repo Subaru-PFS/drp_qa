@@ -301,7 +301,8 @@ median is taken; the value is positive to the red. Trace centroids have none.
 The task stores numbers only. Which of them are judged is under [The checks](#the-checks). The weighted RMS and
 the softening are drp_stella's, in `iqQaMetrics` and `iqQaSpeciesMetrics`, not recomputed. The measurement is in
 the stack-free `pfs.drp.qa.metrics.lineResiduals`. No plot is drawn as the task runs: plot `dmLineResidualData`
-afterwards.
+afterwards with `pfs.drp.qa.plotting.dmResiduals.plotDetectorResiduals` (the former `dmResiduals` 1D and 2D views,
+per detector).
 
 It also runs behind drp_stella's `reduceExposure`, measured by a separate `drpQA.yaml` pass, for
 [redoing a run](#redoing-a-run) and `drpQa.py calib validate`.
@@ -334,7 +335,7 @@ It also runs behind drp_stella's `reduceExposure`, measured by a separate `drpQA
 | `weightedRms`, `softenFit`                        | not recomputed: drp_stella's own, in `iqQaSpeciesMetrics`                                                |
 | `num_lines`, per fiber                            | `nLines` (lines of the species) and `linesPerFiber`                                                      |
 | `dmQaResidualData`                                | `dmLineResidualData`, with a residual against each reference                                             |
-| `dmQaResidualPlot`                                | nothing per quantum: drawn from `dmLineResidualData` after the fact                                      |
+| `dmQaResidualPlot`                                | nothing per quantum: `plotting.dmResiduals.plotDetectorResiduals` draws it from `dmLineResidualData` after the fact |
 | `dmQaDetectorStats`, `dmQaCombinedResidualPlot`   | none; `pfs.drp.qa.metrics.readers.exportMetrics` writes a collection's tables to parquet                 |
 
 #### `imageQualityQa`

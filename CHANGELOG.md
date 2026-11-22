@@ -10,6 +10,19 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Added
+
+- **Detector-map residual plots, drawn from stored data** (PIPE2D-1920) — `plotting.dmResiduals`
+  adds `plotDetectorResiduals`, which draws one detector image's line residuals from
+  `dmLineResidualData`, replacing the retired `dmResiduals` task's 1D and 2D views so the pipeline
+  renders no detector-map plot. Per detector, two rows (Δx spatial from traces and line x; Δy
+  wavelength from lamp and sky lines) by three columns: a median-residual hexbin face map against
+  the calibration detectorMap (drift) and against the visit's own (scatter), and a trend of the
+  reserved lines by species with each reference's median, the gate's warn/fail bands (optional
+  `limits`), and a reserved median/robust-RMS/outlier box. The Δy trend is in km/s when the
+  collection stored it, else pixels. Stack-free, DataFrames in; tested in
+  `tests/plotting/test_dmResiduals.py`, with a worked example in `docs/dm-residual-plots.ipynb`.
+
 ## [0.12.0] - 2026-11-22
 
 ### Added
