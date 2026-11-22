@@ -739,6 +739,33 @@ class TestDetectorHealth:
         # It is not judged: no verdict mentions a detector-health metric.
         assert qadb.count("qa_gate", "qa_decided_by IN ('fitXRms', 'nDefects', 'readNoise')") == 0
 
+    def testCoverageMetricsLoad(self, StubButler, tables, qadb):
+        """The reduction-coverage rows (isrRan, reduceExposureRan, reductionStage) load as detector health.
+
+        They are whole-detector metrics like any other reductionStats row, so the loader needs no
+        change: a detector whose reduction never ran still lands a row in detector_health_qa.
+        """
+        coverage = []
+        for image in tables["iqQaMetrics"][IMAGE].itertuples(index=False):
+            base = image._asdict()
+            coverage.append({**base, "amplifier": "", "metric": "isrRan", "value": 1.0})
+            coverage.append({**base, "amplifier": "", "metric": "reduceExposureRan", "value": 0.0})
+            coverage.append({**base, "amplifier": "", "metric": "reductionStage", "value": 1.0})
+        tables["reductionStats"] = pd.DataFrame(coverage)
+        butler = StubButler(tables, datasets=PACKAGES)
+        counts = load(butler, qadb)
+        assert counts["detector_health_qa"] == 12  # 4 images x 3 coverage metrics
+        stage = qadb.query_scalar(
+            "SELECT value FROM detector_health_qa"
+            " WHERE pfs_visit_id = :v AND camera_name = :c AND amplifier = '' AND metric = 'reductionStage'",
+            params={"v": 133025, "c": "b1"},
+        )
+        assert stage == 1.0
+        # Negative control: coverage is stored, not judged — no verdict is decided by a coverage metric.
+        assert (
+            qadb.count("qa_gate", "qa_decided_by IN ('isrRan', 'reduceExposureRan', 'reductionStage')") == 0
+        )
+
     def testOnlyReductionStatsCollection(self, StubButler, fixtures, qadb):
         """A collection with reductionStats but no QA numbers loads detector health and no verdicts.
 

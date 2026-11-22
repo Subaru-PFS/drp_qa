@@ -10,6 +10,7 @@ import math
 import pandas as pd
 
 from pfs.drp.qa.metrics.reductionStats import (
+    COVERAGE_METRICS,
     FIT_METRICS,
     ISR_COUNT_METRICS,
     REDUCTION_COLUMNS,
@@ -63,11 +64,41 @@ def testSchema():
     assert (frame["arm"] == DATA_ID["arm"]).all()
 
 
-def testEmpty():
-    """No metadata at all gives a well-formed empty frame, not an error."""
+def testCoverageRowsAlwaysPresent():
+    """With no reduction metadata, an exposed detector still gets the coverage rows.
+
+    The task is anchored on raw, so reductionStats runs on a detector whose reduction never
+    started; the frame is the coverage rows (all zero), not empty — that is what gives every
+    exposed detector a row.
+    """
     frame = reductionStatsFrame(DATA_ID)
-    assert len(frame) == 0
+    assert set(frame["metric"]) == set(COVERAGE_METRICS)
+    assert (frame["amplifier"] == "").all()
+    assert _value(frame, "isrRan") == 0.0
+    assert _value(frame, "reduceExposureRan") == 0.0
+    assert _value(frame, "reductionStage") == 0.0
     assert list(frame.columns) == list(REDUCTION_COLUMNS)
+    # Negative control: the old contract — an empty frame when nothing ran — would drop the detector.
+    assert len(frame) != 0
+
+
+def testCoverageStages():
+    """The flags and reductionStage track how far the reduction got."""
+    isrOnly = reductionStatsFrame(N_DATA_ID, isrMetadata={"nDefects": 201178})
+    assert _value(isrOnly, "isrRan") == 1.0
+    assert _value(isrOnly, "reduceExposureRan") == 0.0
+    assert _value(isrOnly, "reductionStage") == 1.0
+
+    reduced = reductionStatsFrame(
+        DATA_ID, isrMetadata={"nDefects": 1}, reduceExposureMetadata=_adjustMetadata()
+    )
+    assert _value(reduced, "isrRan") == 1.0
+    assert _value(reduced, "reduceExposureRan") == 1.0
+    assert _value(reduced, "reductionStage") == 2.0
+
+    # Negative control: a step that produced no metadata is not credited — an ISR-only
+    # detector is stage 1, not 2.
+    assert _value(isrOnly, "reductionStage") != 2.0
 
 
 def testFitStatsWhenApplied():
@@ -159,7 +190,7 @@ def testIsrCountsOnlyWhenPresent():
     assert _value(frame, "nSat") == 0.0  # present and zero: a row, with value 0
     present = set(frame["metric"])
     assert "nCR" not in present  # not recorded on this frame
-    assert present <= set(ISR_COUNT_METRICS)
+    assert present <= set(ISR_COUNT_METRICS) | set(COVERAGE_METRICS)
     assert (frame["amplifier"] == "").all()  # n arm: whole-detector
 
 
@@ -175,7 +206,8 @@ def testPerAmplifierHeader():
     frame = reductionStatsFrame(DATA_ID, header=header)
     assert _value(frame, "gain", amplifier="c1") == 1.24
     assert _value(frame, "readNoise", amplifier="c2") == 3.88
-    assert set(frame["amplifier"]) == {"c1", "c2"}
+    # The per-amp rows (c1, c2) beside the whole-detector coverage rows (empty amplifier).
+    assert set(frame["amplifier"]) == {"", "c1", "c2"}
     # Negative control: a non-ISR header key does not become a metric.
     assert "W_SEQTYP" not in set(frame["metric"])
 
@@ -185,9 +217,10 @@ def testPerAmplifierHeaderCcdOnly():
     header = {"LSST GAIN c1": 1.24, "LSST READNOISE c1": 3.91}
     ccd = reductionStatsFrame({"visit": 155486, "arm": "r", "spectrograph": 1}, header=header)
     assert _value(ccd, "gain", amplifier="c1") == 1.24
-    # Negative control: the same keys on the n arm produce no rows.
+    # Negative control: the same keys on the n arm produce no per-amp rows, only coverage.
     narm = reductionStatsFrame({"visit": 155486, "arm": "n", "spectrograph": 3}, header=header)
-    assert len(narm) == 0
+    assert set(narm["metric"]) == set(COVERAGE_METRICS)
+    assert "gain" not in set(narm["metric"])
 
 
 def testDarkScale():
