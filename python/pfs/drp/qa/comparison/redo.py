@@ -290,7 +290,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     except ValueError as error:
         raise SystemExit(str(error)) from None
     args.fresh = fresh
-    args.command = "run"  # redo always runs the passes; --dry-run builds the graphs only
     args.passes = []  # redo processes every pass; --cadence subsets the arcs and traces
     version = args.version or drpQaVersion()
     args.variant = ""
@@ -577,7 +576,7 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
         warning = unexpectedPipeline(
             args.variant, known, others, int((detectors["status"] == "to reduce").sum())
         )
-        if warning and args.command == "run" and not args.dry_run and not args.new_pipeline:
+        if warning and not args.dry_run and not args.new_pipeline:
             raise SystemExit(
                 f"!! {warning}\n!! Set up that stack, or pass --new-pipeline to reduce with this one."
             )
@@ -629,8 +628,6 @@ def _plan(args, period: Period, visits: pd.DataFrame, output: str, workDir: Path
             print(f"cmd = {command!r}")
     if not commands:
         print("Nothing to do: every detector image is judged or has no raw data.")
-    if args.command == "plan":
-        return 0
 
     # A failed quantum fails its pass but not the others: run every pass, then say what failed.
     failed = []
