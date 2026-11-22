@@ -30,7 +30,8 @@ fit statistics that were scraped from the ``reduceExposure`` log are read here f
 Metadata layout this reads (as recorded by drp_stella and obs_pfs):
 
 - ``reduceExposure_metadata``
-    - top level ``detectorMapAdjustment``: ``applied``, ``failed`` or ``skipped``.
+    - ``reduceExposure.detectorMapAdjustment``: ``applied``, ``failed`` or ``skipped``
+      (the top task's own scalar, under the ``reduceExposure`` key; `_adjustmentApplied`).
       The ``fit*`` and ``reserved*`` statistics are read only when it is ``applied``,
       as they can linger from a fit that later failed.
     - section ``reduceExposure:adjustDetectorMap``: the ``fit*``, ``reserved*`` and
@@ -180,6 +181,21 @@ def _section(metadata: Mapping[str, Any] | None, label: str) -> Mapping[str, Any
     return {}
 
 
+def _adjustmentApplied(metadata: Mapping[str, Any]) -> bool:
+    """Whether the detectorMap adjustment applied, from wherever reduceExposure recorded it.
+
+    ``reduceExposure`` records ``detectorMapAdjustment`` on its own task metadata. The serialized
+    ``reduceExposure_metadata`` nests the top task's scalars under the ``reduceExposure`` key
+    (beside the subtask sections ``reduceExposure:adjustDetectorMap`` …), so it is read from there,
+    falling back to a flattened or top-level mapping.
+    """
+    for source in (_section(metadata, "reduceExposure"), metadata):
+        value = source.get("detectorMapAdjustment")
+        if value is not None:
+            return str(value) == "applied"
+    return False
+
+
 def _toFloat(value: Any) -> float | None:
     """Return a scalar as a float, or `None` when it is missing or not a number."""
     if value is None:
@@ -264,7 +280,7 @@ def reductionStatsFrame(
     # detectorMap fit, scattered light and PFI correction.
     if reduceExposureMetadata is not None:
         adjust = _section(reduceExposureMetadata, "reduceExposure:adjustDetectorMap")
-        applied = str(reduceExposureMetadata.get("detectorMapAdjustment", "")) == "applied"
+        applied = _adjustmentApplied(reduceExposureMetadata)
         gated = FIT_METRICS if applied else _FIT_UNGATED
         for name, value in _metrics(adjust, gated):
             rows.append(("", name, value))
@@ -325,7 +341,7 @@ def speciesFitStats(reduceExposureMetadata: Any) -> dict[str, tuple[float, ...]]
     metadata = asMapping(reduceExposureMetadata)
     if metadata is None:
         return {}
-    if str(metadata.get("detectorMapAdjustment", "")) != "applied":
+    if not _adjustmentApplied(metadata):
         return {}
     adjust = _section(metadata, "reduceExposure:adjustDetectorMap")
     names = _asList(adjust.get("speciesName"))

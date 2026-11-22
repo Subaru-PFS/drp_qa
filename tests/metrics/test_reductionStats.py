@@ -29,10 +29,14 @@ def _value(frame: pd.DataFrame, metric: str, amplifier: str = "") -> float:
 
 
 def _adjustMetadata(applied: bool = True) -> dict:
-    """Build reduceExposure metadata with the adjustDetectorMap fit scalars."""
+    """Build reduceExposure metadata with the adjustDetectorMap fit scalars.
+
+    The shape reduceExposure_metadata really has: the top task's own scalar
+    ``detectorMapAdjustment`` under the ``reduceExposure`` key, beside the subtask sections.
+    """
     section = {name: float(index + 1) for index, name in enumerate(FIT_METRICS)}
     return {
-        "detectorMapAdjustment": "applied" if applied else "failed",
+        "reduceExposure": {"detectorMapAdjustment": "applied" if applied else "failed"},
         "reduceExposure:adjustDetectorMap": section,
         "reduceExposure:scatteredLight": {
             "top": 1.0,
@@ -112,6 +116,24 @@ def testFlattenedSubtaskKeys():
     frame = reductionStatsFrame(DATA_ID, reduceExposureMetadata=metadata)
     assert _value(frame, "fitXRms") == 0.021
     assert _value(frame, "fitYRms") == 0.034
+
+
+def testAdjustmentReadFromReduceExposureSection():
+    """``detectorMapAdjustment`` is read from the ``reduceExposure`` key, as a real reduction nests it.
+
+    Negative control: the flag sits only under ``reduceExposure`` (not at the top level), the shape a
+    reduced image has; a gate that looked only at the top level would read it as not applied and drop
+    every ``fit*``/``reserved*`` row even though the adjustment was used.
+    """
+    section = {name: float(index + 1) for index, name in enumerate(FIT_METRICS)}
+    metadata = {
+        "reduceExposure": {"detectorMapAdjustment": "applied"},
+        "reduceExposure:adjustDetectorMap": section,
+    }
+    assert "detectorMapAdjustment" not in metadata  # nothing at the top level to fall back on
+    frame = reductionStatsFrame(DATA_ID, reduceExposureMetadata=metadata)
+    assert _value(frame, "fitXRms") == float(FIT_METRICS.index("fitXRms") + 1)
+    assert _value(frame, "reservedXRms") == float(FIT_METRICS.index("reservedXRms") + 1)
 
 
 def testScatteredAndPfiNamespaced():
@@ -199,7 +221,7 @@ def _speciesMetadata(applied: bool = True) -> dict:
     fitted species, ``Trace`` among them, and leaves an undefined value NaN.
     """
     return {
-        "detectorMapAdjustment": "applied" if applied else "failed",
+        "reduceExposure": {"detectorMapAdjustment": "applied" if applied else "failed"},
         "reduceExposure:adjustDetectorMap": {
             "speciesName": ["HgI", "NeI", "Trace"],
             "speciesXRms": [0.021, 0.018, 0.040],
