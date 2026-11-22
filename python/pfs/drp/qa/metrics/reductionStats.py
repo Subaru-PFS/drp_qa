@@ -146,12 +146,19 @@ def asMapping(obj: Any) -> Mapping[str, Any] | None:
 
 
 def _asList(value: Any) -> list:
-    """Return a metadata array as a list; a scalar as a one-element list, `None` as empty."""
+    """Return a metadata array as a list; a scalar as a one-element list, `None` as empty.
+
+    A string (a single species name) or a mapping counts as one element, not a sequence to
+    iterate; any other iterable (list, tuple, numpy array) becomes a list of its elements.
+    """
     if value is None:
         return []
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, (str, bytes, Mapping)):
+        return [value]
+    try:
         return list(value)
-    return [value]
+    except TypeError:
+        return [value]
 
 
 def _section(metadata: Mapping[str, Any] | None, label: str) -> Mapping[str, Any]:

@@ -271,3 +271,31 @@ def testSpeciesFitStatsBareSubtaskKey():
         },
     }
     assert speciesFitStats(metadata) == {"ArI": (0.025, 0.035, 0.01, 0.0)}
+
+
+def testSpeciesFitStatsHandlesArrayValues():
+    """Array-like metadata values (not Python lists) are iterated, not wrapped as one species.
+
+    Negative control: a single species name stays one species, never split into characters.
+    """
+    import numpy as np
+
+    metadata = {
+        "reduceExposure": {"detectorMapAdjustment": "applied"},
+        "reduceExposure:adjustDetectorMap": {
+            "speciesName": np.array(["NeI", "HgI"]),
+            "speciesXRms": np.array([0.02, 0.03]),
+            "speciesYRms": np.array([0.04, 0.05]),
+            "speciesXSoften": np.array([0.0, 0.0]),
+            "speciesYSoften": np.array([0.0, 0.0]),
+        },
+    }
+    stats = speciesFitStats(metadata)
+    assert set(stats) == {"NeI", "HgI"}
+    assert stats["NeI"] == (0.02, 0.04, 0.0, 0.0)
+    # Negative control: a lone string name is one species, not three characters.
+    single = {
+        "reduceExposure": {"detectorMapAdjustment": "applied"},
+        "reduceExposure:adjustDetectorMap": {"speciesName": "NeI", "speciesXRms": [0.02]},
+    }
+    assert set(speciesFitStats(single)) == {"NeI"}

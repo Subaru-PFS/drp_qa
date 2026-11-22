@@ -483,16 +483,25 @@ def _reservedRms(reductionStats: pd.DataFrame) -> pd.DataFrame:
     The reserved-line RMS is a whole-detector statistic (empty ``amplifier``). An image whose
     adjustment did not apply recorded none, so it has no row and its RMS merges as null.
     """
-    columns = [*_DETECTOR, *_RESERVED_RMS.values()]
+    # Typed so the reserved columns stay float when there are no rows: merging an object-dtype
+    # empty frame leaves them object, and the later median/max then raise.
+    empty = pd.DataFrame(
+        {
+            "visit": pd.Series(dtype="int64"),
+            "arm": pd.Series(dtype="object"),
+            "spectrograph": pd.Series(dtype="int64"),
+            **{column: pd.Series(dtype="float64") for column in _RESERVED_RMS.values()},
+        }
+    )
     if reductionStats is None or reductionStats.empty:
-        return pd.DataFrame(columns=columns)
+        return empty
     rows = reductionStats[
-        (reductionStats["amplifier"].fillna("") == "") & reductionStats["metric"].isin(_RESERVED_RMS)
+        (reductionStats["amplifier"].fillna("") == "") & reductionStats["metric"].isin(list(_RESERVED_RMS))
     ]
     if rows.empty:
-        return pd.DataFrame(columns=columns)
+        return empty
     wide = (
-        rows.pivot_table(index=_DETECTOR, columns="metric", values="value", aggfunc="last")
+        rows.pivot_table(index=_DETECTOR, columns="metric", values="value", aggfunc="first")
         .reindex(columns=list(_RESERVED_RMS))
         .rename(columns=_RESERVED_RMS)
         .reset_index()

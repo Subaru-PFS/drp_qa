@@ -382,6 +382,19 @@ def testFwhmAloneOnlySaysCheck(visits):
     assert judged.loc[(110, 1), "verdict"] == Verdict.OUT
 
 
+def testMissingReductionStatsLeavesReservedRmsNull(visits, setNormals):
+    """A collection without reductionStats leaves the reserved RMS null, without erroring.
+
+    Negative control: the same set with its reductionStats present has a finite reserved RMS.
+    """
+    iq, dm, reduction = _metrics(visits)
+    judged = judge(detectorTable(visits, iq, dm, reduction.iloc[0:0], setNormals))
+    assert judged["fitReservedXRms"].isna().all()
+    assert judged["reservedRms"].isna().all()
+    # Negative control: with reductionStats the reserved RMS is measured.
+    assert judge(detectorTable(visits, iq, dm, reduction, setNormals))["reservedRms"].notna().any()
+
+
 def testFadingLampIsWeakNotOut(visits):
     iq, dm, reduction = _metrics(visits, fading={101: 0.9, 102: 0.75})
     judged = judge(detectorTable(visits, iq, dm, reduction))
