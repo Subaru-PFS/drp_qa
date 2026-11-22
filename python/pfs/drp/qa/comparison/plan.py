@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from pfs.drp.qa.comparison.classify import shakaLabel
+from pfs.drp.qa.comparison.classify import shakaColumn
 from pfs.drp.qa.comparison.reduction import (
     MEASURE_LABELS,
     MEASURE_PIPELINE,
@@ -246,9 +246,7 @@ def coverage(
         ["pfs_visit_id", "period", "sequence_type", "cadence", "iic_sequence_id", "category", "night"]
     ].copy()
     # A shaka exposure (one fiber group lit) is reported apart from fully lit arcs and traces.
-    info["shaka"] = [
-        shakaLabel(mod, group) for mod, group in zip(judged["shakaMod"], judged["shakaGroup"], strict=True)
-    ]
+    info["shaka"] = shakaColumn(judged)
     detectors = detectors.merge(info.rename(columns={"pfs_visit_id": "visit"}), on="visit", how="left")
     columns = [
         *keys,
@@ -286,9 +284,7 @@ def summarize(visits: pd.DataFrame, detectors: pd.DataFrame) -> pd.DataFrame:
     group = ["sequence_type", "cadence", "shaka", "category"]
     labelled = visits.assign(
         sequence_type=visits["sequence_type"].fillna("(none)"),
-        shaka=[
-            shakaLabel(mod, grp) for mod, grp in zip(visits["shakaMod"], visits["shakaGroup"], strict=True)
-        ],
+        shaka=shakaColumn(visits),
     )
     counts = labelled.groupby([*group, "reason"], dropna=False).size().rename("visits").reset_index()
     if detectors.empty:

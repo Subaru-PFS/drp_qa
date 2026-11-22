@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from pfs.drp.qa.comparison.classify import SKY_TYPES, classifyVisits, designKinds, shakaLabel
+from pfs.drp.qa.comparison.classify import SKY_TYPES, classifyVisits, designKinds, shakaColumn
 from pfs.drp.qa.comparison.plan import (
     STATUS_ORDER,
     coverage,
@@ -141,9 +141,7 @@ def fetchSummary(
     )
     visits = visits[visits["period"] == period.name]
     # Shaka exposures (one fiber group lit) are measured like full arcs and traces but reported apart.
-    visits["shakaTag"] = [
-        shakaLabel(mod, group) for mod, group in zip(visits["shakaMod"], visits["shakaGroup"], strict=True)
-    ]
+    visits["shakaTag"] = shakaColumn(visits)
     lines = [
         f"{period.name}: nights {period.firstNight} to {period.lastNight}, read until {readUntil}",
         f"  {len(visits):,} visits in {visits['iic_sequence_id'].nunique():,} sequences,"
@@ -156,8 +154,9 @@ def fetchSummary(
         lines.append(f"  {len(subset):,} {label}")
         kinds = subset.groupby(["category", "sequence_type", "cadence", "shakaTag"]).size()
         for (category, sequenceType, cadence, shakaTag), count in kinds.items():
-            row = f"    {count:6,}  {category:<12} {sequenceType} {cadence} {shakaTag}"
-            lines.append(row.rstrip())
+            # Join only the non-empty fields: a type with no cadence (e.g. fiberProfiles) leaves no gap.
+            tail = " ".join(part for part in (sequenceType, cadence, shakaTag) if part)
+            lines.append(f"    {count:6,}  {category:<12} {tail}".rstrip())
     others = visits.loc[~visits["judged"], "reason"].value_counts()
     if len(others):
         lines.append(f"  {int(others.sum()):,} not judged")

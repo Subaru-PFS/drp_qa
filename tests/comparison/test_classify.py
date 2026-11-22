@@ -248,6 +248,7 @@ def testShakaOf():
     # Negative controls: a fully lit design, a science field name, and non-strings are not shaka.
     assert shakaOf("cobraHome") == (None, None)
     assert shakaOf("some science field group") == (None, None)  # "group" but no digit and no MOD
+    assert shakaOf("cobraHome-group1_MOD4") == (None, None)  # MOD only after the group: not shaka
     assert shakaOf(None) == (None, None)
     assert shakaOf(float("nan")) == (None, None)
 

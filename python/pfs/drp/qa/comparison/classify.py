@@ -30,10 +30,10 @@ which changes how much light enters the fibers but not the spectrograph's line w
 ``dithered``.
 
 An arc or trace gets the `shaka` sub-label from its design name (`shakaOf`): a *shaka* exposure
-lights one group of every few cobras (``cobraHome-MOD4_group2``, every fourth cobra; PIPE2D-1935),
-so it is measured and judged like a fully lit arc or trace but on about a quarter of the fibers,
-and is reported apart from them. ``shakaMod`` is the modulus (4 for every fourth) and
-``shakaGroup`` the group; a fully lit (``cobraHome``) or science design has neither.
+lights one group of every few cobras (``cobraHome-MOD4_group2``, every fourth cobra), so it is
+measured and judged like a fully lit arc or trace but on about a quarter of the fibers, and is
+reported apart from them. ``shakaMod`` is the modulus (4 for every fourth) and ``shakaGroup`` the
+group; a fully lit (``cobraHome``) or science design has neither.
 """
 
 import re
@@ -61,6 +61,7 @@ __all__ = [
     "engineeringGroups",
     "engineeringSequences",
     "focusSweeps",
+    "shakaColumn",
     "shakaLabel",
     "shakaOf",
 ]
@@ -183,6 +184,24 @@ def shakaLabel(mod: object, group: object) -> str:
     if pd.isna(group):
         return ""
     return f"shaka MOD{int(mod)} group{int(group)}"
+
+
+def shakaColumn(visits: pd.DataFrame) -> list[str]:
+    """Return each visit's shaka label (`shakaLabel`), from its ``shakaMod`` and ``shakaGroup``.
+
+    Parameters
+    ----------
+    visits : `pandas.DataFrame`
+        With ``shakaMod`` and ``shakaGroup`` columns (`classifyVisits`).
+
+    Returns
+    -------
+    `list` [`str`]
+        One label per row (``""`` for a fully lit exposure), in row order.
+    """
+    return [
+        shakaLabel(mod, group) for mod, group in zip(visits["shakaMod"], visits["shakaGroup"], strict=True)
+    ]
 
 
 def focusSweeps(sky: pd.DataFrame) -> pd.Series:
