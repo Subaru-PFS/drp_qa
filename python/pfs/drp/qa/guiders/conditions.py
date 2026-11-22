@@ -135,3 +135,68 @@ def writeConditions(visits, opdb, qadb, wavelengthRef=None):
     return upsert(qadb, "seeing_agc_exposure", seeing, keys), upsert(
         qadb, "transparency_agc_exposure", transp, keys
     )
+
+
+def _median(values: np.ndarray) -> float:
+    """Return the median of the finite values, or NaN when there are none (no all-NaN warning)."""
+    finite = values[np.isfinite(values)]
+    return float(np.median(finite)) if len(finite) else float("nan")
+
+
+def describeConditions(cond: pd.DataFrame) -> list[str]:
+    """Lines describing the per-visit conditions, for the shadow log (what `writeConditions` would upsert).
+
+    Parameters
+    ----------
+    cond : `pandas.DataFrame`
+        `exposureConditions`' output.
+
+    Returns
+    -------
+    lines : `list` of `str`
+        A header with the totals, then one line per visit with its AG exposures' median seeing and
+        transparency. Empty input gives a single "no good-match AG exposures" line.
+    """
+    if len(cond) == 0:
+        return ["AG conditions (shadow): no good-match AG exposures"]
+    header = (
+        f"AG conditions (shadow, not written): {len(cond)} AG exposure(s) over "
+        f"{cond.pfs_visit_id.nunique()} visit(s); would upsert {len(cond)} seeing + "
+        f"{len(cond)} transparency row(s)"
+    )
+    lines = [header]
+    for visit, group in cond.groupby("pfs_visit_id"):
+        seeing = _median(group.seeing_median.to_numpy(float))
+        transparency = _median(group.transparency_median.to_numpy(float))
+        lines.append(
+            f"  visit={int(visit)}: {len(group)} exposure(s), "
+            f"seeing~{seeing:.2f} arcsec, transparency~{transparency:.2f}"
+        )
+    return lines
+
+
+def logConditions(visits, opdb, log) -> int:
+    """Compute the visits' conditions and log what `writeConditions` would upsert, writing nothing.
+
+    The shadow run alongside the observatory ``obsCondition`` tool until the handoff is settled: it
+    does everything `writeConditions` does but the database write, logging the per-visit summary
+    (`describeConditions`) instead.
+
+    Parameters
+    ----------
+    visits : iterable of `int`
+        The visits.
+    opdb : `pfs.utils.database.opdb.OpDB`
+        The operations database.
+    log : callable
+        Where each line goes, called with one string (as `pfs.drp.qa.qadb.loader.loadCollection`'s).
+
+    Returns
+    -------
+    n : `int`
+        The AG exposures described.
+    """
+    cond = exposureConditions(readConditionSpots(opdb, visits))
+    for line in describeConditions(cond):
+        log(line)
+    return len(cond)

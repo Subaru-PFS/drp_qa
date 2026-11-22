@@ -84,6 +84,12 @@ def loadMain(argv: Sequence[str] | None = None) -> int:
         help="don't read the reducing pipeline's versions from the pfsArm headers (one read per image)",
     )
     parser.add_argument("--dry-run", metavar="DIR", default=None, help="write parquet files here instead")
+    parser.add_argument(
+        "--ag-conditions",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="log the AG seeing/transparency that would be written (shadow of obsCondition); needs --opdb-host",
+    )
     args = parser.parse_args(argv)
 
     from lsst.daf.butler import Butler
@@ -109,6 +115,7 @@ def loadMain(argv: Sequence[str] | None = None) -> int:
         opdb=opdb,
         mode=args.mode,
         pipelineVersions=not args.no_pipeline_versions,
+        agConditions=args.ag_conditions,
         dryRun=args.dry_run,
         log=say,
     )

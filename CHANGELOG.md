@@ -18,8 +18,12 @@ made, and earlier sections to the weekly tag alone.
   calc — the airmass-corrected, PSF-floored seeing and the magnitude-based transparency, aggregated as the
   real-time ag actor log reports them (transparency over the brighter stars, via `agMetrics.summarizeTransparency`).
   `queries.readConditionSpots` reads the spots from opdb; `exposureConditions` aggregates per AG exposure
-  (stack-free, tested); `writeConditions` upserts both tables via `qadb.writer`. Not wired into `drpQA.yaml`:
-  it is the candidate replacement for `obsCondition`'s math, pending that handoff.
+  (stack-free, tested); `writeConditions` upserts both tables via `qadb.writer`. It runs as a **shadow** of
+  `obsCondition` in the loader (`drpQa.py load --ag-conditions`, on by default; `loadCollection(agConditions=True)`):
+  with an opdb it computes the conditions of the loaded visits and **logs** what it would write
+  (`logConditions`), touching no qadb, so it can be validated in the live chain before taking over the
+  writes. Not a `drpQA.yaml` task (the compute reads opdb, not a Butler); the qadb write stays off pending
+  the `obsCondition` handoff.
 - **Detector health from the reduction's metadata** (PIPE2D-2014) — a new `reductionStats` task in `drpQA.yaml`
   reads the detectorMap fit, scattered-light and PFI-correction scalars from `reduceExposure_metadata`, the n-arm
   counts and dark scale from `isr_metadata`, and per-amplifier gain and read noise from the ISR header, and writes

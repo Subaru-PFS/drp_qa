@@ -235,3 +235,44 @@ def test_writeConditions_upserts_both_tables(monkeypatch):
     # Idempotent: a second write replaces the rows, it does not duplicate them.
     writeConditions([42], opdb=object(), qadb=qadb)
     assert len(qadb.query_dataframe("SELECT * FROM seeing_agc_exposure")) == 2
+
+
+def test_describeConditions_summarizes_per_visit():
+    """The shadow lines carry the totals and each visit's median seeing and transparency."""
+    from pfs.drp.qa.guiders.conditions import describeConditions
+
+    spots = makeSpots(
+        [
+            (100, 60.0, 9.0, 8.0, 15.0, 15.1, 0.6),
+            (101, 70.0, 10.0, 10.0, 15.0, 15.0, 0.5),
+        ]
+    )
+    spots.loc[spots.agc_exposure_id == 101, "pfs_visit_id"] = 43  # the two exposures are in two visits
+    cond = exposureConditions(spots)
+    lines = describeConditions(cond)
+    assert "shadow, not written" in lines[0]
+    assert "2 AG exposure(s) over 2 visit(s)" in lines[0]
+    assert any("visit=42:" in line for line in lines) and any("visit=43:" in line for line in lines)
+    # Negative control: it never claims a database write.
+    assert not any("wrote" in line.lower() for line in lines)
+    assert describeConditions(exposureConditions(makeSpots([])))[0].endswith("no good-match AG exposures")
+
+
+def test_logConditions_logs_and_writes_nothing(monkeypatch):
+    """LogConditions computes, logs the summary through the callable and returns the exposure count."""
+    from pfs.drp.qa.guiders import conditions
+
+    spots = makeSpots(
+        [
+            (100, 60.0, 9.0, 8.0, 15.0, 15.1, 0.6),
+            (100, 60.0, 12.0, 11.0, 14.6, 14.7, 0.5),
+            (101, 70.0, 10.0, 10.0, 15.0, 15.0, 0.5),
+        ]
+    )
+    monkeypatch.setattr(conditions, "readConditionSpots", lambda opdb, visits: spots)
+    captured = []
+    n = conditions.logConditions([42], opdb=object(), log=captured.append)
+    assert n == 2  # two AG exposures (the two mag-varied rows of exposure 100 are one exposure)
+    assert captured and "shadow" in captured[0]
+    # Negative control: no qadb was touched (none was passed, and a write path would have needed it).
+    assert any("visit=42:" in line for line in captured)
