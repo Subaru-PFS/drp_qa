@@ -6,6 +6,11 @@ The task binds the Butler to the stack-free measurement in
 `pfs.drp.qa.metrics.reductionStats`; it stores numbers only and judges nothing. Detector
 health is stored, not gated: the limits come after a run of values.
 
+The task is anchored on the raw header, so a quantum runs on every exposed detector — even
+one whose reduction never ran — rather than only where ISR produced metadata. The
+reduction's own metadata inputs (``isr_metadata``, ``reduceExposure_metadata``) and the ISR
+header are optional.
+
 This replaces the log scraping ``imageQualityQa`` used to do for the detectorMap fit and
 ISR counts: the same numbers are read here from the task metadata, not from log text.
 """
@@ -35,14 +40,27 @@ class ReductionStatsConnections(
 ):
     """Butler inputs and output for `ReductionStatsTask`."""
 
+    rawMetadata = InputConnection(
+        name="raw.metadata",
+        doc=(
+            "The raw exposure header, the anchor: present for every exposed detector, so a quantum runs"
+            " on each — even one whose reduction never ran — rather than only where ISR produced"
+            " metadata. Its presence defines the quantum; its content is not read here."
+        ),
+        storageClass="PropertyList",
+        dimensions=("instrument", "visit", "arm", "spectrograph"),
+    )
+
     isrMetadata = InputConnection(
         name="isr_metadata",
         doc=(
             "ISR task metadata: the n-arm whole-detector counts (nSat, nLow, nDefects, ..., nCR) and,"
-            " on a CCD with a dark, the dark scale. Each count is recorded only when its step ran."
+            " on a CCD with a dark, the dark scale. Each count is recorded only when its step ran, and"
+            " the whole input is absent when ISR did not run."
         ),
         storageClass="TaskMetadata",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
+        minimum=0,
     )
 
     reduceExposureMetadata = InputConnection(
@@ -97,7 +115,7 @@ class ReductionStatsTask(PipelineTask):
         inputRefs: InputQuantizedConnection,
         outputRefs: OutputQuantizedConnection,
     ):
-        dataId = dict(**inputRefs.isrMetadata.dataId.mapping)
+        dataId = dict(**inputRefs.rawMetadata.dataId.mapping)
         inputs = butlerQC.get(inputRefs)
         inputs["dataId"] = dataId
         try:
@@ -110,6 +128,7 @@ class ReductionStatsTask(PipelineTask):
     def run(
         self,
         dataId: dict,
+        rawMetadata: Any = None,
         isrMetadata: Any = None,
         reduceExposureMetadata: Any = None,
         header: Any = None,
@@ -120,6 +139,9 @@ class ReductionStatsTask(PipelineTask):
         ----------
         dataId : `dict`
             The image: ``visit``, ``arm``, ``spectrograph``.
+        rawMetadata : `lsst.daf.base.PropertyList`, optional
+            The raw exposure header — the Butler anchor that gives one quantum per exposed
+            detector. Its content is not read here.
         isrMetadata, reduceExposureMetadata : `lsst.pipe.base.TaskMetadata`, optional
             The ISR and reduceExposure task metadata.
         header : `lsst.daf.base.PropertyList`, optional

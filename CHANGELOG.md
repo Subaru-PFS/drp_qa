@@ -10,6 +10,13 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Changed
+
+- **`reductionStats` anchored on the raw header** (PIPE2D-2020) — the task takes `raw.metadata` as its
+  anchor input, so a quantum runs on every exposed detector rather than only where ISR produced metadata;
+  `isr_metadata` is now an optional input (as `reduceExposure_metadata` and the ISR header already were).
+  Groundwork for a per-detector reduction-status row.
+
 ## [0.11.0] - 2026-11-22
 
 ### Added

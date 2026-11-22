@@ -264,3 +264,61 @@ def testOptionalPfsConfigSaysMinimumZero():
     assert prerequisiteMinimum(MIXED_SOURCE, "config") is None
     with pytest.raises(LookupError):
         prerequisiteMinimum(MIXED_SOURCE, "pfsConfig")
+
+
+def inputMinimums(source: str) -> dict[str, int | None]:
+    """Map each ``Input`` connection's dataset type to the ``minimum`` it passes.
+
+    A required input passes no ``minimum`` (it defaults to 1), which reads here
+    as `None`; an optional one passes ``minimum=0``.
+
+    Parameters
+    ----------
+    source : `str`
+        Python source of the module.
+
+    Returns
+    -------
+    minimums : `dict` [`str`, `int` or `None`]
+        The ``minimum`` passed, by dataset type name, for every plain ``Input``.
+    """
+    minimums: dict[str, int | None] = {}
+    for _, attribute, connectionType, call in iterConnections(ast.parse(source)):
+        if connectionType != "Input":
+            continue
+        value: int | None = None
+        for keyword in call.keywords:
+            if keyword.arg == "minimum":
+                value = keyword.value.value
+        minimums[datasetTypeName(call, attribute)] = value
+    return minimums
+
+
+# The reductionStats anchoring before PIPE2D-2020: isr_metadata the required input,
+# so only a detector whose ISR ran got a quantum.
+OLD_REDUCTIONSTATS = """
+from lsst.pipe.base.connectionTypes import Input as InputConnection
+
+class ReductionStatsConnections:
+    isrMetadata = InputConnection(name="isr_metadata")
+    reduceExposureMetadata = InputConnection(name="reduceExposure_metadata", minimum=0)
+"""
+
+
+def testReductionStatsAnchoredOnRaw():
+    """``reductionStats`` anchors on ``raw.metadata``, so every exposed detector gets a quantum.
+
+    The raw header exists for every exposed detector, so making it the one required
+    input is what lets the task run on a detector whose reduction never ran; the
+    reduction's own metadata inputs must stay optional or that detector gets no
+    quantum.
+    """
+    minimums = inputMinimums((ROOT / "python" / "pfs" / "drp" / "qa" / "reductionStats.py").read_text())
+    assert minimums["raw.metadata"] is None, "raw.metadata must be the required anchor"
+    assert minimums["isr_metadata"] == 0, "isr_metadata must be optional"
+    assert minimums["reduceExposure_metadata"] == 0, "reduceExposure_metadata must be optional"
+
+    # Negative control: the old anchoring — required isr_metadata, no raw — is not raw-anchored.
+    old = inputMinimums(OLD_REDUCTIONSTATS)
+    assert "raw.metadata" not in old
+    assert old["isr_metadata"] is None
