@@ -98,10 +98,11 @@ the pipeline/config glue to run them.
   `tests/guiders/test_runAnalysis.py` and `test_runReport.py` on a synthetic run (`makeAgRunTables`). Its plots are not in `docs/guider-plots.ipynb`: a run
   holds science visits, which can't be committed, so each run's `report.md` is their description.
 - **Plotting (`python/pfs/drp/qa/plotting/`)** — the QA plots: DataFrames in, figures
-  out (`calibInputs`, and `palettes` for the shared
-  palettes and `scatterplot_with_outliers`). It imports no Butler, stack or task module, so plots can
-  be drawn from stored data; `tests/plotting/test_imports.py` enforces this. `utils.plotting`
-  re-exports the palettes.
+  out (`calibInputs`; `dmResiduals.plotDetectorResiduals` for one detector's line residuals
+  — the former `dmResiduals` task's 1D and 2D views, drawn from `dmLineResidualData`; and
+  `palettes` for the shared palettes and `scatterplot_with_outliers`). It imports no Butler,
+  stack or task module, so plots can be drawn from stored data; `tests/plotting/test_imports.py`
+  enforces this. `utils.plotting` re-exports the palettes.
 - **Metrics (`python/pfs/drp/qa/metrics/`)** — stack-free: the limits, the judging, and the
   measurements that need no Butler.
   - `registry` declares each metric once (`METRIC_SPECS`: direction, units, reference) and holds
