@@ -86,27 +86,22 @@ def exposureConditions(spots: pd.DataFrame) -> pd.DataFrame:
     lo, hi = _TRANSPARENCY_RANGE
     spots["transparency"] = np.where((transparency > lo) & (transparency < hi), transparency, np.nan)
 
-    def stats(values):
-        v = values[np.isfinite(values)]
-        return (v.mean(), v.median(), v.std()) if len(v) else (np.nan, np.nan, np.nan)
-
-    def one(group):
-        s_mean, s_med, s_sig = stats(group.seeing)
-        t_mean, t_med, t_sig = stats(group.transparency)
-        return pd.Series(
-            {
-                "pfs_visit_id": group.pfs_visit_id.iloc[0],
-                "taken_at": group.taken_at.iloc[0],
-                "seeing_mean": s_mean,
-                "seeing_median": s_med,
-                "seeing_sigma": s_sig,
-                "transparency_mean": t_mean,
-                "transparency_median": t_med,
-                "transparency_sigma": t_sig,
-            }
+    # mean / median / std skip NaN and std is ddof=1, so a sub-PSF or out-of-range spot (NaN) drops
+    # and a lone good spot gives a NaN sigma; the exposure-level columns are constant within a group.
+    out = (
+        spots.groupby("agc_exposure_id")
+        .agg(
+            pfs_visit_id=("pfs_visit_id", "first"),
+            taken_at=("taken_at", "first"),
+            seeing_mean=("seeing", "mean"),
+            seeing_median=("seeing", "median"),
+            seeing_sigma=("seeing", "std"),
+            transparency_mean=("transparency", "mean"),
+            transparency_median=("transparency", "median"),
+            transparency_sigma=("transparency", "std"),
         )
-
-    out = spots.groupby("agc_exposure_id").apply(one, include_groups=False).reset_index()
+        .reset_index()
+    )
     out["pfs_visit_id"] = out.pfs_visit_id.astype(int)
     return out[columns]
 
