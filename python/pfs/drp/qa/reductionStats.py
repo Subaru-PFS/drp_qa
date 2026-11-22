@@ -45,10 +45,11 @@ class ReductionStatsConnections(
         doc=(
             "The raw exposure header, the anchor: present for every exposed detector, so a quantum runs"
             " on each — even one whose reduction never ran — rather than only where ISR produced"
-            " metadata. Its presence defines the quantum; its content is not read here."
+            " metadata. Its presence defines the quantum; deferLoad keeps its content unread."
         ),
         storageClass="PropertyList",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
+        deferLoad=True,
     )
 
     isrMetadata = InputConnection(
@@ -139,9 +140,9 @@ class ReductionStatsTask(PipelineTask):
         ----------
         dataId : `dict`
             The image: ``visit``, ``arm``, ``spectrograph``.
-        rawMetadata : `lsst.daf.base.PropertyList`, optional
-            The raw exposure header — the Butler anchor that gives one quantum per exposed
-            detector. Its content is not read here.
+        rawMetadata : `lsst.pipe.base.DeferredDatasetHandle`, optional
+            A deferred handle to the raw header — the Butler anchor that gives one quantum per
+            exposed detector. Its content is not read here.
         isrMetadata, reduceExposureMetadata : `lsst.pipe.base.TaskMetadata`, optional
             The ISR and reduceExposure task metadata.
         header : `lsst.daf.base.PropertyList`, optional
@@ -151,7 +152,8 @@ class ReductionStatsTask(PipelineTask):
         -------
         `lsst.pipe.base.Struct`
             ``reductionStats``: `~pfs.drp.qa.metrics.reductionStats.REDUCTION_COLUMNS`,
-            one row per amplifier and metric recorded (empty when nothing was).
+            one row per amplifier and metric recorded, always including the coverage rows,
+            so it is never empty for an exposed detector.
         """
         frame = reductionStatsFrame(
             dataId,
@@ -159,6 +161,4 @@ class ReductionStatsTask(PipelineTask):
             reduceExposureMetadata=asMapping(reduceExposureMetadata),
             header=asMapping(header),
         )
-        if frame.empty:
-            self.log.info("ReductionStatsTask: no statistics recorded for %s", dataId)
         return Struct(reductionStats=frame)

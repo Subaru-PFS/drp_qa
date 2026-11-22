@@ -293,7 +293,8 @@ def reductionStatsFrame(
 
     # Reduction coverage, whole-detector: a row for every exposed detector whatever ran, so one
     # whose reduction never started still has rows (the task is anchored on raw). isrRan and
-    # reduceExposureRan say whether each step produced metadata; reductionStage is how far it got.
+    # reduceExposureRan say whether each step produced metadata; reductionStage is how far it got
+    # — the highest step reached, not a conjunction of the flags.
     isrRan = isrMetadata is not None
     reduceExposureRan = reduceExposureMetadata is not None
     stage = 2.0 if reduceExposureRan else 1.0 if isrRan else 0.0
