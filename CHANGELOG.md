@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-22
+
 ### Added
 
 - **Per-detector reduction-coverage metrics** (PIPE2D-2020) — `reductionStats` now writes `isrRan`,
