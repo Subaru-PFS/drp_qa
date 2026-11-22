@@ -12,7 +12,12 @@ made, and earlier sections to the weekly tag alone.
 
 ### Added
 
-- **Detector health from the reduction's metadata** (PIPE2D-2014) — a new `reductionStats` task in `drpQA.yaml`
+- **AG seeing and sky transparency for qadb** (INSTRM-3115) — a new `guiders.conditions` module computes the
+  `seeing_agc_exposure` and `transparency_agc_exposure` values (the observatory `obsCondition` tool's) from the
+  good matches only (`agc_match.flags = GOOD_MATCH`, `agc_data.flags <= 1`) with the shared `pfs.utils.agMetrics`
+  calc — the airmass-corrected, PSF-floored seeing and the magnitude-based transparency. `exposureConditions`
+  aggregates per AG exposure (stack-free, tested); `writeConditions` reads opdb and upserts via `qadb.writer`.
+  Not wired into `drpQA.yaml`: it is the candidate replacement for `obsCondition`'s math, pending that handoff. a new `reductionStats` task in `drpQA.yaml`
   reads the detectorMap fit, scattered-light and PFI-correction scalars from `reduceExposure_metadata`, the n-arm
   counts and dark scale from `isr_metadata`, and per-amplifier gain and read noise from the ISR header, and writes
   them long format (amplifier, metric, value; the measurement is stack-free in `metrics.reductionStats`). The
