@@ -655,13 +655,13 @@ METRIC_SPECS = {
         MetricSpec(
             "fitXRms",
             units="pixels",
-            reference="The fitDetectorMap solution, per line species, from the reduceExposure log.",
+            reference="The fitDetectorMap solution, per line species, from reduceExposure_metadata.",
             unitSuffix=" px",
         ),
         MetricSpec(
             "fitYRms",
             units="pixels",
-            reference="The fitDetectorMap solution, per line species, from the reduceExposure log.",
+            reference="The fitDetectorMap solution, per line species, from reduceExposure_metadata.",
             unitSuffix=" px",
         ),
         MetricSpec(

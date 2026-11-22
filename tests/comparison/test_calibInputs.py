@@ -88,7 +88,7 @@ def _listing():
 
 
 def _metrics(visits, bad=None, fading=None, wide=None, drift=0.0):
-    """Return iqQaMetrics and dmLineResidualMetrics for every detector image of ``visits``: numbers, no verdicts.
+    """Return iqQaMetrics, dmLineResidualMetrics and reductionStats for every detector image of ``visits``: numbers, no verdicts.
 
     ``bad``: {(visit, spectrograph)} whose detector image is wrong (tiny FWHM, huge reserved RMS,
     few lines); ``fading``: {visit: factor} scaling the lamp's line count; ``wide``: {(visit,
@@ -96,7 +96,7 @@ def _metrics(visits, bad=None, fading=None, wide=None, drift=0.0):
     image's offset (px) from the calibration in use.
     """
     bad, fading, wide = bad or set(), fading or {}, wide or {}
-    iq, dm = [], []
+    iq, dm, reduction = [], [], []
     for row in visits.itertuples():
         isTrace = row.species == ("Trace",)
         obsType = "trace" if isTrace else "arc"
@@ -106,9 +106,10 @@ def _metrics(visits, bad=None, fading=None, wide=None, drift=0.0):
             rms = 2.2 if isBad else 0.08 + 0.005 * sp
             scale = fading.get(row.visit, 1.0) * (0.3 if isBad else 1.0)
             perFiber = (3000.0 if isTrace else 12.0) * scale
-            iq.append(
-                (row.visit, "n", sp, obsType, "full", row.sequence_name, fwhm, perFiber, drift, rms, rms)
-            )
+            iq.append((row.visit, "n", sp, obsType, "full", row.sequence_name, fwhm, perFiber, drift))
+            # The reserved-line RMS lives in reductionStats now (whole-detector, empty amplifier).
+            reduction.append((row.visit, "n", sp, "", "reservedXRms", rms))
+            reduction.append((row.visit, "n", sp, "", "reservedYRms", rms))
             for species in row.species:
                 lines = 1000 * scale if species != "Trace" else 2e6
                 for statusType, factor in (("BOTH", 1.0), ("RESERVED", 0.1)):
@@ -137,8 +138,6 @@ def _metrics(visits, bad=None, fading=None, wide=None, drift=0.0):
             "medFwhm",
             "linesPerFiber",
             "medDxCenter",
-            "fitReservedXRms",
-            "fitReservedYRms",
         ],
     )
     dm = pd.DataFrame(
@@ -156,7 +155,10 @@ def _metrics(visits, bad=None, fading=None, wide=None, drift=0.0):
             "value",
         ],
     )
-    return iq, dm
+    reduction = pd.DataFrame(
+        reduction, columns=["visit", "arm", "spectrograph", "amplifier", "metric", "value"]
+    )
+    return iq, dm, reduction
 
 
 @pytest.fixture
@@ -167,7 +169,7 @@ def visits():
 @pytest.fixture
 def setNormals(visits):
     """Return the normal values of a set like this one with nothing wrong: what a good image measures."""
-    made = candidates(*_metrics(visits))
+    made = candidates(*_metrics(visits)[:2])
     return made.assign(count=9, validFrom=1).reindex(columns=list(NORMAL_COLUMNS))
 
 
@@ -213,8 +215,8 @@ def _byImage(table):
 def testDetectorGoneBadIsOutOnItsOwnExposuresOnly(visits, setNormals):
     # n4 breaks from the last HgCd exposure onwards: 112 and both traces.
     bad = {(112, 4), (120, 4), (121, 4)}
-    iq, dm = _metrics(visits, bad=bad)
-    judged = judge(detectorTable(visits, iq, dm, setNormals))
+    iq, dm, reduction = _metrics(visits, bad=bad)
+    judged = judge(detectorTable(visits, iq, dm, reduction, setNormals))
     outs = judged[judged["verdict"] == Verdict.OUT]
     assert set(zip(outs["visit"], outs["spectrograph"], strict=True)) == bad
     rest = judged[~judged.index.isin(outs.index)]
@@ -235,8 +237,8 @@ def testDetectorGoneBadIsOutOnItsOwnExposuresOnly(visits, setNormals):
 def testTheVerdictIsTheGates(visits, setNormals):
     """The image's gate verdict is `gate.gate`'s on its numbers, and a gate FAIL alone is a no-go."""
     # 6 % wider than the camera's normal value: beyond the gate's FAIL, within the sequence rules.
-    iq, dm = _metrics(visits, wide={(101, 2): 1.06})
-    table = detectorTable(visits, iq, dm, setNormals)
+    iq, dm, reduction = _metrics(visits, wide={(101, 2): 1.06})
+    table = detectorTable(visits, iq, dm, reduction, setNormals)
     expected = gate.gate(
         iq=iq.drop(columns="medDxCenter"), lines=dm[dm["reference"] == "visit"], normalValues=setNormals
     )
@@ -250,15 +252,15 @@ def testTheVerdictIsTheGates(visits, setNormals):
     assert (table["gateStatus"] == "PASS").sum() == len(table) - 1
     # Negative control: a width between WARN and FAIL is a check, and one under WARN is used.
     for factor, status, verdict in ((1.04, "WARN", Verdict.CHECK), (1.02, "PASS", Verdict.USE)):
-        iq, dm = _metrics(visits, wide={(101, 2): factor})
-        row = _byImage(judge(detectorTable(visits, iq, dm, setNormals))).loc[(101, 2)]
+        iq, dm, reduction = _metrics(visits, wide={(101, 2): factor})
+        row = _byImage(judge(detectorTable(visits, iq, dm, reduction, setNormals))).loc[(101, 2)]
         assert (row["gateStatus"], row["verdict"]) == (status, verdict), factor
 
 
 def testWithoutNormalValuesTheGateGivesNoVerdict(visits, setNormals):
     """No table of normal values: nothing is passed by the gate, and the sequence itself still tells."""
-    iq, dm = _metrics(visits, bad={(112, 4)}, wide={(101, 2): 1.06})
-    table = detectorTable(visits, iq, dm)
+    iq, dm, reduction = _metrics(visits, bad={(112, 4)}, wide={(101, 2): 1.06})
+    table = detectorTable(visits, iq, dm, reduction)
     assert set(table["gateStatus"]) == {"UNKNOWN"} and set(table["gateReason"]) == {"no normal value"}
     assert (table["gateUnjudged"] > 0).all() and set(table["gateChecks"]) == {""}
     judged = judge(table)
@@ -274,7 +276,7 @@ def testWithoutNormalValuesTheGateGivesNoVerdict(visits, setNormals):
     assert "- **The gate gave no verdict on any detector image** (no normal value)" in report
     # Negative control: with the normal values the gate judges every image, fails the wide one, and
     # the report has nothing to say about verdicts not given.
-    withNormals = judge(detectorTable(visits, iq, dm, setNormals))
+    withNormals = judge(detectorTable(visits, iq, dm, reduction, setNormals))
     assert "UNKNOWN" not in set(withNormals["gateStatus"])
     assert _byImage(withNormals).loc[(101, 2), "verdict"] == Verdict.OUT
     assert "gave no verdict" not in buildReport(visits, withNormals, speciesTable(visits, dm), "test")
@@ -284,11 +286,11 @@ def testWithoutNormalValuesTheGateGivesNoVerdict(visits, setNormals):
 
 
 def testReportCountsWhatTheGateDidNotJudge(visits, setNormals):
-    iq, dm = _metrics(visits)
+    iq, dm, reduction = _metrics(visits)
     species = speciesTable(visits, dm)
     # No normal value of any kind for n3: its eight images get no gate verdict.
     without = setNormals[~((setNormals["camera"] == "n3") | (setNormals["metric"] == "linesPerFiber"))]
-    judged = judge(detectorTable(visits, iq, dm, without))
+    judged = judge(detectorTable(visits, iq, dm, reduction, without))
     assert set(judged.loc[judged["detector"] == "n3", "gateStatus"]) == {"UNKNOWN"}
     assert set(judged.loc[judged["detector"] != "n3", "gateStatus"]) == {"PASS"}
     assert (judged["verdict"] == Verdict.USE).all()  # go, by the sequence rules
@@ -299,7 +301,7 @@ def testReportCountsWhatTheGateDidNotJudge(visits, setNormals):
     noScatter = setNormals[
         ~((setNormals["camera"] == "n3") & setNormals["metric"].str.startswith("robustRms"))
     ]
-    judged = judge(detectorTable(visits, iq, dm, noScatter))
+    judged = judge(detectorTable(visits, iq, dm, reduction, noScatter))
     n3 = judged[judged["detector"] == "n3"].set_index("visit")
     assert set(n3["gateStatus"]) == {"PASS"}
     # Neon: NeI in x and y; HgCd: mercury and cadmium are not judged at all; quartz: the traces in x.
@@ -307,14 +309,14 @@ def testReportCountsWhatTheGateDidNotJudge(visits, setNormals):
     report = buildReport(visits, judged, species, "test")
     assert "- On 5 detector image(s) with a gate verdict, the gate left some numbers without one" in report
     # Negative control: with every normal value neither line is written.
-    full = buildReport(visits, judge(detectorTable(visits, iq, dm, setNormals)), species, "test")
+    full = buildReport(visits, judge(detectorTable(visits, iq, dm, reduction, setNormals)), species, "test")
     assert "gave no verdict" not in full and "without one" not in full and "Normal values" not in full
 
 
 def testOffsetFromTheCalibrationInUseIsNotJudged(visits, setNormals):
     """The set replaces the calibration in use: however far the instrument is from it, no image is out for it."""
-    iq, dm = _metrics(visits, drift=3.0)
-    table = detectorTable(visits, iq, dm, setNormals)
+    iq, dm, reduction = _metrics(visits, drift=3.0)
+    table = detectorTable(visits, iq, dm, reduction, setNormals)
     assert set(table["gateStatus"]) == {"PASS"}
     numbers = gateNumbers(iq, dm, setNormals)
     assert set(numbers["check"]) == {
@@ -336,7 +338,7 @@ def testOffsetFromTheCalibrationInUseIsNotJudged(visits, setNormals):
 def testGateNumbersCarryTheirLimits(visits, setNormals):
     """``warnLimit`` and ``failLimit`` are the check's limits in the number's units, where the verdict changes."""
     wide = {(100, 1): 1.029, (101, 1): 1.031, (102, 1): 1.049, (110, 1): 1.051}
-    iq, dm = _metrics(visits, wide=wide)
+    iq, dm = _metrics(visits, wide=wide)[:2]
     numbers = gateNumbers(iq, dm, setNormals)
     width = numbers[(numbers["check"] == "width") & (numbers["spectrograph"] == 1)].set_index("visit")
     check = CHECKS["width"]
@@ -354,7 +356,7 @@ def testGateNumbersCarryTheirLimits(visits, setNormals):
     ).all()
     # Negative control: taken above the normal value, as a width's are, they would pass a lamp gone dim.
     assert not np.allclose(perFiber["failLimit"], perFiber["normal"] * (1 + arc.fail / 100))
-    dim = gateNumbers(*_metrics(visits, fading={102: 0.4}), setNormals)
+    dim = gateNumbers(*_metrics(visits, fading={102: 0.4})[:2], setNormals)
     dim = dim[(dim["check"] == "linesPerFiberArc") & (dim["visit"] == 102)]
     assert (dim["value"] < dim["failLimit"]).all() and set(dim["status"]) == {"FAIL"}
     # Without normal values there is no verdict and no limit to draw.
@@ -364,20 +366,25 @@ def testGateNumbersCarryTheirLimits(visits, setNormals):
 
 def testFwhmAloneOnlySaysCheck(visits):
     # A faint lamp's FWHM can be off on one exposure with a sound fit: look at it, don't leave it out.
-    iq, dm = _metrics(visits)
+    iq, dm, reduction = _metrics(visits)
     iq.loc[(iq["visit"] == 110) & (iq["spectrograph"] == 1), "medFwhm"] = 2.0  # 0.69x its sequence median
-    judged = _byImage(judge(detectorTable(visits, iq, dm)))
+    judged = _byImage(judge(detectorTable(visits, iq, dm, reduction)))
     assert judged.loc[(110, 1), "verdict"] == Verdict.CHECK
     assert "FWHM 2.00 px" in judged.loc[(110, 1), "reason"] and judged.loc[(110, 1), "rules"] == Rule.FWHM
     # Negative control: the same FWHM with the reserved RMS also off (1.6x) is out.
-    iq.loc[(iq["visit"] == 110) & (iq["spectrograph"] == 1), ["fitReservedXRms", "fitReservedYRms"]] = 0.14
-    judged = _byImage(judge(detectorTable(visits, iq, dm)))
+    reduction.loc[
+        (reduction["visit"] == 110)
+        & (reduction["spectrograph"] == 1)
+        & reduction["metric"].isin(["reservedXRms", "reservedYRms"]),
+        "value",
+    ] = 0.14
+    judged = _byImage(judge(detectorTable(visits, iq, dm, reduction)))
     assert judged.loc[(110, 1), "verdict"] == Verdict.OUT
 
 
 def testFadingLampIsWeakNotOut(visits):
-    iq, dm = _metrics(visits, fading={101: 0.9, 102: 0.75})
-    judged = judge(detectorTable(visits, iq, dm))
+    iq, dm, reduction = _metrics(visits, fading={101: 0.9, 102: 0.75})
+    judged = judge(detectorTable(visits, iq, dm, reduction))
     byVisit = judged.groupby("visit")["verdict"].agg(lambda s: set(s))
     assert byVisit[100] == {Verdict.USE}
     assert byVisit[101] == {Verdict.USE}  # 0.9 is above the weak threshold
@@ -395,8 +402,8 @@ def testFadingLampIsWeakNotOut(visits):
 
 
 def testSpeciesWithNoUsableExposureIsFlagged(visits, setNormals):
-    iq, dm = _metrics(visits, bad={(100, 2), (101, 2), (102, 2)})
-    judged = judge(detectorTable(visits, iq, dm, setNormals))
+    iq, dm, reduction = _metrics(visits, bad={(100, 2), (101, 2), (102, 2)})
+    judged = judge(detectorTable(visits, iq, dm, reduction, setNormals))
     species = speciesTable(visits, dm)
     cov = coverage(judged, species).set_index(["detector", "species"])
     assert cov.loc[("n2", "NeI"), "usable"] == 0
@@ -404,13 +411,13 @@ def testSpeciesWithNoUsableExposureIsFlagged(visits, setNormals):
     assert "**n2 has no go NeI exposure.**" in report
     # Negative control: a detector wrong through its whole sequence agrees with itself, so the sequence
     # rules pass it; only the gate, with the normal values, sees it.
-    blind = judge(detectorTable(visits, iq, dm))
+    blind = judge(detectorTable(visits, iq, dm, reduction))
     assert coverage(blind, species).set_index(["detector", "species"]).loc[("n2", "NeI"), "usable"] == 3
 
 
 def testMissingVisitIsReported(visits):
-    iq, dm = _metrics(visits[visits["visit"] != 100])
-    judged = judge(detectorTable(visits, iq, dm))
+    iq, dm, reduction = _metrics(visits[visits["visit"] != 100])
+    judged = judge(detectorTable(visits, iq, dm, reduction))
     assert 100 not in set(judged["visit"])
     recommendation = pick(judged, visits).set_index("detector")
     assert recommendation.loc["n1", "missing"] == [100]
@@ -420,39 +427,45 @@ def testMissingVisitIsReported(visits):
 
 def testUnassessedImageIsMissingNotGo(visits, setNormals):
     """A stored row with nothing for the gate to judge and no line measured is unassessed, so missing."""
-    iq, dm = _metrics(visits)
+    iq, dm, reduction = _metrics(visits)
     blank = (iq["visit"] == 101) & (iq["spectrograph"] == 2)
-    iq.loc[blank, ["medFwhm", "linesPerFiber", "fitReservedXRms", "fitReservedYRms"]] = float("nan")
+    iq.loc[blank, ["medFwhm", "linesPerFiber"]] = float("nan")
+    blankReduction = (
+        (reduction["visit"] == 101)
+        & (reduction["spectrograph"] == 2)
+        & reduction["metric"].isin(["reservedXRms", "reservedYRms"])
+    )
+    reduction.loc[blankReduction, "value"] = float("nan")
     measured = dm[~((dm["visit"] == 101) & (dm["spectrograph"] == 2))]
-    judged = judge(detectorTable(visits, iq, measured, setNormals))
+    judged = judge(detectorTable(visits, iq, measured, reduction, setNormals))
     assert judged[(judged["visit"] == 101) & (judged["spectrograph"] == 2)].empty
     assert len(judged) == len(iq) - 1
     table = goNoGo(judged, visits)
     assert table.loc["n2", 101] == "missing"
     # Negative control: the same row with its lines measured is assessed and go.
-    assert goNoGo(judge(detectorTable(visits, iq, dm, setNormals)), visits).loc["n2", 101] == "go"
+    assert goNoGo(judge(detectorTable(visits, iq, dm, reduction, setNormals)), visits).loc["n2", 101] == "go"
 
 
 def testFallbackFwhmTakesNoPartInTheSequence(visits):
     """A traceOnly image's FWHM comes from the fiberProfiles, not the image: no consistency verdict."""
-    iq, dm = _metrics(visits)
+    iq, dm, reduction = _metrics(visits)
     iq["traceOnly"] = False
     odd = (iq["visit"] == 101) & (iq["spectrograph"] == 2)
     iq.loc[odd, ["medFwhm", "traceOnly"]] = [5.0, True]
-    judged = _byImage(judge(detectorTable(visits, iq, dm)))
+    judged = _byImage(judge(detectorTable(visits, iq, dm, reduction)))
     assert pd.isna(judged.loc[(101, 2), "fwhmRatio"]) and judged.loc[(101, 2), "verdict"] == Verdict.USE
     # Negative control: measured, the same width is far from its sequence and marked.
     iq.loc[odd, "traceOnly"] = False
-    judged = _byImage(judge(detectorTable(visits, iq, dm)))
+    judged = _byImage(judge(detectorTable(visits, iq, dm, reduction)))
     assert judged.loc[(101, 2), "verdict"] == Verdict.CHECK
 
 
 def testListedDetectorWithNoMetricsIsMissing(visits):
     """A camera the listing names stays in the grid even when nothing was measured on it."""
-    iq, dm = _metrics(visits)
+    iq, dm, reduction = _metrics(visits)
     iq = iq[iq["spectrograph"] != 3]
     dm = dm[dm["spectrograph"] != 3]
-    table = goNoGo(judge(detectorTable(visits, iq, dm)), visits)
+    table = goNoGo(judge(detectorTable(visits, iq, dm, reduction)), visits)
     assert list(table.index) == ["n1", "n2", "n3", "n4"]
     assert (table.loc["n3"] == "missing").all()
 
@@ -463,9 +476,9 @@ def testQthIsATraceLamp():
 
 
 def testGoNoGo(visits, setNormals):
-    iq, dm = _metrics(visits, bad={(112, 4)})
+    iq, dm, reduction = _metrics(visits, bad={(112, 4)})
     iq = iq[~((iq["visit"] == 100) & (iq["spectrograph"] == 2))]  # n2 not measured on 100
-    table = goNoGo(judge(detectorTable(visits, iq, dm, setNormals)), visits)
+    table = goNoGo(judge(detectorTable(visits, iq, dm, reduction, setNormals)), visits)
     assert list(table.index) == ["n1", "n2", "n3", "n4"]
     assert list(table.columns) == [100, 101, 102, 110, 111, 112, 120, 121]
     assert table.loc["n4", 112] == "no-go" and table.loc["n4", 111] == "go"
@@ -474,11 +487,11 @@ def testGoNoGo(visits, setNormals):
     narrow = visits.copy()
     narrow.loc[narrow["visit"] == 110, "cameras"] = "n1,n2,n3"
     iqNarrow = iq[~((iq["visit"] == 110) & (iq["spectrograph"] == 4))]
-    table = goNoGo(judge(detectorTable(narrow, iqNarrow, dm, setNormals)), narrow)
+    table = goNoGo(judge(detectorTable(narrow, iqNarrow, dm, reduction, setNormals)), narrow)
     assert table.loc["n4", 110] == "" and table.loc["n2", 100] == "missing"
     # Negative control: a weak or check image is still go; only out is no-go.
-    iq2, dm2 = _metrics(visits, fading={102: 0.7})
-    judged = judge(detectorTable(visits, iq2, dm2, setNormals))
+    iq2, dm2, reduction2 = _metrics(visits, fading={102: 0.7})
+    judged = judge(detectorTable(visits, iq2, dm2, reduction2, setNormals))
     assert set(judged.loc[judged["visit"] == 102, "verdict"]) == {
         Verdict.CHECK
     }  # a gate WARN: 30 % fewer lines
@@ -486,8 +499,8 @@ def testGoNoGo(visits, setNormals):
 
 
 def testReportIsAGoNoGo(visits, setNormals):
-    iq, dm = _metrics(visits, bad={(112, 4)})
-    judged = judge(detectorTable(visits, iq, dm, setNormals))
+    iq, dm, reduction = _metrics(visits, bad={(112, 4)})
+    judged = judge(detectorTable(visits, iq, dm, reduction, setNormals))
     report = buildReport(
         visits,
         judged,
@@ -535,8 +548,8 @@ def testReportIsAGoNoGo(visits, setNormals):
 
 
 def testNoGoMissingVisitIsReported(visits):
-    iq, dm = _metrics(visits[visits["visit"] != 100])
-    judged = judge(detectorTable(visits, iq, dm))
+    iq, dm, reduction = _metrics(visits[visits["visit"] != 100])
+    judged = judge(detectorTable(visits, iq, dm, reduction))
     report = buildReport(visits, judged, speciesTable(visits, dm), "test")
     assert "- Not measured (exposed, but no data in the Butler): 100." in report
 

@@ -482,7 +482,7 @@ drpQA.yaml#imageQualityQa            dims: (instrument, visit, arm, spectrograph
     ← reads: arcLines, detectorMap,
              fiberProfiles, detectorMap_calib (calibrations),
              calexp, pfsConfig (optional),
-             isr_log, cosmicray_log, reduceExposure_log (optional)
+             reduceExposure_metadata (optional)
     → writes: iqQaMetrics, iqQaSpeciesMetrics; iqQaData only with doWriteLineData   (numbers, no verdict;
               seqType, seqName, illumination and lamps say what the frame is, as read)
 
@@ -520,8 +520,10 @@ drpQa.py judge / pfs.drp.qa.qadb.judge.judgeStored   (qadb only)
 
 `reduceExposure` is **not** required between `fitDetectorMap` and `imageQualityQa`. The
 `arcLines` (`lines`) and `detectorMap` outputs from `fitDetectorMap` are read directly.
-When `reduceExposure` *has* run, its logs are picked up through the optional `*_log`
-connections and its statistics are folded into `iqQaMetrics`.
+When `reduceExposure` *has* run, its task metadata is picked up through the optional
+`reduceExposure_metadata` connection and its per-species detectorMap fit statistics are
+folded into `iqQaSpeciesMetrics`. The whole-detector fit scalars and ISR/cosmic-ray counts
+are read from the same metadata by `reductionStats`, not here; no QA task parses a log.
 
 Cross-visit QA is **not** a pipeline task. There is no `imageQualityQaSummary` and no
 combined task: normal values, verdicts and the per-visit rollup are made from qadb after the

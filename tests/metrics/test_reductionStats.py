@@ -14,6 +14,7 @@ from pfs.drp.qa.metrics.reductionStats import (
     ISR_COUNT_METRICS,
     REDUCTION_COLUMNS,
     reductionStatsFrame,
+    speciesFitStats,
 )
 
 DATA_ID = {"visit": 155486, "arm": "r", "spectrograph": 1}
@@ -189,3 +190,62 @@ def testAllSourcesCombine():
     assert _value(frame, "fitXRms") == float(FIT_METRICS.index("fitXRms") + 1)
     assert _value(frame, "readNoise", amplifier="c1") == 3.91
     assert (frame["visit"] == DATA_ID["visit"]).all()
+
+
+def _speciesMetadata(applied: bool = True) -> dict:
+    """Build reduceExposure metadata with the adjustDetectorMap per-species arrays.
+
+    The arrays run parallel to ``speciesName``; ``fitDetectorMap`` records them for every
+    fitted species, ``Trace`` among them, and leaves an undefined value NaN.
+    """
+    return {
+        "detectorMapAdjustment": "applied" if applied else "failed",
+        "reduceExposure:adjustDetectorMap": {
+            "speciesName": ["HgI", "NeI", "Trace"],
+            "speciesXRms": [0.021, 0.018, 0.040],
+            "speciesYRms": [0.034, 0.030, float("nan")],
+            "speciesXSoften": [0.011, 0.009, 0.020],
+            "speciesYSoften": [0.0, 0.0, 0.0],
+        },
+    }
+
+
+def testSpeciesFitStats():
+    """Each species' (xRms, yRms, xSoften, ySoften) comes from the parallel arrays, Trace included."""
+    stats = speciesFitStats(_speciesMetadata())
+    assert set(stats) == {"HgI", "NeI", "Trace"}
+    assert stats["HgI"] == (0.021, 0.034, 0.011, 0.0)
+    assert stats["NeI"] == (0.018, 0.030, 0.009, 0.0)
+    # Trace is kept here; the lamp-species mapping (longFormat.speciesStats) is what drops it.
+    assert stats["Trace"][0] == 0.040 and stats["Trace"][2] == 0.020
+    assert math.isnan(stats["Trace"][1])
+
+
+def testSpeciesFitStatsGatedOnApplied():
+    """Nothing is read when the adjustment did not apply.
+
+    Negative control: a fit that later failed can leave stale species arrays in the metadata,
+    so an unapplied adjustment must yield no stats rather than those arrays.
+    """
+    assert speciesFitStats(_speciesMetadata(applied=False)) == {}
+
+
+def testSpeciesFitStatsAbsent():
+    """No metadata, or no species recorded, gives an empty mapping, not an error."""
+    assert speciesFitStats(None) == {}
+    assert speciesFitStats({"detectorMapAdjustment": "applied"}) == {}
+
+
+def testSpeciesFitStatsBareSubtaskKey():
+    """The subtask is found by its bare name, as reduceExposure_metadata records it."""
+    metadata = {
+        "detectorMapAdjustment": "applied",
+        "adjustDetectorMap": {
+            "speciesName": ["ArI"],
+            "speciesXRms": [0.025],
+            "speciesYRms": [0.035],
+            "speciesXSoften": [0.01],
+            "speciesYSoften": [0.0],
+        },
+    }
+    assert speciesFitStats(metadata) == {"ArI": (0.025, 0.035, 0.01, 0.0)}

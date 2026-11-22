@@ -472,10 +472,39 @@ def scatterLimits(
     return out
 
 
+#: ``reductionStats`` metric names of the detectorMap fit's reserved-line RMS, and the
+#: ``detectorTable`` columns they become (named for the ``iqQaMetrics`` columns they replace).
+_RESERVED_RMS = {"reservedXRms": "fitReservedXRms", "reservedYRms": "fitReservedYRms"}
+
+
+def _reservedRms(reductionStats: pd.DataFrame) -> pd.DataFrame:
+    """Return per-detector ``fitReservedXRms``/``fitReservedYRms`` from the reductionStats table.
+
+    The reserved-line RMS is a whole-detector statistic (empty ``amplifier``). An image whose
+    adjustment did not apply recorded none, so it has no row and its RMS merges as null.
+    """
+    columns = [*_DETECTOR, *_RESERVED_RMS.values()]
+    if reductionStats is None or reductionStats.empty:
+        return pd.DataFrame(columns=columns)
+    rows = reductionStats[
+        (reductionStats["amplifier"].fillna("") == "") & reductionStats["metric"].isin(_RESERVED_RMS)
+    ]
+    if rows.empty:
+        return pd.DataFrame(columns=columns)
+    wide = (
+        rows.pivot_table(index=_DETECTOR, columns="metric", values="value", aggfunc="last")
+        .reindex(columns=list(_RESERVED_RMS))
+        .rename(columns=_RESERVED_RMS)
+        .reset_index()
+    )
+    return wide
+
+
 def detectorTable(
     visits: pd.DataFrame,
     iqMetrics: pd.DataFrame,
     lineMetrics: pd.DataFrame,
+    reductionStats: pd.DataFrame,
     normalValues: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """One row per detector image of the set, with the gate's verdict and its place in the sequence.
@@ -485,15 +514,20 @@ def detectorTable(
     visits : `pandas.DataFrame`
         From `setVisits`.
     iqMetrics : `pandas.DataFrame`
-        ``iqQaMetrics`` rows of the set's images: ``medFwhm``, ``fitReservedXRms``,
-        ``fitReservedYRms`` and ``traceOnly`` are used here, and what the gate reads
-        (`pfs.drp.qa.metrics.gate.measurements`). A ``traceOnly`` image's FWHM is read from the
-        fiberProfiles calibration, not measured on the image, so it takes no part in the sequence
-        comparison. An image the gate judged nothing on (``UNKNOWN``) and that has no width, fit
-        RMS or line species measured is left out: it is unassessed, and `goNoGo` reports it as
-        missing rather than go.
+        ``iqQaMetrics`` rows of the set's images: ``medFwhm`` and ``traceOnly`` are used here, and
+        what the gate reads (`pfs.drp.qa.metrics.gate.measurements`). A ``traceOnly`` image's FWHM
+        is read from the fiberProfiles calibration, not measured on the image, so it takes no part
+        in the sequence comparison. An image the gate judged nothing on (``UNKNOWN``) and that has
+        no width, fit RMS or line species measured is left out: it is unassessed, and `goNoGo`
+        reports it as missing rather than go.
     lineMetrics : `pandas.DataFrame`
         ``dmLineResidualMetrics`` rows of the set's images (`speciesTable`).
+    reductionStats : `pandas.DataFrame`
+        ``reductionStats`` rows of the set's images, long format (amplifier, metric, value). The
+        detectorMap fit's reserved-line RMS (``reservedXRms``, ``reservedYRms``, whole-detector)
+        is taken from here, as ``fitReservedXRms``/``fitReservedYRms``; it came from ``iqQaMetrics``
+        before the reduction statistics moved to their own table. An image whose adjustment did not
+        apply has no reserved RMS, so its ``reservedRms`` is null, as before.
     normalValues : `pandas.DataFrame`, optional
         The normal values the gate judges by
         (`pfs.drp.qa.metrics.normalValues.NORMAL_COLUMNS`). Without them the gate gives no
@@ -510,11 +544,12 @@ def detectorTable(
         y), ``rmsRatio`` (likewise), ``minLinesRatio`` (the lamp's weakest species,
         `speciesTable`), ``nSpecies`` (species measured).
     """
-    keep = ["visit", "arm", "spectrograph", "medFwhm", "fitReservedXRms", "fitReservedYRms", "traceOnly"]
+    keep = ["visit", "arm", "spectrograph", "medFwhm", "traceOnly"]
     iq = iqMetrics.reindex(columns=keep)
     iq.loc[iq["traceOnly"].fillna(False).astype(bool), "medFwhm"] = float("nan")
     iq = iq.drop(columns="traceOnly")
     table = iq.merge(visits[["visit", "iic_sequence_id", "lamp", "k", "n"]], on="visit")
+    table = table.merge(_reservedRms(reductionStats), on=_DETECTOR, how="left")
     table = table.merge(gateVerdicts(iqMetrics, lineMetrics, normalValues), on=_DETECTOR, how="left")
     table["gateStatus"] = table["gateStatus"].fillna("UNKNOWN")
     for column in ("gateDecidedBy", "gateReason", "gateChecks"):
