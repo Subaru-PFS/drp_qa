@@ -472,6 +472,21 @@ def testFitGlobalModelJointTerms(makeAgcData, rng):
     assert rms(np.hypot(noRotation.agcData.dx_model_um, noRotation.agcData.dy_model_um)) > 0.5
 
 
+def testFitGlobalModelNoValidMatches(makeAgcData, rng):
+    """With no valid matches, every camera still gets a zero row and nothing raises."""
+    agcData, _ = makeZenithData(makeAgcData, rng, np.zeros((6, 2)))
+    agcData["agc_match_flags"] = 0  # nothing is a GOOD_MATCH
+
+    fit = fitGlobalModel(agcData, fitAgcOffsets=True)
+
+    assert list(fit.cameras.index) == list(range(6))
+    assert (fit.cameras[["dz_um", "dp_um"]] == 0).all().all()
+    assert (fit.exposures[["dz_um", "dp_um"]] == 0).all().all()
+    # The model leaves every star at its nominal position.
+    assert np.allclose(fit.agcData.agc_model_x_mm, fit.agcData.agc_nominal_x_mm)
+    assert np.allclose(fit.agcData.agc_model_y_mm, fit.agcData.agc_nominal_y_mm)
+
+
 def testFitGlobalModelValid(makeAgcData, rng):
     """Only valid matches are fitted, but every star gets a model position."""
     agcData, _ = makeZenithData(makeAgcData, rng, np.zeros((6, 2)))

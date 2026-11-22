@@ -742,7 +742,7 @@ def _fitZenithModel(
     }
     inJoint = useExposure & np.isin(exposureId, list(jointExposures))
 
-    cameras = np.unique(cameraId[use]) if fitAgcOffsets else np.array([], dtype=int)
+    cameras = np.unique(cameraId) if fitAgcOffsets else np.array([], dtype=int)
     centre: dict[int, tuple[float, float]] = {}
     for c in cameras:
         rows = (cameraId == c) & inJoint
@@ -767,9 +767,13 @@ def _fitZenithModel(
         else:  # scale
             cz, cp = dz, dp
         if cz:
-            eqRow.append(k), eqCol.append(j), eqVal.append(cz)
+            eqRow.append(k)
+            eqCol.append(j)
+            eqVal.append(cz)
         if cp:
-            eqRow.append(nFit + k), eqCol.append(j), eqVal.append(cp)
+            eqRow.append(nFit + k)
+            eqCol.append(j)
+            eqVal.append(cp)
 
     for k, i in enumerate(fitRows):
         dz, dp = dzNominal[i], dpNominal[i]
@@ -793,7 +797,8 @@ def _fitZenithModel(
     conRow, conCol = [], []
     for r, term in enumerate(constraintTerms):
         for c in centre:
-            conRow.append(r), conCol.append(column[("cam", c, term)])
+            conRow.append(r)
+            conCol.append(column[("cam", c, term)])
     constraints = scipy.sparse.coo_matrix(
         (np.ones(len(conRow)), (conRow, conCol)),
         shape=(len(constraintTerms) if centre else 0, len(column)),
