@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-21
+
 ### Added
 
 - **Detector health from the reduction's metadata** (PIPE2D-2014) — a new `reductionStats` task in `drpQA.yaml`
