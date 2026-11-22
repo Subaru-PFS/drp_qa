@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from pfs.drp.qa.comparison.classify import SKY_TYPES, classifyVisits, designKinds
+from pfs.drp.qa.comparison.classify import SKY_TYPES, classifyVisits, designKinds, shakaColumn
 from pfs.drp.qa.comparison.plan import (
     STATUS_ORDER,
     coverage,
@@ -84,7 +84,7 @@ def fetch(opdb, period: Period, now: datetime.datetime | None = None) -> tuple[d
     Returns
     -------
     frames : `dict` [`str`, `pandas.DataFrame`]
-        ``listing``, ``notes``, ``telStatus`` and ``designs``.
+        ``listing``, ``notes``, ``telStatus``, ``designs`` and ``designNames``.
     readUntil : `str`
         The time the listing was read up to (HST).
     """
@@ -99,8 +99,14 @@ def fetch(opdb, period: Period, now: datetime.datetime | None = None) -> tuple[d
         "notes": queries.readNotes(opdb, listing["pfs_visit_id"], listing["iic_sequence_id"].dropna()),
         "telStatus": queries.readTelStatus(opdb, sky["pfs_visit_id"]),
         "designs": queries.readDesignCategories(opdb, sky["pfs_design_id"].dropna()),
+        "designNames": queries.readDesignNames(opdb, listing["pfs_design_id"].dropna()),
     }
     return frames, str(end)
+
+
+def _designNames(frames: dict[str, pd.DataFrame]) -> pd.Series:
+    """Return the shaka designs' names as a Series indexed by ``pfs_design_id``, for `classifyVisits`."""
+    return frames["designNames"].set_index("pfs_design_id")["design_name"]
 
 
 def fetchSummary(
@@ -123,13 +129,19 @@ def fetchSummary(
     -------
     `str`
         Visits, sequences and nights; what the QA tasks will measure, by
-        sequence type and category; what they won't, and why; the sky visits'
-        labels; the designs and the notes.
+        sequence type and category, shaka exposures apart; what they won't, and
+        why; the sky visits' labels; the designs and the notes.
     """
     visits = classifyVisits(
-        frames["listing"], periods.values(), designKinds(frames["designs"]), frames["telStatus"]
+        frames["listing"],
+        periods.values(),
+        designKinds(frames["designs"]),
+        frames["telStatus"],
+        _designNames(frames),
     )
     visits = visits[visits["period"] == period.name]
+    # Shaka exposures (one fiber group lit) are measured like full arcs and traces but reported apart.
+    visits["shakaTag"] = shakaColumn(visits)
     lines = [
         f"{period.name}: nights {period.firstNight} to {period.lastNight}, read until {readUntil}",
         f"  {len(visits):,} visits in {visits['iic_sequence_id'].nunique():,} sequences,"
@@ -140,9 +152,11 @@ def fetchSummary(
         ("unvalidated", visits[visits["judged"] & ~visits["validated"]]),
     ):
         lines.append(f"  {len(subset):,} {label}")
-        kinds = subset.groupby(["category", "sequence_type", "cadence"]).size()
-        for (category, sequenceType, cadence), count in kinds.items():
-            lines.append(f"    {count:6,}  {category:<12} {sequenceType} {cadence}".rstrip())
+        kinds = subset.groupby(["category", "sequence_type", "cadence", "shakaTag"]).size()
+        for (category, sequenceType, cadence, shakaTag), count in kinds.items():
+            # Join only the non-empty fields: a type with no cadence (e.g. fiberProfiles) leaves no gap.
+            tail = " ".join(part for part in (sequenceType, cadence, shakaTag) if part)
+            lines.append(f"    {count:6,}  {category:<12} {tail}".rstrip())
     others = visits.loc[~visits["judged"], "reason"].value_counts()
     if len(others):
         lines.append(f"  {int(others.sum()):,} not judged")
@@ -186,7 +200,11 @@ def classifiedVisits(
         `pfs.drp.qa.comparison.classify.classifyVisits` restricted to the period.
     """
     visits = classifyVisits(
-        frames["listing"], periods.values(), designKinds(frames["designs"]), frames["telStatus"]
+        frames["listing"],
+        periods.values(),
+        designKinds(frames["designs"]),
+        frames["telStatus"],
+        _designNames(frames),
     )
     return visits[visits["period"] == period.name].reset_index(drop=True)
 

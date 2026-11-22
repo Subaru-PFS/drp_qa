@@ -28,6 +28,7 @@ def testFetch(periods, visit, listing, FakeOpDB):
             "pfs_design_fiber": pd.DataFrame(
                 {"pfs_design_id": [10], "proposal_id": ["S25A-123QF"], "n_fibers": [5]}
             ),
+            "design_name": pd.DataFrame(columns=["pfs_design_id", "design_name"]),  # neither design is shaka
         }
     )
     period = periods["run1"]
@@ -37,7 +38,7 @@ def testFetch(periods, visit, listing, FakeOpDB):
     assert opdb.calls[0].params == {"start": period.start, "end": now}
     telCall = next(call for call in opdb.calls if "tel_status" in call.sql)
     assert telCall.params == {"visits": [2]}  # sky visits only
-    assert set(frames) == {"listing", "notes", "telStatus", "designs"}
+    assert set(frames) == {"listing", "notes", "telStatus", "designs", "designNames"}
     assert frames["listing"]["pfs_visit_id"].tolist() == [1, 2]
     assert frames["designs"]["category"].tolist() == ["QF"]
     assert "proposal_id" not in frames["designs"]  # proposal IDs stay out of what the package returns
@@ -63,6 +64,7 @@ def testFetchSummary(periods, visit, listing, FakeOpDB):
             "pfs_design_fiber": pd.DataFrame(
                 {"pfs_design_id": [10], "proposal_id": ["S25A-123QF"], "n_fibers": [5]}
             ),
+            "design_name": pd.DataFrame(columns=["pfs_design_id", "design_name"]),
         }
     )
     frames, readUntil = fetch(opdb, periods["run1"], now=datetime.datetime(2026, 2, 1))
@@ -79,6 +81,33 @@ def testFetchSummary(periods, visit, listing, FakeOpDB):
     assert "notes: 1 (1 on sequences)" in text
 
 
+def testFetchSummarySplitsShaka(periods, visit, listing, FakeOpDB):
+    answer = listing(
+        visit(1, "2026-01-03 18:00", "scienceArc", sequence=10, design=20),  # shaka, group 2
+        visit(2, "2026-01-03 18:30", "scienceArc", sequence=11, design=30),  # fully lit
+    )
+    opdb = FakeOpDB(
+        {
+            "FROM pfs_visit": answer,
+            "obslog_visit_set_note": pd.DataFrame(columns=["iic_sequence_id", "note"]),
+            "obslog_visit_note": pd.DataFrame(
+                columns=["pfs_visit_id", "camera", "data_flag", "note", "source"]
+            ),
+            "FROM tel_status": pd.DataFrame(columns=["pfs_visit_id", "n_status", "focus_offset_max"]),
+            "pfs_design_fiber": pd.DataFrame(columns=["pfs_design_id", "proposal_id", "n_fibers"]),
+            # Only the shaka design is returned; the fully lit design's name never leaves the opdb.
+            "design_name": pd.DataFrame({"pfs_design_id": [20], "design_name": ["cobraHome-MOD4_group2"]}),
+        }
+    )
+    frames, readUntil = fetch(opdb, periods["run1"], now=datetime.datetime(2026, 2, 1))
+    assert frames["designNames"]["design_name"].tolist() == ["cobraHome-MOD4_group2"]
+    text = fetchSummary(frames, readUntil, periods["run1"], periods)
+    lines = [line.strip() for line in text.splitlines()]
+    # The shaka arc is reported on its own row, apart from the fully lit arc of the same type.
+    assert "1  calibration  scienceArc single shaka MOD4 group2" in lines
+    assert "1  calibration  scienceArc single" in lines  # negative control: the fully lit arc, untagged
+
+
 def testClassifiedVisits(periods, visit, listing, FakeOpDB):
     from pfs.drp.qa.comparison.redo import classifiedVisits
 
@@ -91,6 +120,7 @@ def testClassifiedVisits(periods, visit, listing, FakeOpDB):
             ),
             "FROM tel_status": pd.DataFrame(columns=["pfs_visit_id", "n_status", "focus_offset_max"]),
             "pfs_design_fiber": pd.DataFrame(columns=["pfs_design_id", "proposal_id", "n_fibers"]),
+            "design_name": pd.DataFrame(columns=["pfs_design_id", "design_name"]),
         }
     )
     frames, _ = fetch(opdb, periods["run1"], now=datetime.datetime(2026, 2, 1))

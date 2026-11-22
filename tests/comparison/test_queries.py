@@ -96,6 +96,7 @@ def testNothingToReadMakesNoQuery(FakeOpDB):
     assert queries.readNotes(opdb, [], []).empty
     assert queries.readTelStatus(opdb, []).empty
     assert queries.readDesignCategories(opdb, []).empty
+    assert queries.readDesignNames(opdb, []).empty
     assert opdb.calls == []
 
 
@@ -118,6 +119,22 @@ def testDesignCategoriesDropProposalIds(FakeOpDB):
         {"pfs_design_id": 7, "category": "none", "n_fibers": 5},
         {"pfs_design_id": 8, "category": "QF", "n_fibers": 400},
     ]
+
+
+def testDesignNamesKeepsOnlyShaka(FakeOpDB):
+    names = pd.DataFrame(
+        {"pfs_design_id": [20, 21], "design_name": ["cobraHome-MOD4_group2", "cobraHome-MOD32_group1"]}
+    )
+    opdb = FakeOpDB({"design_name": names})
+    # 30 is fully lit or a science field; the opdb filters it out, so its name never reaches the package.
+    result = queries.readDesignNames(opdb, [30, 20, 21])
+    assert (
+        "~*" in opdb.calls[0].sql and "group" in opdb.calls[0].sql
+    )  # the proprietary guard runs in the opdb
+    assert opdb.calls[0].params == {"designs": [20, 21, 30]}
+    assert list(result.columns) == ["pfs_design_id", "design_name"]
+    assert result["pfs_design_id"].tolist() == [20, 21]
+    assert result["design_name"].tolist() == ["cobraHome-MOD4_group2", "cobraHome-MOD32_group1"]
 
 
 def testSequenceOfVisitBindsTheVisit(FakeOpDB):

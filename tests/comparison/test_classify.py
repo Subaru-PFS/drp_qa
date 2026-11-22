@@ -3,7 +3,13 @@
 import numpy as np
 import pandas as pd
 
-from pfs.drp.qa.comparison.classify import classifyVisits, designKinds, focusSweeps
+from pfs.drp.qa.comparison.classify import (
+    classifyVisits,
+    designKinds,
+    focusSweeps,
+    shakaLabel,
+    shakaOf,
+)
 
 
 def testDesignKinds():
@@ -231,3 +237,41 @@ def testArcInAFiberProfilesGroupIsEngineering(periods, visit, listing):
         False,
         False,
     ]
+
+
+def testShakaOf():
+    # Run30's shaka designs: the modulus is the MOD<k> nearest before the group.
+    assert shakaOf("cobraHome-MOD4_group2") == (4, 2)
+    assert shakaOf("cobraHome-MOD32_group1") == (32, 1)
+    assert shakaOf("cobraHome-MOD32_16_4_group1_phase3") == (32, 1)
+    assert shakaOf("cobraHome-MOD32_before_MOD4_group1") == (4, 1)
+    # Negative controls: a fully lit design, a science field name, and non-strings are not shaka.
+    assert shakaOf("cobraHome") == (None, None)
+    assert shakaOf("some science field group") == (None, None)  # "group" but no digit and no MOD
+    assert shakaOf("cobraHome-group1_MOD4") == (None, None)  # MOD only after the group: not shaka
+    assert shakaOf(None) == (None, None)
+    assert shakaOf(float("nan")) == (None, None)
+
+
+def testShakaLabel():
+    assert shakaLabel(4, 2) == "shaka MOD4 group2"
+    assert shakaLabel(pd.NA, pd.NA) == ""  # negative control: not a shaka exposure
+
+
+def testClassifyTagsShaka(periods, visit, listing):
+    rows = listing(
+        visit(1, "2026-01-03 17:00", "scienceArc", name="Arc: Neon", design=20),  # shaka, group 2
+        visit(2, "2026-01-03 17:10", "scienceTrace", name="Trace", design=20),  # shaka trace, same design
+        visit(3, "2026-01-03 17:20", "scienceArc", name="Arc: Neon", design=30),  # fully lit
+    )
+    designNames = pd.Series({20: "cobraHome-MOD4_group2"}, name="design_name")  # 30 is absent: not shaka
+    result = classifyVisits(rows, periods.values(), designNames=designNames).set_index("pfs_visit_id")
+    assert result.loc[[1, 2], "shaka"].all()
+    assert result.loc[1, "shakaMod"] == 4 and result.loc[1, "shakaGroup"] == 2
+    assert result.loc[2, "shakaGroup"] == 2  # the trace on the same design is shaka too
+    # The shaka arc is still gated: judged like a full arc, as PIPE2D-1935 allows for the lit fibers.
+    assert result.loc[1, "reason"] == "gated"
+    # Negative control: the fully lit arc is not shaka, and without designNames nothing is.
+    assert not result.loc[3, "shaka"]
+    assert pd.isna(result.loc[3, "shakaGroup"])
+    assert not classifyVisits(rows, periods.values())["shaka"].any()

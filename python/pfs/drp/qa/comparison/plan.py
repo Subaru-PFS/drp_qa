@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from pfs.drp.qa.comparison.classify import shakaColumn
 from pfs.drp.qa.comparison.reduction import (
     MEASURE_LABELS,
     MEASURE_PIPELINE,
@@ -198,8 +199,9 @@ def coverage(
     -------
     `pandas.DataFrame`
         ``visit``, ``arm``, ``spectrograph``, the visit's ``period``,
-        ``sequence_type``, ``cadence``, ``iic_sequence_id``, ``category`` and
-        ``night``,
+        ``sequence_type``, ``cadence``, ``shaka`` (its shaka label, or ``""``;
+        `pfs.drp.qa.comparison.classify.shakaLabel`), ``iic_sequence_id``,
+        ``category`` and ``night``,
         and ``status``, one of `STATUS_ORDER`: ``raw not in opdb`` for a
         detector with raw data that opdb didn't list.
     """
@@ -242,9 +244,21 @@ def coverage(
 
     info = judged[
         ["pfs_visit_id", "period", "sequence_type", "cadence", "iic_sequence_id", "category", "night"]
-    ]
+    ].copy()
+    # A shaka exposure (one fiber group lit) is reported apart from fully lit arcs and traces.
+    info["shaka"] = shakaColumn(judged)
     detectors = detectors.merge(info.rename(columns={"pfs_visit_id": "visit"}), on="visit", how="left")
-    columns = [*keys, "period", "sequence_type", "cadence", "iic_sequence_id", "category", "night", "status"]
+    columns = [
+        *keys,
+        "period",
+        "sequence_type",
+        "cadence",
+        "shaka",
+        "iic_sequence_id",
+        "category",
+        "night",
+        "status",
+    ]
     return detectors[columns].sort_values(keys, ignore_index=True)
 
 
@@ -261,24 +275,24 @@ def summarize(visits: pd.DataFrame, detectors: pd.DataFrame) -> pd.DataFrame:
     Returns
     -------
     `pandas.DataFrame`
-        One row per ``sequence_type``, ``cadence`` and ``category``: the number of
+        One row per ``sequence_type``, ``cadence``, ``shaka`` (shaka exposures
+        apart from fully lit arcs and traces) and ``category``: the number of
         ``visits``, the ``reason`` (``gated``, ``unvalidated`` or why they
         aren't measured), and one column per `STATUS_ORDER` counting the detector
         images of measured visits.
     """
-    counts = (
-        visits.assign(sequence_type=visits["sequence_type"].fillna("(none)"))
-        .groupby(["sequence_type", "cadence", "category", "reason"], dropna=False)
-        .size()
-        .rename("visits")
-        .reset_index()
+    group = ["sequence_type", "cadence", "shaka", "category"]
+    labelled = visits.assign(
+        sequence_type=visits["sequence_type"].fillna("(none)"),
+        shaka=shakaColumn(visits),
     )
+    counts = labelled.groupby([*group, "reason"], dropna=False).size().rename("visits").reset_index()
     if detectors.empty:
-        images = pd.DataFrame(columns=["sequence_type", "cadence", "category", *STATUS_ORDER])
+        images = pd.DataFrame(columns=[*group, *STATUS_ORDER])
     else:
         images = (
             detectors.pivot_table(
-                index=["sequence_type", "cadence", "category"],
+                index=group,
                 columns="status",
                 values="visit",
                 aggfunc="size",
@@ -288,11 +302,11 @@ def summarize(visits: pd.DataFrame, detectors: pd.DataFrame) -> pd.DataFrame:
             .reset_index()
         )
         images.columns.name = None
-    summary = counts.merge(images, on=["sequence_type", "cadence", "category"], how="left")
+    summary = counts.merge(images, on=group, how="left")
     for status in STATUS_ORDER:
         summary[status] = summary[status].fillna(0).astype(int)
     summary.loc[~summary["reason"].isin(["gated", "unvalidated"]), list(STATUS_ORDER)] = 0
-    return summary.sort_values(["reason", "sequence_type", "cadence", "category"], ignore_index=True)
+    return summary.sort_values(["reason", *group], ignore_index=True)
 
 
 @dataclass(frozen=True)
