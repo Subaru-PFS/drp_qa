@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-22
+
 ### Changed
 
 - **`imageQualityQa` no longer parses logs** (PIPE2D-2016) — the ISR, cosmic-ray and reduceExposure log
