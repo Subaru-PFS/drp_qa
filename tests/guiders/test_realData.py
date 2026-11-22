@@ -22,8 +22,10 @@ from pfs.drp.qa.guiders.analysis import (
     comparePfsUtilsPositions,
     estimateFocusErrors,
     fitDriftRate,
+    fitGlobalModel,
     fitGuiderModel,
     guideErrorsByExposure,
+    selectFittedMatches,
     selectValidMatches,
     smoothAgcData,
 )
@@ -341,6 +343,39 @@ def testRealDataFitGuiderModelValidMatches(realAgcData):
     # Negative control: every match counted as valid.
     fitAll = fitGuiderModel(agcData.assign(agc_match_flags=1), config).agcData
     assert rms(fitAll.dr_model_um[valid]) > 500
+
+
+def testRealDataFitGlobalModel(realAgcData):
+    """The joint zenith-frame fit takes the exposure and camera terms out of real guide errors.
+
+    Fitting the exposure (offset and rotation) and camera (offset) terms in
+    turn didn't converge with the rotations on (PIPE2D-1909); the joint solve
+    does. On the raster scan the valid-match residual is 9.2 µm rms with the
+    exposure terms alone, and the camera offsets (a few to ~13 µm, summing to
+    zero) take it to 5.9 µm; a camera rotation changes it little.
+    """
+    agcData = realAgcData("raster")
+
+    def residual(**kwargs):
+        fit = fitGlobalModel(agcData, **kwargs)
+        valid = selectFittedMatches(fit.agcData)
+        return rms(
+            np.hypot(fit.agcData.dx_model_um.to_numpy()[valid], fit.agcData.dy_model_um.to_numpy()[valid])
+        )
+
+    exposuresOnly = residual(fitPfiRotation=True)
+    withCameras = residual(fitPfiRotation=True, fitAgcOffsets=True)
+    withRotation = residual(fitPfiRotation=True, fitAgcOffsets=True, fitAgcRotation=True)
+
+    assert exposuresOnly > 8
+    assert withCameras < 7
+    assert withCameras < exposuresOnly - 2  # the camera offsets explain real structure
+    assert abs(withRotation - withCameras) < 1  # a camera rotation changes little here
+
+    cameras = fitGlobalModel(agcData, fitPfiRotation=True, fitAgcOffsets=True).cameras
+    assert np.hypot(cameras.dz_um, cameras.dp_um).max() < 50
+    np.testing.assert_allclose(cameras.dz_um.sum(), 0, atol=1e-6)
+    np.testing.assert_allclose(cameras.dp_um.sum(), 0, atol=1e-6)
 
 
 # Drift

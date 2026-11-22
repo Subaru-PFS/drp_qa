@@ -19,6 +19,8 @@ from types import MappingProxyType
 import numpy as np
 import pandas as pd
 import scipy.optimize
+import scipy.sparse
+import scipy.sparse.linalg
 import scipy.stats
 from astropy.time import Time
 from numpy.typing import ArrayLike
@@ -630,68 +632,216 @@ class GlobalModelFit:
     cameras: pd.DataFrame | None
 
 
-def _fitExposureTerms(errDz, errDp, dzNominal, dpNominal, exposureId, use, fitPfiRotation, fitPfiScale):
-    """Fit an offset, and maybe a rotation and scale, to each exposure's errors (mm)."""
-    modelDz, modelDp = np.zeros(len(errDz)), np.zeros(len(errDz))
-    records = []
-    for aid in np.unique(exposureId):
-        rows = exposureId == aid
-        fit = rows & use
-        nFit = np.sum(fit)
-        record = {"agc_exposure_id": aid, "dz_mm": 0.0, "dp_mm": 0.0, "rotation_rad": 0.0, "scale": 0.0}
-        if nFit >= 2:
-            dz, dp = dzNominal[fit], dpNominal[fit]
-            columns = [np.r_[np.ones(nFit), np.zeros(nFit)], np.r_[np.zeros(nFit), np.ones(nFit)]]
-            names = ["dz_mm", "dp_mm"]
-            if fitPfiRotation:
-                columns.append(np.r_[-dp, dz])
-                names.append("rotation_rad")
-            if fitPfiScale:
-                columns.append(np.r_[dz, dp])
-                names.append("scale")
-            solution = np.linalg.lstsq(np.column_stack(columns), np.r_[errDz[fit], errDp[fit]], rcond=None)[0]
-            record.update(zip(names, solution, strict=True))
-
-            dz, dp = dzNominal[rows], dpNominal[rows]
-            modelDz[rows] = record["dz_mm"] - record["rotation_rad"] * dp + record["scale"] * dz
-            modelDp[rows] = record["dp_mm"] + record["rotation_rad"] * dz + record["scale"] * dp
-        records.append(record)
-
-    return modelDz, modelDp, records
+def _applyExposure(record: dict, dz: np.ndarray, dp: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Model offsets (mm) at nominal zenith positions ``dz``, ``dp`` from an exposure's terms."""
+    return (
+        record["dz_mm"] - record["rotation_rad"] * dp + record["scale"] * dz,
+        record["dp_mm"] + record["rotation_rad"] * dz + record["scale"] * dp,
+    )
 
 
-def _fitCameraTerms(errDz, errDp, dzNominal, dpNominal, cameraId, use, fitAgcRotation):
-    """Fit an offset, and maybe a rotation, to each camera's errors (mm)."""
-    modelDz, modelDp = np.zeros(len(errDz)), np.zeros(len(errDz))
-    records = []
-    for cid in np.unique(cameraId):
-        rows = cameraId == cid
-        fit = rows & use
-        nFit = np.sum(fit)
-        record = {"agc_camera_id": int(cid), "dz_mm": 0.0, "dp_mm": 0.0, "rotation_rad": 0.0}
-        if nFit >= 2:
-            if fitAgcRotation:
-                dz0, dp0 = np.mean(dzNominal[fit]), np.mean(dpNominal[fit])
-                dz, dp = dzNominal[fit] - dz0, dpNominal[fit] - dp0
-                design = np.column_stack(
-                    [
-                        np.r_[np.ones(nFit), np.zeros(nFit)],
-                        np.r_[np.zeros(nFit), np.ones(nFit)],
-                        np.r_[-dp, dz],
-                    ]
-                )
-                solution = np.linalg.lstsq(design, np.r_[errDz[fit], errDp[fit]], rcond=None)[0]
-                record.update(zip(["dz_mm", "dp_mm", "rotation_rad"], solution, strict=True))
+def _applyCamera(
+    record: dict, dz: np.ndarray, dp: np.ndarray, dz0: float, dp0: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Model offsets (mm) at nominal zenith positions ``dz``, ``dp`` from a camera's terms.
 
-                dz, dp = dzNominal[rows] - dz0, dpNominal[rows] - dp0
-                modelDz[rows] = record["dz_mm"] - record["rotation_rad"] * dp
-                modelDp[rows] = record["dp_mm"] + record["rotation_rad"] * dz
+    The rotation is about the camera's mean nominal position ``(dz0, dp0)``.
+    """
+    return (
+        record["dz_mm"] - record["rotation_rad"] * (dp - dp0),
+        record["dp_mm"] + record["rotation_rad"] * (dz - dz0),
+    )
+
+
+def _fitCameraAlone(
+    record: dict, errDz, errDp, dzNominal, dpNominal, modelDz, modelDp, fit, fitAgcRotation
+) -> tuple[float, float]:
+    """Fit one camera's offset, and maybe rotation, against the exposure model, on its own.
+
+    For a camera with no jointly-fitted rows (disabled in every exposure
+    here): its terms come from its own residuals to the exposure model, as the
+    per-camera fit did. Returns the rotation centre (zero without a rotation).
+    """
+    nFit = int(np.sum(fit))
+    if nFit < 2:
+        return 0.0, 0.0
+    resDz, resDp = errDz[fit] - modelDz[fit], errDp[fit] - modelDp[fit]
+    if not fitAgcRotation:
+        record.update(dz_mm=resDz.mean(), dp_mm=resDp.mean())
+        return 0.0, 0.0
+    dz0, dp0 = dzNominal[fit].mean(), dpNominal[fit].mean()
+    dz, dp = dzNominal[fit] - dz0, dpNominal[fit] - dp0
+    design = np.column_stack(
+        [np.r_[np.ones(nFit), np.zeros(nFit)], np.r_[np.zeros(nFit), np.ones(nFit)], np.r_[-dp, dz]]
+    )
+    solution = np.linalg.lstsq(design, np.r_[resDz, resDp], rcond=None)[0]
+    record.update(zip(["dz_mm", "dp_mm", "rotation_rad"], solution, strict=True))
+    return dz0, dp0
+
+
+def _solveConstrained(design, rhs: np.ndarray, constraints) -> np.ndarray:
+    """Least-squares ``design @ x = rhs`` subject to ``constraints @ x = 0``.
+
+    Through the KKT system of the normal equations. The normal matrix is
+    sparse and small (block-diagonal in the exposures, a few shared camera
+    columns), so a direct solve is exact and quick. ``constraints`` pins the
+    degenerate directions, so the system is non-singular.
+    """
+    normal = (design.T @ design).tocsc()
+    target = design.T @ rhs
+    nCon = constraints.shape[0]
+    if nCon == 0:
+        return scipy.sparse.linalg.spsolve(normal, target)
+    kkt = scipy.sparse.bmat([[normal, constraints.T], [constraints, None]], format="csc")
+    return scipy.sparse.linalg.spsolve(kkt, np.r_[target, np.zeros(nCon)])[: design.shape[1]]
+
+
+def _fitZenithModel(
+    errDz,
+    errDp,
+    dzNominal,
+    dpNominal,
+    exposureId,
+    cameraId,
+    use,
+    enabled,
+    fitPfiRotation,
+    fitPfiScale,
+    fitAgcOffsets,
+    fitAgcRotation,
+):
+    """Fit the exposure and camera terms together, in one least-squares solve.
+
+    The offset (and optional rotation and scale) of every AG exposure and the
+    offset (and optional rotation) of every camera are fitted at once, in the
+    zenith frame, rather than in turn. An offset shared by every camera is
+    degenerate with one shared by every exposure, and, with both rotations on,
+    so is a rotation of the whole AG ring; the camera terms are pinned to sum
+    to zero, which leaves those common parts in the exposure terms.
+
+    Exposure terms are fitted to valid matches on enabled cameras; a camera's
+    terms to its valid matches on enabled rows. A camera disabled in every
+    exposure here is fitted on its own, against the exposure model, so it still
+    gets terms. A group with fewer valid matches than it has terms is left at
+    zero. Returns the model offsets (mm) of every row and the term records.
+    """
+    n = len(errDz)
+    useExposure = use & enabled
+    exposureTerms = ["dz_mm", "dp_mm"]
+    if fitPfiRotation:
+        exposureTerms.append("rotation_rad")
+    if fitPfiScale:
+        exposureTerms.append("scale")
+    cameraTerms = ["dz_mm", "dp_mm"]
+    if fitAgcRotation:
+        cameraTerms.append("rotation_rad")
+
+    exposures = np.unique(exposureId)
+    jointExposures = {
+        int(e) for e in exposures if np.count_nonzero((exposureId == e) & useExposure) >= len(exposureTerms)
+    }
+    inJoint = useExposure & np.isin(exposureId, list(jointExposures))
+
+    cameras = np.unique(cameraId) if fitAgcOffsets else np.array([], dtype=int)
+    centre: dict[int, tuple[float, float]] = {}
+    for c in cameras:
+        rows = (cameraId == c) & inJoint
+        if np.count_nonzero(rows) >= len(cameraTerms):
+            centre[int(c)] = (dzNominal[rows].mean(), dpNominal[rows].mean())
+
+    # Assemble the joint design over the rows fitted together, one column per
+    # term of each exposure and each jointly-fitted camera.
+    column: dict[tuple, int] = {}
+    fitRows = np.flatnonzero(inJoint)
+    nFit = len(fitRows)
+    eqRow, eqCol, eqVal = [], [], []
+
+    def _addTerm(block, gid, term, dz, dp, dz0, dp0, k):
+        j = column.setdefault((block, gid, term), len(column))
+        if term == "dz_mm":
+            cz, cp = 1.0, 0.0
+        elif term == "dp_mm":
+            cz, cp = 0.0, 1.0
+        elif term == "rotation_rad":
+            cz, cp = -(dp - dp0), dz - dz0
+        else:  # scale
+            cz, cp = dz, dp
+        if cz:
+            eqRow.append(k)
+            eqCol.append(j)
+            eqVal.append(cz)
+        if cp:
+            eqRow.append(nFit + k)
+            eqCol.append(j)
+            eqVal.append(cp)
+
+    for k, i in enumerate(fitRows):
+        dz, dp = dzNominal[i], dpNominal[i]
+        for term in exposureTerms:
+            _addTerm("exp", int(exposureId[i]), term, dz, dp, 0.0, 0.0, k)
+        c = int(cameraId[i])
+        if c in centre:
+            dz0, dp0 = centre[c]
+            for term in cameraTerms:
+                _addTerm("cam", c, term, dz, dp, dz0, dp0, k)
+
+    design = scipy.sparse.coo_matrix((eqVal, (eqRow, eqCol)), shape=(2 * nFit, len(column))).tocsr()
+    rhs = np.r_[errDz[inJoint], errDp[inJoint]]
+
+    # Pin the degenerate means: the offset, and with both rotations on the
+    # rotation, shared by every camera, each indistinguishable from one shared
+    # by every exposure.
+    constraintTerms = ["dz_mm", "dp_mm"]
+    if fitAgcRotation and fitPfiRotation:
+        constraintTerms.append("rotation_rad")
+    conRow, conCol = [], []
+    for r, term in enumerate(constraintTerms):
+        for c in centre:
+            conRow.append(r)
+            conCol.append(column[("cam", c, term)])
+    constraints = scipy.sparse.coo_matrix(
+        (np.ones(len(conRow)), (conRow, conCol)),
+        shape=(len(constraintTerms) if centre else 0, len(column)),
+    ).tocsr()
+
+    solution = _solveConstrained(design, rhs, constraints)
+
+    # The terms and model offset of every row: exposures from the solution,
+    # then cameras, a disabled one fitted against the exposure model.
+    modelDz, modelDp = np.zeros(n), np.zeros(n)
+    exposureRecords = []
+    for e in exposures:
+        record = {"agc_exposure_id": int(e), "dz_mm": 0.0, "dp_mm": 0.0, "rotation_rad": 0.0, "scale": 0.0}
+        for term in exposureTerms:
+            if ("exp", int(e), term) in column:
+                record[term] = solution[column[("exp", int(e), term)]]
+        rows = exposureId == e
+        mz, mp = _applyExposure(record, dzNominal[rows], dpNominal[rows])
+        modelDz[rows] += mz
+        modelDp[rows] += mp
+        exposureRecords.append(record)
+
+    cameraRecords = None
+    if fitAgcOffsets:
+        cameraRecords = []
+        for c in cameras:
+            c = int(c)
+            record = {"agc_camera_id": c, "dz_mm": 0.0, "dp_mm": 0.0, "rotation_rad": 0.0}
+            rows = cameraId == c
+            if c in centre:
+                for term in cameraTerms:
+                    record[term] = solution[column[("cam", c, term)]]
+                dz0, dp0 = centre[c]
             else:
-                record.update(dz_mm=np.mean(errDz[fit]), dp_mm=np.mean(errDp[fit]))
-                modelDz[rows], modelDp[rows] = record["dz_mm"], record["dp_mm"]
-        records.append(record)
+                dz0, dp0 = _fitCameraAlone(
+                    record, errDz, errDp, dzNominal, dpNominal, modelDz, modelDp, rows & use, fitAgcRotation
+                )
+            mz, mp = _applyCamera(record, dzNominal[rows], dpNominal[rows], dz0, dp0)
+            modelDz[rows] += mz
+            modelDp[rows] += mp
+            cameraRecords.append(record)
 
-    return modelDz, modelDp, records
+    return modelDz, modelDp, exposureRecords, cameraRecords
 
 
 def _termsTable(records: list[dict], index: str) -> pd.DataFrame:
@@ -719,10 +869,14 @@ def fitGlobalModel(
     about the boresight, plus optionally a constant offset (and rotation) of
     each camera. It is fitted in the zenith frame
     (`pfs.drp.qa.guiders.coordinates.pfiToZenith`), where gravity, and so
-    flexure, doesn't depend on the rotator angle. With camera terms, the
-    exposure and camera terms are fitted in turn, three times, as in
-    drp_stella; with exposure rotations too, that doesn't fully converge, and
-    can leave a few microns in the terms.
+    flexure, doesn't depend on the rotator angle. The exposure and camera
+    terms are fitted together, in one least-squares solve: fitting them in
+    turn, as drp_stella did, doesn't converge once the exposures have
+    rotations too, and leaves a few microns in the terms. An offset shared by
+    every camera is degenerate with one shared by every exposure, and, with
+    both rotations on, so is a rotation of the whole AG ring; the camera terms
+    are pinned to sum to zero, which leaves those common parts in the exposure
+    terms.
 
     Parameters
     ----------
@@ -734,8 +888,8 @@ def fitGlobalModel(
         The stars to fit, one element per row; default those with
         ``agc_match_flags == 1``. The model is evaluated for every star.
         The exposure terms are fitted to those on enabled cameras
-        (`selectEnabledCameras`) alone, as the guider fitted them; the camera
-        terms to all of them, so a disabled camera has its terms too.
+        (`selectEnabledCameras`) alone, as the guider fitted them; every
+        camera gets its terms, a camera disabled throughout fitted on its own.
     fitPfiRotation : `bool`
         Fit a rotation of each exposure about the boresight.
     fitPfiScale : `bool`
@@ -754,32 +908,29 @@ def fitGlobalModel(
     exposureId = data.agc_exposure_id.to_numpy()
     cameraId = data.agc_camera_id.to_numpy()
     use = selectValidMatches(data) if valid is None else np.asarray(valid, dtype=bool)
-    useExposure = use & selectEnabledCameras(data)
+    enabled = selectEnabledCameras(data)
     insrot = data.groupby("agc_exposure_id").insrot.transform("median").to_numpy(dtype=float)
 
     dzNominal, dpNominal = pfiToZenith(data.agc_nominal_x_mm, data.agc_nominal_y_mm, insrot)
     dzCenter, dpCenter = pfiToZenith(data.agc_center_x_mm, data.agc_center_y_mm, insrot)
     errDz, errDp = dzCenter - dzNominal, dpCenter - dpNominal
 
-    cameraDz, cameraDp = np.zeros(len(data)), np.zeros(len(data))
-    cameraRecords = []
-    for _ in range(3 if fitAgcOffsets else 1):
-        exposureDz, exposureDp, exposureRecords = _fitExposureTerms(
-            errDz - cameraDz,
-            errDp - cameraDp,
-            dzNominal,
-            dpNominal,
-            exposureId,
-            useExposure,
-            fitPfiRotation,
-            fitPfiScale,
-        )
-        if fitAgcOffsets:
-            cameraDz, cameraDp, cameraRecords = _fitCameraTerms(
-                errDz - exposureDz, errDp - exposureDp, dzNominal, dpNominal, cameraId, use, fitAgcRotation
-            )
+    modelDz, modelDp, exposureRecords, cameraRecords = _fitZenithModel(
+        errDz,
+        errDp,
+        dzNominal,
+        dpNominal,
+        exposureId,
+        cameraId,
+        use,
+        enabled,
+        fitPfiRotation,
+        fitPfiScale,
+        fitAgcOffsets,
+        fitAgcRotation,
+    )
 
-    dx, dy = zenithToPfi(exposureDz + cameraDz, exposureDp + cameraDp, insrot)
+    dx, dy = zenithToPfi(modelDz, modelDp, insrot)
     data["agc_model_x_mm"] = data.agc_nominal_x_mm + dx
     data["agc_model_y_mm"] = data.agc_nominal_y_mm + dy
     data = addOffsets(data, "model")

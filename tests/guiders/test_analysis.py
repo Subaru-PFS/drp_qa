@@ -363,11 +363,13 @@ def testFitGuiderModelCuts(makeAgcData):
 # Global model in the zenith frame
 
 
-def makeZenithData(makeAgcData, rng, cameraOffsets_mm, rotationSigma_rad=1e-5):
-    """Return AG data whose errors are an offset and rotation per exposure, and an offset per camera.
+def makeZenithData(makeAgcData, rng, cameraOffsets_mm, rotationSigma_rad=1e-5, cameraRotation_rad=None):
+    """Return AG data whose errors are an offset and rotation per exposure, and camera terms.
 
     The offsets are in the zenith frame, and the visits are at very different
-    rotator angles.
+    rotator angles. Each camera has a constant offset; with
+    ``cameraRotation_rad``, also a rotation about its mean nominal position
+    over the whole set, the centre the fit uses.
     """
     agcData = makeAgcData(closedFrac=0).reset_index(drop=True)
     agcData["insrot"] = agcData.pfs_visit_id.map(dict(zip(VISITS, [-60.0, 0.0, 70.0], strict=True)))
@@ -387,6 +389,13 @@ def makeZenithData(makeAgcData, rng, cameraOffsets_mm, rotationSigma_rad=1e-5):
     camera = np.asarray(cameraOffsets_mm)[agcData.agc_camera_id]
     errDz += camera[:, 0]
     errDp += camera[:, 1]
+    if cameraRotation_rad is not None:
+        cameraId = agcData.agc_camera_id.to_numpy()
+        for cid, rotation in enumerate(cameraRotation_rad):
+            rows = cameraId == cid
+            dz0, dp0 = dz[rows].mean(), dp[rows].mean()
+            errDz[rows] += -rotation * (dp[rows] - dp0)
+            errDp[rows] += rotation * (dz[rows] - dz0)
 
     dx, dy = zenithToPfi(errDz, errDp, agcData.insrot.to_numpy())
     agcData["agc_center_x_mm"] = agcData.agc_nominal_x_mm + dx + rng.normal(0, 1e-4, len(agcData))
@@ -416,7 +425,7 @@ def testFitGlobalModelHardwareFrame(makeAgcData, rng):
     """
     cameraOffsets = rng.normal(0, 0.02, (6, 2))
     cameraOffsets -= cameraOffsets.mean(axis=0)  # the exposures' offsets absorb any mean
-    # Without exposure rotations, which three alternations of the fits don't separate from the cameras'.
+    # Camera offsets alone, without exposure rotations (testFitGlobalModelJointTerms has both).
     agcData, _ = makeZenithData(makeAgcData, rng, cameraOffsets, rotationSigma_rad=0)
 
     fit = fitGlobalModel(agcData, fitPfiRotation=False, fitAgcOffsets=True)
@@ -432,6 +441,50 @@ def testFitGlobalModelHardwareFrame(makeAgcData, rng):
     )
     wrong = fitGlobalModel(opdbFrame, fitPfiRotation=False, fitAgcOffsets=True)
     assert rms(np.hypot(wrong.agcData.dx_model_um, wrong.agcData.dy_model_um)) > 5
+
+
+def testFitGlobalModelJointTerms(makeAgcData, rng):
+    """Exposure offsets and rotations, and camera offsets and rotations, are recovered together.
+
+    Fitting the exposure and camera terms in turn, as drp_stella did, leaves a
+    few microns once the exposures have rotations too (PIPE2D-1909); the joint
+    solve recovers every term, the camera terms pinned to sum to zero.
+    """
+    cameraOffsets = rng.normal(0, 0.02, (6, 2))
+    cameraOffsets -= cameraOffsets.mean(axis=0)
+    cameraRotation = rng.normal(0, 1e-5, 6)
+    cameraRotation -= cameraRotation.mean()
+    agcData, terms = makeZenithData(makeAgcData, rng, cameraOffsets, cameraRotation_rad=cameraRotation)
+
+    fit = fitGlobalModel(agcData, fitAgcOffsets=True, fitAgcRotation=True)
+
+    np.testing.assert_allclose(fit.exposures.rotation_arcsec, np.rad2deg(terms.rotation) * 3600, atol=0.1)
+    np.testing.assert_allclose(fit.cameras.dz_um, 1e3 * cameraOffsets[:, 0], atol=0.1)
+    np.testing.assert_allclose(fit.cameras.dp_um, 1e3 * cameraOffsets[:, 1], atol=0.1)
+    np.testing.assert_allclose(fit.cameras.rotation_arcsec, np.rad2deg(cameraRotation) * 3600, atol=0.1)
+    np.testing.assert_allclose(fit.cameras.dz_um.sum(), 0, atol=1e-6)
+    np.testing.assert_allclose(fit.cameras.rotation_arcsec.sum(), 0, atol=1e-6)
+    assert rms(np.hypot(fit.agcData.dx_model_um, fit.agcData.dy_model_um)) < 0.2
+
+    # Negative control: the camera rotations are real; leaving them out of the
+    # fit leaves them in the residual.
+    noRotation = fitGlobalModel(agcData, fitAgcOffsets=True, fitAgcRotation=False)
+    assert rms(np.hypot(noRotation.agcData.dx_model_um, noRotation.agcData.dy_model_um)) > 0.5
+
+
+def testFitGlobalModelNoValidMatches(makeAgcData, rng):
+    """With no valid matches, every camera still gets a zero row and nothing raises."""
+    agcData, _ = makeZenithData(makeAgcData, rng, np.zeros((6, 2)))
+    agcData["agc_match_flags"] = 0  # nothing is a GOOD_MATCH
+
+    fit = fitGlobalModel(agcData, fitAgcOffsets=True)
+
+    assert list(fit.cameras.index) == list(range(6))
+    assert (fit.cameras[["dz_um", "dp_um"]] == 0).all().all()
+    assert (fit.exposures[["dz_um", "dp_um"]] == 0).all().all()
+    # The model leaves every star at its nominal position.
+    assert np.allclose(fit.agcData.agc_model_x_mm, fit.agcData.agc_nominal_x_mm)
+    assert np.allclose(fit.agcData.agc_model_y_mm, fit.agcData.agc_nominal_y_mm)
 
 
 def testFitGlobalModelValid(makeAgcData, rng):
