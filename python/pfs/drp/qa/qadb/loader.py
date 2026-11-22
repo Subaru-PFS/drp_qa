@@ -287,6 +287,7 @@ def loadCollection(
     opdb: Any = None,
     mode: str = "backfill",
     pipelineVersions: bool = True,
+    agConditions: bool = False,
     dryRun: Path | str | None = None,
     normalValues: pd.DataFrame | None = None,
     log: Callable[[str], None] = print,
@@ -317,6 +318,12 @@ def loadCollection(
     pipelineVersions : `bool`, optional
         Read the reducing pipeline's versions from the images' pfsArm headers
         (one file read per image). `False` leaves them null.
+    agConditions : `bool`, optional
+        Compute the AG seeing and transparency of the loaded visits from the
+        opdb (`pfs.drp.qa.guiders.conditions`) and log what would be written,
+        a shadow of the observatory ``obsCondition`` tool; nothing is written
+        to qadb. Needs ``opdb``; off by default. A failure is logged and does
+        not stop the load.
     dryRun : `pathlib.Path` or `str`, optional
         Write what would be loaded to parquet files in this directory, one per
         table, and touch no database. Processing ids are then negative
@@ -493,6 +500,15 @@ def loadCollection(
             f"{tally[status]} {status}" for status in ("PASS", "WARN", "FAIL", "UNKNOWN") if status in tally
         )
     )
+    # A shadow of obsCondition: compute the AG conditions and log what would be written, writing
+    # nothing. Non-critical, so a failure (e.g. an opdb hiccup) is logged, not raised.
+    if agConditions and opdb is not None and allVisits:
+        try:
+            from pfs.drp.qa.guiders.conditions import logConditions
+
+            counts["ag_conditions"] = logConditions(sorted(allVisits), opdb, log)
+        except Exception as exc:
+            log(f"AG conditions (shadow): skipped, {type(exc).__name__}: {exc}")
     log(f"loaded {collection} in {time.monotonic() - start:.0f} s")
     return counts
 
