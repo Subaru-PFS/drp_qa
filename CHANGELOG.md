@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-22
+
 ### Added
 
 - **Shaka exposures labelled and reported apart** (PIPE2D-1955) — comparison mode now tags a *shaka* exposure,
