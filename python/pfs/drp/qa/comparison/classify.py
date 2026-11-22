@@ -28,8 +28,15 @@ type belongs to the set; one whose name recurs on `DAILY_MIN_NIGHTS` nights is d
 Sky visits also get sub-labels from the telescope status: `focusSweep` (a telescope focus sweep,
 which changes how much light enters the fibers but not the spectrograph's line widths) and
 ``dithered``.
+
+An arc or trace gets the `shaka` sub-label from its design name (`shakaOf`): a *shaka* exposure
+lights one group of every few cobras (``cobraHome-MOD4_group2``, every fourth cobra; PIPE2D-1935),
+so it is measured and judged like a fully lit arc or trace but on about a quarter of the fibers,
+and is reported apart from them. ``shakaMod`` is the modulus (4 for every fourth) and
+``shakaGroup`` the group; a fully lit (``cobraHome``) or science design has neither.
 """
 
+import re
 from collections.abc import Iterable
 
 import numpy as np
@@ -54,6 +61,8 @@ __all__ = [
     "engineeringGroups",
     "engineeringSequences",
     "focusSweeps",
+    "shakaLabel",
+    "shakaOf",
 ]
 
 #: Sequence types of the calibration recipe, whose passes come first: the *gated* visits.
@@ -95,6 +104,11 @@ FOCUS_SWEEP_MIN_STEPS = 10
 #: ...spanning at least this much (mm). The focus correction during a night spans about 0.1 mm.
 FOCUS_SWEEP_MIN_RANGE = 0.5
 
+#: A shaka design name's modulus (``MOD4``) and group (``group2``), case-insensitive: ``MOD<k>`` names
+#: every ``k``-th cobra and ``group<n>`` the group of them that is lit.
+_MOD_RE = re.compile(r"MOD(\d+)", re.IGNORECASE)
+_GROUP_RE = re.compile(r"group(\d+)", re.IGNORECASE)
+
 
 def designKinds(categories: pd.DataFrame) -> pd.Series:
     """Return whether each design was made for science or engineering.
@@ -119,6 +133,56 @@ def designKinds(categories: pd.DataFrame) -> pd.Series:
     isScience = ~categories["category"].isin(ENGINEERING_CATEGORIES)
     kinds = isScience.groupby(categories["pfs_design_id"]).any()
     return kinds.map({True: "science", False: "engineering"}).rename("design_kind")
+
+
+def shakaOf(name: object) -> tuple[int | None, int | None]:
+    """Return the modulus and group of a one-fiber-group (shaka) design name.
+
+    A *shaka* design lights one group of every few cobras; its name has a
+    ``MOD<k>`` before ``group<n>`` (``cobraHome-MOD4_group2`` lights every
+    fourth cobra, group 2). The modulus is the ``MOD<k>`` nearest before the
+    group, so ``cobraHome-MOD32_before_MOD4_group1`` reads as modulus 4, group
+    1.
+
+    Parameters
+    ----------
+    name : object
+        A design name (``pfs_design.design_name``), or anything else.
+
+    Returns
+    -------
+    `tuple` [`int` or `None`, `int` or `None`]
+        ``(modulus, group)`` for a shaka design; ``(None, None)`` for a fully
+        lit (``cobraHome``) or science design, or a non-string.
+    """
+    if not isinstance(name, str):
+        return (None, None)
+    group = _GROUP_RE.search(name)
+    if group is None:
+        return (None, None)
+    mods = [mod for mod in _MOD_RE.finditer(name) if mod.start() < group.start()]
+    if not mods:
+        return (None, None)
+    return int(mods[-1].group(1)), int(group.group(1))
+
+
+def shakaLabel(mod: object, group: object) -> str:
+    """Return a shaka exposure's label (``shaka MOD4 group2``), or ``""`` when it isn't one.
+
+    Parameters
+    ----------
+    mod, group : object
+        A visit's ``shakaMod`` and ``shakaGroup`` (`classifyVisits`); NA when it
+        is not a shaka exposure.
+
+    Returns
+    -------
+    `str`
+        ``shaka MOD<k> group<n>``, or ``""`` when ``group`` is NA.
+    """
+    if pd.isna(group):
+        return ""
+    return f"shaka MOD{int(mod)} group{int(group)}"
 
 
 def focusSweeps(sky: pd.DataFrame) -> pd.Series:
@@ -223,6 +287,7 @@ def classifyVisits(
     periods: Iterable[Period],
     designs: pd.Series | None = None,
     telStatus: pd.DataFrame | None = None,
+    designNames: pd.Series | None = None,
 ) -> pd.DataFrame:
     """Say what each visit is and whether comparison mode measures it.
 
@@ -238,6 +303,11 @@ def classifyVisits(
     telStatus : `pandas.DataFrame`, optional
         From `pfs.drp.qa.comparison.queries.readTelStatus`. Without it no visit
         is a focus sweep or dithered.
+    designNames : `pandas.Series`, optional
+        The shaka designs' names (``design_name`` indexed by
+        ``pfs_design_id``), from
+        `pfs.drp.qa.comparison.queries.readDesignNames`. Without it no visit is
+        a shaka.
 
     Returns
     -------
@@ -255,6 +325,11 @@ def classifyVisits(
             empty otherwise.
         ``focusSweep``, ``dithered``
             Sky sub-labels (`bool`).
+        ``shaka``
+            Whether the design lights one group of every few cobras (`bool`;
+            `shakaOf`).
+        ``shakaMod``, ``shakaGroup``
+            The modulus and group of a shaka exposure (`Int64`; NA otherwise).
         ``judged``
             Whether the QA tasks measure the visit (`bool`). The name is
             historical: the verdict is given later, from the stored numbers
@@ -295,6 +370,13 @@ def classifyVisits(
     visits.loc[isSky, "focusSweep"] = focusSweeps(sky)
     dithered = (status["dither_ra_max"].fillna(0) > 0) | (status["dither_dec_max"].fillna(0) > 0)
     visits["dithered"] = isSky & dithered.to_numpy()
+
+    # One (modulus, group) per design, so shakaOf runs once per design and not once per visit.
+    shakaByDesign = {} if designNames is None else {int(d): shakaOf(n) for d, n in designNames.items()}
+    parsed = visits["pfs_design_id"].map(lambda design: shakaByDesign.get(design, (None, None)))
+    visits["shakaMod"] = parsed.map(lambda modGroup: modGroup[0]).astype("Int64")
+    visits["shakaGroup"] = parsed.map(lambda modGroup: modGroup[1]).astype("Int64")
+    visits["shaka"] = visits["shakaGroup"].notna()
 
     reason = pd.Series("gated", index=visits.index, dtype=object)
     reason[~sequenceType.isin(VALIDATED_TYPES)] = "unvalidated"

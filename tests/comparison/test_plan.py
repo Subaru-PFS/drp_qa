@@ -133,6 +133,26 @@ def testCoverage(classified):
     assert summary.loc["darks", "to reduce"] == 0  # not expanded into detectors
 
 
+def testCoverageAndSummarizeSplitShaka(periods, visit, listing):
+    visits = classifyVisits(
+        listing(
+            visit(1, "2026-01-03 18:00", "scienceArc", sequence=50, cameras="b1", design=20),  # shaka g2
+            visit(2, "2026-01-03 18:05", "scienceArc", sequence=51, cameras="b1", design=30),  # fully lit
+        ),
+        periods.values(),
+        designNames=pd.Series({20: "cobraHome-MOD4_group2"}, name="design_name"),
+    )
+    holdings = _holdings([(1, "b", 1, True, True, True), (2, "b", 1, True, True, True)])
+    detectors = coverage(visits, holdings).set_index("visit")
+    assert detectors.loc[1, "shaka"] == "shaka MOD4 group2"
+    assert detectors.loc[2, "shaka"] == ""  # negative control: the fully lit arc carries no shaka label
+
+    # The shaka arc and the fully lit arc of the same type are separate rows, each one visit.
+    summary = summarize(visits, coverage(visits, holdings)).set_index("shaka")
+    assert summary.loc["shaka MOD4 group2", "visits"] == 1
+    assert summary.loc["", "visits"] == 1
+
+
 def testPassesGroupByConfigAndSequence(classified):
     holdings = _holdings([(visit, arm, 1, True, False, False) for visit in (1, 2, 3, 4) for arm in "br"])
     detectors = coverage(classified, holdings)

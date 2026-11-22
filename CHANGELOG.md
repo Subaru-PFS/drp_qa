@@ -10,6 +10,17 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Added
+
+- **Shaka exposures labelled and reported apart** (PIPE2D-1955) — comparison mode now tags a *shaka* exposure,
+  one taken on a `cobraHome-MOD<k>_group<n>` design that lights one group of every `k`-th cobra, with its
+  modulus and group. `classifyVisits` gains `shaka`, `shakaMod` and `shakaGroup` columns and a `designNames`
+  argument; `comparison.classify.shakaOf`/`shakaLabel` parse and format the label, and
+  `comparison.queries.readDesignNames` reads the names, keeping only the one-fiber-group designs so proprietary
+  field names stay in the opdb. The fetch summary and the coverage table (`plan.coverage`/`summarize`) report
+  shaka arcs and traces on their own rows, apart from the fully lit ones. The judgement is unchanged:
+  `linesPerFiber` already allows for the lit fibers (PIPE2D-1935).
+
 ## [0.10.0] - 2026-11-22
 
 ### Changed

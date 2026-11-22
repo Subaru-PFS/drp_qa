@@ -16,6 +16,7 @@ __all__ = [
     "SEQUENCE_COLUMNS",
     "proposalCategory",
     "readDesignCategories",
+    "readDesignNames",
     "readNotes",
     "readSequenceOfVisit",
     "readTelStatus",
@@ -116,6 +117,17 @@ SELECT pfs_visit_id, count(*) AS n_status,
 FROM tel_status
 WHERE pfs_visit_id = ANY(:visits)
 GROUP BY pfs_visit_id
+"""
+
+# The names of the one-fiber-group (shaka) designs only: a name with a MOD<k> before a group<n>
+# (``cobraHome-MOD4_group2``). A science design's name can be a field or target name, which is
+# proprietary and stays out of anything this package writes, so the guard returns NULL for it and
+# the proprietary names never leave the opdb; `pfs.drp.qa.comparison.classify.shakaOf` parses what
+# comes back.
+_DESIGN_NAMES_SQL = """
+SELECT pfs_design_id, design_name
+FROM pfs_design
+WHERE pfs_design_id = ANY(:designs) AND design_name ~* 'mod[0-9].*group[0-9]'
 """
 
 # Science fibers only (targetType SCIENCE = 1): their proposals say whose design it is.
@@ -350,6 +362,40 @@ def readDesignCategories(opdb, designs: Iterable[int]) -> pd.DataFrame:
     proposals["category"] = proposals["proposal_id"].map(proposalCategory)
     categories = proposals.groupby(["pfs_design_id", "category"], as_index=False)["n_fibers"].sum()
     return categories.reindex(columns=columns)
+
+
+def readDesignNames(opdb, designs: Iterable[int]) -> pd.DataFrame:
+    """Read the names of some designs, keeping only the one-fiber-group (shaka) designs.
+
+    A *shaka* design lights one group of every few cobras; its name has a
+    ``MOD<k>`` before ``group<n>`` (``cobraHome-MOD4_group2``). Only these
+    names are returned: a science design's name can be a field or target name,
+    which is proprietary, so the query filters it out in the opdb and it never
+    reaches this package. `pfs.drp.qa.comparison.classify.shakaOf` parses the
+    modulus and group from what comes back.
+
+    Parameters
+    ----------
+    opdb : `pfs.utils.database.opdb.OpDB`
+        The opdb, read-only.
+    designs : iterable of `int`
+        ``pfs_design_id`` values.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``pfs_design_id`` and ``design_name``, one row per shaka design; a
+        design that is not shaka (``cobraHome``, a science field, ...) has no
+        row.
+    """
+    designs = sorted({int(design) for design in designs})
+    columns = ["pfs_design_id", "design_name"]
+    if not designs:
+        return pd.DataFrame(columns=columns)
+    names = opdb.query_dataframe(_DESIGN_NAMES_SQL, params={"designs": designs})
+    names = names.reindex(columns=columns)
+    names["pfs_design_id"] = names["pfs_design_id"].astype("Int64")
+    return names.reset_index(drop=True)
 
 
 def proposalCategory(proposalId: str | None) -> str:
