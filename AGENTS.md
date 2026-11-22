@@ -37,9 +37,10 @@ the pipeline/config glue to run them.
   currently registers **six** task labels, and only these run under `pipetask`:
   `extractionQa`, `extractionQaCombined`, `imageQualityQa`, `dmLineResiduals`,
   `twilightFluxQa`, `reductionStats`.
-- **Reduce-and-measure pipeline (`pipelines/qaThresholds.yaml`)** — drp_stella's `reduceExposure`
-  (less `mergeArms`) plus `imageQualityQa` and `dmLineResiduals`, for comparison mode and
-  `drpQa.py calib validate`, which apply `drpActor`'s per-sequence-type config.
+- **Reduce then measure (two `pipetask` commands)** — `drpQa.py redo` and `drpQa.py calib validate`
+  reduce with drp_stella's `reduceExposure` (less `mergeArms`), applying `drpActor`'s per-sequence-type
+  config, and then measure with `drpQA.yaml`'s tasks; the pipeline paths and labels are in
+  `comparison.reduction` (`REDUCE_*`, `MEASURE_*`). There is no combined pipeline file.
 - **Tasks in the pipeline (`python/pfs/drp/qa/`)**:
   - `imageQualityQa.py` — image quality (FWHM, flag rates); numbers only, no verdict
   - `extractionQa.py`, `extractionQaCombined.py` — fiber extraction quality
@@ -62,17 +63,19 @@ the pipeline/config glue to run them.
   - `fluxCalQa.py`, `fluxCal/fluxCalQA.py` — flux calibration validation
   - `fiberNormsQa.py` — **not** a `PipelineTask`; a standalone Butler-driven CLI module
     whose `main()` is `drpQa.py fiberNorms`
-- **Comparison mode (`python/pfs/drp/qa/comparison/`)** — reduces every image of an observing run
-  that `drpActor/reductions` lacks and runs the QA tasks on all of them; it gives no verdict. Driven
-  by `bin.src/qaComparison.py` (`fetch`, `plan`, `run`). `queries` is the only code touching the opdb
-  and `butlerQueries` the only code touching a Butler (both take it as an argument); `runs`,
-  `classify` and `plan` are stack-free and tested in `tests/comparison/`. The observing
+- **Redo a run (`python/pfs/drp/qa/comparison/`)** — `drpQa.py redo <run>` (`comparison/redo.py`) redoes
+  an observing run with an updated pipeline end to end: read the opdb, reduce the raw frames (unless
+  `--reductions` reuses a reduced collection), measure, load qadb, make and compare normal values against
+  the previous pipeline, judge, and point at `pfs_qa_dashboard` for the run report. It reads the opdb in
+  memory and writes no parquet; `--only process,load,values,judge` resumes a subset. `queries` is the only
+  code touching the opdb and `butlerQueries` the only code touching a Butler (both take it as an argument);
+  `runs`, `classify`, `plan` and `reduction` are stack-free and tested in `tests/comparison/`. The observing
   runs are package data (`comparison/data/observingRuns.yaml`). Calibration vs science is decided by
   what an exposure is (sequence type, and the design's proposals for sky), never by when it was taken.
   `calibInputs` (which exposures of a calibration set to build from) and `calibValidate` (candidate
   calibrations compared on the same visits) are stack-free, with plots in `plotting/calibInputs.py`;
-  `drpQa.py calib inputs` and `drpQa.py calib validate` drive them. The opdb reads under
-  `--data-dir` list science visits: they stay local.
+  `drpQa.py calib inputs` and `drpQa.py calib validate` drive them, reading the listing from the opdb
+  (`--opdb-host`) and numbers from a Butler collection. The opdb reads list science visits: they stay local.
 - **Guider analysis (`python/pfs/drp/qa/guiders/`)** — notebook tools for the AG
   cameras, being moved from `pfs.drp.stella.utils.guiders` (epic PIPE2D-1891). Four
   layers: `coordinates`, `queries` (the only code touching the opdb or a butler),
@@ -88,7 +91,7 @@ the pipeline/config glue to run them.
   The end-of-run report adds `queries.readAgRun` (aggregates over a period's AG
   exposures), `runAnalysis` (stack-free: per-exposure camera states, dropouts, settled jitter,
   clusters of rejected matches, position-model errors, flags), `runPlotting` (figures from an `AgRun`) and `runReport` (fetch to parquet, then the
-  Markdown report), driven by `drpQa.py agReport` with comparison mode's runs; tested in
+  Markdown report), driven by `drpQa.py agReport` with the same observing runs `redo` uses; tested in
   `tests/guiders/test_runAnalysis.py` and `test_runReport.py` on a synthetic run (`makeAgRunTables`). Its plots are not in `docs/guider-plots.ipynb`: a run
   holds science visits, which can't be committed, so each run's `report.md` is their description.
 - **Plotting (`python/pfs/drp/qa/plotting/`)** — the QA plots: DataFrames in, figures
@@ -135,13 +138,13 @@ the pipeline/config glue to run them.
     `provenance.py` reads which calibrations a dataset was made with from its Butler provenance)
   - `tasks/` — auxiliary task helpers (e.g. `overlapRegionLines.py`)
 - **Command-line tools (`bin.src/`)** — run as `python bin.src/<name>.py`:
-  - `drpQa.py` — one command with a subcommand for each job (`pfs.drp.qa.cli.COMMANDS`): `load`,
+  - `drpQa.py` — one command with a subcommand for each job (`pfs.drp.qa.cli.COMMANDS`): `redo`, `load`,
     `values`, `judge`, `summary`, `calib inputs`, `calib validate`, `fiberNorms`, `agReport`. A
     subcommand's module is imported only when it is asked for, so `values`, `judge` and `summary`,
     which read only qadb, run without the stack: keep them that way. Add a job as an entry of
     `COMMANDS`, not as a script. `summary`'s exit status is the worst visit verdict (0/1/2, 3 nothing
-    judged, 4 could not be read), for a nightly job.
-  - `qaComparison.py` — entry point for `pfs.drp.qa.comparison.cli.main` (comparison mode)
+    judged, 4 could not be read), for a nightly job. `redo` (`comparison/redo.py`) redoes a run end to
+    end: reduce, measure, load, make and compare normal values, judge, and point at the dashboard.
 - **Inter-project relationship** — `drp_qa` depends on `drp_stella` (`../drp_stella`),
   which contains the core reduction logic and C++ primitives, and on `pfs_utils`. Both
   are `setupRequired` in `ups/drp_qa.table`; `pfs-utils` is also a hard `pyproject.toml`
@@ -217,7 +220,7 @@ by bare module name.
 
 No test module needs the stack (`_STACK_MODULES` in `tests/conftest.py` is empty).
 `tests/test_connections.py` and
-`tests/test_qaThresholdsPipeline.py` read the task modules and the pipelines as text and need only
+`tests/test_drpQaPipeline.py` read the task modules and the pipelines as text and need only
 pytest. The tests in the subdirectories of `tests/` need the packages their `conftest.py`
 imports (numpy, pandas, pfs_utils, ...). If logic cannot be tested without the LSST/PFS
 environment, validate it via unit-testable components and document the constraint in the test,

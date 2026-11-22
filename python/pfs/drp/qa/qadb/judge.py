@@ -67,8 +67,12 @@ def storedNumbers(
     reads = [readQadb(qadb, collection, int(lo), int(hi)) for lo, hi in visitRanges]
 
     def select(source: str) -> pd.DataFrame:
-        table = pd.concat([read[source] for read in reads], ignore_index=True)
-        table = table.drop_duplicates().reset_index(drop=True) if len(reads) > 1 else table
+        # Concatenate only the non-empty reads: an empty range would otherwise drag the dtypes to
+        # object (and warn) when a metric was measured in some ranges but not others.
+        frames = [read[source] for read in reads]
+        nonEmpty = [frame for frame in frames if not frame.empty]
+        table = pd.concat(nonEmpty, ignore_index=True) if nonEmpty else frames[0]
+        table = table.drop_duplicates().reset_index(drop=True) if len(nonEmpty) > 1 else table
         return table[table["arm"].isin(list(arms))].reset_index(drop=True) if arms is not None else table
 
     return {name: select(source) for name, source in names.items()}
@@ -162,6 +166,7 @@ def makeValues(
     store: bool = False,
     acceptedBy: str = "",
     reason: str = "",
+    baseline: str | None = None,
     log: Callable[[str], None] = print,
     now: Callable[[], datetime] = datetime.now,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -188,6 +193,12 @@ def makeValues(
     reason : `str`, optional
         Why values shifted beyond FAIL are accepted; without it they are
         refused, and the values in force stay.
+    baseline : `str`, optional
+        The collection whose values in force each candidate is set beside, and
+        which pre-judges the calibration frames; default ``collection``. A redo
+        passes the previous pipeline's collection, so the shift printed is
+        against the same run under the previous pipeline. The values are still
+        stored for, and judged on, ``collection``.
     log : callable, optional
         Where progress goes.
     now : callable, optional
@@ -212,7 +223,7 @@ def makeValues(
         + ", ".join(f"{lo} to {hi}" for lo, hi in visitRanges)
     )
     numbers = storedNumbers(qadb, collection, visitRanges, arms)
-    inForce = readNormalValues(qadb, collection)
+    inForce = readNormalValues(qadb, baseline or collection)
     # The calibration frames are first judged by the values in force: the start-of-run check. A frame that
     # fails a fixed check is not a calibration frame to take a normal value from.
     judged = judge(measurements(numbers["iq"], numbers["lines"]), inForce[inForce["validFrom"] < validFrom])

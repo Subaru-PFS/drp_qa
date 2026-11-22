@@ -11,11 +11,19 @@ from pfs.drp.qa import cli
 QADB_ONLY = (("values",), ("judge",), ("summary",))
 
 #: The subcommands whose module is importable without the stack (it is imported when they run, not before).
-STACK_FREE_MODULES = (*QADB_ONLY, ("load",), ("calib", "inputs"), ("calib", "validate"), ("agReport",))
+STACK_FREE_MODULES = (
+    *QADB_ONLY,
+    ("redo",),
+    ("load",),
+    ("calib", "inputs"),
+    ("calib", "validate"),
+    ("agReport",),
+)
 
 
 def testSubcommands():
     assert list(cli.COMMANDS) == [
+        ("redo",),
         ("load",),
         ("values",),
         ("judge",),

@@ -155,6 +155,46 @@ class TestMakeValues:
         assert made.loc[("robustRmsDeltaX", "b1", "quartz", "Trace"), "value"] == pytest.approx(0.04)
         assert set(compared["count"]) == {5} and set(compared["sourceVisits"]) == {"101-105"}
 
+    def testBaselineReadsTheInForceValuesFromAnotherCollection(self, loaded):
+        """A redo makes a collection's own values but compares them with the previous pipeline's."""
+        from pfs.drp.qa.qadb.tables import NORMAL_VALUE_KEYS, normalValueRows
+        from pfs.drp.qa.qadb.writer import upsert
+
+        previous = "previous/pipeline"
+        prior = pd.DataFrame(
+            [
+                {
+                    "metric": "medFwhm",
+                    "camera": "b1",
+                    "frameType": "quartz",
+                    "selector": "",
+                    "value": 3.50,
+                    "count": 5,
+                    "collection": previous,
+                    "validFrom": 1,
+                    "sourceVisits": "1-5",
+                    "acceptedBy": "old",
+                    "acceptedAt": NOW,
+                    "reason": "",
+                }
+            ]
+        ).reindex(columns=list(NORMAL_COLUMNS))
+        upsert(loaded, "qa_normal_value", normalValueRows(prior), list(NORMAL_VALUE_KEYS))
+
+        compared, _, _ = makeValues(
+            loaded, COLLECTION, [(101, 105)], validFrom=200, baseline=previous, log=quiet
+        )
+        made = compared.set_index(["metric", "camera", "frameType", "selector"])
+        # The candidate is COLLECTION's own median, but the value it is set beside is read from the baseline.
+        assert made.loc[B1, "value"] == pytest.approx(NORMAL_B1)
+        assert made.loc[B1, "previous"] == pytest.approx(3.50)
+        assert made.loc[B1, "status"] != "NEW"  # there is a value to compare with
+        # Negative control: without a baseline, COLLECTION has no value in force, so b1 reads as NEW.
+        plain, _, _ = makeValues(loaded, COLLECTION, [(101, 105)], validFrom=200, log=quiet)
+        assert plain.set_index(["metric", "camera", "frameType", "selector"]).loc[B1, "status"] == "NEW"
+        # Nothing was written to COLLECTION: the comparison is read-only.
+        assert loaded.count("qa_normal_value", "collection_name = 'u/test/judge'") == 0
+
     def testStoringNeedsWhoAccepts(self, loaded):
         with pytest.raises(ValueError, match="who accepts"):
             makeValues(loaded, COLLECTION, [(101, 105)], store=True, log=quiet)

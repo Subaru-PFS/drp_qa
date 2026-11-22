@@ -21,10 +21,21 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from pfs.drp.qa.comparison.reduction import cosmicrayConfig, cosmicrayGroups, drpActorConfig
+from pfs.drp.qa.comparison.reduction import (
+    MEASURE_LABELS,
+    MEASURE_PIPELINE,
+    REDUCE_LABELS,
+    REDUCE_PIPELINE,
+    cosmicrayConfig,
+    cosmicrayGroups,
+    drpActorConfig,
+)
 
 __all__ = [
-    "JUDGE_TASKS",
+    "MEASURE_LABELS",
+    "MEASURE_PIPELINE",
+    "REDUCE_LABELS",
+    "REDUCE_PIPELINE",
     "STATUS_ORDER",
     "Pass",
     "coverage",
@@ -41,10 +52,6 @@ __all__ = [
 
 #: Coverage of a judged visit's detector, from done to blocked.
 STATUS_ORDER = ("judged", "to judge", "to reduce", "failed", "no pfsConfig", "no raw", "raw not in opdb")
-
-#: The QA tasks of the pipeline, which a judge-only pass runs on reductions that exist: the image
-#: quality, and the line residuals against the calibration and the visit's detectorMap.
-JUDGE_TASKS = ("imageQualityQa", "dmLineResiduals")
 
 #: A failed quantum in a ``pipetask`` log.
 _FAILED_RE = re.compile(r"Execution of task '(\w+)' on quantum \{([^}]*)\} failed\. Exception (.*)$")
@@ -307,8 +314,9 @@ class Pass:
         Visit to cosmic-ray group, the group being the first visit of its
         sequence: ``cosmicray``'s ``groups`` with ``grouping="manual"``.
     judgeOnly : `bool`, optional
-        Whether every image is already reduced, so only the QA tasks (`JUDGE_TASKS`)
-        runs; its name ends ``-judge``.
+        Whether every image is already reduced, so the pass has only a ``measure``
+        phase (the QA tasks, `MEASURE_LABELS`) and no ``reduce`` phase; its name
+        ends ``-judge``.
     """
 
     name: str
@@ -329,11 +337,12 @@ def passes(visits: pd.DataFrame, detectors: pd.DataFrame) -> list[Pass]:
     The gated passes come first in the list, so the calibration recipe's visits are done before
     the unvalidated ones, which can be many.
 
-    Each is split by sequence: a sequence with an image ``to reduce`` gets the whole pipeline, on
-    every visit of the sequence so ``cosmicray`` combines all of it, and one whose images are all
-    reduced only ``imageQualityQa`` (a ``-judge`` pass, listed
-    first). Without the split, pipetask reruns ``cosmicray`` on every image whose reduction lacks
-    a ``cosmicray_log``, an optional input of ``imageQualityQa``, though nothing is reduced again.
+    Each is split by sequence: a sequence with an image ``to reduce`` gets a ``reduce`` phase on
+    every visit of the sequence, so ``cosmicray`` combines all of it (the quanta already done are
+    skipped with ``--skip-existing-in``), and a ``measure`` phase; a sequence whose images are all
+    reduced gets a ``measure`` phase alone (a ``-judge`` pass). The two phases are separate
+    ``pipetask run`` commands (`pipetaskCommand`): the ``measure`` phase reads the reductions from
+    the output chain, so it never reruns ``cosmicray``.
 
     Parameters
     ----------
@@ -430,36 +439,51 @@ def outputCollection(prefix: str, period: str, version: str, reductions: str = "
 def pipetaskCommand(
     item: Pass,
     *,
+    phase: str,
     butler: str,
-    pipeline: str,
     inputs: Sequence[str],
     output: str,
     skipExistingIn: Sequence[str],
+    reducePipeline: str = REDUCE_PIPELINE,
+    measurePipeline: str = MEASURE_PIPELINE,
     cosmicrayConfigFile: str | None = None,
     jobs: int = 8,
     instrument: str = "PFS",
     rebase: bool = False,
+    arms: Sequence[str] | None = None,
+    spectrographs: Sequence[int] | None = None,
 ) -> list[str]:
-    """Return the ``pipetask run`` command of a pass, as a list.
+    """Return the ``pipetask run`` command of one phase of a pass, as a list.
+
+    A pass is run in two phases, each its own ``pipetask run``: ``reduce`` runs
+    drp_stella's ``reduceExposure`` (`REDUCE_LABELS` of `REDUCE_PIPELINE`, minus
+    ``mergeArms``) with ``drpActor``'s per-sequence-type overrides and the
+    cosmic-ray grouping, and ``measure`` runs the QA tasks (`MEASURE_LABELS` of
+    `MEASURE_PIPELINE`) on the reductions, which it finds in the output chain and
+    the input collections. A judge-only pass has only a ``measure`` phase.
 
     Parameters
     ----------
     item : `Pass`
         The pass.
+    phase : `str`
+        ``reduce`` or ``measure``.
     butler : `str`
         The Butler repository.
-    pipeline : `str`
-        The pipeline, normally ``$DRP_QA_DIR/pipelines/qaThresholds.yaml``.
     inputs : sequence of `str`
-        Input collections, e.g. ``["drpActor/reductions", "PFS/defaults"]``.
+        Input collections, e.g. ``["drpActor/reductions", "PFS/defaults"]``. The
+        ``measure`` phase reads the reductions the ``reduce`` phase wrote from
+        the output chain (``-o`` searches it), so they need not be listed here.
     output : `str`
         The output collection, from `outputCollection`.
     skipExistingIn : sequence of `str`
         Collections whose outputs are reused, e.g. ``drpActor/reductions``
         and, once it exists, ``output``.
+    reducePipeline, measurePipeline : `str`, optional
+        The reduction and QA pipelines; the defaults are `REDUCE_PIPELINE` and
+        `MEASURE_PIPELINE`.
     cosmicrayConfigFile : `str`, optional
-        Where `Pass.cosmicrayConfig` was written; needed unless
-        ``item.judgeOnly``.
+        Where `Pass.cosmicrayConfig` was written; needed for the ``reduce`` phase.
     jobs : `int`, optional
         Parallel processes.
     instrument : `str`, optional
@@ -469,30 +493,47 @@ def pipetaskCommand(
         ``drpActor/reductions`` is a chain that grows with every reduction, so
         without it pipetask refuses an output whose recorded inputs no longer
         match.
+    arms, spectrographs : sequence, optional
+        Restrict the data query to these arms (``b``, ``r``, ``m``, ``n``) and
+        spectrographs; `None` or empty means every one. Used to process a subset
+        of the detectors, e.g. to skip the slow ``n`` arm.
 
     Returns
     -------
     `list` [`str`]
         The command, one argument per element.
     """
+    if phase not in ("reduce", "measure"):
+        raise ValueError(f"phase must be 'reduce' or 'measure', not {phase!r}")
+    reducing = phase == "reduce"
     # The tasks log as pfs.<task>, lowercase, as drpActor sets them (CliLog.setLogLevels): PFS=INFO
     # misses them, and a bare INFO sets only lsst. The fit statistics imageQualityQa reads from
-    # the stored reduceExposure_log are INFO lines.
+    # the stored reduceExposure_log are INFO lines, so the reduction is logged at pfs=INFO.
+    # --register-dataset-types: a QA task new to this Butler (e.g. reductionStats) has unregistered
+    # output types; it is a no-op for tasks whose types already exist, and `pipetask qgraph` drops it.
     command = ["pipetask", "--long-log", "--log-level", "pfs=INFO", "run", "-j", str(jobs)]
-    # A judge-only pass runs the QA tasks alone, so the reduction's overrides would name labels it lacks.
-    subset = f"{pipeline}#{','.join(JUDGE_TASKS)}" if item.judgeOnly else pipeline
+    command += ["--register-dataset-types"]
+    if reducing:
+        subset = f"{reducePipeline}#{','.join(REDUCE_LABELS)}"
+    else:
+        subset = f"{measurePipeline}#{','.join(MEASURE_LABELS)}"
     command += ["-b", butler, "-p", subset, "-i", ",".join(inputs), "-o", output]
     if rebase:
         command += ["--rebase"]
     if skipExistingIn:
         command += ["--skip-existing-in", ",".join(skipExistingIn)]
-    if not item.judgeOnly:
+    if reducing:
         if cosmicrayConfigFile is None:
             raise ValueError(f"Pass {item.name} reduces, so it needs cosmicrayConfigFile")
         for key, value in item.config.items():
             command += ["-c", f"{key}={value}"]
         command += ["-C", f"cosmicray:{cosmicrayConfigFile}"]
-    command += ["-d", f"instrument = '{instrument}' AND {visitExpression(item.visits)}"]
+    data = f"instrument = '{instrument}' AND {visitExpression(item.visits)}"
+    if arms:
+        data += " AND arm IN (" + ", ".join(f"'{arm}'" for arm in arms) + ")"
+    if spectrographs:
+        data += " AND spectrograph IN (" + ", ".join(str(int(s)) for s in spectrographs) + ")"
+    command += ["-d", data]
     return command
 
 

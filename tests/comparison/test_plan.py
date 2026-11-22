@@ -169,27 +169,32 @@ def testReducedSequencesAreOnlyJudged(classified):
     ]
     common = {
         "butler": "/work/datastore",
-        "pipeline": "pipelines/qaThresholds.yaml",
         "inputs": ["drpActor/reductions", "PFS/defaults"],
         "output": "u/me/comparison/run1/w.2026.41",
         "skipExistingIn": ["drpActor/reductions"],
     }
-    judge = pipetaskCommand(result[0], **common)
-    assert judge[judge.index("-p") + 1] == "pipelines/qaThresholds.yaml#imageQualityQa,dmLineResiduals"
-    # The judge-only pass runs exactly the QA tasks the thresholds pipeline includes.
     from pathlib import Path
 
-    from pfs.drp.qa.comparison.plan import JUDGE_TASKS
+    import yaml
 
-    pipeline = (Path(__file__).parents[2] / "pipelines" / "qaThresholds.yaml").read_text()
-    included = pipeline.split("include:")[1].split("\n\n")[0]
-    assert [line.strip()[2:] for line in included.strip().splitlines()] == list(JUDGE_TASKS)
-    assert "-c" not in judge and "-C" not in judge  # no reduction labels to configure
-    reduce = pipetaskCommand(result[1], cosmicrayConfigFile="/tmp/cr.py", **common)
-    assert reduce[reduce.index("-p") + 1] == "pipelines/qaThresholds.yaml"
+    from pfs.drp.qa.comparison.plan import (
+        MEASURE_LABELS,
+        MEASURE_PIPELINE,
+        REDUCE_LABELS,
+        REDUCE_PIPELINE,
+    )
+
+    judge = pipetaskCommand(result[0], phase="measure", **common)
+    assert judge[judge.index("-p") + 1] == f"{MEASURE_PIPELINE}#" + ",".join(MEASURE_LABELS)
+    # The measure phase runs exactly the QA tasks the drpQA pipeline registers.
+    drpQA = yaml.safe_load((Path(__file__).parents[2] / "pipelines" / "drpQA.yaml").read_text())
+    assert set(MEASURE_LABELS) <= set(drpQA["tasks"])
+    assert "-c" not in judge and "-C" not in judge  # a measure pass configures no reduction
+    reduce = pipetaskCommand(result[1], phase="reduce", cosmicrayConfigFile="/tmp/cr.py", **common)
+    assert reduce[reduce.index("-p") + 1] == f"{REDUCE_PIPELINE}#" + ",".join(REDUCE_LABELS)
     assert "-C" in reduce
     with pytest.raises(ValueError, match="cosmicrayConfigFile"):
-        pipetaskCommand(result[1], **common)
+        pipetaskCommand(result[1], phase="reduce", **common)
 
 
 def testNothingPendingNoPasses(classified):
@@ -198,6 +203,13 @@ def testNothingPendingNoPasses(classified):
 
 
 def testPipetaskCommand():
+    from pfs.drp.qa.comparison.plan import (
+        MEASURE_LABELS,
+        MEASURE_PIPELINE,
+        REDUCE_LABELS,
+        REDUCE_PIPELINE,
+    )
+
     item = Pass(
         name="calibration",
         types=("scienceArc",),
@@ -205,37 +217,57 @@ def testPipetaskCommand():
         config=drpActorConfig("scienceArc"),
         groups={},
     )
-    command = pipetaskCommand(
+    reduce = pipetaskCommand(
         item,
+        phase="reduce",
         butler="/work/datastore",
-        pipeline="pipelines/qaThresholds.yaml",
         inputs=["drpActor/reductions", "PFS/defaults"],
         output="u/me/comparison/run30/w.2026.41",
         skipExistingIn=["drpActor/reductions"],
         cosmicrayConfigFile="/tmp/cr.py",
         jobs=4,
     )
-    assert command[:7] == ["pipetask", "--long-log", "--log-level", "pfs=INFO", "run", "-j", "4"]
+    assert reduce[:7] == ["pipetask", "--long-log", "--log-level", "pfs=INFO", "run", "-j", "4"]
+    # A QA task new to the Butler (reductionStats) needs its output types registered.
+    assert "--register-dataset-types" in reduce
     # Negative control: the tasks' loggers are lowercase pfs.<task>, which PFS=INFO and INFO miss.
-    assert "PFS=INFO" not in command and "INFO" not in command
-    joined = " ".join(command)
+    assert "PFS=INFO" not in reduce and "INFO" not in reduce
+    assert reduce[reduce.index("-p") + 1] == f"{REDUCE_PIPELINE}#" + ",".join(REDUCE_LABELS)
+    joined = " ".join(reduce)
     assert "-i drpActor/reductions,PFS/defaults" in joined
     assert "--skip-existing-in drpActor/reductions" in joined
     assert "-c isr:h4.quickCDS=True" in joined
     assert "-C cosmicray:/tmp/cr.py" in joined
-    assert command[-2:] == ["-d", "instrument = 'PFS' AND visit IN (10..12, 20)"]
-    assert "--rebase" not in command
-    rebased = pipetaskCommand(
+    assert reduce[-2:] == ["-d", "instrument = 'PFS' AND visit IN (10..12, 20)"]
+    assert "--rebase" not in reduce
+    # The measure phase: the QA tasks, no reduction configuration, and --rebase onto an existing chain.
+    measure = pipetaskCommand(
         item,
+        phase="measure",
         butler="/work/datastore",
-        pipeline="pipelines/qaThresholds.yaml",
         inputs=["drpActor/reductions", "PFS/defaults"],
         output="u/me/comparison/run30/w.2026.41",
         skipExistingIn=["drpActor/reductions"],
-        cosmicrayConfigFile="/tmp/cr.py",
         rebase=True,
     )
-    assert rebased[rebased.index("-o") + 2] == "--rebase"
+    assert measure[measure.index("-p") + 1] == f"{MEASURE_PIPELINE}#" + ",".join(MEASURE_LABELS)
+    assert "-c" not in measure and "-C" not in measure
+    assert measure[measure.index("-o") + 2] == "--rebase"
+    with pytest.raises(ValueError, match="phase"):
+        pipetaskCommand(item, phase="judge", butler="b", inputs=[], output="o", skipExistingIn=[])
+
+
+def testPipetaskCommandDetectorSubset():
+    """--arm / --spectrograph restrict the data query to a subset of the detectors, e.g. to skip n."""
+    item = Pass(name="calibration", types=("scienceArc",), visits=(10, 11), config={}, groups={})
+    common = {"butler": "/b", "inputs": ["c"], "output": "o", "skipExistingIn": []}
+    data = pipetaskCommand(item, phase="measure", arms=["b", "r", "m"], spectrographs=[1, 2], **common)[-1]
+    assert data.startswith("instrument = 'PFS' AND visit IN (10..11)")
+    assert "AND arm IN ('b', 'r', 'm')" in data
+    assert "AND spectrograph IN (1, 2)" in data
+    # Negative control: no restriction by default.
+    plain = pipetaskCommand(item, phase="measure", **common)[-1]
+    assert "arm IN" not in plain and "spectrograph IN" not in plain
 
 
 def testOutputCollection():

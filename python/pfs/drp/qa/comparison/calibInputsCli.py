@@ -1,9 +1,8 @@
 r"""``drpQa.py calib inputs``: report which exposures of a calibration set to build the calibrations from, per detector.
 
-Reads comparison mode's visit listing for the period (``fetch``), takes the set's arcs and traces
-(cadence ``set``, or ``--visits``), reads what comparison mode measured on them (``iqQaMetrics``,
-``dmLineResidualMetrics``) from its output collection, or from parquet exports
-(`pfs.drp.qa.metrics.readers.exportMetrics`) with ``--exports``, and writes the Markdown report of
+Reads the period's visits from the opdb (``--opdb-host``), takes the set's arcs and traces (cadence
+``set``, or ``--visits``), reads what a redo (or any collection) measured on them (``iqQaMetrics``,
+``dmLineResidualMetrics``) from its Butler output collection, and writes the Markdown report of
 `pfs.drp.qa.comparison.calibInputs`: a go/no-go for every detector and visit, as a grid, a table and a
 CSV, with the reasons and the lamp trends behind ``--detail``. Blind: it uses no calibration built from the set.
 
@@ -12,13 +11,12 @@ the table of normal values ``--normal-values`` gives (those in force at each vis
 calibration frame is relative to a normal value, so without the table the gate gives no verdict: the report
 says so, the go/no-go rests on the sequence rules alone, and the figures show no gate limit.
 
-    drpQa.py calib inputs --period run31 --data-dir ~/qa-comparison \\
-        --collection u/wtg/comparison/run31/w.2026.35-259-g83ef4f3 -o calibInputs-run31.md
-    drpQa.py calib inputs --period run31 --data-dir ~/qa-comparison --exports ./export \\
-        --visits 152652 152705 -o calibInputs-run31.md
+    drpQa.py calib inputs --period run31 --opdb-host pfsa-db \\
+        --collection u/wtg/redo/run31/w.2026.35-259-g83ef4f3 -o calibInputs-run31.md
 """
 
 import argparse
+import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -55,18 +53,7 @@ def readNormalValues(path: str | None) -> pd.DataFrame | None:
 
 
 def readTables(args, visits: list[int]) -> dict[str, pd.DataFrame]:
-    """Read the per-detector tables (`TABLES`) for ``visits``, from the exports or the Butler."""
-    if args.exports:
-        tables = {}
-        for name in TABLES:
-            files = sorted(Path(args.exports).glob(f"{name}-*.parquet"))
-            if not files:
-                raise SystemExit(f"no {name}-*.parquet in {args.exports}")
-            frame = pd.read_parquet(files[-1])
-            tables[name] = frame[frame["visit"].isin(visits)]
-            # exportMetrics names the file <datasetType>-<collection with / as _>.parquet
-            tables["source"] = files[-1].stem[len(name) + 1 :]
-        return tables
+    """Read the per-detector tables (`TABLES`) for ``visits`` from the Butler collection."""
     from lsst.daf.butler import Butler
 
     from pfs.drp.qa.metrics.readers import readMetrics
@@ -79,14 +66,8 @@ def readTables(args, visits: list[int]) -> dict[str, pd.DataFrame]:
 
 
 def readResiduals(args, images: pd.DataFrame) -> pd.DataFrame | None:
-    """Read ``dmLineResidualData`` for the no-go images: from ``--residuals`` parquet files, or the Butler.
-
-    None when there is no source (exports without ``--residuals``).
-    """
-    if args.residuals:
-        frames = [pd.read_parquet(f) for f in args.residuals]
-        return pd.concat(frames, ignore_index=True) if frames else None
-    if not args.collection or images.empty:
+    """Read ``dmLineResidualData`` for the no-go images from the Butler; None when there are none."""
+    if images.empty:
         return None
     from lsst.daf.butler import Butler
 
@@ -105,9 +86,6 @@ def readResiduals(args, images: pd.DataFrame) -> pd.DataFrame | None:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--period", required=True, help="e.g. run31")
-    parser.add_argument(
-        "--data-dir", required=True, help="comparison mode's data directory (fetch wrote opdb/ there)"
-    )
     parser.add_argument("--runs", default=None, help="the run table (default: the packaged one)")
     parser.add_argument(
         "--visits",
@@ -116,10 +94,11 @@ def main(argv=None) -> int:
         metavar=("FIRST", "LAST"),
         help="the set's visit range (default: every set-cadence arc and trace of the period)",
     )
-    source = parser.add_mutually_exclusive_group(required=True)
-    source.add_argument("--collection", help="comparison mode's output collection to read")
-    source.add_argument("--exports", help="directory of exportMetrics parquet files instead of a Butler")
+    parser.add_argument("--collection", required=True, help="the Butler output collection to read")
     parser.add_argument("--butler", default="/work/datastore", help="Butler repository")
+    parser.add_argument("--opdb-host", default="pfsa-db", help="opdb host, for the visit listing")
+    parser.add_argument("--opdb-port", type=int, default=5432, help="opdb port")
+    parser.add_argument("--opdb-dbname", default="opdb", help="opdb database name")
     parser.add_argument("--title", default=None, help="report title (default: the period)")
     parser.add_argument("--weak-lines", type=float, default=Thresholds.weakLines)
     parser.add_argument("--fwhm-check", type=float, default=Thresholds.fwhmCheck)
@@ -140,13 +119,6 @@ def main(argv=None) -> int:
         "judges by; without it the gate gives no verdict, and the go/no-go rests on the sequence rules alone",
     )
     parser.add_argument(
-        "--residuals",
-        nargs="*",
-        default=None,
-        help="dmLineResidualData parquet file(s) for the no-go images' line-residual figures (with --exports; "
-        "with --collection they are read from the Butler)",
-    )
-    parser.add_argument(
         "--detail",
         action="store_true",
         help="add the reasons, weak exposures, lamp trends and the detail figures",
@@ -157,10 +129,11 @@ def main(argv=None) -> int:
     if args.period not in periods:
         raise SystemExit(f"unknown period {args.period}; known: {', '.join(periods)}")
     period = periods[args.period]
-    listingPath = Path(args.data_dir) / "opdb" / f"comparison-{period.name}-listing.parquet"
-    if not listingPath.exists():
-        raise SystemExit(f"{listingPath} not found: run qaComparison.py fetch --period {period.name} first")
-    listing = pd.read_parquet(listingPath)
+    from pfs.drp.qa.comparison import queries
+    from pfs.utils.database.opdb import OpDB
+
+    opdb = OpDB(host=args.opdb_host, port=args.opdb_port, dbname=args.opdb_dbname, user="public_user")
+    listing = queries.readVisitListing(opdb, period.start, min(period.end, datetime.datetime.now()))
     classified = classifyVisits(listing, periods.values())
     if args.visits:
         first, last = args.visits
@@ -282,8 +255,8 @@ def main(argv=None) -> int:
         judged,
         species,
         args.title or period.name,
-        source=args.collection or tables.get("source", args.exports),
-        exports=bool(args.exports),
+        source=args.collection,
+        exports=False,
         detectorFigures=detectorFigures,
         imageFigures=imageFigures,
         thresholds=thresholds,

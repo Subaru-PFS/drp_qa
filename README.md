@@ -28,8 +28,8 @@ stores one verdict per image in `qa_gate`; see [Loading QA results into qadb](#l
 
 - **It judges quick reductions.** `drpActor` reduces each image during observing (`reduceExposure`, its `hilo`
   pipeline). That is not the reduction the science release uses. `qaActor` listens to `drpActor` and reads
-  `drpActor/reductions`, so QA never reduces anything a second time. [Comparison mode](#comparison-mode) is the
-  one exception: it reduces only what `drpActor/reductions` lacks, with `drpActor`'s per-sequence-type config,
+  `drpActor/reductions`, so QA never reduces anything a second time. [Redoing a run](#redoing-a-run) is the
+  one exception: it re-reduces a run with an updated pipeline, with `drpActor`'s per-sequence-type config,
   into its own collection.
 - **A verdict is on an image, not on a science product.** Judging the quality of science products is a separate
   job, not designed here.
@@ -303,8 +303,8 @@ the softening are drp_stella's, in `iqQaMetrics` and `iqQaSpeciesMetrics`, not r
 the stack-free `pfs.drp.qa.metrics.lineResiduals`. No plot is drawn as the task runs: plot `dmLineResidualData`
 afterwards.
 
-It also runs in `pipelines/qaThresholds.yaml` beside `imageQualityQa`, behind drp_stella's `reduceExposure`, for
-[comparison mode](#comparison-mode) and `drpQa.py calib validate`.
+It also runs behind drp_stella's `reduceExposure`, measured by a separate `drpQA.yaml` pass, for
+[redoing a run](#redoing-a-run) and `drpQa.py calib validate`.
 
 ##### Options
 
@@ -654,7 +654,7 @@ A raster scan visit holds two pointings: once its shutters close, the telescope 
 ### End-of-run report
 
 `drpQa.py agReport` reports how the AG cameras and the guide loop did over an observing run, so
-problems are caught once the run is over. The runs are comparison mode's
+problems are caught once the run is over. The runs are the same ones `redo` uses
 ([`observingRuns.yaml`](python/pfs/drp/qa/comparison/data/observingRuns.yaml)).
 
 ```bash
@@ -692,12 +692,13 @@ What it flags (`runAnalysis.RunConfig` holds the numbers):
 
 The report holds science visit IDs and guiding statistics: keep it within the team.
 
-## Comparison mode
+## Redoing a run
 
-`bin.src/qaComparison.py` reduces every image of an observing run, or of the calibrations taken before it, that
-`drpActor/reductions` lacks, and runs `imageQualityQa` and `dmLineResiduals` on all of them
-(`pfs.drp.qa.comparison`). It gives no verdict: the images are judged when their numbers are loaded into qadb
-(`drpQa.py load`).
+`drpQa.py redo <run>` redoes an observing run (or its pre-run calibration period) with an updated pipeline, end
+to end (`pfs.drp.qa.comparison`): it reads the run's visits from the opdb, reduces the raw frames, measures
+them, loads the numbers into qadb, makes the run's normal values and compares them with the previous pipeline's,
+judges every frame, and points at the dashboard for the run report. It runs on the processing host, where the
+opdb, the Butler and qadb are all reachable, and writes no parquet and no report of its own.
 
 - **The visits come from the opdb**, not from the hand-written run summaries: every SpS visit between the
   period's dates, with its sequence, `cmd_str`, cameras, design, obslog notes and telescope status. The periods
@@ -721,60 +722,64 @@ The report holds science visit IDs and guiding statistics: keep it within the te
 - **Sky visits are labelled** from the telescope status: a *focus sweep* (10 or more focus offsets spanning at least
   0.5 mm on one field in one night), and *dithered* visits.
 
-Three steps, each safe to repeat. Files go under `--data-dir`: opdb reads in `opdb/`, everything else in
-`<run>/qa/<drp_qa version>/`.
-
 ```bash
-python bin.src/qaComparison.py fetch  --period run30 --data-dir ~/Projects/Subaru/PFS/data   # opdb, read-only
-python bin.src/qaComparison.py plan   --period run30 --data-dir ~/Projects/Subaru/PFS/data   # coverage, pipetask commands
-python bin.src/qaComparison.py run    --period run30 --data-dir ~/Projects/Subaru/PFS/data   # reduce what's missing, measure
+# Redo run31 with the current stack: reduce afresh, measure, load, make and compare normal values, judge
+python bin.src/drpQa.py redo run31 --opdb-host pfsa-db --accept wtg
+# Reuse an already-reduced collection (measure, load and judge only)
+python bin.src/drpQa.py redo run31 --reductions drpActor/reductions --accept wtg
+# Resume after the long reduce/measure: just load, make values and judge
+python bin.src/drpQa.py redo run31 --only load,values,judge --accept wtg
 ```
 
-`plan` prints the `pipetask` commands as Python lists, for running from a notebook instead; `-j` sets the
-`pipetask` processes (default 8). `--cadence set` (or `daily`, `single`; repeatable) measures only the arcs and traces
-of those cadences, e.g. the calibration sets; the other visits stay listed as
-`cadence not selected`. By default the reductions in `drpActor/reductions` are reused, each made with the
-pipeline of its day, and so are those an earlier drp_qa version's comparison of the period made beside them, on
-which the QA tasks run again; `--fresh` reduces everything
-with the current pipeline instead, so runs are compared on a level field (their calibrations are still each
-run's own). Its collection and files are named after that pipeline, `<period>/<version>/pfs-<weekly>` (from
-drp_stella's `getPfsVersions`, each product's version if they differ; `--pipeline-version` names it), so a
-different pipeline starts afresh while a different drp_qa version reuses the same pipeline's reductions and only
-runs the QA tasks again. Since
-the label comes from the stack set up in the shell, `run --fresh` stops when its label has no reductions of the
-period yet while another label has (the whole reduction again, where a QA-only pass was meant); `--new-pipeline`
-reduces anyway, `plan` and `--dry-run` only warn, and a run resumed under its own label is not stopped. Passes are
-`calibration`,
-`sky` and `unvalidated-calibration`, gated first, each split by sequence: sequences with an image to reduce get the
-whole pipeline, and sequences already reduced by drpActor only the QA tasks, `imageQualityQa` and `dmLineResiduals`
-(a `-judge` pass, e.g. `sky-judge`;
-`--pass sky` selects both). Otherwise pipetask reruns `cosmicray` wherever a reduction lacks the `cosmicray_log`
-that `imageQualityQa` optionally reads, though the reduction is reused; those images then have no
-cosmic-ray counts. `run --dry-run` builds
-each pass's graph (`pipetask qgraph`) and prints its quanta without writing anything; `--pass calibration`
-or `--pass sky` limits `run` to one pass. Visits with no `pfsConfig` in the inputs can't be reduced and are
-reported, not scheduled. A failed quantum fails its pass but not the others; `run` lists the failures at the end and
-exits 1. Images whose quanta failed in an earlier run (read from the period's `pipetask` logs) are `failed`
-and not rescheduled, since they fail the same way each time; `--retry-failed` retries them. The
-output collection is
-`u/$USER/comparison/<period>/<version>`, the version being `git describe` of the last commit that could change what
-the pipeline writes (not the comparison driver, tests or docs), so a change to the driver keeps the
-collection; uncommitted changes to the rest are refused.
+The stages are `process` (reduce then measure), `load`, `values` and `judge`; `--only` runs a subset to resume
+after an interruption. `-j` sets the `pipetask` processes (default 8); `--cadence set` (or `daily`, `single`;
+repeatable) processes only the arcs and traces of those cadences; `--arm b r m` and `--spectrograph 1 2`
+process only some detectors (e.g. `--arm b r m` skips the slow `n` arm); `--dry-run` builds each pass's graph
+(`pipetask qgraph`) and writes nothing.
+
+By default redo reduces every frame afresh with the current pipeline, into
+`u/$USER/redo/<run>/<version>/<pipeline>`: the pipeline from drp_stella's `getPfsVersions` (each product's
+version if they differ; `--pipeline-version` names it), so a different stack starts a fresh collection, and the
+version is `git describe` of the last commit that could change what is written (not the driver, tests or docs),
+so a change to the driver keeps the collection and uncommitted changes to the rest are refused. `--reductions
+<collection>` reuses that collection's reductions instead, measuring only, into `u/$USER/redo/<run>/<version>`;
+reductions an earlier drp_qa version of the same pipeline made are reused too. Since the pipeline label comes
+from the stack set up in the shell, a fresh redo stops when its label has no reductions of the run yet while
+another does (the whole reduction again, where a measure pass was meant); `--new-pipeline` reduces anyway, and
+`--dry-run` only warns.
+
+The reduction is drp_stella's `reduceExposure` (less `mergeArms`) with drpActor's per-sequence-type
+configuration and cosmic-ray grouping; the measurement is `imageQualityQa`, `dmLineResiduals` and
+`reductionStats`, a separate `pipetask` command that reads the reductions from the output chain. Passes are
+`calibration`, `sky` and `unvalidated-calibration`, gated first, each split by sequence: a sequence with a frame
+to reduce is reduced whole (so `cosmicray` combines it) and then measured, and one already reduced is measured
+alone (a `-judge` pass). A failed quantum fails its pass but not the others; redo lists the failures at the end
+and exits 1. Images whose quanta failed before (read from the run's `pipetask` logs) are not rescheduled, since
+they fail the same way each time; `--retry-failed` retries them. Visits with no `pfsConfig` can't be reduced and
+are reported, not scheduled.
+
+Once the frames are loaded, redo makes the run's normal values from its calibration set and prints each beside
+the value in force in the previous pipeline's collection (`--previous-collection`, default `qaActor/reductions`),
+with its shift; `--accept NAME` stores them for the redo collection and judges every frame against them (a shift
+beyond FAIL needs `--reason`; without `--accept` nothing is stored and the relative checks stay `UNKNOWN`).
+`--calib-visits FIRST LAST` names the calibration frames; the default is the run's set-cadence arcs and traces.
+The run report is the dashboard's: redo prints the `qaDashboard.py report --collection <redo collection> …`
+command (`pfs_qa_dashboard` reads qadb and renders a stand-alone page; see [Loading QA results into
+qadb](#loading-qa-results-into-qadb) and the dashboard's own README).
 
 ### Calibration inputs
 
 `drpQa.py calib inputs` judges a run's calibration set exposure by exposure and detector by detector, for
 whoever builds `detectorMap_calib` and the fiber profiles from it: which visits to use per detector,
 which to leave out and why. It reads the set's arcs and traces (cadence `set`, or `--visits`) from the period's
-listing (`fetch`) and what comparison mode measured on them (`iqQaMetrics`, `dmLineResidualMetrics`)
-from its output collection, or from parquet exports
-(`pfs.drp.qa.metrics.readers.exportMetrics`) with `--exports`, and writes a
-Markdown report with its tables beside it as CSV. It is blind: no calibration built from the set is used.
+visit listing (the opdb, `--opdb-host`) and what was measured on them (`iqQaMetrics`, `dmLineResidualMetrics`)
+from a Butler collection (a redo's, `--collection`), and writes a Markdown report with its tables beside it as
+CSV. It is blind: no calibration built from the set is used.
 
 ```bash
-python bin.src/qaComparison.py run --period run31 --cadence set --data-dir ~/qa-comparison   # measure the set
-python bin.src/drpQa.py calib inputs --period run31 --data-dir ~/qa-comparison \
-    --collection u/wtg/comparison/run31/<version> -o calibInputs-run31.md
+python bin.src/drpQa.py redo run31 --cadence set                                # measure the set
+python bin.src/drpQa.py calib inputs --period run31 --opdb-host pfsa-db \
+    --collection u/wtg/redo/run31/<version> -o calibInputs-run31.md
 ```
 
 Each detector image is judged on its own detector against the other exposures of its sequence, with no outside
@@ -809,16 +814,17 @@ spectrographs looked normal on Run31's n arm), so nothing aggregates over detect
 ### Validating a built calibration
 
 `drpQa.py calib validate` is the verdict after the build: it compares candidate calibrations on the same
-visits. `run` reduces the period's set-cadence and daily arcs and traces (or `--visits`) once per candidate through
-`pipelines/qaThresholds.yaml` with drpActor's arc configuration, the candidate's collection first in the inputs so its
-`detectorMap_calib` is the one used (an empty collection means the inputs as they are, e.g. the certified
-calibration in `PFS/defaults`), into `<prefix>/<label>`. `report` lays the candidates' `dmLineResidualMetrics` side by
-side per detector: the offsets and RMS of every line against the calibration (the drift it leaves) and the
-reserved-line RMS against the visit's own map, medians over the set's images and over the nights after it, with a
-figure per detector (`pfs.drp.qa.comparison.calibValidate`, `plotting.calibInputs.plotCalibrationComparison`).
+visits. `run` reduces the period's set-cadence and daily arcs and traces (or `--visits`) once per candidate —
+`reduceExposure` with drpActor's arc configuration, then `dmLineResiduals` — the candidate's collection first in
+the inputs so its `detectorMap_calib` is the one used (an empty collection means the inputs as they are, e.g. the
+certified calibration in `PFS/defaults`), into `<prefix>/<label>`. `report` lays the candidates'
+`dmLineResidualMetrics` side by side per detector: the offsets and RMS of every line against the calibration (the
+drift it leaves) and the reserved-line RMS against the visit's own map, medians over the set's images and over
+the nights after it, with a figure per detector (`pfs.drp.qa.comparison.calibValidate`,
+`plotting.calibInputs.plotCalibrationComparison`).
 
 ```bash
-python bin.src/drpQa.py calib validate run --period run31 --data-dir ~/qa-comparison --detectors b1 r2 \
+python bin.src/drpQa.py calib validate run --period run31 --opdb-host pfsa-db --detectors b1 r2 \
     --candidate asis= --candidate pick=u/wtg/pipe2d-1941/detectorMaps-pick --prefix u/wtg/pipe2d-1941/validate
 python bin.src/drpQa.py calib validate report ... -o validate-run31.md
 ```
@@ -917,17 +923,18 @@ python bin.src/drpQa.py <subcommand> --help    # a subcommand's options
 
 | Subcommand | Does | Needs the stack | See |
 |---|---|---|---|
+| `redo` | Redoes a run with an updated pipeline end to end: reduce, measure, load, make and compare normal values, judge, point at the dashboard | yes | [Redoing a run](#redoing-a-run) |
 | `load` | Copies a collection's numbers from the Butler to qadb and judges them; measures and judges a complete twilight sequence | yes | [Loading QA results into qadb](#loading-qa-results-into-qadb) |
 | `values` | Makes, compares and accepts a run's normal values, then judges the frames they cover | no | [At the start of a run](#at-the-start-of-a-run) |
 | `judge` | Judges stored numbers again for a visit range of a collection | no | [After a change of limit](#after-a-change-of-limit) |
 | `summary` | Prints the verdict of each visit of a collection, and exits with the worst | no | [Verdicts per visit](#verdicts-per-visit) |
-| `calib inputs` | Says which exposures of a calibration set to build from, per detector | with `--collection` | [Calibration inputs](#calibration-inputs) |
-| `calib validate` | Compares candidate calibrations on the same visits | `run`; `report` without `--exports` | [Validating a built calibration](#validating-a-built-calibration) |
+| `calib inputs` | Says which exposures of a calibration set to build from, per detector | yes (the Butler) | [Calibration inputs](#calibration-inputs) |
+| `calib validate` | Compares candidate calibrations on the same visits | yes | [Validating a built calibration](#validating-a-built-calibration) |
 | `fiberNorms` | Plots fiber normalizations from a Butler collection (`pfs.drp.qa.fiberNormsQa.main`) | yes | |
 | `agReport` | The end-of-run guider report | no | [End-of-run report](#end-of-run-report) |
 
 The qadb subcommands (`load`, `values`, `judge`, `summary`) take `--host` (default `pfsa-db`), `--port` (default
-`5436`), `--user` (default `pfs`) and `--dbname` (default `qadb`); credentials are read from `~/.pgpass`.
+`5436`), `--user` (default `pfs`) and `--dbname` (default `qadb`); credentials are read from `~/.pgpass`. `redo`
+takes `--qadb-host`/`--qadb-port`/`--qadb-user` for qadb and `--opdb-host`/`--opdb-port` for the opdb.
 
-`bin.src/qaComparison.py` is separate; see [Comparison mode](#comparison-mode). The QA tasks themselves run
-under `pipetask`, from `pipelines/drpQA.yaml`.
+The QA tasks themselves run under `pipetask`, from `pipelines/drpQA.yaml`.
