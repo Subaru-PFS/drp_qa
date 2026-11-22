@@ -10,6 +10,20 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Added
+
+- **Per-detector reduction-coverage metrics** (PIPE2D-2020) — `reductionStats` now writes `isrRan`,
+  `reduceExposureRan` and the derived `reductionStage` (0 raw, 1 ISR, 2 reduceExposure) as whole-detector
+  rows of `detector_health_qa`, whatever the reduction did. With the raw anchor below, every exposed detector
+  gets a row saying how far its reduction got — even one whose reduction never ran — with no new table or
+  migration (the loader is metric-agnostic).
+
+### Changed
+
+- **`reductionStats` anchored on the raw header** (PIPE2D-2020) — the task takes `raw.metadata` as its
+  anchor input, so a quantum runs on every exposed detector rather than only where ISR produced metadata;
+  `isr_metadata` is now an optional input (as `reduceExposure_metadata` and the ISR header already were).
+
 ## [0.11.0] - 2026-11-22
 
 ### Added

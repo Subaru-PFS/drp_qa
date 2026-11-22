@@ -23,6 +23,11 @@ The statistics are measured by the reduction and recorded in its task metadata
 them and judges nothing. The limits come after a run of values, so detector health is
 stored, not gated: no check in `~pfs.drp.qa.metrics.registry` reads these rows.
 
+Every frame also carries the `COVERAGE_METRICS` (``isrRan``, ``reduceExposureRan`` and the
+derived ``reductionStage``), whole-detector rows written whatever ran. The task is anchored
+on the raw header, so a detector whose reduction never started still gets these: that is how
+every exposed detector ends up with a row.
+
 This replaces the log parsing the image-quality task used to do: the same detectorMap
 fit statistics that were scraped from the ``reduceExposure`` log are read here from
 ``reduceExposure_metadata`` instead.
@@ -54,6 +59,7 @@ from typing import Any
 import pandas as pd
 
 __all__ = [
+    "COVERAGE_METRICS",
     "FIT_METRICS",
     "ISR_COUNT_METRICS",
     "ISR_DARK_METRICS",
@@ -123,6 +129,11 @@ SCATTERED_METRICS = ("top", "bottom", "modelMean", "modelMax")
 
 #: ``pfiCorrection`` scalars (``skyNorms*`` are NaN without sky norms).
 PFI_METRICS = ("correctionMean", "correctionStd", "skyNormsMean", "skyNormsStd", "numBad")
+
+#: Reduction-coverage metrics, written for every exposed detector whatever ran: ``isrRan`` and
+#: ``reduceExposureRan`` (1.0/0.0, whether that step produced metadata) and the derived
+#: ``reductionStage`` (0 raw only, 1 ISR, 2 reduceExposure). Whole-detector (empty amplifier).
+COVERAGE_METRICS = ("isrRan", "reduceExposureRan", "reductionStage")
 
 #: The ``adjustDetectorMap`` per-species array suffixes read into one ``speciesStats`` entry,
 #: in the order of `~pfs.drp.qa.metrics.longFormat.STAT_METRICS`: (xRms, yRms, xSoften, ySoften).
@@ -271,13 +282,25 @@ def reductionStatsFrame(
     `pandas.DataFrame`
         `REDUCTION_COLUMNS`, one row per amplifier and metric present. Whole-detector
         statistics have an empty ``amplifier``. An input that is `None` or lacks a
-        statistic contributes no row for it.
+        statistic contributes no row for it, except that the `COVERAGE_METRICS` rows are
+        always written, so the frame is never empty for an exposed detector.
     """
     visit = int(dataId["visit"])
     arm = str(dataId["arm"])
     spectrograph = int(dataId["spectrograph"])
 
     rows: list[tuple[str, str, float]] = []  # (amplifier, metric, value)
+
+    # Reduction coverage, whole-detector: a row for every exposed detector whatever ran, so one
+    # whose reduction never started still has rows (the task is anchored on raw). isrRan and
+    # reduceExposureRan say whether each step produced metadata; reductionStage is how far it got
+    # — the highest step reached, not a conjunction of the flags.
+    isrRan = isrMetadata is not None
+    reduceExposureRan = reduceExposureMetadata is not None
+    stage = 2.0 if reduceExposureRan else 1.0 if isrRan else 0.0
+    rows.append(("", "isrRan", float(isrRan)))
+    rows.append(("", "reduceExposureRan", float(reduceExposureRan)))
+    rows.append(("", "reductionStage", stage))
 
     # Whole-detector ISR counts (n arm) and dark scale (CCDs with a dark).
     if isrMetadata is not None:

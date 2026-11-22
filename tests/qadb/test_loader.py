@@ -739,6 +739,64 @@ class TestDetectorHealth:
         # It is not judged: no verdict mentions a detector-health metric.
         assert qadb.count("qa_gate", "qa_decided_by IN ('fitXRms', 'nDefects', 'readNoise')") == 0
 
+    def testCoverageMetricsLoad(self, StubButler, tables, qadb):
+        """The reduction-coverage rows (isrRan, reduceExposureRan, reductionStage) load as detector health.
+
+        They are whole-detector metrics like any other reductionStats row, so the loader needs no
+        change: a detector whose reduction never ran still lands a row in detector_health_qa.
+        """
+        coverage = []
+        for image in tables["iqQaMetrics"][IMAGE].itertuples(index=False):
+            base = image._asdict()
+            coverage.append({**base, "amplifier": "", "metric": "isrRan", "value": 1.0})
+            coverage.append({**base, "amplifier": "", "metric": "reduceExposureRan", "value": 0.0})
+            coverage.append({**base, "amplifier": "", "metric": "reductionStage", "value": 1.0})
+        tables["reductionStats"] = pd.DataFrame(coverage)
+        butler = StubButler(tables, datasets=PACKAGES)
+        counts = load(butler, qadb)
+        assert counts["detector_health_qa"] == 12  # 4 images x 3 coverage metrics
+        stage = qadb.query_scalar(
+            "SELECT value FROM detector_health_qa"
+            " WHERE pfs_visit_id = :v AND camera_name = :c AND amplifier = '' AND metric = 'reductionStage'",
+            params={"v": 133025, "c": "b1"},
+        )
+        assert stage == 1.0
+        # Negative control: coverage is stored, not judged — no verdict is decided by a coverage metric.
+        assert (
+            qadb.count("qa_gate", "qa_decided_by IN ('isrRan', 'reduceExposureRan', 'reductionStage')") == 0
+        )
+
+    def testCoverageOnlyVisitNotInIq(self, StubButler, tables, qadb):
+        """A never-reduced detector — a visit absent from iqQaMetrics — still lands a row.
+
+        The task is anchored on raw, so a visit with only coverage rows (not in the QA-number
+        tables) gets its detector_health_qa rows and a pfs_visit row via ensureVisits, though it
+        has no image_quality_qa row. This is the motivating case for PIPE2D-2020.
+        """
+        extra = 133099  # a visit absent from the iqQaMetrics fixture
+        assert extra not in VISITS
+        base = {"visit": extra, "arm": "b", "spectrograph": 1, "amplifier": ""}
+        tables["reductionStats"] = pd.DataFrame(
+            [
+                {**base, "metric": "isrRan", "value": 0.0},
+                {**base, "metric": "reduceExposureRan", "value": 0.0},
+                {**base, "metric": "reductionStage", "value": 0.0},
+            ]
+        )
+        butler = StubButler(tables, datasets=PACKAGES)
+        load(butler, qadb, visits=[*VISITS, extra])
+        # The coverage-only visit lands its three rows, keyed to a pfs_visit row ensureVisits made.
+        assert qadb.count("detector_health_qa", f"pfs_visit_id = {extra}") == 3
+        assert qadb.count("pfs_visit", f"pfs_visit_id = {extra}") == 1
+        stage = qadb.query_scalar(
+            "SELECT value FROM detector_health_qa"
+            " WHERE pfs_visit_id = :v AND camera_name = 'b1' AND metric = 'reductionStage'",
+            params={"v": extra},
+        )
+        assert stage == 0.0
+        # Negative control: it never reached the QA numbers, so there is no image_quality_qa row.
+        assert qadb.count("image_quality_qa", f"pfs_visit_id = {extra}") == 0
+
     def testOnlyReductionStatsCollection(self, StubButler, fixtures, qadb):
         """A collection with reductionStats but no QA numbers loads detector health and no verdicts.
 
