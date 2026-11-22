@@ -83,12 +83,16 @@ def testKmsUsedWhenStored_pixelFallbackWhenNot():
 
 
 def testGateBandsDrawnOnlyWithLimits():
-    limits = {"Δx": (0.1, 0.2), "Δy": (5.0, 10.0)}
+    limits = {"dx": (0.1, 0.2), "dy": (5.0, 10.0)}
     withBands = plotDetectorResiduals(_lineData(), limits=limits)
     # warn and fail, either side of zero, in both trend panels: 2 × 2 × 2.
     assert len(_dashed(withBands)) == 8
+    # A one-sided limit (fail only) on one row draws just that band (±) and only there.
+    assert len(_dashed(plotDetectorResiduals(_lineData(), limits={"dx": (None, 0.2)}))) == 2
     # Negative control: no limits, no gate bands (the only reference line is the solid zero).
     assert _dashed(plotDetectorResiduals(_lineData())) == []
+    # Negative control: the Greek key the internals use is NOT the public key, so it draws nothing.
+    assert _dashed(plotDetectorResiduals(_lineData(), limits={"Δx": (0.1, 0.2)})) == []
 
 
 def testSpeciesAndReferencesInLegend():
@@ -110,6 +114,18 @@ def testStatsBoxReportsBothReferences():
     visitMedian = float(deltaX.split("Visit")[1].split("med")[1].split()[0])
     assert abs(calibMedian) > 0.03  # drift is seen
     assert abs(visitMedian) < abs(calibMedian)  # Negative control: visit is not the drift
+
+
+def testUnfittedFrameStillClipsScale():
+    # An UNFITTED frame has no RESERVED lines; a lone wild line must not autoscale the trend
+    # (the y-scale falls back to all lines' robust spread, not the reserved ones).
+    data = _lineData()
+    data = data[data["description"] != "Trace"].copy()
+    data["statusType"] = "UNFITTED"
+    data.iloc[0, data.columns.get_loc("dxVisit")] = 50.0  # one wild outlier
+    fig = plotDetectorResiduals(data)
+    lo, hi = fig.axes[3].get_ylim()  # the Δx trend (map, map, colorbar, trend)
+    assert hi - lo < 10  # held, not stretched to the 50 px outlier
 
 
 def testTraceOnlyFrameDrawsSpatialOnly():

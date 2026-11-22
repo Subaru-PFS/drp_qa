@@ -34,8 +34,7 @@ __all__ = ["plotDetectorResiduals"]
 #: Gate band colours: warn amber, fail red (the status palette, as `plotting.calibInputs`).
 _WARN, _FAIL = "#fab219", "#d03b3b"
 
-#: One pixel on an AG detector is 13 µm; on a spectrograph detector the plate scale differs,
-#: but residuals here are in detector pixels throughout, as ``dmLineResiduals`` measures them.
+#: Ink colour for the zero line, axis text and any species outside ``description_palette``.
 _INK = "#222222"
 #: The two references: column key in ``dmLineResidualData``, label, and the trend color.
 _REFERENCES = (
@@ -127,7 +126,7 @@ def _trend(
             label=name,
         )
     # Each reference's per-group median, bold over the points.
-    stats, spread = [], 0.0
+    stats, spread, fallback = [], 0.0, 0.0
     for (suffix, label, color), column in zip(_REFERENCES, columns, strict=True):
         good = data[np.isfinite(data[column])]
         if good.empty:
@@ -136,6 +135,10 @@ def _trend(
         ax.plot(
             grouped.index, grouped.to_numpy(), linewidth=1.2, alpha=0.95, color=color, zorder=4, label=label
         )
+        # A robust spread for the y-scale, from all lines, so a frame with no reserved lines
+        # (an UNFITTED fit) is still held; reserved lines set it when there are any.
+        allVals = good[column].to_numpy()
+        fallback = max(fallback, abs(float(np.median(allVals))) + robustRms(allVals))
         reserved = good.loc[good["statusType"] == "RESERVED", column].to_numpy()
         reserved = reserved[np.isfinite(reserved)]
         if reserved.size:
@@ -148,7 +151,8 @@ def _trend(
             )
     # Hold the y-scale to a robust range so one wild line cannot flatten the view; the gate
     # fail band stays in frame, and clipped outliers are still counted in the stats box.
-    yLimit = 4 * spread if spread > 0 else None
+    scale = spread or fallback
+    yLimit = 4 * scale if scale > 0 else None
     if limits and limits[1] is not None:
         yLimit = max(yLimit or 0.0, 1.3 * limits[1])
     if yLimit:
@@ -202,9 +206,9 @@ def plotDetectorResiduals(
     title : `str`, optional
         The figure's suptitle; the detector and visit, e.g. ``"n4 152676"``.
     limits : `dict`, optional
-        The gate's warn and fail RMS, as ``{"Δx": (warn, fail), "Δy": (warn, fail)}`` in each
-        trend's unit (pixels for Δx; km/s or pixels for Δy, matching the trend). Drawn as
-        dashed amber/red bands either side of zero. Either bound may be `None`; omit a row
+        The gate's warn and fail RMS, as ``{"dx": (warn, fail), "dy": (warn, fail)}`` in each
+        trend's unit (pixels for ``dx``; km/s or pixels for ``dy``, matching the trend). Drawn as
+        dashed amber/red bands either side of zero. Either bound may be `None`; omit a key
         for no band.
 
     Returns
@@ -229,18 +233,19 @@ def plotDetectorResiduals(
     # Δx (spatial): trace centroids and line x, in pixels, against fiberId.
     # Δy (wavelength): lamp and sky lines only, against wavelength.
     rows = (
-        ("Δx", "Δx (spatial, pix)", ("dxCalib", "dxVisit"), "fiberId", "pix", ("dxCalib", "dxVisit")),
-        ("Δy", "Δy (wavelength, pix)", ("dyCalib", "dyVisit"), "wavelength", yTrendUnit, yTrendColumns),
+        ("dx", "Δx", "Δx (spatial, pix)", ("dxCalib", "dxVisit"), "fiberId", "pix", ("dxCalib", "dxVisit")),
+        ("dy", "Δy", "Δy (wavelength, pix)", ("dyCalib", "dyVisit"), "wavelength", yTrendUnit, yTrendColumns),
     )
-    for r, (short, rowLabel, mapColumns, against, trendUnit, trendColumns) in enumerate(rows):
+    for r, (key, short, rowLabel, mapColumns, against, trendUnit, trendColumns) in enumerate(rows):
         mapData = data if r == 0 else data[data["description"] != "Trace"]
         limit = _symmetricLimit(pd.concat([mapData[c] for c in mapColumns]).to_numpy())
-        mappable = None
+        mapAxes, mappable = [], None
         for c, (_suffix, refLabel, _color) in enumerate(_REFERENCES):
             ax = fig.add_subplot(gs[r, c])
+            mapAxes.append(ax)
             mappable = _residualMap(fig, ax, mapData, mapColumns[c], limit, title=f"{short} {refLabel}")
         with opaqueColorbar(mappable):
-            fig.colorbar(mappable, ax=fig.axes[-2:], location="right", shrink=0.9, label=rowLabel, pad=0.01)
+            fig.colorbar(mappable, ax=mapAxes, location="right", shrink=0.9, label=rowLabel, pad=0.01)
         _trend(
             fig.add_subplot(gs[r, 2]),
             data,
@@ -248,7 +253,7 @@ def plotDetectorResiduals(
             trendColumns,
             unit=trendUnit,
             title=f"{short} by species, median per {against}",
-            limits=limits.get(short),
+            limits=limits.get(key),
         )
 
     if title:
