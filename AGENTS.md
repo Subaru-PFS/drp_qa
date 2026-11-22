@@ -55,7 +55,10 @@ the pipeline/config glue to run them.
   - `reductionStats.py` — detector health read from the reduction's task metadata
     (`isr_metadata`, `reduceExposure_metadata`) and the ISR header: ISR counts, per-amp
     gain/read-noise and the detectorMap fit scalars, long format; stored, not judged, with
-    the stack-free measurement in `metrics/reductionStats.py`. Loaded into `detector_health_qa`.
+    the stack-free measurement in `metrics/reductionStats.py`. Anchored on `raw.metadata`
+    (the reduction's own inputs all optional), so it runs on every exposed detector and
+    writes the coverage metrics `isrRan`, `reduceExposureRan` and `reductionStage` whatever
+    ran — even a detector whose reduction never started. Loaded into `detector_health_qa`.
 - **QA modules *not* wired into `drpQA.yaml`** — these exist as `PipelineTask`s or CLIs
   but must be run via their own pipeline/entry point:
   - `skySubtractionQa.py` — sky subtraction accuracy (`SkyArmSubtractionTask`,
