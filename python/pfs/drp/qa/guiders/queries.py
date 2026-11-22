@@ -871,3 +871,54 @@ def readAgRun(
         }.get(name, params)
         tables[name] = opdb.query_dataframe(sql, params=bound).reset_index(drop=True)
     return tables
+
+
+# One row per good-match, clean-detection spot of each AG exposure, for the sky conditions
+# (pfs.drp.qa.guiders.conditions): the second moments already corrected for the ics_agccActor
+# "git" halving (as readAgcData returns them), the spot and catalogue magnitudes and colour, the
+# altitude (degrees) and the exposure time. The detection filter is the observatory tool's:
+# GOOD_MATCH and agc_data.flags <= 1.
+_AG_CONDITIONS_SQL = f"""
+SELECT agc_exposure.pfs_visit_id, agc_exposure.agc_exposure_id, agc_exposure.taken_at,
+       agc_exposure.altitude,
+       agc_data.central_image_moment_20_pix * {_VARIANCE_PER_MOMENT_SQL} AS mxx,
+       agc_data.central_image_moment_02_pix * {_VARIANCE_PER_MOMENT_SQL} AS myy,
+       agc_data.estimated_magnitude,
+       pfs_design_agc.guide_star_magnitude, pfs_design_agc.guide_star_color
+FROM agc_exposure
+JOIN agc_data ON agc_data.agc_exposure_id = agc_exposure.agc_exposure_id
+JOIN agc_match ON agc_match.agc_exposure_id = agc_data.agc_exposure_id
+   AND agc_match.agc_camera_id = agc_data.agc_camera_id AND agc_match.spot_id = agc_data.spot_id
+LEFT JOIN pfs_visit ON pfs_visit.pfs_visit_id = agc_exposure.pfs_visit_id
+LEFT JOIN pfs_design_agc ON pfs_design_agc.pfs_design_id = pfs_visit.pfs_design_id
+   AND pfs_design_agc.guide_star_id = agc_match.guide_star_id
+WHERE agc_exposure.pfs_visit_id = ANY(:visits)
+  AND agc_match.flags = :goodMatch AND COALESCE(agc_data.flags, 0) <= 1
+"""
+
+
+def readConditionSpots(opdb, visits: Iterable[int]) -> pd.DataFrame:
+    """Return the good-match spots of the visits' AG exposures, for the sky conditions.
+
+    The spots `pfs.drp.qa.guiders.conditions.exposureConditions` turns into per-exposure seeing
+    and transparency: a good match (``agc_match.flags = GOOD_MATCH``) and a clean detection
+    (``agc_data.flags <= 1``), the tool's filter. The guide stars missing from ``pfs_design_agc``
+    keep their spot (a `LEFT JOIN`, so the seeing still counts them) with a NaN catalogue magnitude.
+
+    Parameters
+    ----------
+    opdb : `pfs.utils.database.opdb.OpDB`
+        The operations database.
+    visits : iterable of `int`
+        The visits.
+
+    Returns
+    -------
+    spots : `pandas.DataFrame`
+        One row per spot: ``pfs_visit_id``, ``agc_exposure_id``, ``taken_at``, ``altitude``
+        (degrees), the variance-corrected ``mxx`` / ``myy``, ``estimated_magnitude`` and the
+        catalogue ``guide_star_magnitude`` / ``guide_star_color``.
+    """
+    _checkOpdb(opdb)
+    params = {"visits": list(visits), "goodMatch": AG_RUN_FLAGS["goodMatch"], **MOMENT_SCALE_PARAMS}
+    return opdb.query_dataframe(_AG_CONDITIONS_SQL, params=params).reset_index(drop=True)
