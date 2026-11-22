@@ -10,6 +10,18 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Changed
+
+- **`fitGlobalModel` fits the zenith model's exposure and camera terms jointly** (PIPE2D-1909) — the guider
+  analysis' global zenith-frame fit (`pfs.drp.qa.guiders.analysis.fitGlobalModel`) now solves for every
+  exposure's offset/rotation/scale and every camera's offset/rotation in one constrained least-squares step,
+  rather than fitting the exposure and camera terms in turn. Fitting them in turn, as drp_stella did, did not
+  converge once the exposures had rotations as well as the cameras, leaving a few microns in the terms. The
+  offset shared by every camera is degenerate with one shared by every exposure, and, with both rotations on, so
+  is a rotation of the whole AG ring; the camera terms are pinned to sum to zero, leaving those common parts in
+  the exposure terms. The signature and returned `GlobalModelFit` are unchanged. Checked on the committed raster
+  fixture, where the camera offsets take the valid-match residual from 9.2 to 5.9 µm.
+
 ## [0.13.0] - 2026-11-22
 
 ### Added
