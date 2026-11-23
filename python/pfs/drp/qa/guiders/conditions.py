@@ -44,7 +44,8 @@ def exposureConditions(spots: pd.DataFrame) -> pd.DataFrame:
 
     Seeing is `agMetrics.calibratedSeeing` of each spot's FWHM, then the mean / median / sigma over
     all the exposure's good matches; a spot the AG cannot resolve (NaN seeing) drops out.
-    Transparency is `agMetrics.magnitudesToTransparency` per spot, aggregated the same way but over
+    Transparency is `agMetrics.magnitudesToTransparency` per spot, with its camera's zero point
+    (`agMetrics.agCameraZeroPoint`), aggregated the same way but over
     the brighter `_TRANSPARENCY_BRIGHT_FRACTION` of each exposure's spots and inside
     `_TRANSPARENCY_RANGE`, matching the ag actor log's `agMetrics.summarizeTransparency`. The second
     moments are already corrected for the ics_agccActor ``"git"`` halving (`readConditionSpots`).
@@ -53,8 +54,9 @@ def exposureConditions(spots: pd.DataFrame) -> pd.DataFrame:
     ----------
     spots : `pandas.DataFrame`
         The good-match spots, from `pfs.drp.qa.guiders.queries.readConditionSpots`: one row per spot
-        with ``agc_exposure_id``, ``pfs_visit_id``, ``taken_at``, ``altitude`` (degrees), ``mxx`` /
-        ``myy``, ``estimated_magnitude`` and ``guide_star_magnitude`` / ``guide_star_color``.
+        with ``agc_exposure_id``, ``pfs_visit_id``, ``taken_at``, ``altitude`` (degrees),
+        ``agc_camera_id`` / ``flags``, ``mxx`` / ``myy``, ``estimated_magnitude`` and
+        ``guide_star_magnitude`` / ``guide_star_color``.
 
     Returns
     -------
@@ -69,10 +71,13 @@ def exposureConditions(spots: pd.DataFrame) -> pd.DataFrame:
     fwhm = agMetrics.momentsToFwhm(spots.mxx.to_numpy(float), spots.myy.to_numpy(float))
     spots["seeing"] = agMetrics.calibratedSeeing(fwhm, spots.altitude.to_numpy(float))
 
+    # spots["flags"], not spots.flags: that is pandas' own attribute.
+    zeroPoint = agMetrics.agCameraZeroPoint(spots.agc_camera_id.to_numpy(int), spots["flags"].to_numpy(int))
     transparency = agMetrics.magnitudesToTransparency(
         spots.estimated_magnitude.to_numpy(float),
         spots.guide_star_magnitude.to_numpy(float),
         spots.guide_star_color.to_numpy(float),
+        zeroPoint=zeroPoint,
     )
     lo, hi = _TRANSPARENCY_RANGE
     # Keep the brighter spots of each exposure (by estimated magnitude) whose transparency is sky,
