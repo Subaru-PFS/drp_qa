@@ -12,7 +12,13 @@ from collections.abc import Mapping
 
 import pandas as pd
 
-__all__ = ["buildValidationReport", "compareCalibrations", "validationSummary"]
+__all__ = [
+    "buildSlitOffsetSection",
+    "buildValidationReport",
+    "compareCalibrations",
+    "slitOffsetHealth",
+    "validationSummary",
+]
 
 #: Line sets that stand in for one another: against the calibration, a visit whose fit marked
 #: no usable lines stores every good line as ``UNFITTED`` instead of ``BOTH``.
@@ -200,5 +206,113 @@ def buildValidationReport(
         "map predicts lines it was not fitted to). The set's own images read near zero against a calibration "
         "built from them; the later nights are the fair comparison.*"
     )
+    out.append("")
+    return "\n".join(out)
+
+
+def slitOffsetHealth(offsets: pd.DataFrame, *, threshold: float = 5.0) -> pd.DataFrame:
+    """Flag each detector's slit-offset outliers from a collection's offsets.
+
+    Runs `pfs.drp.qa.metrics.slitOffsets` per ``(arm, spectrograph)`` detector: detrends each MTP
+    ferrule and flags the fibers whose offset is an outlier. Stack-free: it takes the offsets
+    `pfs.drp.qa.comparison.butlerQueries.readSlitOffsets` read, not a Butler.
+
+    Parameters
+    ----------
+    offsets : `pandas.DataFrame`
+        ``arm``, ``spectrograph``, ``fiberId``, ``spatial``, ``spectral``, ``group`` (the MTP
+        ferrule, ``"?"`` where unmapped), as `readSlitOffsets` returns.
+    threshold : `float`, optional
+        Per-fiber outlier sigma, passed to `flagOutliers`.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        `flagOutliers`' per-fiber table, stacked over detectors, with ``arm`` and ``spectrograph``.
+    """
+    from pfs.drp.qa.metrics.slitOffsets import flagOutliers, slitOffsetResiduals
+
+    frames = []
+    for (arm, spectrograph), g in offsets.groupby(["arm", "spectrograph"], sort=True):
+        select = (g["group"].astype(str) != "?").to_numpy()
+        residuals = slitOffsetResiduals(g["fiberId"], g["spatial"], g["spectral"], g["group"], select=select)
+        flagged = flagOutliers(residuals, threshold=threshold)
+        flagged["arm"] = arm
+        flagged["spectrograph"] = int(spectrograph)
+        frames.append(flagged)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
+def _confirmedTable(confirmed: pd.DataFrame, withStatus: bool = False) -> list[str]:
+    """Return Markdown table rows for a `crossArmConfirmed` (or `compareRuns`) frame."""
+    head = "| detector | fiberId | arms | max spatial (px) | max spectral (px) |"
+    if withStatus:
+        head += " status |"
+    lines = [head, "|---|---|---|---|---|" + ("---|" if withStatus else "")]
+    for row in confirmed.itertuples():
+        cells = [
+            f"SM{row.spectrograph}",
+            str(int(row.fiberId)),
+            str(row.arms),
+            f"{row.maxSpatialResid:.3f}",
+            f"{row.maxSpectralResid:.3f}",
+        ]
+        if withStatus:
+            cells.append(str(row.status))
+        lines.append("| " + " | ".join(cells) + " |")
+    return lines
+
+
+def buildSlitOffsetSection(
+    confirmed: pd.DataFrame,
+    previous: pd.DataFrame | None = None,
+    *,
+    previousLabel: str = "the previous run",
+) -> str:
+    """Return the Markdown slit-offset section: the confirmed outliers and the change from last run.
+
+    Parameters
+    ----------
+    confirmed : `pandas.DataFrame`
+        This calibration's cross-arm confirmed outliers (`crossArmConfirmed`).
+    previous : `pandas.DataFrame`, optional
+        The previous run's confirmed outliers; given, each fiber is marked ``new``, ``cleared`` or
+        ``persisted`` and a change summary is shown (`compareRuns`, `changeSummary`).
+    previousLabel : `str`, optional
+        How the previous run is named in the text.
+
+    Returns
+    -------
+    `str`
+        The Markdown section.
+    """
+    from pfs.drp.qa.metrics.slitOffsets import changeSummary, compareRuns
+
+    out = [
+        "## Slit offsets",
+        "",
+        "Fibers whose slit offset is an outlier within its MTP ferrule in two or more arms of a "
+        "spectrograph: a fault at or before the slit (a bad fiber) biases every arm. 1 px ≈ 71 µm at the "
+        "slit. Chronic bad fibers persist run to run; a *new* one is a regression.",
+        "",
+    ]
+    if previous is not None:
+        comparison = compareRuns(confirmed, previous)
+        summary = changeSummary(comparison)
+        out.append(
+            f"**{summary['nNew']} new**, {summary['nPersisted']} persisted and {summary['nCleared']} cleared "
+            f"against {previousLabel}."
+        )
+        out.append("")
+        ordered = comparison.sort_values(
+            "status", key=lambda s: s.map({"new": 0, "persisted": 1, "cleared": 2})
+        )
+        out += _confirmedTable(ordered, withStatus=True) if len(ordered) else ["No confirmed outliers."]
+    elif confirmed.empty:
+        out.append("No confirmed slit-offset outliers.")
+    else:
+        out += _confirmedTable(confirmed)
     out.append("")
     return "\n".join(out)

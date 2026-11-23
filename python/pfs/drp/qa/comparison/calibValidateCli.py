@@ -4,7 +4,9 @@ r"""``drpQa.py calib validate``: validate candidate detectorMap calibrations aga
 inputs so its ``detectorMap_calib`` is the one used, in two ``pipetask`` commands — ``reduceExposure``
 with drpActor's arc/trace configuration, then ``dmLineResiduals`` on the reductions — into
 ``<prefix>/<label>``. ``report`` reads each candidate's ``dmLineResidualMetrics`` from the Butler and
-writes the Markdown comparison of `pfs.drp.qa.comparison.calibValidate` with a figure per detector.
+writes the Markdown comparison of `pfs.drp.qa.comparison.calibValidate` with a figure per detector,
+and a slit-offset section per candidate -- the fibers whose slit offset is an outlier in two or more
+arms -- with the change from the previous run's calibration when ``--previous`` names it.
 
     drpQa.py calib validate run --period run31 --opdb-host pfsa-db \\
         --candidate asis= --candidate pick=u/wtg/pipe2d-1941/detectorMaps-pick \\
@@ -25,7 +27,12 @@ from pathlib import Path
 import pandas as pd
 
 from pfs.drp.qa.comparison.calibInputs import lampsOf, setVisits
-from pfs.drp.qa.comparison.calibValidate import buildValidationReport, compareCalibrations
+from pfs.drp.qa.comparison.calibValidate import (
+    buildSlitOffsetSection,
+    buildValidationReport,
+    compareCalibrations,
+    slitOffsetHealth,
+)
 from pfs.drp.qa.comparison.classify import classifyVisits
 from pfs.drp.qa.comparison.reduction import (
     MEASURE_PIPELINE,
@@ -128,6 +135,11 @@ def main(argv=None) -> int:
     parser.add_argument("-j", "--jobs", type=int, default=8)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("-o", "--output", default=None, help="report: the Markdown file")
+    parser.add_argument(
+        "--previous",
+        default=None,
+        help="report: a collection with the previous run's detectorMap_calib, for the slit-offset change",
+    )
     args = parser.parse_args(argv)
 
     visits = chooseVisits(args)
@@ -208,11 +220,29 @@ def main(argv=None) -> int:
         f"Visits: {int(visits['pfs_visit_id'].min())}–{int(visits['pfs_visit_id'].max())}, "
         f"{len(theSet)} in the set and {len(visits) - len(theSet)} nightly arcs and traces after it."
     )
-    out.write_text(
-        buildValidationReport(
-            table, f"{args.period} {', '.join(args.detectors)}: candidate calibrations", shown, figures, note
-        )
+    report = buildValidationReport(
+        table, f"{args.period} {', '.join(args.detectors)}: candidate calibrations", shown, figures, note
     )
+
+    # Slit-offset health of each candidate's detectorMap_calib, and the change from the previous run.
+    from pfs.drp.qa.comparison.butlerQueries import readSlitOffsets
+    from pfs.drp.qa.metrics.slitOffsets import crossArmConfirmed
+
+    previousConfirmed = None
+    if args.previous:
+        previousConfirmed = crossArmConfirmed(slitOffsetHealth(readSlitOffsets(butler, args.previous)))
+    for label in cands:
+        flagged = slitOffsetHealth(readSlitOffsets(butler, f"{args.prefix}/{label}"))
+        if flagged.empty:
+            continue
+        flagged.to_parquet(out.with_name(f"{out.stem}-{label}.slitoffsets.parquet"))
+        heading = f" ({label})" if len(cands) > 1 else ""
+        section = buildSlitOffsetSection(
+            crossArmConfirmed(flagged), previousConfirmed, previousLabel=f"`{args.previous}`"
+        )
+        report += "\n" + section.replace("## Slit offsets", f"## Slit offsets{heading}", 1)
+
+    out.write_text(report)
     table.to_csv(out.with_suffix(".csv"), index=False)
     print(f"wrote {out}", flush=True)
     return 0

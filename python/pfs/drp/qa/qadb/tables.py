@@ -19,6 +19,7 @@ Butler table reaches qadb only once both that schema and the spec here name it.
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -35,6 +36,8 @@ __all__ = [
     "NORMAL_VALUE",
     "NORMAL_VALUE_KEYS",
     "QA_GATE",
+    "SLIT_OFFSET_CONFIRMED_COLUMNS",
+    "SLIT_OFFSET_CONFIRMED_KEYS",
     "TWILIGHT_QA",
     "TableSpec",
     "cameraName",
@@ -42,6 +45,8 @@ __all__ = [
     "imageRows",
     "normalValueFrame",
     "normalValueRows",
+    "slitOffsetConfirmedFrame",
+    "slitOffsetConfirmedRows",
     "snakeCase",
 ]
 
@@ -362,3 +367,76 @@ def normalValueFrame(rows: pd.DataFrame) -> pd.DataFrame:
     """Return ``qa_normal_value`` rows as `pfs.drp.qa.metrics.normalValues.NORMAL_COLUMNS`."""
     frame = rows.rename(columns=NORMAL_VALUE)
     return frame.reindex(columns=list(NORMAL_VALUE.values())).reset_index(drop=True)
+
+
+#: Columns of ``slit_offset_confirmed``, in order; the key is `SLIT_OFFSET_CONFIRMED_KEYS`.
+SLIT_OFFSET_CONFIRMED_COLUMNS = (
+    "run",
+    "collection_name",
+    "spectrograph",
+    "fiber_id",
+    "n_arms",
+    "arms",
+    "max_spatial_resid",
+    "max_spectral_resid",
+    "created_at",
+)
+
+#: What identifies a ``slit_offset_confirmed`` row: storing the same key again replaces it.
+SLIT_OFFSET_CONFIRMED_KEYS = ("run", "spectrograph", "fiber_id")
+
+#: Its qadb column by the `crossArmConfirmed` column read back from it.
+_SLIT_OFFSET_READ = {
+    "run": "run",
+    "spectrograph": "spectrograph",
+    "fiber_id": "fiberId",
+    "n_arms": "nArms",
+    "arms": "arms",
+    "max_spatial_resid": "maxSpatialResid",
+    "max_spectral_resid": "maxSpectralResid",
+}
+
+
+def slitOffsetConfirmedRows(
+    confirmed: pd.DataFrame, run: str, collection: str, when: datetime | None = None
+) -> pd.DataFrame:
+    """Return `pfs.drp.qa.metrics.slitOffsets.crossArmConfirmed` rows as ``slit_offset_confirmed`` rows.
+
+    Parameters
+    ----------
+    confirmed : `pandas.DataFrame`
+        `crossArmConfirmed` output (`CONFIRMED_COLUMNS`).
+    run : `str`
+        The observing run (the key), e.g. ``run31``.
+    collection : `str`
+        The ``detectorMap_calib`` collection the offsets came from (provenance).
+    when : `datetime.datetime`, optional
+        The ``created_at`` stamp; default now, UTC.
+    """
+    when = when or datetime.now(UTC)
+    if confirmed.empty:
+        return pd.DataFrame(columns=list(SLIT_OFFSET_CONFIRMED_COLUMNS))
+    return pd.DataFrame(
+        {
+            "run": run,
+            "collection_name": collection,
+            "spectrograph": confirmed["spectrograph"].astype(int),
+            "fiber_id": confirmed["fiberId"].astype(int),
+            "n_arms": confirmed["nArms"].astype(int),
+            "arms": confirmed["arms"].astype(str),
+            "max_spatial_resid": confirmed["maxSpatialResid"].astype(float),
+            "max_spectral_resid": confirmed["maxSpectralResid"].astype(float),
+            "created_at": when,
+        },
+        columns=list(SLIT_OFFSET_CONFIRMED_COLUMNS),
+    )
+
+
+def slitOffsetConfirmedFrame(rows: pd.DataFrame) -> pd.DataFrame:
+    """Return ``slit_offset_confirmed`` rows as `crossArmConfirmed` columns, with ``run``.
+
+    One frame for every run; group by ``run`` for
+    `pfs.drp.qa.metrics.slitOffsets.offsetTrajectory`.
+    """
+    frame = rows.rename(columns=_SLIT_OFFSET_READ)
+    return frame.reindex(columns=list(_SLIT_OFFSET_READ.values())).reset_index(drop=True)

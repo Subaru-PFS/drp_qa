@@ -4,7 +4,7 @@ A `MetricSpec` says what a measured number is: its units, direction, the
 reference it is measured against and how to phrase it. A `Check` is a rule
 that turns numbers into a verdict: the frames it applies to, a WARN and a FAIL
 limit, and whether the limits are fixed or a percentage from the camera's
-normal value. `CHECKS` holds every rule there is, 13 of them; nothing else in
+normal value. `CHECKS` holds every rule there is, 14 of them; nothing else in
 the package holds a limit. `pfs.drp.qa.metrics.gate` reads them to judge and
 `pfs.drp.qa.metrics.normalValues` to make the normal values, so the two cannot
 disagree on what a check covers.
@@ -555,6 +555,11 @@ _LINE_FLUX = (
 _NORMAL = (
     " Judged against the camera's normal value for the frame type: cameras differ by more than the tolerance."
 )
+_SLIT = (
+    "The visit's own slit offsets against the calibration's. Normal reduction leaves them untouched "
+    "(adjustDetectorMap.doSlitOffsets=False), so a change means they were refit, or the visit was reduced "
+    "against a different detectorMap_calib than the one compared."
+)
 
 #: The metrics, by name.
 METRIC_SPECS = {
@@ -699,6 +704,25 @@ METRIC_SPECS = {
             unitSuffix=" %",
             notMeasuredWhen=("tooFaint",),
         ),
+        # Slit-offset invariance (pfs.drp.qa.metrics.slitOffsets): the visit's slit
+        # offsets against the calibration's, the largest absolute change over fibers.
+        MetricSpec(
+            "maxSpatialOffsetDelta",
+            units="pixels",
+            reference=_SLIT,
+            label="spatial slit-offset change",
+            valueFormat=".3f",
+            unitSuffix=" px",
+        ),
+        MetricSpec(
+            "maxSpectralOffsetDelta",
+            units="pixels",
+            reference=_SLIT,
+            label="spectral slit-offset change",
+            valueFormat=".3f",
+            unitSuffix=" px",
+        ),
+        MetricSpec("nSlitOffsetChanged", units="fibers", reference=_SLIT, valueFormat=".0f"),
     )
 }
 
@@ -706,7 +730,7 @@ _SKY = (SCIENCE, ALLSKY)
 _LAMP = (ARC, QUARTZ)
 _ALL_LAMP = (ARC, QUARTZ, IIS_ARC, IIS_QUARTZ)
 
-#: Every rule, by name: the 13 pairs of limits. `pfs.drp.qa.metrics.gate` says which rows of which table each
+#: Every rule, by name: the 14 pairs of limits. `pfs.drp.qa.metrics.gate` says which rows of which table each
 #: reads.
 CHECKS = {
     check.name: check
@@ -754,6 +778,16 @@ CHECKS = {
             (IIS_ARC, IIS_QUARTZ),
             warn=1.0,
             fail=2.0,
+        ),
+        # The visit's slit offsets should equal the calibration's (doSlitOffsets=False); a
+        # change is a provenance fault (offsets refit, or a different calibration resolved).
+        Check(
+            "slitOffsetInvariance",
+            "slit offsets changed from the calibration",
+            ("maxSpatialOffsetDelta", "maxSpectralOffsetDelta"),
+            _LAMP,
+            warn=0.02,
+            fail=0.10,
         ),
         # Twilights: each exposure against the sequence's others.
         Check(
@@ -877,6 +911,11 @@ EXCLUSIONS = (
     (
         "Saturation (nSaturatedLines, pctSaturatedPixels) and line flux",
         "Stored for cross-visit comparison; no limit has been set.",
+    ),
+    (
+        "Count of fibers whose slit offset changed (nSlitOffsetChanged)",
+        "Stored beside the slitOffsetInvariance check for context -- one fiber or all -- not judged itself; "
+        "the per-fiber outlier count and the cross-arm confirmed set are run-level, from calibValidate.",
     ),
     *((f"Every number measured on {kind} frames", reason) for kind, reason in NOT_JUDGED.items()),
     (

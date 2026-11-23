@@ -18,6 +18,7 @@ __all__ = [
     "earlierReductions",
     "earlierRuns",
     "freshPipelines",
+    "readSlitOffsets",
 ]
 
 #: The data ID keys of a detector image.
@@ -351,3 +352,73 @@ def detectorHoldings(
         datasetVisits(butler, "pfsConfig", visits, inputs, instrument)
     )
     return holdings.sort_values(list(DETECTOR_KEYS), ignore_index=True)
+
+
+def _mtpGroups(fiberId) -> list[str]:
+    """Return the MTP ferrule id per fiber (``pfs_utils``); ``"?"`` where there is no mapping.
+
+    Imported lazily: it reads the grand fiber map, which the stack-free tests do not have.
+    """
+    import numpy as np
+
+    from pfs.utils.fiberids import FiberIds
+
+    groups = []
+    for mtpId, _holes, _cobra in FiberIds().fiberIdToMTP(np.asarray(fiberId, dtype=int)):
+        mtpId = str(mtpId)
+        groups.append(mtpId if (mtpId and "None" not in mtpId) else "?")
+    return groups
+
+
+def readSlitOffsets(butler, collection: "str | Sequence[str]", instrument: str = "PFS") -> pd.DataFrame:
+    """Return each detector's per-fiber slit offsets from ``detectorMap_calib``.
+
+    One ``detectorMap_calib`` per ``(spectrograph, arm)`` is read (the first, when a CALIBRATION
+    collection holds several validity ranges), and its spatial and spectral slit offsets taken with
+    the fibers' MTP ferrule. The numbers feed `pfs.drp.qa.metrics.slitOffsets`; this is the only
+    Butler-touching step.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        The Butler.
+    collection : `str` or sequence of `str`
+        A collection, or collections searched in order, holding ``detectorMap_calib`` (a certified
+        calibration or a rebuild, or the input chain of a reduction).
+    instrument : `str`, optional
+        Instrument name. Default is ``PFS``.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        One row per detector fiber: ``arm``, ``spectrograph``, ``fiberId``, ``spatial``,
+        ``spectral`` (pixels), ``group`` (the MTP ferrule, ``"?"`` where unmapped) and
+        ``collection`` (the RUN the detectorMap_calib came from, its build: provenance). Empty,
+        with those columns, when no ``detectorMap_calib`` is found.
+    """
+    columns = ["arm", "spectrograph", "fiberId", "spatial", "spectral", "group", "collection"]
+    collections = [collection] if isinstance(collection, str) else list(collection)
+    refs = list(butler.registry.queryDatasets("detectorMap_calib", collections=collections))
+    chosen: dict[tuple, object] = {}
+    for ref in refs:
+        chosen.setdefault((int(ref.dataId["spectrograph"]), str(ref.dataId["arm"])), ref)
+    frames = []
+    for (spectrograph, arm), ref in sorted(chosen.items()):
+        detectorMap = butler.get(ref)
+        fiberId = detectorMap.fiberId
+        frames.append(
+            pd.DataFrame(
+                {
+                    "arm": arm,
+                    "spectrograph": spectrograph,
+                    "fiberId": [int(f) for f in fiberId],
+                    "spatial": [float(x) for x in detectorMap.getSpatialOffsets()],
+                    "spectral": [float(y) for y in detectorMap.getSpectralOffsets()],
+                    "group": _mtpGroups(fiberId),
+                    "collection": ref.run,
+                }
+            )
+        )
+    if not frames:
+        return pd.DataFrame(columns=columns)
+    return pd.concat(frames, ignore_index=True)[columns]

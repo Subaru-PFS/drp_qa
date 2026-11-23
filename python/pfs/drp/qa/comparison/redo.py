@@ -341,7 +341,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if stages & {"load", "values", "judge"}:
         qadb = _qadb(args)
         if "load" in stages:
-            _load(args, output, visits, opdb, qadb)
+            _load(args, output, visits, opdb, qadb, period)
         if "values" in stages:
             _values(args, output, visits, qadb)
         if "judge" in stages:
@@ -376,8 +376,8 @@ def _qadb(args):
     return QaDB(host=args.qadb_host, port=args.qadb_port, user=args.qadb_user, dbname=args.qadb_dbname)
 
 
-def _load(args, output: str, visits: pd.DataFrame, opdb, qadb) -> None:
-    """Load the collection's numbers into qadb and judge them."""
+def _load(args, output: str, visits: pd.DataFrame, opdb, qadb, period: Period) -> None:
+    """Load the collection's numbers into qadb, and record the run's slit-offset outliers."""
     from lsst.daf.butler import Butler
 
     from pfs.drp.qa.qadb.loader import loadCollection
@@ -395,6 +395,39 @@ def _load(args, output: str, visits: pd.DataFrame, opdb, qadb) -> None:
     )
     for table, count in counts.items():
         say(f"{table}: {count}")
+    _loadSlitOffsets(args, output, period, qadb)
+
+
+def _loadSlitOffsets(args, output: str, period: Period, qadb) -> None:
+    """Record the run's cross-arm slit-offset outliers in qadb's ``slit_offset_confirmed``.
+
+    Read per-fiber from the run's ``detectorMap_calib`` (through the reduction's chain), flagged
+    within each MTP ferrule and kept where confirmed in two or more arms. Keyed by the run, so a
+    reprocessing replaces its rows; the run-to-run trajectory is read back from the table.
+    """
+    from lsst.daf.butler import Butler
+
+    from pfs.drp.qa.comparison.butlerQueries import readSlitOffsets
+    from pfs.drp.qa.comparison.calibValidate import slitOffsetHealth
+    from pfs.drp.qa.metrics.slitOffsets import crossArmConfirmed
+    from pfs.drp.qa.qadb.writer import writeSlitOffsetConfirmed
+
+    offsets = readSlitOffsets(Butler(args.butler, writeable=False), output)
+    if offsets.empty:
+        say("\nno detectorMap_calib found through the collection; no slit-offset outliers recorded")
+        return
+    confirmed = crossArmConfirmed(slitOffsetHealth(offsets))
+    provenance = str(offsets["collection"].mode().iloc[0]) if "collection" in offsets else output
+    try:
+        written = writeSlitOffsetConfirmed(qadb, period.run, provenance, confirmed)
+    except Exception as error:
+        # The recording is auxiliary: a missing slit_offset_confirmed table (the migration not yet
+        # applied) or any write error must not fail the run's load. Report and carry on.
+        say(
+            f"\nslit offsets: could not record for {period.run} (is slit_offset_confirmed migrated?): {error}"
+        )
+        return
+    say(f"\nslit offsets: {written} cross-arm outliers recorded for {period.run} (from {provenance})")
 
 
 def _values(args, output: str, visits: pd.DataFrame, qadb) -> None:

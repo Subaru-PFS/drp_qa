@@ -10,6 +10,38 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Added
+
+- **Slit-offset QA** (PIPE2D-1677) — the per-fiber spatial and spectral slit offsets carved into a
+  `detectorMap_calib` are now checked. The stack-free measurement is `pfs.drp.qa.metrics.slitOffsets`:
+  `slitOffsetResiduals`/`flagOutliers`/`offsetSummary` detrend each MTP ferrule and flag per-fiber outliers,
+  `crossArmConfirmed` keeps the fibers an outlier in ≥2 arms of a spectrograph (the robust bad-fiber signal),
+  and `compareRuns`/`changeSummary` give the run-to-run change (new/cleared/persisted). Validated on stored
+  calibrations: it flags the documented bad fibers (SM3 1358/1373/1415 on Run21, SM2 940/941) with no
+  single-detector false positives.
+  - **`dmLineResiduals` now writes a per-visit slit-offset invariance** — three `reference="slit"`,
+    `description="SlitOffset"` rows in `dmLineResidualMetrics`: `maxSpatialOffsetDelta`,
+    `maxSpectralOffsetDelta` and (for context, unjudged) `nSlitOffsetChanged`, the visit's slit offsets
+    against the calibration's. Normal reduction leaves them untouched (`doSlitOffsets=False`), so a change
+    means they were refit or a different calibration was resolved.
+  - **New gate check `slitOffsetInvariance`** (fixed, WARN 0.02 px / FAIL 0.10 px, calibration frames) in
+    `metrics/registry.py`, with its three metric specs; `nSlitOffsetChanged` is an `EXCLUSIONS` entry. The
+    per-fiber outlier count and the cross-arm confirmed set are run-level (reported from the calibration
+    comparison), not per-image gated.
+  - **`drpQa.py calib validate report` now includes a slit-offset section** — `butlerQueries.readSlitOffsets`
+    reads each candidate's `detectorMap_calib` offsets with their MTP ferrule, `calibValidate.slitOffsetHealth`
+    flags the outliers and `buildSlitOffsetSection` writes the confirmed set; `--previous <collection>` adds
+    the new/cleared/persisted change against the previous run's calibration. A per-candidate
+    `*.slitoffsets.parquet` is written beside the report.
+  - **Run-to-run trajectory, stored in qadb** — `metrics.slitOffsets.offsetTrajectory` lays the confirmed
+    outliers out fiber-by-run (a chronic fiber is confirmed every run, a lasting change steps and stays, fit
+    wobble flickers); `plotting.slitOffsets.plotTrajectory` draws the heatmap. `drpQa.py redo` records each
+    run's confirmed set in the new `slit_offset_confirmed` qadb table (`qadb.writer.writeSlitOffsetConfirmed`),
+    keyed by the observing run so a reprocessing replaces its rows; `qadb.reader.readSlitOffsetConfirmed`
+    reads the trajectory back. Needs `spt_qa_database` ≥ 0.8.0 (revision `b2d4f6a8c019`); until the
+    migration is applied `redo` logs that it could not record and carries on, so the two can be merged
+    independently.
+
 ## [0.16.0] - 2026-11-22
 
 ### Changed

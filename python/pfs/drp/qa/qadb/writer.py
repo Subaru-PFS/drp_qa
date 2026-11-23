@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import text
 
+from pfs.drp.qa.qadb.tables import SLIT_OFFSET_CONFIRMED_KEYS, slitOffsetConfirmedRows
+
 __all__ = [
     "PIPELINE_VERSION_COLUMNS",
     "UNKNOWN_VERSION",
@@ -23,6 +25,7 @@ __all__ = [
     "records",
     "upsert",
     "upsertSql",
+    "writeSlitOffsetConfirmed",
 ]
 
 #: The drp_qa version recorded when a RUN's ``packages`` dataset names none; never overwrites a known one.
@@ -245,3 +248,42 @@ def processingId(
     if found is None:
         raise RuntimeError(f"No processing_id returned for {collection!r} run {run!r}")
     return int(found)
+
+
+def writeSlitOffsetConfirmed(
+    qadb: Any,
+    run: str,
+    collection: str,
+    confirmed: pd.DataFrame,
+    conn: Any = None,
+    when: Any = None,
+) -> int:
+    """Replace a run's cross-arm slit-offset outliers in ``slit_offset_confirmed``.
+
+    The run's existing rows are deleted first, so a fiber that is no longer an outlier is
+    removed, then the new set is written. Keyed by the observing run, so a rebuild or
+    reprocessing of the run replaces its rows rather than adding a set.
+
+    Parameters
+    ----------
+    qadb : `pfs.utils.database.qadb.QaDB`
+        The database.
+    run : `str`
+        The observing run (the key), e.g. ``run31``.
+    collection : `str`
+        The ``detectorMap_calib`` collection the offsets came from (provenance).
+    confirmed : `pandas.DataFrame`
+        `pfs.drp.qa.metrics.slitOffsets.crossArmConfirmed` output.
+    conn : `sqlalchemy.engine.Connection`, optional
+        As for `upsert`, to put the delete and the write in one transaction.
+    when : `datetime.datetime`, optional
+        The ``created_at`` stamp; default now, UTC.
+
+    Returns
+    -------
+    `int`
+        Rows written.
+    """
+    deleteRows(qadb, "slit_offset_confirmed", pd.DataFrame({"run": [run]}), conn)
+    rows = slitOffsetConfirmedRows(confirmed, run, collection, when)
+    return upsert(qadb, "slit_offset_confirmed", rows, list(SLIT_OFFSET_CONFIRMED_KEYS), conn)

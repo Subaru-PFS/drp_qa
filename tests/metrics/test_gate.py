@@ -697,3 +697,38 @@ def testLongLines():
         sorted(long["metric"]) == ["medianDeltaX", "robustRmsDeltaX"] and "medianDeltaX" not in long.columns
     )
     assert gate(lines=long).iloc[0]["qaStatus"] == "WARN"
+
+
+class TestSlitOffsetInvariance:
+    """The visit's slit offsets against the calibration's (reference ``slit``, calibration frames)."""
+
+    def _row(self, value, metric="maxSpatialOffsetDelta"):
+        line = lineRow(
+            metric, value, description="SlitOffset", reference="slit", statusType="ALL", obsType="arc"
+        )
+        return gate(iq=frame(iqRow()), lines=frame(line)).iloc[0]
+
+    @pytest.mark.parametrize(
+        "value, status",
+        [(0.0, "PASS"), (0.019, "PASS"), (0.02, "WARN"), (0.05, "WARN"), (0.10, "FAIL"), (0.5, "FAIL")],
+    )
+    def testInvariance(self, value, status):
+        """Offsets equal to the calibration pass; any real change warns, a large one fails."""
+        row = self._row(value)
+        assert row["qaStatus"] == status
+        assert row["qaDecidedBy"] == ("" if status == "PASS" else "slitOffsetInvariance")
+
+    def testSpectralIsJudgedToo(self):
+        assert self._row(0.2, metric="maxSpectralOffsetDelta")["qaStatus"] == "FAIL"
+
+    def testCompanionCountIsNotJudged(self):
+        # nSlitOffsetChanged rides along for context but has no check: alone it leaves no verdict.
+        row = self._row(7.0, metric="nSlitOffsetChanged")
+        assert row["qaStatus"] == "UNKNOWN"
+
+    def testNotJudgedOnScienceFrames(self):
+        """Negative control: slitOffsetInvariance is a calibration-frame check; science is left ungated."""
+        line = lineRow(
+            "maxSpatialOffsetDelta", 0.5, description="SlitOffset", reference="slit", statusType="ALL"
+        )
+        assert gate(lines=frame(line)).iloc[0]["qaStatus"] == "UNKNOWN"
