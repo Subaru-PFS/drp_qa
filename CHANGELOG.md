@@ -23,9 +23,10 @@ made, and earlier sections to the weekly tag alone.
   fixture, where the camera offsets take the valid-match residual from 9.2 to 5.9 µm.
 - **AG conditions' transparency takes each camera's zero point** (INSTRM-3115) — `exposureConditions`
   passes `agMetrics.agCameraZeroPoint` (per camera and detector half) to `magnitudesToTransparency`, and
-  `readConditionSpots` now also returns `agc_camera_id` and the detection `flags` for it. Without it AG3's glass
-  half read 17% low. Needs pfs_utils with `agCameraZeroPoint` (pfs_utils PR #116), which also recalibrates the
-  colour term for agcc 2.4.0 and narrows it to 0.5 < BP-RP < 2.8.
+  `readConditionSpots` now also returns `agc_camera_id` and the detection `flags` (0 where NULL) for it. Without
+  it stars on AG3's left half read 16% low. Needs pfs_utils with `agCameraZeroPoint` (pfs_utils PR #116), which
+  also recalibrates the colour term for agcc 2.4.0 and narrows it to 0.5 < BP-RP < 2.8; that calibration applies to
+  every visit given, including ones from before agcc 2.4.0, whose values it does not fit.
 
 ## [0.13.0] - 2026-11-22
 
