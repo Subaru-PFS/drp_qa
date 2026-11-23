@@ -10,6 +10,14 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Changed
+
+- **`extractionQa`'s summary plot moved to `pfs.drp.qa.plotting.extraction.plotExtractionStats`** (PIPE2D-2031)
+  — the four-panel per-detector summary (chiMed / chiStd / chiAtPeak / resFrac vs fiberId, coloured by
+  pfsArmAve) is now drawn by a stack-free function taking the `extQaImage_pickle` arrays, so it can be made
+  from the stored pickle alone, outside the stack (the QA dashboard's per-visit page).
+  `ExtractionQaTask.drawStats` delegates to it; the stored `extQaStats` PDF is unchanged.
+
 ## [0.14.0] - 2026-11-22
 
 ### Changed

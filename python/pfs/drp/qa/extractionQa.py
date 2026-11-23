@@ -28,6 +28,7 @@ from matplotlib import pyplot as plt
 from scipy.stats import iqr
 
 from pfs.datamodel import FiberStatus, PfsConfig, TargetType
+from pfs.drp.qa.plotting.extraction import ExtractionPlotRanges, plotExtractionStats
 from pfs.drp.qa.storageClasses import MultipagePdfFigure, QaDict
 from pfs.drp.stella import DetectorMap, FiberProfileSet, PfsArm, SpectrumSet
 
@@ -327,369 +328,34 @@ class ExtractionQaTask(PipelineTask):
         qaStats: QaDict,
         dataId: dict,
     ) -> MultipagePdfFigure:
-        """Draw figures on new pages of ``qaStatsPdf``.
+        """Draw the extraction-QA summary page from ``qaStats``.
+
+        The drawing lives in
+        `pfs.drp.qa.plotting.extraction.plotExtractionStats`, so the same figure
+        can be made from the stored ``extQaImage_pickle`` alone, outside the
+        stack (the QA dashboard's per-visit page). This wraps it in the task's
+        `MultipagePdfFigure` output, applying the config's plot ranges.
 
         Parameters
         ----------
         qaStats : `QaDict`
-            XXXXX
+            The per-fiber statistics built in `run`.
         dataId : `dict`
-            Data ID. Required keys are: "visit", "arm", "spectrograph".
+            Data ID. Required keys are: "visit", "arm", "spectrograph", "run".
 
         Returns
         -------
         extQaStats : `MultipagePdfFigure`
-            XXXXX
+            The summary page.
         """
-        fiberIds = qaStats["fiberIds"]
-        xa = qaStats["xa"]
-        pfsArmAve = qaStats["pfsArmAve"]
-        targetMask = qaStats["targetMask"]
-        chiMed = qaStats["chiMed"]
-        chiStd = qaStats["chiStd"]
-        chiAtPeak = qaStats["chiAtPeak"]
-        resFrac = qaStats["resFrac"]
-
+        ranges = ExtractionPlotRanges(
+            chiMed=(self.config.plotMinChiMed, self.config.plotMaxChiMed),
+            chiStd=(self.config.plotMinChiStd, self.config.plotMaxChiStd),
+            chiAtPeak=(self.config.plotMinChiAtPeak, self.config.plotMaxChiAtPeak),
+            resFrac=(self.config.plotMinResFrac, self.config.plotMaxResFrac),
+        )
         qaStatsPdf = MultipagePdfFigure()
-        # ct = self.getTargetColors()
-
-        fig, ax = plt.subplots(2, 2, figsize=(12, 8), layout="constrained")
-
-        titleStr = "Chi distribution (visit={visit} arm={arm} spectrograph={spectrograph})\n".format(**dataId)
-        titleStr += "RUN={run}".format(**dataId)
-        fig.suptitle(titleStr, y=1.05)
-        sc = None
-
-        # chiMed vs. fiberId (top left)
-        ax[0][0].axhline(0.0, color="gray", linestyle="dashed")
-
-        ymin = self.config.plotMinChiMed
-        ymax = self.config.plotMaxChiMed
-        ax[0][0].set_ylim(ymin, ymax)
-
-        for t in targetMask:
-            if np.sum(targetMask[t]) > 0:
-                fid = fiberIds[targetMask[t]]
-                val = chiMed[targetMask[t]]
-                col = pfsArmAve[targetMask[t]]
-
-                under = val < ymin
-                over = val > ymax
-                inside = ~(under | over)
-
-                sc = ax[0][0].scatter(
-                    fid[inside],
-                    val[inside],
-                    10.0,
-                    c=col[inside],
-                    vmin=np.nanmin(pfsArmAve),
-                    vmax=np.nanmax(pfsArmAve),
-                    label=f"{t}: {np.sum(targetMask[t])} fibers",
-                )
-                if np.any(over):
-                    ax[0][0].scatter(
-                        fid[over],
-                        np.full(np.sum(over), ymax),
-                        marker="^",
-                        s=50,
-                        c=col[over],
-                        edgecolors="k",
-                        rasterized=True,
-                        clip_on=False,
-                        vmin=np.nanmin(pfsArmAve),
-                        vmax=np.nanmax(pfsArmAve),
-                    )
-                if np.any(under):
-                    ax[0][0].scatter(
-                        fid[under],
-                        np.full(np.sum(under), ymin),
-                        marker="v",
-                        s=50,
-                        c=col[under],
-                        edgecolors="k",
-                        rasterized=True,
-                        clip_on=False,
-                        vmin=np.nanmin(pfsArmAve),
-                        vmax=np.nanmax(pfsArmAve),
-                    )
-
-        if sc is not None:
-            fig.colorbar(sc, ax=ax[0][0], location="right", fraction=0.04, alpha=1.0, label="pfsArmAve")
-
-        ax2 = ax[0][0].twiny()
-        ax2.set_xlim(ax[0][0].get_xlim())
-        bottom_ticks = ax[0][0].get_xticks()
-        sort_idx = np.argsort(fiberIds)
-        sorted_fiber_ids = fiberIds[sort_idx]
-        sorted_xa = xa[sort_idx]
-        unique_fiber_ids, unique_indices = np.unique(sorted_fiber_ids, return_index=True)
-        unique_xa = sorted_xa[unique_indices]
-        interp_xa = np.interp(bottom_ticks, unique_fiber_ids, unique_xa)
-        selected_labels = [f"{pix:.2f}" for pix in interp_xa]
-
-        med = round(np.nanmedian(chiMed), 3)
-        q3, q1 = np.nanpercentile(chiMed, [75, 25])
-        robust_sigma = 0.741 * (q3 - q1)
-        ax[0][0].text(
-            0.05, 0.1, f"median={med:.3}, robustSigma={robust_sigma:.3}", transform=ax[0][0].transAxes
-        )
-        ax2.set_xticks(bottom_ticks)
-        ax2.set_xticklabels(selected_labels, rotation=60)
-        ax2.set_xlabel("X (pix)")
-        ax[0][0].grid(color="gray", linestyle=":", linewidth=0.5)
-        ax[0][0].set_ylabel("Chi (median)")
-        ax[0][0].set_xlabel("fiberId")
-        ax[0][0].legend()
-
-        # chiStd vs. fiberId (top right)
-        ax[0][1].axhline(1.0, color="gray", linestyle="dashed")
-
-        ymin = self.config.plotMinChiStd
-        ymax = self.config.plotMaxChiStd
-        ax[0][1].set_ylim(ymin, ymax)
-
-        for t in targetMask:
-            if np.sum(targetMask[t]) > 0:
-                fid = fiberIds[targetMask[t]]
-                val = chiStd[targetMask[t]]
-                col = pfsArmAve[targetMask[t]]
-
-                under = val < ymin
-                over = val > ymax
-                inside = ~(under | over)
-
-                sc = ax[0][1].scatter(
-                    fid[inside],
-                    val[inside],
-                    10.0,
-                    c=col[inside],
-                    vmin=np.nanmin(pfsArmAve),
-                    vmax=np.nanmax(pfsArmAve),
-                    label=f"{t}: {np.sum(targetMask[t])} fibers",
-                )
-                if np.any(over):
-                    ax[0][1].scatter(
-                        fid[over],
-                        np.full(np.sum(over), ymax),
-                        marker="^",
-                        s=50,
-                        c=col[over],
-                        edgecolors="k",
-                        rasterized=True,
-                        clip_on=False,
-                        vmin=np.nanmin(pfsArmAve),
-                        vmax=np.nanmax(pfsArmAve),
-                    )
-                if np.any(under):
-                    ax[0][1].scatter(
-                        fid[under],
-                        np.full(np.sum(under), ymin),
-                        marker="v",
-                        s=50,
-                        c=col[under],
-                        edgecolors="k",
-                        rasterized=True,
-                        clip_on=False,
-                        vmin=np.nanmin(pfsArmAve),
-                        vmax=np.nanmax(pfsArmAve),
-                    )
-
-        if sc is not None:
-            fig.colorbar(sc, ax=ax[0][1], location="right", fraction=0.04, alpha=1.0, label="pfsArmAve")
-
-        ax3 = ax[0][1].twiny()
-        ax3.set_xlim(ax[0][1].get_xlim())
-        bottom_ticks = ax[0][1].get_xticks()
-        sort_idx = np.argsort(fiberIds)
-        sorted_fiber_ids = fiberIds[sort_idx]
-        sorted_xa = xa[sort_idx]
-        unique_fiber_ids, unique_indices = np.unique(sorted_fiber_ids, return_index=True)
-        unique_xa = sorted_xa[unique_indices]
-        interp_xa = np.interp(bottom_ticks, unique_fiber_ids, unique_xa)
-        selected_labels = [f"{pix:.2f}" for pix in interp_xa]
-
-        ax3.set_xticks(bottom_ticks)
-        ax3.set_xticklabels(selected_labels, rotation=60)
-        ax3.set_xlabel("X (pix)")
-
-        med = round(np.nanmedian(chiStd), 3)
-        q3, q1 = np.nanpercentile(chiStd, [75, 25])
-        robust_sigma = 0.741 * (q3 - q1)
-        ax[0][1].text(
-            0.05,
-            self.config.plotMaxChiStd * 0.0075,
-            f"median={med:.3}, robustSigma={robust_sigma:.3}",
-            transform=ax[0][1].transAxes,
-        )
-        ax[0][1].set_xlabel("X pixel")
-        ax[0][1].grid(color="gray", linestyle=":", linewidth=0.5)
-        ax[0][1].set_ylabel("Chi (standard deviation)")
-        ax[0][1].set_xlabel("fiberId")
-        ax[0][1].legend()
-
-        # chiAtPeak vs. fiberId (bottom left)
-        ax[1][0].axhline(0.0, color="gray", linestyle="dashed")
-
-        ymin = self.config.plotMinChiAtPeak
-        ymax = self.config.plotMaxChiAtPeak
-        ax[1][0].set_ylim(ymin, ymax)
-
-        for t in targetMask:
-            if np.sum(targetMask[t]) > 0:
-                fid = fiberIds[targetMask[t]]
-                val = chiAtPeak[targetMask[t]]
-                col = pfsArmAve[targetMask[t]]
-
-                under = val < ymin
-                over = val > ymax
-                inside = ~(under | over)
-
-                sc = ax[1][0].scatter(
-                    fid[inside],
-                    val[inside],
-                    10.0,
-                    c=col[inside],
-                    vmin=np.nanmin(pfsArmAve),
-                    vmax=np.nanmax(pfsArmAve),
-                    label=f"{t}: {np.sum(targetMask[t])} fibers",
-                )
-                if np.any(over):
-                    ax[1][0].scatter(
-                        fid[over],
-                        np.full(np.sum(over), ymax),
-                        marker="^",
-                        s=50,
-                        c=col[over],
-                        edgecolors="k",
-                        rasterized=True,
-                        clip_on=False,
-                        vmin=np.nanmin(pfsArmAve),
-                        vmax=np.nanmax(pfsArmAve),
-                    )
-                if np.any(under):
-                    ax[1][0].scatter(
-                        fid[under],
-                        np.full(np.sum(under), ymin),
-                        marker="v",
-                        s=50,
-                        c=col[under],
-                        edgecolors="k",
-                        rasterized=True,
-                        clip_on=False,
-                        vmin=np.nanmin(pfsArmAve),
-                        vmax=np.nanmax(pfsArmAve),
-                    )
-
-        if sc is not None:
-            fig.colorbar(sc, ax=ax[1][0], location="right", fraction=0.04, alpha=1.0, label="pfsArmAve")
-
-        ax4 = ax[1][0].twiny()
-        ax4.set_xlim(ax[1][0].get_xlim())
-        bottom_ticks = ax[1][0].get_xticks()
-        sort_idx = np.argsort(fiberIds)
-        sorted_fiber_ids = fiberIds[sort_idx]
-        sorted_xa = xa[sort_idx]
-        unique_fiber_ids, unique_indices = np.unique(sorted_fiber_ids, return_index=True)
-        unique_xa = sorted_xa[unique_indices]
-        interp_xa = np.interp(bottom_ticks, unique_fiber_ids, unique_xa)
-        selected_labels = [f"{pix:.2f}" for pix in interp_xa]
-
-        med = round(np.nanmedian(chiAtPeak), 3)
-        q3, q1 = np.nanpercentile(chiAtPeak, [75, 25])
-        robust_sigma = 0.741 * (q3 - q1)
-        ax4.text(0.05, 0.1, f"median={med:.3}, robustSigma={robust_sigma:.3}", transform=ax[1][0].transAxes)
-        ax4.set_xticks(bottom_ticks)
-        ax4.set_xticklabels(selected_labels, rotation=60)
-        ax4.set_xlabel("X (pix)")
-        ax[1][0].grid(color="gray", linestyle=":", linewidth=0.5)
-        ax[1][0].set_ylabel("Chi at profile peak pixels")
-        ax[1][0].set_xlabel("fiberId")
-        ax[1][0].legend()
-
-        # resFrac vs. fiberId (bottom right)
-        ax[1][1].axhline(0.0, color="gray", linestyle="dashed")
-
-        ymin = self.config.plotMinResFrac
-        ymax = self.config.plotMaxResFrac
-        ax[1][1].set_ylim(ymin, ymax)
-
-        for t in targetMask:
-            if np.sum(targetMask[t]) > 0:
-                fid = fiberIds[targetMask[t]]
-                val = resFrac[targetMask[t]]
-                col = pfsArmAve[targetMask[t]]
-
-                under = val < ymin
-                over = val > ymax
-                inside = ~(under | over)
-
-                sc = ax[1][1].scatter(
-                    fid[inside],
-                    val[inside],
-                    10.0,
-                    c=col[inside],
-                    vmin=np.nanmin(pfsArmAve),
-                    vmax=np.nanmax(pfsArmAve),
-                    label=f"{t}: {np.sum(targetMask[t])} fibers",
-                )
-                if np.any(over):
-                    ax[1][1].scatter(
-                        fid[over],
-                        np.full(np.sum(over), ymax),
-                        marker="^",
-                        s=50,
-                        c=col[over],
-                        edgecolors="k",
-                        rasterized=True,
-                        clip_on=False,
-                        vmin=np.nanmin(pfsArmAve),
-                        vmax=np.nanmax(pfsArmAve),
-                    )
-                if np.any(under):
-                    ax[1][1].scatter(
-                        fid[under],
-                        np.full(np.sum(under), ymin),
-                        marker="v",
-                        s=50,
-                        c=col[under],
-                        edgecolors="k",
-                        rasterized=True,
-                        clip_on=False,
-                        vmin=np.nanmin(pfsArmAve),
-                        vmax=np.nanmax(pfsArmAve),
-                    )
-
-        if sc is not None:
-            fig.colorbar(sc, ax=ax[1][1], location="right", fraction=0.04, alpha=1.0, label="pfsArmAve")
-
-        ax4 = ax[1][1].twiny()
-        ax4.set_xlim(ax[1][1].get_xlim())
-        bottom_ticks = ax[1][1].get_xticks()
-        sort_idx = np.argsort(fiberIds)
-        sorted_fiber_ids = fiberIds[sort_idx]
-        sorted_xa = xa[sort_idx]
-        unique_fiber_ids, unique_indices = np.unique(sorted_fiber_ids, return_index=True)
-        unique_xa = sorted_xa[unique_indices]
-        interp_xa = np.interp(bottom_ticks, unique_fiber_ids, unique_xa)
-        selected_labels = [f"{pix:.2f}" for pix in interp_xa]
-
-        med = round(np.nanmedian(resFrac), 3)
-        q3, q1 = np.nanpercentile(resFrac, [75, 25])
-        robust_sigma = 0.741 * (q3 - q1)
-        ax4.text(0.05, 0.1, f"median={med:.3}, robustSigma={robust_sigma:.3}", transform=ax[1][1].transAxes)
-        ax4.set_xticks(bottom_ticks)
-        ax4.set_xticklabels(selected_labels, rotation=60)
-        ax4.set_xlabel("X (pix)")
-        ax[1][1].grid(color="gray", linestyle=":", linewidth=0.5)
-        ax[1][1].set_ylabel("Residual fraction (percent)")
-        ax[1][1].set_xlabel("fiberId")
-        ax[1][1].legend()
-
-        # plt.subplots_adjust(wspace=0.3)
-
-        qaStatsPdf.append(fig, bbox_inches="tight")
-        plt.close(fig)
-
+        qaStatsPdf.append(plotExtractionStats(qaStats, dataId=dataId, ranges=ranges), bbox_inches="tight")
         return qaStatsPdf
 
     def makeImagePdf(
