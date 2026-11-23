@@ -53,7 +53,7 @@ def _title(dataId: Mapping[str, Any]) -> str:
         return ("Chi distribution (visit={visit} arm={arm} spectrograph={spectrograph})\nRUN={run}").format(
             **dataId
         )
-    except (KeyError, IndexError):
+    except KeyError:
         return ""
 
 
