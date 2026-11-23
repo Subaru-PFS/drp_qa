@@ -38,7 +38,9 @@ made, and earlier sections to the weekly tag alone.
     wobble flickers); `plotting.slitOffsets.plotTrajectory` draws the heatmap. `drpQa.py redo` records each
     run's confirmed set in the new `slit_offset_confirmed` qadb table (`qadb.writer.writeSlitOffsetConfirmed`),
     keyed by the observing run so a reprocessing replaces its rows; `qadb.reader.readSlitOffsetConfirmed`
-    reads the trajectory back. Needs `spt_qa_database` ≥ 0.8.0 (revision `b2d4f6a8c019`).
+    reads the trajectory back. Needs `spt_qa_database` ≥ 0.8.0 (revision `b2d4f6a8c019`); until the
+    migration is applied `redo` logs that it could not record and carries on, so the two can be merged
+    independently.
 
 ### Removed
 

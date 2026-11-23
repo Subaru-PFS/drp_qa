@@ -418,7 +418,15 @@ def _loadSlitOffsets(args, output: str, period: Period, qadb) -> None:
         return
     confirmed = crossArmConfirmed(slitOffsetHealth(offsets))
     provenance = str(offsets["collection"].mode().iloc[0]) if "collection" in offsets else output
-    written = writeSlitOffsetConfirmed(qadb, period.run, provenance, confirmed)
+    try:
+        written = writeSlitOffsetConfirmed(qadb, period.run, provenance, confirmed)
+    except Exception as error:
+        # The recording is auxiliary: a missing slit_offset_confirmed table (the migration not yet
+        # applied) or any write error must not fail the run's load. Report and carry on.
+        say(
+            f"\nslit offsets: could not record for {period.run} (is slit_offset_confirmed migrated?): {error}"
+        )
+        return
     say(f"\nslit offsets: {written} cross-arm outliers recorded for {period.run} (from {provenance})")
 
 
