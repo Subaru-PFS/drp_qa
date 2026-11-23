@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-22
+
 ### Changed
 
 - **`fitGlobalModel` fits the zenith model's exposure and camera terms jointly** (PIPE2D-1909) — the guider
