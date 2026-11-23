@@ -44,6 +44,7 @@ PAIRS = {
     "skyLineResidualBlue": (FIXED, 1.5, 2.5),
     "calibOffset": (FIXED, 1.0, 2.0),
     "traceCentreOffset": (FIXED, 1.0, 2.0),
+    "slitOffsetInvariance": (FIXED, 0.02, 0.10),
     "twilightLevel": (FIXED, 2.0, 3.0),
     "twilightScatter": (FIXED, 1.5, 2.5),
     "twilightPatch": (FIXED, 2.5, 4.0),
@@ -55,9 +56,9 @@ PAIRS = {
 }
 
 
-def testThirteenPairs():
+def testFourteenPairs():
     assert {name: (check.kind, check.warn, check.fail) for name, check in CHECKS.items()} == PAIRS
-    assert len(CHECKS) == 13
+    assert len(CHECKS) == 14
 
 
 def testChecksAreWellFormed():

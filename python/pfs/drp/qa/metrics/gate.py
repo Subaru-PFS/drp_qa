@@ -302,6 +302,10 @@ def _lineRows(lines: pd.DataFrame, iq: pd.DataFrame | None) -> list[pd.DataFrame
         scatter = lines[heldBack & judgedSpecies & (metric == name)]
         species = scatter["description"].astype(str)
         frames.append(_rows(scatter, check, name, species, species, scatter["value"]))
+    # Slit-offset invariance: the visit's offsets against the calibration's (reference "slit").
+    for name, part in (("maxSpatialOffsetDelta", "spatial"), ("maxSpectralOffsetDelta", "spectral")):
+        slit = lines[(lines["reference"] == "slit") & (metric == name)]
+        frames.append(_rows(slit, "slitOffsetInvariance", name, part, "", slit["value"]))
     return frames
 
 

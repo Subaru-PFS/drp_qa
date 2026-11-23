@@ -45,6 +45,7 @@ from pfs.drp.qa.metrics.lineResiduals import (
     sequenceType,
     speciesResiduals,
 )
+from pfs.drp.qa.metrics.slitOffsets import invarianceRows, offsetInvariance
 from pfs.drp.stella import ArcLineSet, DetectorMap, ReferenceLineStatus
 
 __all__ = ["DmLineResidualsConfig", "DmLineResidualsTask"]
@@ -111,12 +112,15 @@ class DmLineResidualsConnections(
             " as imageQualityQa classifies it, from the raw or the pfsConfig header: ``trace`` for a quartz,"
             " ``arc``, ``twilight``, ...; ``unknown`` when neither header says), ``seqType`` (the IIC"
             " sequence type, W_SEQTYP as read; null when neither header has it), ``reference`` (``calib``:"
-            " detectorMap_calib; ``visit``: the visit's adjusted detectorMap), ``description``,"
+            " detectorMap_calib; ``visit``: the visit's adjusted detectorMap; ``slit``: the visit's slit"
+            " offsets against the calibration's, one ``SlitOffset`` row per metric), ``description``,"
             " ``statusType`` (``BOTH``, ``USED``, ``RESERVED`` lines of the visit's detectorMap fit, or"
-            " ``UNFITTED``, every good line, when the fit marked none), ``metric`` (``nLines``,"
-            " ``linesPerFiber``; ``medianDeltaX``, ``robustRmsDeltaX`` for every species;"
+            " ``UNFITTED``, every good line, when the fit marked none; ``ALL`` for the slit rows), ``metric``"
+            " (``nLines``, ``linesPerFiber``; ``medianDeltaX``, ``robustRmsDeltaX`` for every species;"
             " ``medianDeltaY``, ``robustRmsDeltaY`` in pixels and ``medianDeltaYKms`` in km/s for lamp and"
-            " sky lines), ``value``. No verdict: `pfs.drp.qa.metrics.gate` judges the rows afterwards."
+            " sky lines; ``maxSpatialOffsetDelta``, ``maxSpectralOffsetDelta`` and ``nSlitOffsetChanged`` on"
+            " the ``slit`` reference), ``value``. No verdict: `pfs.drp.qa.metrics.gate` judges the rows"
+            " afterwards."
         ),
         storageClass="DataFrame",
         dimensions=("instrument", "visit", "arm", "spectrograph"),
@@ -256,6 +260,18 @@ class DmLineResidualsTask(PipelineTask):
         obsType, seqType = frameType(*headers), sequenceType(*headers)
         measured = residualSummary(species, self.config.minLines)
 
+        # Slit-offset invariance: the visit's offsets should equal the calibration's, since
+        # normal reduction leaves them untouched (adjustDetectorMap.doSlitOffsets=False).
+        invariance = offsetInvariance(*_alignedOffsets(detectorMap, detectorMapCalib))
+        if invariance["nSlitOffsetChanged"]:
+            self.log.warning(
+                "Slit offsets differ from the calibration on %d fibers (max %.3f, %.3f px); worst fiberId=%s",
+                invariance["nSlitOffsetChanged"],
+                invariance["maxSpatialOffsetDelta"],
+                invariance["maxSpectralOffsetDelta"],
+                invariance["worstFiberId"],
+            )
+
         summary = {key: dataId.get(key) for key in ("visit", "arm", "spectrograph")}
         summary |= {"cameraSet": camera, "obsType": obsType, "seqType": seqType}
         summary |= measured | _calibProvenance(detectorMapCalib)
@@ -267,11 +283,43 @@ class DmLineResidualsTask(PipelineTask):
             "fitted" if measured["fitted"] else "unfitted",
             _describe(species) or "no lines",
         )
+        metrics = longResiduals(species, dataId, camera, obsType, seqType)
+        metrics = pd.concat(
+            [metrics, invarianceRows(dataId, invariance, camera=camera, obsType=obsType, seqType=seqType)],
+            ignore_index=True,
+        )
         return Struct(
-            dmLineResidualMetrics=longResiduals(species, dataId, camera, obsType, seqType),
+            dmLineResidualMetrics=metrics,
             dmLineResidualSummary=pd.DataFrame([summary]),
             dmLineResidualData=lineTable(residuals, dataId, self.config.maxTraceRowsPerFiber),
         )
+
+
+def _alignedOffsets(detectorMap: Any, detectorMapCalib: Any) -> tuple[np.ndarray, ...]:
+    """Return ``(fiberId, spatial, spectral, spatialCalib, spectralCalib)`` for `offsetInvariance`.
+
+    The visit's slit offsets and the calibration's, aligned to the visit's fiber order; a
+    fiber the calibration lacks gets NaN, which the invariance drops. The adjusted map is
+    built from the calibration, so the two fiber orders are normally identical.
+    """
+    fiberId = np.asarray(detectorMap.fiberId, dtype=np.int32)
+    spatial = np.asarray(detectorMap.getSpatialOffsets(), dtype=np.float64)
+    spectral = np.asarray(detectorMap.getSpectralOffsets(), dtype=np.float64)
+    calibFiberId = np.asarray(detectorMapCalib.fiberId, dtype=np.int32)
+    calibSpatial = np.asarray(detectorMapCalib.getSpatialOffsets(), dtype=np.float64)
+    calibSpectral = np.asarray(detectorMapCalib.getSpectralOffsets(), dtype=np.float64)
+
+    if np.array_equal(fiberId, calibFiberId):
+        return fiberId, spatial, spectral, calibSpatial, calibSpectral
+
+    lookup = {int(f): i for i, f in enumerate(calibFiberId)}
+    idx = np.array([lookup.get(int(f), -1) for f in fiberId])
+    have = idx >= 0
+    spatialRef = np.full(len(fiberId), np.nan)
+    spectralRef = np.full(len(fiberId), np.nan)
+    spatialRef[have] = calibSpatial[idx[have]]
+    spectralRef[have] = calibSpectral[idx[have]]
+    return fiberId, spatial, spectral, spatialRef, spectralRef
 
 
 def _describe(species: pd.DataFrame) -> str:

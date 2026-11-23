@@ -27,6 +27,7 @@ from pfs.drp.qa.qadb.tables import (
     TWILIGHT_QA,
     TableSpec,
     normalValueFrame,
+    slitOffsetConfirmedFrame,
 )
 
 __all__ = [
@@ -38,6 +39,7 @@ __all__ = [
     "readGate",
     "readNormalValues",
     "readQadb",
+    "readSlitOffsetConfirmed",
     "readTwilight",
     "visitsJudged",
 ]
@@ -320,3 +322,34 @@ def readGate(qadb: Any, collection: str, first: int = FIRST_VISIT, last: int = L
     # A database that returns times as text writes the fraction of a second only when there is one.
     frame["decidedAt"] = pd.to_datetime(frame["decidedAt"], format="mixed")
     return frame.reindex(columns=list(GATE_COLUMNS)).reset_index(drop=True)
+
+
+def readSlitOffsetConfirmed(qadb: Any, run: str | None = None) -> pd.DataFrame:
+    """Return the stored cross-arm slit-offset outliers, in `crossArmConfirmed` columns with ``run``.
+
+    Group the result by ``run`` for `pfs.drp.qa.metrics.slitOffsets.offsetTrajectory` (the run-to-run
+    trajectory), or read one run with ``run``.
+
+    Parameters
+    ----------
+    qadb : `pfs.utils.database.qadb.QaDB`
+        The database, read-only.
+    run : `str`, optional
+        One observing run; default every run.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``run``, ``spectrograph``, ``fiberId``, ``nArms``, ``arms``, ``maxSpatialResid``,
+        ``maxSpectralResid``, ordered by run then detector then fiber.
+    """
+    sql = (
+        "SELECT run, spectrograph, fiber_id, n_arms, arms, max_spatial_resid, max_spectral_resid"
+        " FROM slit_offset_confirmed"
+    )
+    params: dict[str, Any] = {}
+    if run is not None:
+        sql += " WHERE run = :run"
+        params["run"] = run
+    sql += " ORDER BY run, spectrograph, fiber_id"
+    return slitOffsetConfirmedFrame(qadb.query_dataframe(sql, params=params))

@@ -87,3 +87,66 @@ def testReport():
     assert "| pick | `u/me/pick` |" in report
     assert "## b1" in report and "![b1](v-b1.png)" in report
     assert "| offset x vs calib | 0.000 (n=2) | 0.500 (n=1) | 0.000 (n=2) | 0.100 (n=1) |" in report
+
+
+# --- slit-offset health and its report section (PIPE2D-1677) ------------------
+
+import numpy as np  # noqa: E402
+
+from pfs.drp.qa.comparison.calibValidate import buildSlitOffsetSection, slitOffsetHealth  # noqa: E402
+from pfs.drp.qa.metrics.slitOffsets import CONFIRMED_COLUMNS, crossArmConfirmed  # noqa: E402
+
+
+def _offsets(arm, spectrograph, bad=None, seed=1):
+    """Return a `readSlitOffsets`-shaped frame: 4 MTP blocks of 20 fibers, a trend, maybe one bad fiber."""
+    rng = np.random.default_rng(seed)
+    nBlocks, per = 4, 20
+    n = nBlocks * per
+    group = np.repeat([f"MTP{b}" for b in range(nBlocks)], per)
+    spatial = np.repeat(np.arange(nBlocks) * 1.0, per) + rng.normal(0.0, 0.01, n)
+    spectral = rng.normal(0.0, 0.01, n)
+    if bad is not None:
+        spatial[bad - 1] += 0.3
+    return pd.DataFrame(
+        {
+            "arm": arm,
+            "spectrograph": spectrograph,
+            "fiberId": np.arange(1, n + 1),
+            "spatial": spatial,
+            "spectral": spectral,
+            "group": group,
+        }
+    )
+
+
+def _run(bad):
+    return pd.concat([_offsets("b", 1, bad=bad), _offsets("r", 1, bad=bad)], ignore_index=True)
+
+
+def testSlitOffsetHealthFlagsPerDetector():
+    flagged = slitOffsetHealth(_run(bad=27))
+    assert set(flagged["arm"]) == {"b", "r"}
+    assert set(flagged.loc[flagged["outlier"], "fiberId"]) == {27}
+    confirmed = crossArmConfirmed(flagged)
+    assert confirmed["fiberId"].to_list() == [27] and confirmed.iloc[0]["nArms"] == 2
+
+
+def testSlitOffsetSectionListsConfirmed():
+    md = buildSlitOffsetSection(crossArmConfirmed(slitOffsetHealth(_run(bad=27))))
+    assert "## Slit offsets" in md and "SM1" in md and "27" in md
+
+
+def testSlitOffsetSectionEmpty():
+    empty = pd.DataFrame({c: pd.Series(dtype=d) for c, d in CONFIRMED_COLUMNS.items()})
+    assert "No confirmed slit-offset outliers." in buildSlitOffsetSection(empty)
+
+
+def testSlitOffsetSectionChangeVsPrevious():
+    current = crossArmConfirmed(slitOffsetHealth(_run(bad=27)))
+    previous = crossArmConfirmed(slitOffsetHealth(_run(bad=50)))
+    md = buildSlitOffsetSection(current, previous, previousLabel="run30")
+    assert "1 new" in md and "cleared" in md and "run30" in md
+    # The status column is a column of its own, not merged into the last header cell.
+    header = next(line for line in md.splitlines() if line.startswith("| detector"))
+    cells = [c.strip() for c in header.strip("|").split("|")]
+    assert cells[-1] == "status" and len(cells) == 6

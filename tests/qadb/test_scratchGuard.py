@@ -24,7 +24,9 @@ def testScratchDatabaseIsCleared(scratchGuard, name):
     scratchGuard.clearTestRows(db)
     emptied = [query.split()[-1] for query in db.committed if "WHERE" not in query]
     assert emptied == list(reversed(scratchGuard.QA_TABLES))
-    assert len(db.committed) == len(scratchGuard.QA_TABLES) + 3
+    # The wholesale QA_TABLES empties, then the four scoped deletes (qa_normal_value,
+    # slit_offset_confirmed, data_processing_pipe2d, pfs_visit).
+    assert len(db.committed) == len(scratchGuard.QA_TABLES) + 4
 
 
 @pytest.mark.parametrize("name", ["qadb", "opdb", "qadb_tests_copy", "tests"])

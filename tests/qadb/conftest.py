@@ -100,6 +100,11 @@ CREATE TABLE qa_normal_value (
     valid_from INTEGER NOT NULL, value DOUBLE PRECISION NOT NULL, n_frames INTEGER NOT NULL,
     source_visits TEXT, accepted_by TEXT, accepted_at TIMESTAMP, reason TEXT,
     CONSTRAINT uq_normal_value UNIQUE (collection_name, metric, camera, frame_type, selector, valid_from));
+CREATE TABLE slit_offset_confirmed (
+    slit_offset_confirmed_id INTEGER PRIMARY KEY AUTOINCREMENT, run TEXT NOT NULL, collection_name TEXT NOT NULL,
+    spectrograph INTEGER NOT NULL, fiber_id INTEGER NOT NULL, n_arms INTEGER NOT NULL, arms TEXT NOT NULL,
+    max_spatial_resid DOUBLE PRECISION, max_spectral_resid DOUBLE PRECISION, created_at TIMESTAMP,
+    CONSTRAINT uq_slit_offset_confirmed UNIQUE (run, spectrograph, fiber_id));
 """
 
 #: The tables `DDL` makes, in dependency order.
@@ -172,7 +177,9 @@ TEST_VISITS = "pfs_visit_id < 1000"
 #: The QA tables, which the PostgreSQL fixture empties (the dump has none of their rows): all but the normal
 #: values, which name their collection and lose the test collections' alone.
 QA_TABLES = [
-    table for table in TABLES if table not in ("pfs_visit", "data_processing_pipe2d", "qa_normal_value")
+    table
+    for table in TABLES
+    if table not in ("pfs_visit", "data_processing_pipe2d", "qa_normal_value", "slit_offset_confirmed")
 ]
 
 
@@ -207,6 +214,7 @@ def clearTestRows(db):
     for table in reversed(QA_TABLES):
         db.commit(f"DELETE FROM {table}")
     db.commit(f"DELETE FROM qa_normal_value WHERE {TEST_PROCESSINGS}")
+    db.commit(f"DELETE FROM slit_offset_confirmed WHERE {TEST_PROCESSINGS}")
     db.commit(f"DELETE FROM data_processing_pipe2d WHERE {TEST_PROCESSINGS}")
     db.commit(f"DELETE FROM pfs_visit WHERE {TEST_VISITS}")
 

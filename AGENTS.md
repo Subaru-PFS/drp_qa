@@ -106,7 +106,7 @@ the pipeline/config glue to run them.
 - **Metrics (`python/pfs/drp/qa/metrics/`)** — stack-free: the limits, the judging, and the
   measurements that need no Butler.
   - `registry` declares each metric once (`METRIC_SPECS`: direction, units, reference) and holds
-    every limit: `CHECKS`, 13 checks with a WARN and a FAIL each and the frame types they apply to,
+    every limit: `CHECKS`, 14 checks with a WARN and a FAIL each and the frame types they apply to,
     and `EXCLUSIONS`, what is measured but not judged, with the reason. Nothing else in the package
     holds a limit. It also says what a frame is, and nothing else does: `SEQUENCE_TYPES` gives each
     IIC sequence type (`seqType`, `W_SEQTYP` as the tasks store it) its frame type, `frameType` adds
@@ -122,6 +122,11 @@ the pipeline/config glue to run them.
     `imageQualityQa`'s unjudged measurements; `twilight` measures twilight sequences, each exposure
     against the sequence's others; `visitRollup` rolls verdicts up to one per visit; `readers` reads
     the tasks' tables from a Butler it is given.
+  - `slitOffsets` is the slit-offset measurement (PIPE2D-1677): per-fiber outliers within an MTP
+    ferrule (`slitOffsetResiduals`/`flagOutliers`/`offsetSummary`), the cross-arm confirmed set
+    (`crossArmConfirmed`) and the run-to-run change (`compareRuns`/`changeSummary`) are run-level, read
+    from the calibration comparison; `offsetInvariance`/`invarianceRows` are `dmLineResiduals`'
+    per-visit check that the visit's slit offsets still equal the calibration's.
 
   Read [`docs/qa-principles.md`](docs/qa-principles.md) (rules R1–R7, the procedure and the
   checklist) before adding a metric or a check. `tests/metrics/test_knownFaults.py` holds a table
