@@ -42,6 +42,8 @@ made, and earlier sections to the weekly tag alone.
     migration is applied `redo` logs that it could not record and carries on, so the two can be merged
     independently.
 
+## [0.16.0] - 2026-11-22
+
 ### Changed
 
 - **`extractionQa`'s summary plot moved to `pfs.drp.qa.plotting.extraction.plotExtractionStats`** (PIPE2D-2031)
