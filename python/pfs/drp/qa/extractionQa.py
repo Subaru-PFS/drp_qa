@@ -673,32 +673,43 @@ class ExtractionQaTask(PipelineTask):
         titleStr += "RUN={run}".format(**dataId)
         fig.suptitle(titleStr)
 
-        n, bins, _ = ax[0].hist(
-            residual_over_reconst.flatten(),
-            range=(self.config.plotHistRangeScale * q05_rr, self.config.plotHistRangeScale * q95_rr),
-            bins=self.config.plotHistNbin,
-            alpha=0.8,
-            label="observed",
-        )
-        ax[0].set_xlim(self.config.plotHistRangeScale * q05_rr, self.config.plotHistRangeScale * q95_rr)
+        # Guard the histogram range: on a degenerate frame (few or no fibers reconstructed) the residual and
+        # chi images are all-NaN, so the percentiles are NaN and plt.hist raises on a (nan, nan) range. That
+        # ValueError is swallowed by runQuantum, so the whole detector then writes no extraction output; draw
+        # a note instead and keep the rest of the page.
+        lo, hi = self.config.plotHistRangeScale * q05_rr, self.config.plotHistRangeScale * q95_rr
+        if np.isfinite(lo) and np.isfinite(hi) and lo < hi:
+            ax[0].hist(
+                residual_over_reconst.flatten(),
+                range=(lo, hi),
+                bins=self.config.plotHistNbin,
+                alpha=0.8,
+                label="observed",
+            )
+            ax[0].set_xlim(lo, hi)
+        else:
+            ax[0].text(0.5, 0.5, "no finite data", ha="center", va="center", transform=ax[0].transAxes)
         ax[0].set_xlabel("residual / reconstructed")
 
         # a histogram of chi values
-        n, bins, _patches = ax[1].hist(
-            imagearray.flatten(),
-            range=(self.config.plotHistRangeScale * q01, self.config.plotHistRangeScale * q99),
-            bins=self.config.plotHistNbin,
-            alpha=0.8,
-            label="observed",
-        )
-        peak_idx = np.argmax(n)
-        amplitude = n[peak_idx]
-        x = np.linspace(bins[0], bins[-1], 2 * self.config.plotHistNbin)
-        y = amplitude * np.exp(-0.5 * (x / 1.0) ** 2)
-        ax[1].plot(x, y, ls="dashed", lw=2, c="k", alpha=0.8, label="N(0,1)")
-        ax[1].set_xlim(self.config.plotHistRangeScale * q01, self.config.plotHistRangeScale * q99)
+        lo, hi = self.config.plotHistRangeScale * q01, self.config.plotHistRangeScale * q99
+        if np.isfinite(lo) and np.isfinite(hi) and lo < hi:
+            n, bins, _patches = ax[1].hist(
+                imagearray.flatten(),
+                range=(lo, hi),
+                bins=self.config.plotHistNbin,
+                alpha=0.8,
+                label="observed",
+            )
+            amplitude = n[np.argmax(n)]
+            x = np.linspace(bins[0], bins[-1], 2 * self.config.plotHistNbin)
+            y = amplitude * np.exp(-0.5 * (x / 1.0) ** 2)
+            ax[1].plot(x, y, ls="dashed", lw=2, c="k", alpha=0.8, label="N(0,1)")
+            ax[1].set_xlim(lo, hi)
+            ax[1].legend(loc="upper right")
+        else:
+            ax[1].text(0.5, 0.5, "no finite data", ha="center", va="center", transform=ax[1].transAxes)
         ax[1].set_xlabel("chi")
-        ax[1].legend(loc="upper right")
 
         qaImagePdf.append(fig, dpi=self.config.figureDpi, bbox_inches="tight")
         plt.close(fig)

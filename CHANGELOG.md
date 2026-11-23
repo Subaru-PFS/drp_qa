@@ -20,10 +20,16 @@ made, and earlier sections to the weekly tag alone.
 
 ### Fixed
 
-- **`extractionQa` no longer crashes on a GOOD fiber missing from the pfsArm** (PIPE2D-2031) — a pfsConfig
-  GOOD fiber can be absent from the extracted `pfsArm` (not extracted); `run` now records NaN for its mean
-  flux (`pfsArmAve`) instead of indexing an empty array, which raised an uncaught `IndexError` that failed
-  the whole QA pipetask. The fiber's chi statistics (from the image and detectorMap) are unaffected.
+- **`extractionQa` produces output on degenerate frames instead of writing nothing** (PIPE2D-2031) — two
+  failures stopped extraction QA from writing any output on frames with few or no fibers reconstructed:
+  - a pfsConfig GOOD fiber can be absent from the extracted `pfsArm`; `run` now records NaN for its mean
+    flux (`pfsArmAve`) instead of indexing an empty array, which raised an uncaught `IndexError` that failed
+    the whole QA pipetask; and
+  - when the residual and chi images are all-NaN the detail histograms' percentile range was `(nan, nan)`,
+    on which `matplotlib` raised a `ValueError` that `runQuantum` swallowed (so the detector wrote nothing);
+    each histogram is now drawn only over a finite range, with a note otherwise.
+
+  Both were seen across visit 156424. A fiber's chi statistics (from the image and detectorMap) are unaffected.
 
 ## [0.14.0] - 2026-11-22
 
