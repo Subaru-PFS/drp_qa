@@ -31,6 +31,8 @@ def makeSpots(rows):
     """Build a spots DataFrame from (agc_exposure_id, altitude, mxx, myy, est, cat, color) rows."""
     spots = pd.DataFrame(rows, columns=COLUMNS)
     spots["pfs_visit_id"] = 42
+    spots["agc_camera_id"] = 3  # AG4 without RIGHT: a zero point near 0
+    spots["flags"] = 0
     spots["taken_at"] = pd.Timestamp("2026-11-20 03:00:00")
     return spots
 
@@ -42,12 +44,15 @@ def perSpotSeeing(spots):
 
 
 def perSpotTransparency(spots):
-    """Return each spot's raw transparency (no selection), straight from agMetrics."""
+    """Return each spot's raw transparency (no selection, camera zero point applied), from agMetrics."""
     return np.asarray(
         agMetrics.magnitudesToTransparency(
             spots.estimated_magnitude.to_numpy(float),
             spots.guide_star_magnitude.to_numpy(float),
             spots.guide_star_color.to_numpy(float),
+            zeroPoint=agMetrics.agCameraZeroPoint(
+                spots.agc_camera_id.to_numpy(int), spots["flags"].to_numpy(int)
+            ),
         ),
         float,
     )
@@ -58,7 +63,7 @@ def test_seeing_aggregates_match_agMetrics():
     spots = makeSpots(
         [
             (100, 60.0, 9.0, 8.0, 15.0, 15.1, 0.6),
-            (100, 60.0, 12.0, 11.0, 14.6, 14.7, 0.5),
+            (100, 60.0, 12.0, 11.0, 14.6, 14.7, 1.0),
             (100, 60.0, 7.0, 8.0, 16.2, 16.0, 0.7),
         ]
     )
@@ -75,7 +80,7 @@ def test_seeing_aggregates_match_agMetrics():
 
 def test_moments_taken_as_corrected():
     """ExposureConditions does not double the moments; the ``"git"`` correction is the SQL's job."""
-    spots = makeSpots([(1, 90.0, 9.0, 9.0, 15.0, 15.0, 0.5)])
+    spots = makeSpots([(1, 90.0, 9.0, 9.0, 15.0, 15.0, 1.0)])
     got = exposureConditions(spots).iloc[0].seeing_median
     assert got == pytest.approx(perSpotSeeing(spots)[0])  # variancePerMoment = 1
     # Negative control: it must not be the doubled-moment ("git") seeing.
@@ -93,10 +98,10 @@ def test_transparency_matches_summarizeTransparency():
     # A bright and a faint half (the faint quartile is dropped); all transparencies in range.
     spots = makeSpots(
         [
-            (300, 90.0, 10.0, 10.0, 14.0, 14.0, 0.5),
-            (300, 90.0, 10.0, 10.0, 14.3, 14.2, 0.5),
-            (300, 90.0, 10.0, 10.0, 15.0, 15.0, 0.5),
-            (300, 90.0, 10.0, 10.0, 17.5, 15.0, 0.5),  # the faintest: excluded, and 2.5 mag off (dim)
+            (300, 90.0, 10.0, 10.0, 14.0, 14.0, 1.0),
+            (300, 90.0, 10.0, 10.0, 14.3, 14.2, 1.0),
+            (300, 90.0, 10.0, 10.0, 15.0, 15.0, 1.0),
+            (300, 90.0, 10.0, 10.0, 17.5, 15.0, 1.0),  # the faintest: excluded, and 2.5 mag off (dim)
         ]
     )
     raw = perSpotTransparency(spots)
@@ -114,12 +119,24 @@ def test_transparency_matches_summarizeTransparency():
     assert exposureConditions(darker).iloc[0].transparency_median == pytest.approx(expected.transparency)
 
 
+def test_transparency_uses_camera_zero_point():
+    """A star on AG3 without RIGHT, 0.19 mag faint there under a clear sky, reads 1 with its zero point."""
+    clear = 15.0 + float(agMetrics.agColorTerm(1.0)) + float(agMetrics.agCameraZeroPoint(2, 0))
+    spots = makeSpots([(500, 90.0, 10.0, 10.0, clear, 15.0, 1.0)])
+    spots["agc_camera_id"] = 2
+    row = exposureConditions(spots).iloc[0]
+    assert row.transparency_median == pytest.approx(1.0)
+    # Negative control: the same star on AG4 without RIGHT, whose zero point is near 0, reads ~0.84.
+    spots["agc_camera_id"] = 3
+    assert exposureConditions(spots).iloc[0].transparency_median < 0.86
+
+
 def test_sub_psf_spot_drops_from_seeing():
     """A spot the AG cannot resolve (NaN seeing) leaves the exposure's seeing but not its other spots."""
     spots = makeSpots(
         [
-            (200, 90.0, 10.0, 10.0, 15.0, 15.0, 0.5),  # resolved
-            (200, 90.0, 0.3, 0.3, 15.0, 15.0, 0.5),  # below the instrument PSF
+            (200, 90.0, 10.0, 10.0, 15.0, 15.0, 1.0),  # resolved
+            (200, 90.0, 0.3, 0.3, 15.0, 15.0, 1.0),  # below the instrument PSF
         ]
     )
     seeing = perSpotSeeing(spots)
@@ -136,8 +153,8 @@ def test_out_of_range_transparency_is_cut():
     # Equal estimated magnitudes so both survive the brighter-star cut; only the range cut acts.
     spots = makeSpots(
         [
-            (400, 90.0, 10.0, 10.0, 15.0, 15.0, 0.5),  # observed == catalogue -> transparency ~1
-            (400, 90.0, 10.0, 10.0, 15.0, 17.5, 0.5),  # 2.5 mag brighter than catalogue -> > 2
+            (400, 90.0, 10.0, 10.0, 15.0, 15.0, 1.0),  # observed == catalogue -> transparency ~1
+            (400, 90.0, 10.0, 10.0, 15.0, 17.5, 1.0),  # 2.5 mag brighter than catalogue -> > 2
         ]
     )
     raw = perSpotTransparency(spots)
@@ -151,8 +168,8 @@ def test_out_of_range_transparency_is_cut():
 def test_altitude_is_degrees_airmass_correction():
     """Altitude is degrees: at the same measured FWHM, lower altitude means more airmass, less seeing."""
     moments = (10.0, 10.0)
-    high = exposureConditions(makeSpots([(1, 85.0, *moments, 15.0, 15.0, 0.5)])).iloc[0].seeing_median
-    low = exposureConditions(makeSpots([(2, 35.0, *moments, 15.0, 15.0, 0.5)])).iloc[0].seeing_median
+    high = exposureConditions(makeSpots([(1, 85.0, *moments, 15.0, 15.0, 1.0)])).iloc[0].seeing_median
+    low = exposureConditions(makeSpots([(2, 35.0, *moments, 15.0, 15.0, 1.0)])).iloc[0].seeing_median
     assert np.isfinite(high) and np.isfinite(low)
     assert low < high  # more airmass at 35 deg than 85 deg -> a larger correction down to zenith
     # Negative control: altitude must matter (it is not ignored, e.g. treated as a constant).
@@ -208,8 +225,8 @@ def test_writeConditions_upserts_both_tables(monkeypatch):
     spots = makeSpots(
         [
             (100, 60.0, 9.0, 8.0, 15.0, 15.1, 0.6),
-            (100, 60.0, 12.0, 11.0, 14.6, 14.7, 0.5),
-            (101, 70.0, 10.0, 10.0, 15.0, 15.0, 0.5),
+            (100, 60.0, 12.0, 11.0, 14.6, 14.7, 1.0),
+            (101, 70.0, 10.0, 10.0, 15.0, 15.0, 1.0),
         ]
     )
     monkeypatch.setattr("pfs.drp.qa.guiders.conditions.readConditionSpots", lambda opdb, visits: spots)
@@ -244,7 +261,7 @@ def test_describeConditions_summarizes_per_visit():
     spots = makeSpots(
         [
             (100, 60.0, 9.0, 8.0, 15.0, 15.1, 0.6),
-            (101, 70.0, 10.0, 10.0, 15.0, 15.0, 0.5),
+            (101, 70.0, 10.0, 10.0, 15.0, 15.0, 1.0),
         ]
     )
     spots.loc[spots.agc_exposure_id == 101, "pfs_visit_id"] = 43  # the two exposures are in two visits
@@ -265,8 +282,8 @@ def test_logConditions_logs_and_writes_nothing(monkeypatch):
     spots = makeSpots(
         [
             (100, 60.0, 9.0, 8.0, 15.0, 15.1, 0.6),
-            (100, 60.0, 12.0, 11.0, 14.6, 14.7, 0.5),
-            (101, 70.0, 10.0, 10.0, 15.0, 15.0, 0.5),
+            (100, 60.0, 12.0, 11.0, 14.6, 14.7, 1.0),
+            (101, 70.0, 10.0, 10.0, 15.0, 15.0, 1.0),
         ]
     )
     monkeypatch.setattr(conditions, "readConditionSpots", lambda opdb, visits: spots)

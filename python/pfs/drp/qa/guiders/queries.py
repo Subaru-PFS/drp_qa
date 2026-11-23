@@ -880,7 +880,8 @@ def readAgRun(
 # GOOD_MATCH and agc_data.flags <= 1.
 _AG_CONDITIONS_SQL = f"""
 SELECT agc_exposure.pfs_visit_id, agc_exposure.agc_exposure_id, agc_exposure.taken_at,
-       agc_exposure.altitude,
+       agc_exposure.altitude, agc_data.agc_camera_id,
+       COALESCE(agc_data.flags, 0) AS flags,
        agc_data.central_image_moment_20_pix * {_VARIANCE_PER_MOMENT_SQL} AS mxx,
        agc_data.central_image_moment_02_pix * {_VARIANCE_PER_MOMENT_SQL} AS myy,
        agc_data.estimated_magnitude,
@@ -916,8 +917,9 @@ def readConditionSpots(opdb, visits: Iterable[int]) -> pd.DataFrame:
     -------
     spots : `pandas.DataFrame`
         One row per spot: ``pfs_visit_id``, ``agc_exposure_id``, ``taken_at``, ``altitude``
-        (degrees), the variance-corrected ``mxx`` / ``myy``, ``estimated_magnitude`` and the
-        catalogue ``guide_star_magnitude`` / ``guide_star_color``.
+        (degrees), ``agc_camera_id`` and the detection ``flags`` (0 where NULL; for the camera's zero point), the
+        variance-corrected ``mxx`` / ``myy``, ``estimated_magnitude`` and the catalogue
+        ``guide_star_magnitude`` / ``guide_star_color``.
     """
     _checkOpdb(opdb)
     params = {"visits": list(visits), "goodMatch": AG_RUN_FLAGS["goodMatch"], **MOMENT_SCALE_PARAMS}

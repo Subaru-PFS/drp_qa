@@ -21,6 +21,12 @@ made, and earlier sections to the weekly tag alone.
   is a rotation of the whole AG ring; the camera terms are pinned to sum to zero, leaving those common parts in
   the exposure terms. The signature and returned `GlobalModelFit` are unchanged. Checked on the committed raster
   fixture, where the camera offsets take the valid-match residual from 9.2 to 5.9 µm.
+- **AG conditions' transparency takes each camera's zero point** (INSTRM-3115) — `exposureConditions`
+  passes `agMetrics.agCameraZeroPoint` (per camera and detector half) to `magnitudesToTransparency`, and
+  `readConditionSpots` now also returns `agc_camera_id` and the detection `flags` (0 where NULL) for it. Without
+  it stars on AG3 without RIGHT read 16% low. Needs pfs_utils 7.4.50 or later, which
+  also recalibrates the colour term for agcc 2.4.0 and narrows it to 0.5 < BP-RP < 2.8; that calibration applies to
+  every visit given, including ones from before agcc 2.4.0, whose values it does not fit.
 
 ## [0.13.0] - 2026-11-22
 
