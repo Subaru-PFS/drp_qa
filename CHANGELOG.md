@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-22
+
 ### Changed
 
 - **`extractionQa`'s summary plot moved to `pfs.drp.qa.plotting.extraction.plotExtractionStats`** (PIPE2D-2031)
