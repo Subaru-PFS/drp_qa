@@ -18,6 +18,13 @@ made, and earlier sections to the weekly tag alone.
   from the stored pickle alone, outside the stack (the QA dashboard's per-visit page).
   `ExtractionQaTask.drawStats` delegates to it; the stored `extQaStats` PDF is unchanged.
 
+### Fixed
+
+- **`extractionQa` no longer crashes on a GOOD fiber missing from the pfsArm** (PIPE2D-2031) — a pfsConfig
+  GOOD fiber can be absent from the extracted `pfsArm` (not extracted); `run` now records NaN for its mean
+  flux (`pfsArmAve`) instead of indexing an empty array, which raised an uncaught `IndexError` that failed
+  the whole QA pipetask. The fiber's chi statistics (from the image and detectorMap) are unaffected.
+
 ## [0.14.0] - 2026-11-22
 
 ### Changed

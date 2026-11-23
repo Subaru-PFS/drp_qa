@@ -283,7 +283,10 @@ class ExtractionQaTask(PipelineTask):
                 np.divide(res_sum, img_sum, out=row_ratio, where=np.isfinite(img_sum) & (img_sum != 0))
                 resFrac.append(np.nanmedian(row_ratio) * 100.0)
 
-                pfsArmAve.append(np.nanmean(pfsArm[pfsArm.fiberId == fiberId].flux[0]))
+                selected = pfsArm[pfsArm.fiberId == fiberId]
+                # A GOOD pfsConfig fiber can be absent from the pfsArm (not extracted); its mean flux is
+                # then undefined (NaN), but its chi stats (from the image and detectorMap) stay valid.
+                pfsArmAve.append(np.nanmean(selected.flux[0]) if selected.flux.shape[0] > 0 else np.nan)
                 chiAveSpec.append(np.nanmean(stats.chi_f, axis=1))
                 xa.append(stats.x_ave)
 
