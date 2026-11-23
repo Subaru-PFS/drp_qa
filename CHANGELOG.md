@@ -42,14 +42,26 @@ made, and earlier sections to the weekly tag alone.
     migration is applied `redo` logs that it could not record and carries on, so the two can be merged
     independently.
 
-### Removed
+### Changed
 
-- **`extractionQa` and `extractionQaCombined` temporarily removed from `drpQA.yaml`** — both fail on every
-  detector and produce no output: on frames whose GOOD fibers are absent from the pfsArm `extractionQa`
-  raises an uncaught `IndexError` that fails the whole QA pipetask, and where the per-fiber stats are
-  all-NaN the residual histogram range is `(nan, nan)`, raising a `ValueError` that `runQuantum` swallows.
-  The task modules are unchanged and still import; only their pipeline entries are commented out. Re-enable
-  once the task is fixed. Does not affect qadb: the loader never read the extraction outputs.
+- **`extractionQa`'s summary plot moved to `pfs.drp.qa.plotting.extraction.plotExtractionStats`** (PIPE2D-2031)
+  — the four-panel per-detector summary (chiMed / chiStd / chiAtPeak / resFrac vs fiberId, coloured by
+  pfsArmAve) is now drawn by a stack-free function taking the `extQaImage_pickle` arrays, so it can be made
+  from the stored pickle alone, outside the stack (the QA dashboard's per-visit page).
+  `ExtractionQaTask.drawStats` delegates to it; the stored `extQaStats` PDF is unchanged.
+
+### Fixed
+
+- **`extractionQa` produces output on degenerate frames instead of writing nothing** (PIPE2D-2031) — two
+  failures stopped extraction QA from writing any output on frames with few or no fibers reconstructed:
+  - a pfsConfig GOOD fiber can be absent from the extracted `pfsArm`; `run` now records NaN for its mean
+    flux (`pfsArmAve`) instead of indexing an empty array, which raised an uncaught `IndexError` that failed
+    the whole QA pipetask; and
+  - when the residual and chi images are all-NaN the detail histograms' percentile range was `(nan, nan)`,
+    on which `matplotlib` raised a `ValueError` that `runQuantum` swallowed (so the detector wrote nothing);
+    each histogram is now drawn only over a finite range, with a note otherwise.
+
+  Both were seen across visit 156424. A fiber's chi statistics (from the image and detectorMap) are unaffected.
 
 ## [0.14.0] - 2026-11-22
 
