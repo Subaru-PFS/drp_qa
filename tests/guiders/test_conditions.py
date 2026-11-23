@@ -31,7 +31,7 @@ def makeSpots(rows):
     """Build a spots DataFrame from (agc_exposure_id, altitude, mxx, myy, est, cat, color) rows."""
     spots = pd.DataFrame(rows, columns=COLUMNS)
     spots["pfs_visit_id"] = 42
-    spots["agc_camera_id"] = 3  # AG4's left half: a zero point near 0
+    spots["agc_camera_id"] = 3  # AG4 without RIGHT: a zero point near 0
     spots["flags"] = 0
     spots["taken_at"] = pd.Timestamp("2026-11-20 03:00:00")
     return spots
@@ -120,13 +120,13 @@ def test_transparency_matches_summarizeTransparency():
 
 
 def test_transparency_uses_camera_zero_point():
-    """A star on AG3's glass half, 0.19 mag faint there under a clear sky, reads 1 with its zero point."""
+    """A star on AG3 without RIGHT, 0.19 mag faint there under a clear sky, reads 1 with its zero point."""
     clear = 15.0 + float(agMetrics.agColorTerm(1.0)) + float(agMetrics.agCameraZeroPoint(2, 0))
     spots = makeSpots([(500, 90.0, 10.0, 10.0, clear, 15.0, 1.0)])
     spots["agc_camera_id"] = 2
     row = exposureConditions(spots).iloc[0]
     assert row.transparency_median == pytest.approx(1.0)
-    # Negative control: the same star on AG4's left half, whose zero point is near 0, reads ~0.84.
+    # Negative control: the same star on AG4 without RIGHT, whose zero point is near 0, reads ~0.84.
     spots["agc_camera_id"] = 3
     assert exposureConditions(spots).iloc[0].transparency_median < 0.86
 
