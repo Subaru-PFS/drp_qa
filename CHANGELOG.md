@@ -10,6 +10,15 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Removed
+
+- **`extractionQa` and `extractionQaCombined` temporarily removed from `drpQA.yaml`** — both fail on every
+  detector and produce no output: on frames whose GOOD fibers are absent from the pfsArm `extractionQa`
+  raises an uncaught `IndexError` that fails the whole QA pipetask, and where the per-fiber stats are
+  all-NaN the residual histogram range is `(nan, nan)`, raising a `ValueError` that `runQuantum` swallows.
+  The task modules are unchanged and still import; only their pipeline entries are commented out. Re-enable
+  once the task is fixed. Does not affect qadb: the loader never read the extraction outputs.
+
 ## [0.14.0] - 2026-11-22
 
 ### Changed

@@ -1,9 +1,15 @@
 description: DetectorMap QA pipeline
 tasks:
-  extractionQa:
-    class: pfs.drp.qa.extractionQa.ExtractionQaTask
-  extractionQaCombined:
-    class: pfs.drp.qa.extractionQaCombined.ExtractionQaCombinedTask
+  # extractionQa and extractionQaCombined are temporarily disabled: they currently
+  # fail on every detector and produce no output. On frames whose GOOD fibers are
+  # absent from the pfsArm they raise an uncaught IndexError that fails the whole QA
+  # pipetask; where the per-fiber stats come out all-NaN the residual histogram range
+  # is (nan, nan), which raises a ValueError that runQuantum swallows. Re-enable once
+  # the task is fixed.
+  # extractionQa:
+  #   class: pfs.drp.qa.extractionQa.ExtractionQaTask
+  # extractionQaCombined:
+  #   class: pfs.drp.qa.extractionQaCombined.ExtractionQaCombinedTask
   imageQualityQa:
     class: pfs.drp.qa.imageQualityQa.ImageQualityQaTask
   dmLineResiduals:
