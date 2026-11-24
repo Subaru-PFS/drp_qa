@@ -8,7 +8,7 @@ import argparse
 import getpass
 from collections.abc import Sequence
 
-__all__ = ["EXIT_REFUSED", "judgeMain", "loadMain", "valuesMain"]
+__all__ = ["EXIT_REFUSED", "judgeMain", "loadMain", "markReduceFailedMain", "valuesMain"]
 
 #: ``values``: exit status when a candidate was refused, so the values in force stayed for it.
 EXIT_REFUSED = 1
@@ -211,4 +211,54 @@ def judgeMain(argv: Sequence[str] | None = None) -> int:
     from pfs.drp.qa.qadb.judge import judgeStored
 
     judgeStored(_qadb(args), args.collection, *args.visits, dryRun=args.dry_run, log=say)
+    return 0
+
+
+def markReduceFailedMain(argv: Sequence[str] | None = None) -> int:
+    """Record a visit's reduceExposure failure in qadb, so the dashboard shows REDUCE FAILED, not Awaiting.
+
+    When reduceExposure fails the qaActor skips QA, so no numbers are loaded and the visit
+    reads as AWAITING / NO RESULT on the dashboard. This writes a ``REDUCE FAILED`` ``qa_gate``
+    verdict for each detector the visit exposed (read from the opdb), under the actor's collection
+    and a RUN of its own, so the dashboard reads the failure as a verdict. Idempotent; no schema change.
+    """
+    parser = argparse.ArgumentParser(
+        description="Mark a visit's reduceExposure failure in qadb as a REDUCE FAILED verdict."
+    )
+    parser.add_argument(
+        "-c", "--collection", required=True, help="the actor's output collection, as the dashboard reads it"
+    )
+    parser.add_argument(
+        "--run", required=True, help="the Butler RUN for the failed attempt (data_processing_pipe2d.run_name)"
+    )
+    parser.add_argument("--visit", type=int, required=True, help="the visit whose reduceExposure failed")
+    parser.add_argument("--return-code", type=int, default=None, help="the reduceExposure returnCode")
+    parser.add_argument("--status", default="", help="the reduceExposure status string (e.g. FAILED)")
+    _qadbOptions(parser)
+    parser.add_argument(
+        "--opdb-host", required=True, help="the opdb's host: the visit's exposed cameras are read from it"
+    )
+    parser.add_argument("--opdb-port", type=int, default=5432, help="opdb port (default 5432)")
+    parser.add_argument(
+        "--opdb-user", default="public_user", help="opdb user; reading suffices (default public_user)"
+    )
+    parser.add_argument("--opdb-dbname", default="opdb", help="opdb database name (default opdb)")
+    args = parser.parse_args(argv)
+
+    from pfs.drp.qa.qadb.reduceFailed import markReduceFailed
+    from pfs.utils.database.opdb import OpDB
+
+    opdb = OpDB(host=args.opdb_host, port=args.opdb_port, dbname=args.opdb_dbname, user=args.opdb_user)
+    written = markReduceFailed(
+        _qadb(args),
+        opdb,
+        args.collection,
+        args.run,
+        args.visit,
+        returnCode=args.return_code,
+        status=args.status,
+        log=say,
+    )
+    if written == 0:
+        say(f"visit {args.visit}: nothing marked")
     return 0

@@ -12,6 +12,13 @@ made, and earlier sections to the weekly tag alone.
 
 ### Added
 
+- **`drpQa.py markReduceFailed`** (PIPE2D-2036) — records a visit's reduceExposure failure in qadb, so the
+  dashboard shows it as a verdict instead of leaving it AWAITING. When reduceExposure fails the qaActor
+  skips QA and nothing is loaded, so the visit reads as still-pending. This stack-free qadb+opdb subcommand
+  writes a `REDUCE FAILED` `qa_gate` verdict (`qa_decided_by="reduceExposure"`, the returnCode in
+  `qa_reason`) for each detector the visit exposed (from the opdb), under the actor's collection and a RUN of
+  its own. No schema change: `qa_status` is free text, and the row needs only the `data_processing_pipe2d`
+  and `pfs_visit` rows the writer makes. The measurement is `pfs.drp.qa.qadb.reduceFailed.markReduceFailed`.
 - **Slit-offset QA** (PIPE2D-1677) — the per-fiber spatial and spectral slit offsets carved into a
   `detectorMap_calib` are now checked. The stack-free measurement is `pfs.drp.qa.metrics.slitOffsets`:
   `slitOffsetResiduals`/`flagOutliers`/`offsetSummary` detrend each MTP ferrule and flag per-fiber outliers,
