@@ -66,6 +66,12 @@ def testReasonWithoutAReturnCode(qadb):
     assert qadb.query_scalar("SELECT qa_reason FROM qa_gate") == "reduceExposure failed"
 
 
+def testReasonKeepsTheStatusWithoutAReturnCode(qadb):
+    # A status given without a returnCode (the CLI permits it) must not be dropped.
+    markReduceFailed(qadb, FakeOpDB(_cameras(6, ["b1"])), "u/test/qa", "run/6", 6, status="FAILED")
+    assert qadb.query_scalar("SELECT qa_reason FROM qa_gate") == "reduceExposure failed (FAILED)"
+
+
 def testVisitDescriptionCopiedFromOpdbWhenKnown(qadb):
     visits = pd.DataFrame(
         {

@@ -33,14 +33,17 @@ _DECIDED_BY = "reduceExposure"
 
 
 def _reason(returnCode: int | None, status: str) -> str:
-    """Return the ``qa_gate.qa_reason`` text, e.g. ``reduceExposure failed (returnCode 1: FAILED)``."""
-    reason = "reduceExposure failed"
+    """Return the ``qa_gate.qa_reason`` text, e.g. ``reduceExposure failed (returnCode 1: FAILED)``.
+
+    Either part may be absent: ``(returnCode 1)``, ``(FAILED)`` or nothing beyond ``reduceExposure failed``.
+    """
+    parts = []
     if returnCode is not None:
-        detail = f"returnCode {returnCode}"
-        if status:
-            detail += f": {status}"
-        reason = f"{reason} ({detail})"
-    return reason
+        parts.append(f"returnCode {returnCode}")
+    if status:
+        parts.append(status)
+    detail = ": ".join(parts)
+    return f"reduceExposure failed ({detail})" if detail else "reduceExposure failed"
 
 
 def markReduceFailed(
