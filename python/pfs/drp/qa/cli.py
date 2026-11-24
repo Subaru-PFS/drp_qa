@@ -42,6 +42,11 @@ COMMANDS: dict[tuple[str, ...], tuple[str, str, str]] = {
     ),
     ("values",): ("pfs.drp.qa.qadb.cli", "valuesMain", "make, compare and accept a run's normal values"),
     ("judge",): ("pfs.drp.qa.qadb.cli", "judgeMain", "judge stored numbers again for a visit range"),
+    ("markReduceFailed",): (
+        "pfs.drp.qa.qadb.cli",
+        "markReduceFailedMain",
+        "mark a visit's reduceExposure failure in qadb as a REDUCE FAILED verdict",
+    ),
     ("summary",): ("pfs.drp.qa.qadb.visitSummary", "main", "the verdict of each visit, with an exit status"),
     ("calib", "inputs"): (
         "pfs.drp.qa.comparison.calibInputsCli",
