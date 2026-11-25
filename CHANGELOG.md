@@ -10,6 +10,8 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-11-24
+
 ### Changed
 
 - **Guider boresight reference** (PIPE2D-1910) — `coordinates.addReferencePositions(..., "boresight")` now
@@ -18,6 +20,13 @@ made, and earlier sections to the weekly tag alone.
   `agc_nominal_[xy]_mm` jumps (~90 µm in Run 30's raster) and the one shift lands between the pointings; limit
   the rows to one pointing first (e.g. `shutter_open == 1`). A `test_realData.py` negative control pins it: a
   3.8 µm nominal-to-boresight residual on one pointing, 50 µm across both. No behaviour change.
+
+### Removed
+
+- **`OverlapRegionLinesTask`** (PIPE2D-1375) — `pfs.drp.qa.tasks.overlapRegionLines`, and the `tasks` package
+  it was alone in, are gone. Nothing has called the task since the Gen3 conversion, it was not in
+  `drpQA.yaml`, and it only drew a plot. Its check, that a sky line seen in two arms of a spectrograph gives
+  the same wavelength in both, is not made by any current task.
 
 ## [0.18.0] - 2026-11-23
 
