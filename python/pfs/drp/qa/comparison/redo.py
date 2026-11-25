@@ -220,6 +220,8 @@ RESULT_NEUTRAL_PATHS = (
             "butlerQueries.py",
             "calibInputs.py",
             "calibInputsCli.py",
+            "calibProfiles.py",
+            "calibProfilesCli.py",
             "calibValidate.py",
             "calibValidateCli.py",
             "classify.py",
@@ -231,6 +233,11 @@ RESULT_NEUTRAL_PATHS = (
         )
     ),
     "python/pfs/drp/qa/plotting/calibInputs.py",
+    "python/pfs/drp/qa/plotting/fiberProfiles.py",
+    # fiberProfilesQa is not in drpQA.yaml: a redo runs none of it. They count again once it is.
+    "python/pfs/drp/qa/fiberProfilesQa.py",
+    "python/pfs/drp/qa/metrics/fiberProfiles.py",
+    "pipelines/fiberProfilesQa.yaml",
     # The tasks write numbers only: the limits and the judging cannot change them.
     "python/pfs/drp/qa/metrics/registry.py",
     "python/pfs/drp/qa/metrics/gate.py",

@@ -21,3 +21,12 @@ def testMeasureLabelsAreRegisteredInDrpQa():
         assert re.search(rf"^  {label}:$", drpQa, flags=re.MULTILINE), label
     # Negative control: mergeArms is one of reduceExposure's labels, not one drpQA registers.
     assert not re.search(r"^  mergeArms:$", drpQa, flags=re.MULTILINE)
+
+
+def testFiberProfilesQaHasAPipelineOfItsOwn():
+    """``drpQa.py calib profiles`` runs it on a candidate calibration; it is not part of the nightly pipeline."""
+    own = (PIPELINES / "fiberProfilesQa.yaml").read_text()
+    assert re.search(r"^  fiberProfilesQa:$", own, flags=re.MULTILINE)
+    assert "class: pfs.drp.qa.fiberProfilesQa.FiberProfilesQaTask" in own
+    # Negative control: the QA actor's pipeline does not register it.
+    assert not re.search(r"^  fiberProfilesQa:$", (PIPELINES / "drpQA.yaml").read_text(), flags=re.MULTILINE)

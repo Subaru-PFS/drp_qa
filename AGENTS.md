@@ -61,6 +61,13 @@ the pipeline/config glue to run them.
     ran — even a detector whose reduction never started. Loaded into `detector_health_qa`.
 - **QA modules *not* wired into `drpQA.yaml`** — these exist as `PipelineTask`s or CLIs
   but must be run via their own pipeline/entry point:
+  - `fiberProfilesQa.py` — measures a `fiberProfiles` calibration, per detector: one row per fiber
+    (`fiberProfilesQaFibers`: width, wing light, `wingExcess` against the slit neighbours, and whether
+    the profile is a copy of its neighbours, `replaced`) and the detector's metrics in long format
+    (`fiberProfilesQaMetrics`). Numbers only. It has its own pipeline, `pipelines/fiberProfilesQa.yaml`,
+    which `drpQa.py calib profiles` runs on a candidate calibration before it is certified; the
+    stack-free measurement is `metrics/fiberProfiles.py`. It skips visits that are not quartzes unless
+    `anyFrameType` is set, so that it can join `drpQA.yaml` once something reads its tables
   - `skySubtractionQa.py` — sky subtraction accuracy (`SkyArmSubtractionTask`,
     `SkySubtractionQaTask`)
   - `fluxCalQa.py`, `fluxCal/fluxCalQA.py` — flux calibration validation
@@ -122,6 +129,15 @@ the pipeline/config glue to run them.
     `imageQualityQa`'s unjudged measurements; `twilight` measures twilight sequences, each exposure
     against the sequence's others; `visitRollup` rolls verdicts up to one per visit; `readers` reads
     the tasks' tables from a Butler it is given.
+  - `fiberProfiles` is `fiberProfilesQa`'s measurement: per-swath and per-fiber statistics of a
+    `fiberProfiles` calibration, each fiber against its slit neighbours (`neighbourResidual`) and against
+    another calibration (`compareFibers`), and the profiles drp_stella replaced with the mean of two to four
+    neighbours' (`findReplaced`), which are left out of that reference. Tested in `tests/fiberProfiles/`, on
+    synthetic profiles and on the Run30 and Run31 calibrations of r4 (`data/makeProfileFixtures.py`).
+    `WING_EXCESS_LIMIT` is the run-level listing limit of `drpQa.py calib profiles`
+    (`comparison/calibProfiles.py`, `calibProfilesCli.py`), which measures candidate calibrations before one
+    is certified and reports what to do, the fibers over the limit (a row per fiber, an arm per column) and
+    the detectors, against the calibration in force, with `plotting/fiberProfiles.py`'s figure.
   - `slitOffsets` is the slit-offset measurement (PIPE2D-1677): per-fiber outliers within an MTP
     ferrule (`slitOffsetResiduals`/`flagOutliers`/`offsetSummary`), the cross-arm confirmed set
     (`crossArmConfirmed`) and the run-to-run change (`compareRuns`/`changeSummary`) are run-level, read
@@ -147,7 +163,8 @@ the pipeline/config glue to run them.
     `provenance.py` reads which calibrations a dataset was made with from its Butler provenance)
 - **Command-line tools (`bin.src/`)** — run as `python bin.src/<name>.py`:
   - `drpQa.py` — one command with a subcommand for each job (`pfs.drp.qa.cli.COMMANDS`): `redo`, `load`,
-    `values`, `judge`, `summary`, `calib inputs`, `calib validate`, `fiberNorms`, `agReport`. A
+    `values`, `judge`, `summary`, `calib inputs`, `calib validate`, `calib profiles`, `fiberNorms`,
+    `agReport`. A
     subcommand's module is imported only when it is asked for, so `values`, `judge` and `summary`,
     which read only qadb, run without the stack: keep them that way. Add a job as an entry of
     `COMMANDS`, not as a script. `summary`'s exit status is the worst visit verdict (0/1/2, 3 nothing
@@ -502,6 +519,10 @@ drpQA.yaml#dmLineResiduals           dims: (instrument, visit, arm, spectrograph
 drpQA.yaml#twilightFluxQa            dims: (instrument, visit, arm, spectrograph)
     ← reads: pfsArm, raw.metadata, pfsConfig (optional)
     → writes: twilightFiberFlux (twilights only)
+
+fiberProfilesQa.yaml (drpQa.py calib profiles; not in drpQA.yaml)   dims: (instrument, visit, arm, spectrograph)
+    ← reads: raw.metadata, fiberProfiles (calibration: the candidate's, first in the inputs), pfsConfig (optional)
+    → writes: fiberProfilesQaFibers, fiberProfilesQaMetrics (numbers, no verdict)
 
 drpQA.yaml#extractionQa              → extQaStats, extQaImage, extQaImage_pickle
 drpQA.yaml#extractionQaCombined      ← extQaImage_pickle (multiple)

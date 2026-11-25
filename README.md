@@ -125,6 +125,9 @@ but not judged, each with its reason:
 - Flagged-line rate (`pctFlagged`). It is a property of the line list and the fit's flags, not of the frame.
 - Saturation (`nSaturatedLines`, `pctSaturatedPixels`) and line flux. Stored for cross-visit comparison; no limit
   has been set.
+- The statistics of the `fiberProfiles` calibration (`fiberProfilesQa`). Measured before a calibration is
+  certified and listed for the person certifying it (`drpQa.py calib profiles`, by
+  `metrics.fiberProfiles.WING_EXCESS_LIMIT`): run-level, not stored per image or loaded into qadb.
 - Every number measured on a frame type of `registry.NOT_JUDGED` (the table above), for the reason given there.
 - Frames with no frame type. Their sequence type is missing or not in `SEQUENCE_TYPES`.
 
@@ -273,8 +276,8 @@ See [documentation](https://pipelines.lsst.io/modules/lsst.pipe.base/creating-a-
 
 Also see the example notebook [`examples/QA Pipelines.ipynb`](examples/QA%20Pipelines.ipynb).
 
-`drpQA.yaml` currently wires up `dmLineResiduals`, `extractionQa`, `extractionQaCombined`, `imageQualityQa` and
-`twilightFluxQa`. The
+`drpQA.yaml` currently wires up `dmLineResiduals`, `extractionQa`, `extractionQaCombined`, `imageQualityQa`,
+`twilightFluxQa` and `reductionStats`. The
 remaining tasks below are implemented and importable
 but are not registered in the pipeline; run them by referencing their task class directly.
 
@@ -549,6 +552,32 @@ exposures of its sequence, which one quantum cannot see. `drpQa.py load` measure
 is complete (see [Twilights](#twilights)). Any other visit is skipped from the raw header (the
 pfsConfig's standing in) before its pfsArm is read, so running it on every visit costs the header and the pfsConfig.
 Raws without those cards (before 2025-11) need `assumeTwilight` and a data query selecting the twilights.
+
+#### `fiberProfilesQa`
+
+Per detector, measures the `fiberProfiles` calibration the collections resolve for a visit
+(`pfs.drp.qa.metrics.fiberProfiles`) and stores numbers only. It is not in `drpQA.yaml`: it has a pipeline of its
+own, `pipelines/fiberProfilesQa.yaml`, which `drpQa.py calib profiles` runs on a candidate calibration before it
+is certified (see
+[Checking fiber profiles before they are certified](#checking-fiber-profiles-before-they-are-certified)).
+
+- `fiberProfilesQaFibers`, one row per fiber: the profile's width at half maximum, core centroid, wing fraction
+  (the share of its light 4 px or more from the center), highest wing value, lowest value and swath-to-swath
+  variation; `wingExcess` and `fwhmExcess`, the wing fraction and width minus their median over the fibers
+  beside it on the slit; and `replaced` with its `donors`, for a profile that is the mean of two to four nearby
+  fibers' profiles. drp_stella stores such a copy for a fiber it has no trustworthy measurement of, and the
+  calibration does not mark it: a copy inherits whatever its donors carry, and it is left out of the
+  neighbours a measured profile is set against.
+- `fiberProfilesQaMetrics`, long format: `nProfiles`, `nMissing` (against the pfsConfig's fibers, engineering
+  fibers apart), `nPlaceholder`, `nReplaced`, `nUnmeasured`, `medProfileFwhm`, `medWingFrac`, `medVariation`, `maxWingExcess`
+  and `maxAbsFwhmExcess` over the measured profiles, `maxWingExcessReplaced` over the copies, and
+  `minProfileValue`.
+
+With a candidate calibration's collection first in the inputs, it is the candidate that is measured.
+`calibVisit0` in both tables says which calibration a row is of, and `calibRun` the Butler RUN it was read from.
+The task measures on a quartz, and skips any other visit from the raw header before the calibration is read, so
+that it can join a nightly pipeline; `fiberProfilesQa:anyFrameType=True`, which `drpQa.py calib profiles` sets,
+measures on a visit of any type.
 
 #### `fiberNormsQa`
 
@@ -834,6 +863,49 @@ The set's own images read near zero against a calibration built from them, so th
 comparison. A candidate built from the go/no-go pick is made with the certified build's own task configurations,
 stack and inputs (read from its collection) and only the visit list changed.
 
+### Checking fiber profiles before they are certified
+
+`drpQa.py calib profiles` measures candidate `fiberProfiles` calibrations before one is certified. `run`
+measures each candidate with `fiberProfilesQa`, the candidate's collection first in the inputs so its
+`fiberProfiles` is the one resolved (an empty collection means the inputs as they are: the calibration in
+force), into `<prefix>/<label>`. `--visit` names visits of the run the candidates are for, of any frame type:
+each gives the fiber configuration, the date the calibration in force is resolved at and the detectors it
+exposed, and nothing of it is reduced. A visit has the red arm in low or in medium resolution, so name one of
+each to measure all four arms.
+`report` writes a Markdown report (`pfs.drp.qa.comparison.calibProfiles`) with a figure of every fiber's wing
+light along the slits (`plotting.fiberProfiles.plotWingExcess`). For each candidate it gives:
+
+- **What to do**: the measured fibers over the limit, which stand against certifying the calibration as built;
+  those that the calibration in force already has; the copies over the limit, which clear when the fibers they
+  are the mean of do; a detector whose calibration was not the candidate's own (its collection holds none, so
+  the inputs after it were measured instead); a whole detector whose median wing fraction moved; and fibers
+  with no profile or none that could be measured.
+- **Fibers over the limit**: one row per fiber, in order along the slit, an arm per column.
+- **Detectors**: each detector's numbers, with the change from the calibration in force.
+
+A candidate is `LABEL=COLLECTION`. The label is a name of your choosing: it names the candidate in the report
+and its output collection, `<prefix>/<label>`. That collection is defined with the candidate's collection first, so
+a label stays with the collection it was first run with: measure a rebuilt candidate under a new label or a new
+`--prefix`. Give the collection the build's RUNs sit under, as `pipetask` names them; a RUN outside it counts as
+not the candidate's.
+
+With `--previous` the candidate is set against the calibration in force, which gets no section of its own.
+Give the calibration in force as `asis=`: it is then whatever is certified for each detector, whichever run built
+it. A named collection is a reference only for the detectors it holds.
+
+```bash
+python bin.src/drpQa.py calib profiles run --visit 156021 155123 --prefix u/wtg/profiles/run31 \
+    --candidate asis= --candidate new=<the build's output collection>
+python bin.src/drpQa.py calib profiles report --visit 156021 155123 --prefix u/wtg/profiles/run31 \
+    --candidate asis= --candidate new=<the build's output collection> --previous asis -o profiles-run31.md
+```
+
+A fiber is over the limit when its wing fraction is more than 0.01 (`metrics.fiberProfiles.WING_EXCESS_LIMIT`)
+above the median of the measured fibers beside it on the slit. It is a listing for the person about to certify,
+as the slit-offset outliers of `calib validate` are, not a verdict on an image. A whole detector that drifts,
+such as a floor of light under every profile, moves no fiber against its neighbours: it is named when its median
+wing fraction changed by more than the same limit.
+
 ## Loading QA results into qadb
 
 `drpQa.py load` copies what `imageQualityQa`, `dmLineResiduals` and `twilightFluxQa` wrote to the Butler into
@@ -931,6 +1003,7 @@ python bin.src/drpQa.py <subcommand> --help    # a subcommand's options
 | `summary` | Prints the verdict of each visit of a collection, and exits with the worst | no | [Verdicts per visit](#verdicts-per-visit) |
 | `calib inputs` | Says which exposures of a calibration set to build from, per detector | yes (the Butler) | [Calibration inputs](#calibration-inputs) |
 | `calib validate` | Compares candidate calibrations on the same visits | yes | [Validating a built calibration](#validating-a-built-calibration) |
+| `calib profiles` | Measures candidate `fiberProfiles` calibrations before one is certified | yes | [Checking fiber profiles before they are certified](#checking-fiber-profiles-before-they-are-certified) |
 | `fiberNorms` | Plots fiber normalizations from a Butler collection (`pfs.drp.qa.fiberNormsQa.main`) | yes | |
 | `agReport` | The end-of-run guider report | no | [End-of-run report](#end-of-run-report) |
 

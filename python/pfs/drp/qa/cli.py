@@ -14,6 +14,7 @@ when it is asked for, so those that read only qadb (``values``, ``judge``,
 ``summary``         Give the verdict of each visit of a collection, with an exit status.
 ``calib inputs``    Choose a calibration set's exposures.
 ``calib validate``  Validate candidate calibrations.
+``calib profiles``  Measure candidate fiberProfiles calibrations before one is certified.
 ``fiberNorms``      The fiber-norm QA.
 ``agReport``        The end-of-run guider report.
 =================== ====================================================================================
@@ -57,6 +58,11 @@ COMMANDS: dict[tuple[str, ...], tuple[str, str, str]] = {
         "pfs.drp.qa.comparison.calibValidateCli",
         "main",
         "validate candidate calibrations",
+    ),
+    ("calib", "profiles"): (
+        "pfs.drp.qa.comparison.calibProfilesCli",
+        "main",
+        "measure candidate fiberProfiles calibrations before one is certified",
     ),
     ("fiberNorms",): ("pfs.drp.qa.fiberNormsQa", "main", "the fiber-norm QA"),
     ("agReport",): ("pfs.drp.qa.guiders.runReport", "main", "the end-of-run guider report"),

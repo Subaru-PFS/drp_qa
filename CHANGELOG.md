@@ -10,6 +10,31 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Added
+
+- **`drpQa.py calib profiles`: fiber profiles are checked before they are certified** (PIPE2D-1247) — `run`
+  measures each candidate `fiberProfiles` calibration, its collection first in the inputs, on any visit of the
+  run; `report` writes a Markdown report with a figure of every fiber's wing light along the slits. The report
+  says what to do: the measured fibers whose wing fraction is more than 0.01
+  (`metrics.fiberProfiles.WING_EXCESS_LIMIT`) above their measured slit neighbours, which stand against
+  certifying the calibration as built, apart from those the calibration in force already has; the copies over
+  the limit; a detector whose calibration was not the candidate's own; and a whole detector whose median wing
+  fraction moved. Then the fibers over the limit, a row per fiber and an arm per column, and each detector's
+  numbers with the change from the calibration in force. Replayed on Run31's build against Run30's, it names
+  31 measured fibers on spectrographs 3 and 4 and the rise of b4's wing light.
+- **`fiberProfilesQa`: a task that measures a `fiberProfiles` calibration** (PIPE2D-1247) — with a pipeline of
+  its own, `pipelines/fiberProfilesQa.yaml`, which the command runs; it is not in `drpQA.yaml`. It stores
+  `fiberProfilesQaFibers` (one row per fiber) and `fiberProfilesQaMetrics` (the detector's metrics, long
+  format), with the calibration's first visit and the RUN it was read from. Per fiber: width at half maximum,
+  core centroid, the share of light and the highest value 4 px or more from the center, the lowest value and
+  the swath-to-swath variation; `wingExcess` and `fwhmExcess` against the measured fibers beside it on the
+  slit; and `replaced`, with its `donors`, for a profile that is the mean of two to four nearby fibers'
+  profiles (drp_stella stores such copies unmarked, and a copy inherits what its donors carry). The stack-free
+  measurement is `pfs.drp.qa.metrics.fiberProfiles`, which also sets one calibration against another
+  (`compareFibers`). Numbers only: nothing is loaded into qadb or judged. On Run31's r4 it measures the fibers
+  reported with a neighbour's light at 0.05 to 0.20 and 12 copies that inherited it; Run30's r4 reads below
+  0.02 (`tests/fiberProfiles/`, on the real profiles).
+
 ## [0.18.1] - 2026-11-24
 
 ### Changed

@@ -18,6 +18,7 @@ STACK_FREE_MODULES = (
     ("markReduceFailed",),
     ("calib", "inputs"),
     ("calib", "validate"),
+    ("calib", "profiles"),
     ("agReport",),
 )
 
@@ -32,6 +33,7 @@ def testSubcommands():
         ("summary",),
         ("calib", "inputs"),
         ("calib", "validate"),
+        ("calib", "profiles"),
         ("fiberNorms",),
         ("agReport",),
     ]
