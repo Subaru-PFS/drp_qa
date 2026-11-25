@@ -6,21 +6,27 @@ import pytest
 
 from pfs.drp.qa.guiders.runAnalysis import (
     CAMERA_GROUPS,
+    DETECTION_FLAG_COLUMNS,
     CameraState,
     RunConfig,
     axialMean,
+    cameraFocus,
     cameraSummary,
     describePeriod,
+    detectionFlagShares,
     findDropouts,
     findFlags,
     findRejectionClusters,
     fitModelErrors,
     groupSummary,
     isRejectedOffset,
+    magnitudeSummary,
     nightPosition,
     onSkyRa,
     prepareRun,
+    runSummary,
     settledJitter,
+    stateShares,
     summariseModelErrors,
 )
 from pfs.utils.datamodel.ag import GuideOffsetFlag
@@ -321,7 +327,7 @@ def testCameraSummary(makeAgRunTables):
     assert summary.loc["exposures with rejected matches clustered on it alone", "AG3"] == 7
     assert summary.loc["their direction (°)", "AG3"] == pytest.approx(90, abs=1)
     assert np.isclose(summary.loc["position-model error at 500 px (µm)", "AG3"], 6.5, atol=0.3)
-    assert summary.loc["focus minus 6-camera median (µm)", "AG1"] == pytest.approx(10.0, abs=1.0)
+    assert summary.loc["focus minus the cameras' median (µm)", "AG1"] == pytest.approx(10.0, abs=1.0)
 
 
 def testAxialMeanWraps():
@@ -387,3 +393,155 @@ def testCameraChecksUsePlottedNightsOnly(makeAgRunTables):
     # Negative control: plotted, the same run has both.
     shown = prepareRun(tables)
     assert len(findRejectionClusters(shown)) == 5 and len(fitModelErrors(shown))
+
+
+def _flagText(run):
+    return "\n".join(flag.text for flag in findFlags(run, settledJitter(run), findDropouts(run)))
+
+
+def testCameraNotInUse(makeAgRunTables):
+    """A camera with no detections in the whole run is named once and left out of every comparison."""
+    tables = makeAgRunTables(deadFrom={1: 0})
+    tables["exposures"]["guide_delta_z2"] = np.nan  # as the guider writes for a camera with no stars
+    run = prepareRun(tables)
+    jitter = settledJitter(run)
+    flags = findFlags(run, jitter, findDropouts(run))
+
+    assert run.inUse == (0, 2, 3, 4, 5)
+    assert [(flag.text, flag.severe, flag.agc_camera_id) for flag in flags] == [
+        ("AG2: not in use (no detections in any of the run's 320 AG exposures).", False, 1)
+    ]
+    assert findDropouts(run).empty
+    assert jitter.full.all()
+    # The focus is still compared, among the five: AG1/3/5 +10 µm and AG4/6 -10 µm about a median of +10.
+    assert list(cameraFocus(run).columns) == [0, 2, 3, 4, 5]
+    groups = groupSummary(run)
+    assert np.allclose(groups.loc["focus minus the cameras' median (µm)"], [0.0, -20.0], atol=1.5)
+    assert (groups.loc["matched (% of judged exposures)"] == 100).all()
+    summary = cameraSummary(run, findRejectionClusters(run), fitModelErrors(run))
+    assert summary["AG2"].isna().all()
+    assert summary.drop(columns="AG2").loc["matched (% of judged exposures)"].eq(100).all()
+    # Negative control: a camera that stops during the run was in use, and its loss is a fault.
+    lost = prepareRun(makeAgRunTables(deadFrom={1: 100}))
+    assert lost.inUse == tuple(range(6))
+    assert "**AG2: no detections at all in 220 consecutive AG exposures**" in _flagText(lost)
+    assert not settledJitter(lost).full.all()
+
+
+def testDisabledCamera(makeAgRunTables):
+    """A camera the guider left out of its fit is DISABLED: its matches are not good ones, and it is flagged."""
+    run = prepareRun(makeAgRunTables(disabledFrom={3: 200}), RunConfig(longDropout=100))
+    frames = run.frames
+
+    assert (frames.state3.iloc[200:] == CameraState.DISABLED).all()
+    assert (frames.n_good3.iloc[200:] == 0).all() and (frames.n_spots3.iloc[200:] == 8).all()
+    assert (frames.n_cams.iloc[200:] == 5).all()
+    (dropout,) = findDropouts(run).itertuples()
+    assert (dropout.agc_camera_id, dropout.n_frames, dropout.disabled, dropout.dark) == (3, 120, True, False)
+    assert "**AG4: left out of the guider's fit (disabled) in 120 consecutive AG exposures**" in _flagText(
+        run
+    )
+    # Negative control: before then it was matched like the others.
+    assert (frames.state3.iloc[:200] == CameraState.OK).all()
+
+
+def testSettledSizeAndJitter(makeAgRunTables):
+    """A steady pointing error shows in the size of the settled offsets, not in their jitter."""
+    tables = makeAgRunTables()
+    exposures = tables["exposures"]
+    biased = exposures.pfs_visit_id == 150002
+    exposures.loc[biased, "guide_delta_dec"] += 0.3
+    jitter = settledJitter(prepareRun(tables)).set_index("pfs_visit_id")
+
+    assert jitter.dec_size[150002] == pytest.approx(np.hypot(0.3, 0.05), rel=0.1)
+    assert jitter.dec[150002] == pytest.approx(0.05, rel=0.35)
+    assert jitter.dec_size.drop(150002).between(0.03, 0.07).all()
+    assert (jitter.residual_um == 12.0).all()
+    # Negative control: the jitter doesn't see the 0.3″.
+    assert not np.isclose(jitter.dec[150002], jitter.dec_size[150002], rtol=0.5)
+
+
+def testStateShares(makeAgRunTables):
+    """Each camera's states are counted per hour of each night, among the exposures with a star somewhere."""
+    tables = makeAgRunTables(nNights=1, nVisits=4, nExp=90, deadFrom={0: 330}, disabledFrom={4: 0})
+    shares = stateShares(prepareRun(tables))
+    ag1 = shares[shares.agc_camera_id == 0].set_index("slot")
+
+    # 360 exposures 10 s apart from 19:00: slots 1 and 2 (19:00-21:00); AG1 dies 55 min in.
+    assert ag1.n.to_dict() == {1: 359, 2: 1}
+    assert (ag1.matched[1], ag1.dark[1], ag1.dark[2]) == (330, 29, 1)
+    assert (ag1[["matched", "unmatched", "dark", "disabled", "few_stars"]].sum(axis=1) == ag1.n).all()
+    ag5 = shares[shares.agc_camera_id == 4]
+    assert (ag5.disabled == ag5.n).all()
+    # Negative control: a camera that kept matching has no other state.
+    ag2 = shares[shares.agc_camera_id == 1]
+    assert (ag2.matched == ag2.n).all()
+
+
+def testMagnitudeSummary(makeAgRunTables):
+    """The share of designed guide stars matched, by camera and magnitude."""
+    summary = magnitudeSummary(prepareRun(makeAgRunTables(deadFrom={2: 160})))
+    fraction = summary.set_index(["agc_camera_id", "magnitude"]).fraction
+
+    assert fraction[0, 14.0] == 1.0 and fraction[0, 19.0] == 0.5
+    # AG3 detected nothing in the second half of the run.
+    assert fraction[2, 14.0] == 0.5 and fraction[2, 19.0] == 0.25
+    # Negative control: the faint stars aren't matched as often as the bright ones.
+    assert not np.isclose(fraction[0, 19.0], fraction[0, 14.0])
+
+
+def testDetectionFlagShares(makeAgRunTables):
+    tables = makeAgRunTables()
+    cameras = tables["cameras"]
+    cameras.loc[cameras.agc_camera_id == 5, "n_saturated"] = 2
+    shares = detectionFlagShares(prepareRun(tables))
+
+    assert list(shares.columns) == [
+        "night",
+        "agc_camera_id",
+        "EDGE",
+        *list(DETECTION_FLAG_COLUMNS.values())[1:],
+        "n_spots",
+    ]
+    assert len(shares) == 2 * 6 and (shares.EDGE == 25.0).all()
+    assert (shares.SATURATED[shares.agc_camera_id == 5] == 50.0).all()
+    # Negative control: the other cameras have no saturated detection.
+    assert (shares.SATURATED[shares.agc_camera_id != 5] == 0.0).all()
+
+
+def testRunSummary(makeAgRunTables):
+    tables = makeAgRunTables()
+    exposures = tables["exposures"]
+    exposures.loc[50, "mask"] = 1
+    exposures.loc[60, "mask"] = np.nan
+    run = prepareRun(tables)
+    summary = runSummary(run, settledJitter(run))
+
+    assert (summary["nights"], summary["exposures"], summary["scienceVisits"]) == (2, N_EXPOSURES, 8)
+    assert summary["camerasInUse"] == [f"AG{n}" for n in range(1, 7)]
+    assert summary["matchedStars"]["perExposure"] == 36 and summary["matchedStars"]["perCamera"]["AG4"] == 6
+    assert summary["matchedStars"]["underMinimumPct"] == 0.0
+    assert summary["residualUm"] == {"median": 12.0, "p95": 12.0}
+    assert summary["guideLoop"] == {"rejected": 1, "noOffset": 1}
+    for axis, expected in (("ra", 0.05), ("dec", 0.05), ("inr", 1.0)):
+        error = summary["guideError"][axis]
+        assert error["size"] == pytest.approx(expected, rel=0.3)
+        assert error["jitter"] == pytest.approx(expected, rel=0.3)
+        assert error["size95"] >= error["size"] and error["jitter95"] >= error["jitter"]
+
+
+def testPrepareRunFromAnOlderRead(makeAgRunTables):
+    """A read without the newer columns and the magnitudes table still prepares, with those results empty."""
+    tables = makeAgRunTables()
+    tables["cameras"] = tables["cameras"].drop(columns=["residual_um", "n_disabled", *DETECTION_FLAG_COLUMNS])
+    del tables["magnitudes"]
+    run = prepareRun(tables)
+
+    assert magnitudeSummary(run).empty and detectionFlagShares(run).empty
+    assert run.frames.residual_um.isna().all()
+    assert (run.frames[[f"state{cid}" for cid in range(6)]] == CameraState.OK).all().all()
+    summary = cameraSummary(run, findRejectionClusters(run), fitModelErrors(run))
+    assert summary.loc["detections flagged EDGE (%)"].isna().all()
+    # Negative control: with them, the same run has both.
+    full = prepareRun(makeAgRunTables())
+    assert not magnitudeSummary(full).empty and not detectionFlagShares(full).empty

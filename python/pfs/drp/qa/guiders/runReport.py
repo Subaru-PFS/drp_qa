@@ -37,23 +37,24 @@ from pfs.drp.qa.guiders.runAnalysis import (
     fitModelErrors,
     groupSummary,
     prepareRun,
+    runSummary,
     settledJitter,
     summariseModelErrors,
 )
-from pfs.drp.qa.guiders.runPlotting import CAMERA_ORDER
+from pfs.drp.qa.guiders.runPlotting import CAMERA_ORDER, GROUPS_NOTE, captions
 from pfs.utils import agMetrics
 
-__all__ = ["fetchRun", "loadRun", "main", "writeReport"]
+__all__ = ["fetchRun", "keyNumbers", "loadRun", "main", "writeReport"]
 
 #: Tables an older fetch lacks; without them the report leaves out the checks that need them.
-OPTIONAL_TABLES = ("grid",)
+OPTIONAL_TABLES = ("grid", "magnitudes")
 
 # What a fetch stamp's ``sigmaPix`` says when ``cameras.sigma_pix`` is the radius of the stars' variance.
 SIGMA_PIX_OF_VARIANCE = "variance"
 
 #: The run-wide figures of a report, by file name; each camera's follows, as ``camera-AG<n>``.
 FIGURES = {
-    "cameraPresence": ("Camera presence", lambda run, jitter: runPlotting.plotCameraPresence(run)),
+    "cameraPresence": ("Camera states", lambda run, jitter: runPlotting.plotCameraPresence(run)),
     "guiding": ("Guiding", runPlotting.plotGuiding),
     "focus": ("Focus", lambda run, jitter: runPlotting.plotFocus(run)),
     "acquisition": ("Acquisition", lambda run, jitter: runPlotting.plotAcquisition(run)),
@@ -166,6 +167,65 @@ def _table(frame: pd.DataFrame, fmt: str = "{:.2f}") -> list[str]:
     return lines
 
 
+def keyNumbers(summary: dict, config: RunConfig | None = None) -> list[tuple[str, str, str]]:
+    """Return the run's key numbers as text, for the top of a report.
+
+    Parameters
+    ----------
+    summary : `dict`
+        From `pfs.drp.qa.guiders.runAnalysis.runSummary`.
+    config : `pfs.drp.qa.guiders.runAnalysis.RunConfig`, optional
+        The parameters the run was analysed with.
+
+    Returns
+    -------
+    numbers : `list` [`tuple` [`str`, `str`, `str`]]
+        What it is, its value, and how it was measured.
+    """
+    config = config or RunConfig()
+    error, stars, loop = summary["guideError"], summary["matchedStars"], summary["guideLoop"]
+    pixelUm = 13.0
+
+    def pair(axis: str, key: str) -> str:
+        return f"{error[axis][key]:.3f}″ (95%: {error[axis][key + '95']:.3f}″)"
+
+    settled = f"median over {summary['settledVisits']} settled science visits"
+    return [
+        ("Cameras in use", ", ".join(summary["camerasInUse"]), "cameras with any detection in the run"),
+        *[
+            (f"Guide error, {name}", pair(axis, "size"), f"RMS of a visit's settled guide offsets; {settled}")
+            for axis, name in (("ra", "ΔRA on the sky"), ("dec", "ΔDec"), ("inr", "ΔInR"))
+        ],
+        *[
+            (f"Guide jitter, {name}", pair(axis, "jitter"), f"frame-to-frame; {settled}")
+            for axis, name in (("ra", "ΔRA on the sky"), ("dec", "ΔDec"), ("inr", "ΔInR"))
+        ],
+        (
+            "Star position, measured minus expected",
+            f"{summary['residualUm']['median']:.1f} µm = {summary['residualUm']['median'] / pixelUm:.2f} px "
+            f"(95%: {summary['residualUm']['p95']:.1f} µm)",
+            "distance of a good match from where the guider expected it; median over science AG exposures",
+        ),
+        (
+            "Matched stars per AG exposure",
+            f"{stars['perExposure']:.0f} (5%: {stars['p5']:.0f}); "
+            + ", ".join(f"{name} {n:.0f}" for name, n in stars["perCamera"].items()),
+            "good matches, all cameras then each; median over science AG exposures",
+        ),
+        (
+            f"AG exposures with fewer than {config.minFitStars} matched stars",
+            f"{stars['underMinimumPct']:.2f}%",
+            "of science AG exposures",
+        ),
+        ("FWHM of matched stars", f"{summary['fwhm']:.2f}″", "median over cameras and AG exposures"),
+        (
+            "Guide offsets rejected / not written",
+            f"{loop['rejected']} / {loop['noOffset']}",
+            f"of {summary['exposures']} AG exposures",
+        ),
+    ]
+
+
 def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) -> Path:
     """Write a run's report: Markdown, its figures (PNG) and its numbers (JSON).
 
@@ -193,6 +253,8 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
     flags = findFlags(run, jitter, dropouts, clusters, modelErrors)
     groups = groupSummary(run)
     cameras = cameraSummary(run, clusters, modelErrors)
+    summary = runSummary(run, jitter)
+    caption = captions(run.config)
     for name, (_, plot) in FIGURES.items():
         plot(run, jitter).savefig(outDir / f"{name}.png", dpi=150)
     for cid in CAMERA_ORDER:
@@ -212,22 +274,21 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
         "Offsets in arcsec, ΔRA on the sky (ΔRA cos Dec). Times HST. "
         f"{describePeriod(run)}.",
         "",
+        "## Key numbers",
+        "",
+        "| | | |",
+        "|---|---|---|",
+        *[f"| {what} | {value} | {how} |" for what, value, how in keyNumbers(summary, config)],
+        "",
         "## Flags",
         "",
         *([f"- {flag.text}" for flag in flags] or ["- None."]),
         "",
     ]
     for name, (heading, _) in FIGURES.items():
-        md += [f"## {heading}", "", f"![{heading}]({name}.png)", ""]
+        md += [f"## {heading}", "", f"![{heading}]({name}.png)", "", caption[name], ""]
         if name == "cameraPresence":
-            md += ["### AG1/3/5 against AG2/4/6", "", *_table(groups), ""]
-        if name == "guiding":
-            md += [
-                f"Settled: science visits' accepted guide offsets after their first {config.nSettle} guide frames, "
-                f"in visits with at least {config.minSettled} ({len(jitter)} visits). Jitter: the standard "
-                "deviation of consecutive differences / √2.",
-                "",
-            ]
+            md += ["### AG1/3/5 against AG2/4/6", "", GROUPS_NOTE, "", *_table(groups), ""]
     md += [
         "## Cameras",
         "",
@@ -237,6 +298,8 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
         "error is fitted from the good matches' residuals (measured minus expected position, less the camera's "
         "mean in each AG exposure, which the pointing moves together) across the detector; directions are on "
         "the detector, 0° = +x, 90° = +y.",
+        "",
+        caption["camera"],
         "",
         *_table(cameras),
         "",
@@ -270,6 +333,7 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
     metrics = {
         "title": title,
         "period": describePeriod(run),
+        "summary": summary,
         "flags": [flag.__dict__ for flag in flags],
         "jitterMedian": {axis: float(jitter[axis].median()) for axis in ("ra", "dec", "inr")}
         if len(jitter)

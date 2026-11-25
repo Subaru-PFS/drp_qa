@@ -10,6 +10,34 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Added
+
+- **AG run report: key numbers, captions, and more per camera** (INSTRM-3073) — `drpQa.py agReport` now opens
+  with the run's key numbers (`runAnalysis.runSummary`, also `summary` in `metrics.json`): the size (RMS of a
+  visit's settled offsets) and the frame-to-frame jitter of the guide error in ΔRA, ΔDec and ΔInR, the distance
+  of the good matches from where the guider expected them, and the stars matched per AG exposure and per camera.
+  Every figure has a caption (`runPlotting.captions`, and `GROUPS_NOTE` on why the cameras are in two groups).
+  The guiding figure shows the size of the error beside its jitter. Each camera's figure gains the share of its
+  designed guide stars matched, by magnitude (`runAnalysis.magnitudeSummary`, from the new `magnitudes` table of
+  `queries.readAgRun`), and the share of its detections carrying each of ics_agccActor's bad-detection flags
+  (`runAnalysis.detectionFlagShares`, from new counts in `cameras`). `runAnalysis.stateShares` gives the camera
+  states per hour, for the map and for `pfs_qa_dashboard`.
+
+### Changed
+
+- **AG run report: camera states** (INSTRM-3073) — "camera presence" is now a map of camera states, coloured by
+  what a camera did when it matched no star: no detections (red), detections but no match (amber), or left out
+  by the guider (`CameraState.DISABLED`, from `agc_match.camera_enabled`; blue). A camera with no detections in
+  the whole run is **not in use** (`AgRun.inUse`): it is named once, not flagged as a fault, and left out of the
+  group and camera comparisons, the "matched on every camera" marks and the focus medians, which are now taken
+  over the cameras in use (they were NaN whenever a camera had no focus value, as AG2 in Run 31). A dropout's
+  flag says when the camera was disabled.
+- **AG run report: good matches** (INSTRM-3073) — the `cameras` table of `queries.readAgRun` counts a good match
+  as `GOOD_MATCH` on a clean detection (`agc_data.flags` NONE or RIGHT) of a camera the guider had not left out,
+  for the count, the FWHM and the new `residual_um`. No change where the guider already matched only clean
+  detections (Run 31: every good match is one). A fetch made before this release still reports, without the
+  magnitudes, flag counts and residual: run `fetch` again for them.
+
 ## [0.18.1] - 2026-11-24
 
 ### Changed

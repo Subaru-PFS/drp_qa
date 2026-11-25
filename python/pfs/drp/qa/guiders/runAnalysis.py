@@ -24,24 +24,31 @@ from pfs.utils.datamodel.ag import GuideOffsetFlag
 
 __all__ = [
     "CAMERA_GROUPS",
+    "DETECTION_FLAG_COLUMNS",
+    "JUDGED_STATES",
     "SCIENCE_TYPES",
     "AgRun",
     "CameraState",
     "Flag",
     "RunConfig",
+    "cameraFocus",
     "cameraSummary",
     "describePeriod",
+    "detectionFlagShares",
     "findDropouts",
     "findFlags",
     "findRejectionClusters",
     "fitModelErrors",
     "groupSummary",
     "isRejectedOffset",
+    "magnitudeSummary",
     "nightOf",
     "nightPosition",
     "onSkyRa",
     "prepareRun",
+    "runSummary",
     "settledJitter",
+    "stateShares",
     "summariseModelErrors",
 ]
 
@@ -61,10 +68,22 @@ class CameraState:
     FEW_STARS = 1
     #: It detected something but matched none of the design's guide stars.
     UNMATCHED = 2
-    #: It detected nothing at all.
+    #: It detected nothing at all. The opdb holds a camera's detections, not whether it returned an image, so
+    #: a camera that is dead and one whose image held nothing look the same here.
     DARK = 3
+    #: The guider left it out of its fit (``agc_match.camera_enabled`` false).
+    DISABLED = 4
     #: No camera matched anything (the sky wasn't usable); the camera isn't judged.
     UNUSABLE = -1
+
+
+#: The states in which a camera is judged, in the order drawn: what it gave when it was expected to match.
+JUDGED_STATES = {
+    CameraState.OK: "matched",
+    CameraState.UNMATCHED: "detections, no match",
+    CameraState.DARK: "no detections",
+    CameraState.DISABLED: "disabled",
+}
 
 
 @dataclass(frozen=True)
@@ -165,18 +184,29 @@ class AgRun:
         One row per AG exposure, time-ordered: the ``exposures`` table plus
         ``night``, ``population`` (science, convergence, focus sweep or
         other), ``pfs_design_id``, ``dec_center_designed``, ``n_good`` (good
-        matches over the cameras), ``n_cams`` (cameras with one) and, per
-        camera ``c``, ``n_spots{c}``, ``n_good{c}``, ``n_design{c}`` (its
-        design's bright guide stars) and ``state{c}`` (a `CameraState`).
+        matches over the cameras), ``n_cams`` (cameras with one),
+        ``residual_um`` (the good matches' distance from where the guider
+        expected them: the cameras' medians, weighted by their matches)
+        and, per camera ``c``, ``n_spots{c}``, ``n_good{c}``,
+        ``n_disabled{c}``, ``n_design{c}`` (its design's bright guide
+        stars) and ``state{c}`` (a `CameraState`).
     cameras : `pandas.DataFrame`
         The ``cameras`` table with ``fwhm`` (arcsec), ``night`` and
-        ``population``.
+        ``population``; a column an older read lacks is NaN (0 for
+        ``n_disabled``).
     focus : `pandas.DataFrame`
         The ``focus`` table with ``night``.
     nights : `pandas.Series`
         AG exposures per night.
     grid : `pandas.DataFrame`
         The ``grid`` table with ``night`` (empty if it wasn't read).
+    magnitudes : `pandas.DataFrame`
+        The ``magnitudes`` table with ``night`` and ``population`` (empty
+        if it wasn't read).
+    inUse : `tuple` [`int`, ...]
+        The cameras (``agc_camera_id``) that detected anything during the
+        run. One that never did was not in use: it is named once and left
+        out of every comparison between cameras.
     config : `RunConfig`
         The parameters it was prepared with.
     """
@@ -186,6 +216,8 @@ class AgRun:
     focus: pd.DataFrame
     nights: pd.Series
     grid: pd.DataFrame = field(default_factory=pd.DataFrame)
+    magnitudes: pd.DataFrame = field(default_factory=pd.DataFrame)
+    inUse: tuple[int, ...] = tuple(range(6))
     config: RunConfig = field(default_factory=RunConfig)
 
     @property
@@ -230,6 +262,18 @@ GRID_COLUMNS = [
     "dx_um",
     "dy_um",
 ]
+
+MAGNITUDE_COLUMNS = ["pfs_visit_id", "agc_camera_id", "magnitude", "n_expected", "n_good"]
+
+#: The columns of ``cameras`` counting detections with one of ics_agccActor's bad-detection flags, with the
+#: flag's name (`pfs.drp.qa.guiders.queries.AG_DETECTION_FLAGS`).
+DETECTION_FLAG_COLUMNS = {
+    "n_edge": "EDGE",
+    "n_saturated": "SATURATED",
+    "n_bad_shape": "BAD_SHAPE",
+    "n_bad_ellip": "BAD_ELLIP",
+    "n_bad_size": "BAD_SIZE",
+}
 
 
 def nightOf(times: pd.Series) -> pd.Series:
@@ -277,7 +321,15 @@ def prepareRun(tables: dict[str, pd.DataFrame], config: RunConfig | None = None)
     frames["population"] = _population(frames.sequence_type)
 
     cameras = tables["cameras"]
-    perCamera = cameras.groupby(["agc_exposure_id", "agc_camera_id"])[["n_spots", "n_good"]].sum()
+    # A read older than these columns lacks them: no camera was recorded as disabled, and the rest are unknown.
+    if "n_disabled" not in cameras:
+        cameras = cameras.assign(n_disabled=0)
+    cameras = cameras.assign(
+        **{name: np.nan for name in ("residual_um", *DETECTION_FLAG_COLUMNS) if name not in cameras}
+    )
+    perCamera = cameras.groupby(["agc_exposure_id", "agc_camera_id"])[
+        ["n_spots", "n_good", "n_disabled"]
+    ].sum()
     designStars = (
         tables["designStars"]
         .pivot_table(index="pfs_design_id", columns="agc_camera_id", values="n_bright", aggfunc="sum")
@@ -285,7 +337,7 @@ def prepareRun(tables: dict[str, pd.DataFrame], config: RunConfig | None = None)
         .fillna(0)
     )
     columns = {}
-    for name in ("n_spots", "n_good"):
+    for name in ("n_spots", "n_good", "n_disabled"):
         wide = perCamera[name].unstack().reindex(index=frames.agc_exposure_id, columns=range(6)).fillna(0)
         for cid in range(6):
             columns[f"{name}{cid}"] = wide[cid].to_numpy().astype(int)
@@ -301,14 +353,22 @@ def prepareRun(tables: dict[str, pd.DataFrame], config: RunConfig | None = None)
     for cid in range(6):
         state = np.select(
             [
+                frames[f"n_disabled{cid}"] > 0,
                 frames[f"n_good{cid}"] > 0,
                 frames[f"n_design{cid}"] < config.minDesignStars,
                 frames[f"n_spots{cid}"] > 0,
             ],
-            [CameraState.OK, CameraState.FEW_STARS, CameraState.UNMATCHED],
+            [CameraState.DISABLED, CameraState.OK, CameraState.FEW_STARS, CameraState.UNMATCHED],
             CameraState.DARK,
         )
         frames[f"state{cid}"] = np.where(usable, state, CameraState.UNUSABLE)
+    inUse = tuple(cid for cid in range(6) if frames[f"n_spots{cid}"].any()) or tuple(range(6))
+
+    matched = cameras[cameras.residual_um.notna() & (cameras.n_good > 0)]
+    residual = (matched.residual_um * matched.n_good).groupby(
+        matched.agc_exposure_id
+    ).sum() / matched.groupby("agc_exposure_id").n_good.sum()
+    frames["residual_um"] = frames.agc_exposure_id.map(residual)
 
     cameras = cameras.assign(fwhm=agMetrics.storedRadiusToFwhm(cameras.sigma_pix, variancePerMoment=1)).merge(
         frames[["agc_exposure_id", "night", "population"]], on="agc_exposure_id"
@@ -319,7 +379,22 @@ def prepareRun(tables: dict[str, pd.DataFrame], config: RunConfig | None = None)
     if grid is None:
         grid = pd.DataFrame(columns=GRID_COLUMNS)
     grid = grid.merge(frames[["agc_exposure_id", "night"]], on="agc_exposure_id")
-    return AgRun(frames=frames, cameras=cameras, focus=focus, nights=nights, grid=grid, config=config)
+    magnitudes = tables.get("magnitudes")
+    if magnitudes is None:
+        magnitudes = pd.DataFrame(columns=MAGNITUDE_COLUMNS)
+    magnitudes = magnitudes.merge(
+        frames.drop_duplicates("pfs_visit_id")[["pfs_visit_id", "night", "population"]], on="pfs_visit_id"
+    )
+    return AgRun(
+        frames=frames,
+        cameras=cameras,
+        focus=focus,
+        nights=nights,
+        grid=grid,
+        magnitudes=magnitudes,
+        inUse=inUse,
+        config=config,
+    )
 
 
 def onSkyRa(frames: pd.DataFrame) -> pd.Series:
@@ -352,14 +427,16 @@ def isRejectedOffset(mask: pd.Series, flag: GuideOffsetFlag = GuideOffsetFlag.IN
 
 
 def settledJitter(run: AgRun) -> pd.DataFrame:
-    """Return the settled frame-to-frame jitter of each science visit.
+    """Return the size and the frame-to-frame jitter of each science visit's settled guide offsets.
 
     A visit's settled frames are its accepted guide offsets after its first
     ``nSettle`` guide frames, rejected ones counted among those (the loop is
     still converging, whatever it did with them); visits with fewer than
-    ``minSettled`` settled frames are left out. The
-    jitter is the standard deviation of consecutive differences over √2,
-    which a slow drift barely changes.
+    ``minSettled`` settled frames are left out. A guide offset is the
+    pointing error the guider measured in that AG exposure, so their RMS
+    about zero is how large the error was, and the jitter, the standard
+    deviation of consecutive differences over √2, which a slow drift barely
+    changes, is how steady the measurement was.
 
     Parameters
     ----------
@@ -371,8 +448,11 @@ def settledJitter(run: AgRun) -> pd.DataFrame:
     jitter : `pandas.DataFrame`
         One row per visit: ``pfs_visit_id``, ``night``, ``taken_at`` (its
         first settled frame), ``n_frames``, ``n_good`` and ``n_cams`` (median
-        over its frames), and ``ra`` (on the sky), ``dec`` and ``inr``
-        (arcsec).
+        over its frames), ``full`` (stars were matched on every camera in
+        use), the jitter ``ra`` (on the sky), ``dec`` and ``inr`` (arcsec),
+        the size ``ra_size``, ``dec_size`` and ``inr_size`` (arcsec), and
+        ``residual_um`` (the median distance of its good matches from where
+        the guider expected them).
     """
     config = run.config
     frames = run.frames[run.frames.population.eq("science") & run.frames["mask"].notna()].copy()
@@ -385,11 +465,32 @@ def settledJitter(run: AgRun) -> pd.DataFrame:
         differences = differences[np.isfinite(differences)]
         return float(np.std(differences) / np.sqrt(2)) if len(differences) else np.nan
 
-    columns = ["pfs_visit_id", "night", "taken_at", "n_frames", "n_good", "n_cams", "ra", "dec", "inr"]
+    def size(values: pd.Series) -> float:
+        values = values.to_numpy(float)
+        values = values[np.isfinite(values)]
+        return float(np.sqrt(np.mean(values**2))) if len(values) else np.nan
+
+    columns = [
+        "pfs_visit_id",
+        "night",
+        "taken_at",
+        "n_frames",
+        "n_good",
+        "n_cams",
+        "full",
+        "ra",
+        "dec",
+        "inr",
+        "ra_size",
+        "dec_size",
+        "inr_size",
+        "residual_um",
+    ]
     rows = []
     for visit, group in frames.groupby("pfs_visit_id"):
         if len(group) < config.minSettled:
             continue
+        nCams = int(group.n_cams.median())
         rows.append(
             [
                 visit,
@@ -397,13 +498,18 @@ def settledJitter(run: AgRun) -> pd.DataFrame:
                 group.taken_at.iloc[0],
                 len(group),
                 group.n_good.median(),
-                int(group.n_cams.median()),
+                nCams,
+                nCams >= len(run.inUse),
                 jitter(group.ra),
                 jitter(group.guide_delta_dec),
                 jitter(group.guide_delta_insrot),
+                size(group.ra),
+                size(group.guide_delta_dec),
+                size(group.guide_delta_insrot),
+                group.residual_um.median(),
             ]
         )
-    return pd.DataFrame(rows, columns=columns)
+    return pd.DataFrame(rows, columns=columns).astype({"full": bool})
 
 
 def findDropouts(run: AgRun) -> pd.DataFrame:
@@ -411,8 +517,9 @@ def findDropouts(run: AgRun) -> pd.DataFrame:
 
     Only the AG exposures in which some camera matched a star, and in which
     the camera's design had at least ``minDesignStars`` bright guide stars,
-    are judged (`CameraState` OK, UNMATCHED or DARK). A dropout is at least
-    ``minDropout`` consecutive judged exposures that aren't OK.
+    are judged (`JUDGED_STATES`). A dropout is at least ``minDropout``
+    consecutive judged exposures that aren't OK. A camera not in use
+    (`AgRun.inUse`) has none: it is named once, by `findFlags`.
 
     Parameters
     ----------
@@ -425,8 +532,9 @@ def findDropouts(run: AgRun) -> pd.DataFrame:
         One row per dropout: ``agc_camera_id``, ``n_frames``, ``start`` and
         ``end`` (times of its first and last exposure), ``start_visit``,
         ``end_visit``, ``to_end`` (it lasts to the end of the run), ``dark``
-        (over 90% of its exposures detected nothing) and ``last_good`` (the
-        last match before it, or NaT).
+        (over 90% of its exposures detected nothing), ``disabled`` (over
+        90% had the camera left out of the fit) and ``last_good`` (the last
+        match before it, or NaT).
     """
     config = run.config
     columns = [
@@ -438,12 +546,12 @@ def findDropouts(run: AgRun) -> pd.DataFrame:
         "end_visit",
         "to_end",
         "dark",
+        "disabled",
         "last_good",
     ]
-    judged = [CameraState.OK, CameraState.UNMATCHED, CameraState.DARK]
     rows = []
-    for cid in range(6):
-        frames = run.frames[run.frames[f"state{cid}"].isin(judged)].reset_index(drop=True)
+    for cid in run.inUse:
+        frames = run.frames[run.frames[f"state{cid}"].isin(list(JUDGED_STATES))].reset_index(drop=True)
         missing = (frames[f"state{cid}"] != CameraState.OK).to_numpy()
         if not missing.any():
             continue
@@ -462,6 +570,7 @@ def findDropouts(run: AgRun) -> pd.DataFrame:
                     int(frames.pfs_visit_id.iloc[index[-1]]),
                     bool(index[-1] == len(frames) - 1),
                     bool((frames[f"state{cid}"].iloc[index] == CameraState.DARK).mean() > 0.9),
+                    bool((frames[f"state{cid}"].iloc[index] == CameraState.DISABLED).mean() > 0.9),
                     frames.taken_at.iloc[index[0] - 1] if index[0] > 0 else pd.NaT,
                 ]
             )
@@ -479,38 +588,65 @@ def groupSummary(run: AgRun) -> pd.DataFrame:
     Returns
     -------
     summary : `pandas.DataFrame`
-        One column per group of `CAMERA_GROUPS`, one row per quantity: the
-        percentage of judged exposures in which its cameras matched a star;
-        the median good matches per camera and exposure; the median FWHM
-        (arcsec) on each detector half; the median of its cameras' focus
-        minus the six cameras' median, and of its own median minus the
-        six cameras' (µm), over exposures with all six focus values: what
-        the guider's focus would read with only this group.
+        One column per group of `CAMERA_GROUPS`, one row per quantity,
+        over its cameras in use: the percentage of judged exposures in
+        which they matched a star; the median good matches per camera and
+        exposure; the median FWHM (arcsec) on each detector half; the
+        median of its cameras' focus minus the median of the cameras in
+        use, and of its own median minus theirs (µm), over exposures with
+        a focus value from each: what the guider's focus would read with
+        only this group. A group with no camera in use is NaN.
     """
     frames = run.frames[run.frames.night.isin(run.plottedNights)]
     cameras = run.cameras[run.cameras.night.isin(run.plottedNights)]
-    zColumns = [f"guide_delta_z{cid + 1}" for cid in range(6)]
-    z = frames[zColumns].dropna().to_numpy() * 1e3
-    zMedian = np.median(z, axis=1) if len(z) else np.array([])
-    judged = [CameraState.OK, CameraState.UNMATCHED, CameraState.DARK]
+    z = cameraFocus(run, frames)
+    zMedian = z.median(axis=1)
     summary = {}
-    for name, cids in CAMERA_GROUPS.items():
+    for name, group in CAMERA_GROUPS.items():
+        cids = [cid for cid in group if cid in run.inUse]
         states = frames[[f"state{cid}" for cid in cids]].to_numpy()
+        judged = states[np.isin(states, list(JUDGED_STATES))]
         inGroup = cameras.agc_camera_id.isin(cids)
+        own = z[cids]
         summary[name] = {
-            "matched (% of judged exposures)": 100
-            * np.mean(states[np.isin(states, judged)] == CameraState.OK),
-            "good matches per camera": float(np.median(frames[[f"n_good{cid}" for cid in cids]].to_numpy())),
+            "matched (% of judged exposures)": 100 * np.mean(judged == CameraState.OK)
+            if len(judged)
+            else np.nan,
+            "good matches per camera": float(np.median(frames[[f"n_good{cid}" for cid in cids]].to_numpy()))
+            if cids and len(frames)
+            else np.nan,
             "FWHM, glass half (″)": cameras[inGroup & cameras.right_half.eq(0)].fwhm.median(),
             "FWHM, no-glass half (″)": cameras[inGroup & cameras.right_half.eq(1)].fwhm.median(),
-            "focus minus 6-camera median (µm)": (
-                float(np.median(z[:, list(cids)] - zMedian[:, None])) if len(z) else np.nan
+            "focus minus the cameras' median (µm)": (
+                float(np.median(own.to_numpy() - zMedian.to_numpy()[:, None])) if cids and len(z) else np.nan
             ),
             "focus from this group alone minus dZ (µm)": (
-                float(np.median(np.median(z[:, list(cids)], axis=1) - zMedian)) if len(z) else np.nan
+                float((own.median(axis=1) - zMedian).median()) if cids and len(z) else np.nan
             ),
         }
     return pd.DataFrame(summary)
+
+
+def cameraFocus(run: AgRun, frames: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Return each camera's focus error in the AG exposures that have one from every camera in use.
+
+    Parameters
+    ----------
+    run : `AgRun`
+        The run.
+    frames : `pandas.DataFrame`, optional
+        The AG exposures (rows of ``run.frames``; default, all).
+
+    Returns
+    -------
+    focus : `pandas.DataFrame`
+        ``guide_delta_z1``-``z6`` of the cameras in use (µm), one column
+        per ``agc_camera_id``, indexed as ``frames``.
+    """
+    frames = run.frames if frames is None else frames
+    z = frames[[f"guide_delta_z{cid + 1}" for cid in run.inUse]].astype(float) * 1e3
+    z.columns = list(run.inUse)
+    return z[np.isfinite(z).all(axis=1)]
 
 
 def _hst(when) -> str:
@@ -547,7 +683,7 @@ def findFlags(
     Returns
     -------
     flags : `list` [`Flag`]
-        Camera dropouts; cameras whose matches are often rejected in a
+        Cameras not in use; camera dropouts; cameras whose matches are often rejected in a
         cluster on one side of the detector, or whose position model is off; guide frames rejected,
         missing, or accepted from too few stars; visits with unusual settled
         jitter; cameras with unusual image sizes. The FWHM of a camera's two
@@ -555,9 +691,24 @@ def findFlags(
     """
     config = run.config
     flags = []
+    for cid in sorted(set(range(6)) - set(run.inUse)):
+        flags.append(
+            Flag(
+                "camera",
+                False,
+                f"AG{cid + 1}: not in use (no detections in any of the run's {len(run.frames)} AG exposures).",
+                cid,
+            )
+        )
     long = dropouts.dark | (dropouts.n_frames >= config.longDropout)
     for _, d in dropouts[long].iterrows():
-        what = "no detections at all" if d.dark else "detections but no matched star"
+        what = (
+            "no detections at all"
+            if d.dark
+            else "left out of the guider's fit (disabled)"
+            if d.get("disabled", False)
+            else "detections but no matched star"
+        )
         until = "to the end of the run" if d.to_end else f"to {_hst(d.end)} (visit {d.end_visit})"
         last = f"; last matched star {_hst(d.last_good)}" if pd.notna(d.last_good) else ""
         flags.append(
@@ -585,7 +736,7 @@ def findFlags(
 
     if clusters is not None and len(clusters):
         alone = clusters[clusters.alone.astype(bool)]
-        counts = alone.groupby("agc_camera_id").size().reindex(range(6), fill_value=0)
+        counts = alone.groupby("agc_camera_id").size().reindex(list(run.inUse), fill_value=0)
         for cid, group in alone.groupby("agc_camera_id"):
             others = counts.drop(cid).median()
             if len(group) < config.minClusters or len(group) <= config.clusterFactor * max(others, 1):
@@ -659,7 +810,7 @@ def findFlags(
         )
 
     if len(jitter):
-        full = jitter[jitter.n_cams >= 6]
+        full = jitter[jitter.n_cams >= len(run.inUse)]
         reference = full if len(full) else jitter
         ratio = pd.concat([jitter[axis] / reference[axis].median() for axis in ("ra", "dec", "inr")], axis=1)
         jitter = jitter.assign(ratio=ratio.max(axis=1))
@@ -947,37 +1098,48 @@ def cameraSummary(run: AgRun, clusters: pd.DataFrame, modelErrors: pd.DataFrame)
         One column per camera (``AG1``-``AG6``), one row per quantity:
         the percentage of judged AG exposures in which it matched a star,
         its median good matches per exposure, its median FWHM (arcsec) on
-        each half, its focus minus the six cameras' median (µm), its AG
-        exposures with a cluster of rejected matches on it alone, their mean
-        direction and its consistency, and its position-model error (µm, nightly median) and the
-        direction it grows in.
+        each half, the median distance (µm) of its good matches from where
+        the guider expected them, the percentage of its detections carrying
+        each of ics_agccActor's bad-detection flags, its focus minus the
+        median of the cameras in use (µm), its AG exposures with a cluster
+        of rejected matches on it alone, their mean direction and its
+        consistency, and its position-model error (µm, nightly median) and
+        the direction it grows in. A camera not in use is NaN throughout.
     """
     frames = run.frames[run.frames.night.isin(run.plottedNights)]
     cameras = run.cameras[run.cameras.night.isin(run.plottedNights)]
-    zColumns = [f"guide_delta_z{cid + 1}" for cid in range(6)]
-    z = frames[zColumns].dropna().to_numpy() * 1e3
-    zMedian = np.median(z, axis=1) if len(z) else np.array([])
-    judged = [CameraState.OK, CameraState.UNMATCHED, CameraState.DARK]
+    z = cameraFocus(run, frames)
+    zMedian = z.median(axis=1)
     radius = run.config.modelErrorRadiusPix
     models = summariseModelErrors(run, modelErrors)
     summary = {}
     for cid in range(6):
+        used = cid in run.inUse
         states = frames[f"state{cid}"]
-        states = states[states.isin(judged)]
+        states = states[states.isin(list(JUDGED_STATES))]
         own = clusters[(clusters.agc_camera_id == cid) & clusters.alone.astype(bool)]
+        mine = cameras[cameras.agc_camera_id == cid]
+        nSpots = mine.n_spots.sum()
         summary[f"AG{cid + 1}"] = {
             "matched (% of judged exposures)": 100 * float((states == CameraState.OK).mean())
-            if len(states)
+            if used and len(states)
             else np.nan,
-            "good matches per exposure": float(frames[f"n_good{cid}"].median()) if len(frames) else np.nan,
-            "FWHM, glass half (″)": cameras[
-                (cameras.agc_camera_id == cid) & cameras.right_half.eq(0)
-            ].fwhm.median(),
-            "FWHM, no-glass half (″)": cameras[
-                (cameras.agc_camera_id == cid) & cameras.right_half.eq(1)
-            ].fwhm.median(),
-            "focus minus 6-camera median (µm)": float(np.median(z[:, cid] - zMedian)) if len(z) else np.nan,
-            "exposures with rejected matches clustered on it alone": len(own),
+            "good matches per exposure": float(frames[f"n_good{cid}"].median())
+            if used and len(frames)
+            else np.nan,
+            "FWHM, glass half (″)": mine[mine.right_half.eq(0)].fwhm.median(),
+            "FWHM, no-glass half (″)": mine[mine.right_half.eq(1)].fwhm.median(),
+            "good matches' distance from expected (µm)": mine.residual_um.median(),
+            **{
+                f"detections flagged {flag} (%)": 100 * mine[column].sum() / nSpots
+                if nSpots and mine[column].notna().any()
+                else np.nan
+                for column, flag in DETECTION_FLAG_COLUMNS.items()
+            },
+            "focus minus the cameras' median (µm)": float((z[cid] - zMedian).median())
+            if used and len(z)
+            else np.nan,
+            "exposures with rejected matches clustered on it alone": len(own) if used else np.nan,
             "their direction (°)": _meanAngle(own.angle_deg) if len(own) else np.nan,
             "their direction's consistency (0-1)": _consistency(own.angle_deg),
             f"position-model error at {radius:g} px (µm)": models.error_um.get(cid, np.nan),
@@ -985,3 +1147,190 @@ def cameraSummary(run: AgRun, clusters: pd.DataFrame, modelErrors: pd.DataFrame)
             "its anisotropy (s2/s1; near 1: no direction)": models.ratio.get(cid, np.nan),
         }
     return pd.DataFrame(summary)
+
+
+def stateShares(run: AgRun, slotsPerNight: int = 12) -> pd.DataFrame:
+    """Count each camera's states through the run, in slots of each night.
+
+    Only the AG exposures in which some camera matched a star, on the
+    plotted nights, are counted; a night spans 18:00 to 06:00 HST
+    (`nightPosition`).
+
+    Parameters
+    ----------
+    run : `AgRun`
+        The run.
+    slotsPerNight : `int`
+        Slots in a night (12: an hour each).
+
+    Returns
+    -------
+    shares : `pandas.DataFrame`
+        One row per (``night``, ``slot``, ``agc_camera_id``) with an AG
+        exposure: ``n`` exposures, how many of them in each state
+        (``matched``, ``unmatched``, ``dark``, ``disabled``, and
+        ``few_stars``, which is not judged) and ``start``, the time of the
+        slot's first exposure. Cameras not in use are left out.
+    """
+    columns = [
+        "night",
+        "slot",
+        "agc_camera_id",
+        "n",
+        "matched",
+        "unmatched",
+        "dark",
+        "disabled",
+        "few_stars",
+        "start",
+    ]
+    nights = run.plottedNights
+    frames = run.frames[run.frames.night.isin(nights) & (run.frames.n_cams > 0)]
+    if frames.empty:
+        return pd.DataFrame(columns=columns)
+    position = nightPosition(frames.taken_at, nights)
+    hours = (position - np.floor(position) - 0.05) / 0.9
+    slot = np.clip(np.floor(hours * slotsPerNight), 0, slotsPerNight - 1).astype(int)
+    names = {
+        CameraState.OK: "matched",
+        CameraState.UNMATCHED: "unmatched",
+        CameraState.DARK: "dark",
+        CameraState.DISABLED: "disabled",
+        CameraState.FEW_STARS: "few_stars",
+    }
+    parts = []
+    for cid in run.inUse:
+        states = frames[f"state{cid}"]
+        counts = pd.DataFrame({name: (states == state).astype(int) for state, name in names.items()})
+        counts = counts.assign(night=frames.night, slot=slot, n=1, start=frames.taken_at)
+        grouped = counts.groupby(["night", "slot"]).agg(
+            n=("n", "sum"), start=("start", "min"), **{name: (name, "sum") for name in names.values()}
+        )
+        parts.append(grouped.reset_index().assign(agc_camera_id=cid))
+    return pd.concat(parts, ignore_index=True)[columns]
+
+
+def magnitudeSummary(run: AgRun) -> pd.DataFrame:
+    """Return how often each camera matched its designed guide stars, by their magnitude.
+
+    Parameters
+    ----------
+    run : `AgRun`
+        The run.
+
+    Returns
+    -------
+    summary : `pandas.DataFrame`
+        One row per (``agc_camera_id``, ``magnitude``), the lower edge of
+        the bin, over the science visits of the plotted nights and the
+        cameras in use: ``n_expected`` (guide stars in the designs, times
+        AG exposures), ``n_good`` (good matches with them) and
+        ``fraction``. Empty if the ``magnitudes`` table wasn't read.
+    """
+    columns = ["agc_camera_id", "magnitude", "n_expected", "n_good", "fraction"]
+    magnitudes = run.magnitudes
+    if magnitudes.empty:
+        return pd.DataFrame(columns=columns)
+    chosen = magnitudes[
+        magnitudes.population.eq("science")
+        & magnitudes.night.isin(run.plottedNights)
+        & magnitudes.agc_camera_id.isin(run.inUse)
+    ]
+    summary = chosen.groupby(["agc_camera_id", "magnitude"])[["n_expected", "n_good"]].sum().reset_index()
+    return summary.assign(fraction=summary.n_good / summary.n_expected)[columns]
+
+
+def detectionFlagShares(run: AgRun) -> pd.DataFrame:
+    """Return the share of each camera's detections carrying each bad-detection flag, night by night.
+
+    Parameters
+    ----------
+    run : `AgRun`
+        The run.
+
+    Returns
+    -------
+    shares : `pandas.DataFrame`
+        One row per (``night``, ``agc_camera_id``) on the plotted nights:
+        ``n_spots`` and, per flag of `DETECTION_FLAG_COLUMNS`, the
+        percentage of them carrying it (a detection can carry several).
+        Empty if the read holds no flag counts.
+    """
+    names = list(DETECTION_FLAG_COLUMNS.values())
+    cameras = run.cameras[run.cameras.night.isin(run.plottedNights)]
+    if cameras.empty or not cameras[list(DETECTION_FLAG_COLUMNS)].notna().any().any():
+        return pd.DataFrame(columns=["night", "agc_camera_id", "n_spots", *names])
+    sums = cameras.groupby(["night", "agc_camera_id"])[["n_spots", *DETECTION_FLAG_COLUMNS]].sum()
+    shares = sums[list(DETECTION_FLAG_COLUMNS)].div(sums.n_spots, axis=0) * 100
+    return shares.rename(columns=DETECTION_FLAG_COLUMNS).assign(n_spots=sums.n_spots).reset_index()
+
+
+def runSummary(run: AgRun, jitter: pd.DataFrame) -> dict:
+    """Return the run's key numbers: the guide error, the matched stars and the guide loop.
+
+    Parameters
+    ----------
+    run : `AgRun`
+        The run.
+    jitter : `pandas.DataFrame`
+        From `settledJitter`.
+
+    Returns
+    -------
+    summary : `dict`
+        ``nights``, ``exposures``, ``scienceVisits`` and ``settledVisits``;
+        ``camerasInUse`` (their names); ``guideError``, per axis (``ra`` on
+        the sky, ``dec``, ``inr``; arcsec) the median and 95th percentile
+        over the settled science visits of the offsets' RMS (``size``,
+        ``size95``) and of their jitter (``jitter``, ``jitter95``);
+        ``residualUm``, the median and 95th percentile over the science AG
+        exposures of the good matches' distance from where the guider
+        expected them; ``matchedStars``, the median and 5th percentile of
+        the good matches per science AG exposure, the median per camera in
+        use, and the percentage of exposures with fewer than
+        ``minFitStars``; ``fwhm`` (arcsec, median of the good matches); and
+        ``guideLoop``, the AG exposures whose offset was rejected, or not
+        written. NaN where there is nothing to measure.
+    """
+    plotted = run.frames[run.frames.night.isin(run.plottedNights)]
+    science = plotted[plotted.population.eq("science")]
+
+    def percentile(values: pd.Series, q: float) -> float:
+        values = np.asarray(values, dtype=float)
+        values = values[np.isfinite(values)]
+        return float(np.percentile(values, q)) if len(values) else float("nan")
+
+    guideError = {}
+    for axis in ("ra", "dec", "inr"):
+        guideError[axis] = {
+            "size": percentile(jitter[f"{axis}_size"], 50),
+            "size95": percentile(jitter[f"{axis}_size"], 95),
+            "jitter": percentile(jitter[axis], 50),
+            "jitter95": percentile(jitter[axis], 95),
+        }
+    cameras = run.cameras[run.cameras.night.isin(run.plottedNights)]
+    return {
+        "nights": len(run.plottedNights),
+        "exposures": len(plotted),
+        "scienceVisits": int(science.pfs_visit_id.nunique()),
+        "settledVisits": len(jitter),
+        "camerasInUse": [f"AG{cid + 1}" for cid in run.inUse],
+        "guideError": guideError,
+        "residualUm": {
+            "median": percentile(science.residual_um, 50),
+            "p95": percentile(science.residual_um, 95),
+        },
+        "matchedStars": {
+            "perExposure": percentile(science.n_good, 50),
+            "p5": percentile(science.n_good, 5),
+            "perCamera": {f"AG{cid + 1}": percentile(science[f"n_good{cid}"], 50) for cid in run.inUse},
+            "underMinimumPct": 100 * float((science.n_good < run.config.minFitStars).mean())
+            if len(science)
+            else float("nan"),
+        },
+        "fwhm": percentile(cameras.fwhm, 50),
+        "guideLoop": {
+            "rejected": int(isRejectedOffset(plotted["mask"]).sum()),
+            "noOffset": int(plotted["mask"].isna().sum()),
+        },
+    }

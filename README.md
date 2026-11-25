@@ -663,12 +663,26 @@ python bin.src/drpQa.py agReport fetch --period run30   # the opdb, once: ~10 MB
 python bin.src/drpQa.py agReport report --period run30 --title "Run 30" [--notes notes.md]
 ```
 
-`fetch` reads six aggregated tables (`queries.readAgRun`, the matches on a 4×4 grid over each detector among them) into `~/.cache/drp_qa/agRun/opdb/`; `report` writes
+`fetch` reads seven aggregated tables (`queries.readAgRun`, the matches on a 4×4 grid over each detector and the
+designed guide stars matched by magnitude among them) into `~/.cache/drp_qa/agRun/opdb/`; `report` writes
 `<period>/report.md`, its figures and `metrics.json` from them, without the database. The report opens with its
-flags, then a camera-presence map, AG1/3/5 against AG2/4/6, the settled guiding of each science visit, focus and
-acquisition, and a section per camera: its flags, and its matched stars, FWHM per detector half, focus against the
-others, presence, clusters of rejected matches and position-model error, night by night. Cameras are shown and compared by group, AG1/3/5 and
-AG2/4/6: they are wired and placed separately, and can fail together (Run 30 lost AG1/3/5 after 2026-09-08).
+key numbers (`runAnalysis.runSummary`: the size and the frame-to-frame jitter of the settled guide error in ΔRA,
+ΔDec and ΔInR, the distance of the matched stars from where the guider expected them, and the stars matched per
+AG exposure and per camera) and its flags, then a map of the camera states, AG1/3/5 against AG2/4/6, the settled
+guiding of each science visit, focus and acquisition, and a section per camera: its flags, and its matched stars,
+FWHM per detector half, focus against the others, designed guide stars matched by magnitude, the share of AG
+exposures in which it matched a star, clusters of rejected matches, position-model error and the share of its
+detections ics_agccActor flagged (EDGE, SATURATED, BAD_SHAPE, BAD_ELLIP, BAD_SIZE), night by night. Every figure
+has a caption saying what it shows (`runPlotting.captions`), which `pfs_qa_dashboard`'s AG page shows too.
+
+A good match is `agc_match.flags = GOOD_MATCH` on a clean detection (`agc_data.flags` NONE or RIGHT) of a camera
+the guider had not left out of its fit. A camera's state in an AG exposure is one of matched, detections but no
+match, no detections, or disabled (`agc_match.camera_enabled` false). The opdb records a camera's detections, not
+whether it returned an image, so a dead camera and an empty image both read as no detections; a camera with none
+in the whole run is **not in use**, named once and left out of every comparison between cameras (AG2 in Run 31).
+
+Cameras are shown and compared by group, AG1/3/5 and AG2/4/6: they are wired and placed separately, and can fail
+together (Run 30 lost AG1/3/5 after 2026-09-08). The guider treats all six alike.
 
 What it flags (`runAnalysis.RunConfig` holds the numbers):
 

@@ -693,28 +693,67 @@ def readTelStatus(opdb, pfs_visit_id: int | Iterable[int]) -> pd.DataFrame:
 # The flag values the readAgRun SQL compares with, bound rather than written into it.
 AG_RUN_FLAGS = {"goodMatch": int(SourceMatchingFlags.GOOD_MATCH), "right": int(SourceDetectionFlags.RIGHT)}
 
+#: The detection flags ics_agccActor sets on a bad spot (`SourceDetectionFlags.BAD_DETECTION`), by the column of
+#: `readAgRun`'s ``cameras`` that counts the detections carrying each.
+AG_DETECTION_FLAGS = {
+    "n_edge": SourceDetectionFlags.EDGE,
+    "n_saturated": SourceDetectionFlags.SATURATED,
+    "n_bad_shape": SourceDetectionFlags.BAD_SHAPE,
+    "n_bad_ellip": SourceDetectionFlags.BAD_ELLIP,
+    "n_bad_size": SourceDetectionFlags.BAD_SIZE,
+}
+
+# What the cameras query binds besides the period: the flags above, and the largest agc_data.flags of a clean
+# detection (NONE or RIGHT).
+_CAMERAS_PARAMS = {
+    **{name: int(flag) for name, flag in AG_DETECTION_FLAGS.items()},
+    "goodDetection": int(SourceDetectionFlags.GOOD_DETECTION),
+}
+
+# A good match the guider could use: GOOD_MATCH, a clean detection, and a camera it had not left out of its fit.
+_GOOD_SQL = (
+    "agc_match.flags = :goodMatch AND COALESCE(agc_data.flags, 0) <= :goodDetection"
+    " AND agc_match.camera_enabled IS NOT FALSE"
+)
+_FLAG_COUNTS_SQL = ",\n        ".join(
+    f"count(*) FILTER (WHERE COALESCE(agc_data.flags, 0) & :{name} <> 0) AS {name}"
+    for name in AG_DETECTION_FLAGS
+)
+
 # The reads behind readAgRun: aggregates over every AG exposure taken in [start, end), so that a whole run is a
 # few MB rather than every spot. agc_camera_id is 0-5 (AG1 is 0) throughout.
 _AG_RUN_SQL = {
     # One row per (AG exposure, camera, detector half) with at least one detection. A good match is
     # agc_match.flags = :goodMatch (GOOD_MATCH alone since ics_agActor 1.1.78; before that 1, the same value, for
-    # any match). The no-glass half is :right (RIGHT), inferred from the centroid where flags is NULL, as in
-    # readAgcData. sigma_pix is the radius of the spots' variance, the stored moments scaled as in readAgcData;
-    # it leaves out :badShape (BAD_SHAPE) detections, whose moments are unweighted.
+    # any match) on a clean detection (agc_data.flags NONE or RIGHT) of a camera the guider had not left out
+    # (camera_enabled, NULL before it was written). The no-glass half is :right (RIGHT), inferred from the
+    # centroid where flags is NULL, as in readAgcData. sigma_pix is the radius of the spots' variance, the stored
+    # moments scaled as in readAgcData; it leaves out :badShape (BAD_SHAPE) detections, whose moments are
+    # unweighted. residual_um is the good matches' median distance from where the guider expected the star.
+    # n_disabled counts the matches of a camera left out of the fit; the n_<flag> columns count the detections
+    # carrying each of ics_agccActor's bad-detection flags (AG_DETECTION_FLAGS).
     "cameras": f"""
     SELECT
         agc_data.agc_exposure_id,
         agc_data.agc_camera_id,
         COALESCE(agc_data.flags, CAST(agc_data.centroid_x_pix >= 511.5 + 24 AS INTEGER)) & :right AS right_half,
         count(*) AS n_spots,
-        count(*) FILTER (WHERE agc_match.flags = :goodMatch) AS n_good,
+        count(*) FILTER (WHERE {_GOOD_SQL}) AS n_good,
         percentile_cont(0.5) WITHIN GROUP (
             ORDER BY sqrt(
                 greatest(agc_data.central_image_moment_20_pix + agc_data.central_image_moment_02_pix, 0) / 2
                 * {_VARIANCE_PER_MOMENT_SQL}
             )
-        ) FILTER (WHERE agc_match.flags = :goodMatch AND COALESCE(agc_data.flags, 0) & :badShape = 0) AS sigma_pix,
-        percentile_cont(0.5) WITHIN GROUP (ORDER BY agc_data.background) AS background
+        ) FILTER (WHERE {_GOOD_SQL}) AS sigma_pix,
+        percentile_cont(0.5) WITHIN GROUP (ORDER BY agc_data.background) AS background,
+        percentile_cont(0.5) WITHIN GROUP (
+            ORDER BY 1000 * sqrt(
+                power(agc_match.agc_center_x_mm - agc_match.agc_nominal_x_mm, 2)
+                + power(agc_match.agc_center_y_mm - agc_match.agc_nominal_y_mm, 2)
+            )
+        ) FILTER (WHERE {_GOOD_SQL}) AS residual_um,
+        count(*) FILTER (WHERE agc_match.camera_enabled IS FALSE) AS n_disabled,
+        {_FLAG_COUNTS_SQL}
     FROM agc_exposure
     JOIN agc_data ON agc_data.agc_exposure_id = agc_exposure.agc_exposure_id
     LEFT JOIN agc_match ON agc_match.agc_exposure_id = agc_data.agc_exposure_id
@@ -796,6 +835,48 @@ _AG_RUN_SQL = {
     )
     GROUP BY 1, 2
     """,
+    # How many of each visit's designed guide stars were matched, by camera and magnitude: n_expected is the
+    # design's guide stars in the bin on that camera times the visit's AG exposures, n_good the good matches
+    # (GOOD_MATCH) with one of them. A star takes its camera from the design.
+    "magnitudes": """
+    WITH exposures AS (
+        SELECT agc_exposure.agc_exposure_id, agc_exposure.pfs_visit_id, pfs_visit.pfs_design_id
+        FROM agc_exposure
+        JOIN pfs_visit ON pfs_visit.pfs_visit_id = agc_exposure.pfs_visit_id
+        WHERE agc_exposure.taken_at >= :start AND agc_exposure.taken_at < :end
+    ),
+    expected AS (
+        SELECT
+            visits.pfs_visit_id, pfs_design_agc.agc_camera_id,
+            CAST(floor(pfs_design_agc.guide_star_magnitude / :magBin) AS INTEGER) AS mag_bin,
+            count(*) * max(visits.n_exposures) AS n_expected
+        FROM (
+            SELECT pfs_visit_id, pfs_design_id, count(*) AS n_exposures FROM exposures GROUP BY 1, 2
+        ) AS visits
+        JOIN pfs_design_agc ON pfs_design_agc.pfs_design_id = visits.pfs_design_id
+        WHERE pfs_design_agc.guide_star_magnitude IS NOT NULL
+        GROUP BY 1, 2, 3
+    ),
+    matched AS (
+        SELECT
+            exposures.pfs_visit_id, pfs_design_agc.agc_camera_id,
+            CAST(floor(pfs_design_agc.guide_star_magnitude / :magBin) AS INTEGER) AS mag_bin,
+            count(*) AS n_good
+        FROM exposures
+        JOIN agc_match ON agc_match.agc_exposure_id = exposures.agc_exposure_id
+        JOIN pfs_design_agc ON pfs_design_agc.pfs_design_id = exposures.pfs_design_id
+            AND pfs_design_agc.guide_star_id = agc_match.guide_star_id
+        WHERE agc_match.flags = :goodMatch AND pfs_design_agc.guide_star_magnitude IS NOT NULL
+        GROUP BY 1, 2, 3
+    )
+    SELECT
+        expected.pfs_visit_id, expected.agc_camera_id, expected.mag_bin * :magBin AS magnitude,
+        expected.n_expected, COALESCE(matched.n_good, 0) AS n_good
+    FROM expected
+    LEFT JOIN matched ON matched.pfs_visit_id = expected.pfs_visit_id
+        AND matched.agc_camera_id = expected.agc_camera_id AND matched.mag_bin = expected.mag_bin
+    ORDER BY 1, 2, 3
+    """,
 }
 
 #: The tables `readAgRun` returns.
@@ -804,13 +885,16 @@ AG_RUN_TABLES = tuple(_AG_RUN_SQL)
 #: The size (pixels) of the cells of `readAgRun`'s ``grid``, 4 x 4 over an AG detector (1072 x 1041 pixels).
 AG_GRID_CELL_PIX = {"rowCell": 260, "columnCell": 268}
 
+#: The width (mag) of the bins of `readAgRun`'s ``magnitudes``.
+AG_MAGNITUDE_BIN = 0.5
+
 
 def readAgRun(
     opdb, start: datetime.datetime, end: datetime.datetime, magLimit: float = 20.0
 ) -> dict[str, pd.DataFrame]:
     """Read what an end-of-run AG report needs about every AG exposure in a period.
 
-    Six queries, aggregated in the database (a run of about 20,000 AG
+    Seven queries, aggregated in the database (a run of about 20,000 AG
     exposures comes back as ~1,000,000 rows in a few seconds), rather than
     one row per spot as `readAgcData` returns.
 
@@ -832,11 +916,18 @@ def readAgRun(
         ``cameras``
             One row per (``agc_exposure_id``, ``agc_camera_id``,
             ``right_half``) with a detection: ``n_spots`` detections,
-            ``n_good`` good matches, and the median ``sigma_pix`` (the
-            radius of the stars' variance, sqrt((mxx + myy) / 2) with the
-            moments scaled as in `readAgcData`) of the good matches without ``BAD_SHAPE`` (a NULL
-            ``agc_data.flags`` counts as without) and median
-            ``background`` of the detections. ``right_half`` is 1 on the
+            ``n_good`` good matches (``GOOD_MATCH`` on a clean detection,
+            ``agc_data.flags`` ``NONE`` or ``RIGHT``, NULL counting as
+            clean, of a camera the guider had not left out of its fit),
+            their median ``sigma_pix`` (the radius of the stars' variance,
+            sqrt((mxx + myy) / 2) with the moments scaled as in
+            `readAgcData`) and median ``residual_um`` (the distance, µm,
+            from where the guider expected the star to where it was), and
+            the median ``background`` of the detections. ``n_disabled``
+            counts the matches of a camera left out of the fit
+            (``agc_match.camera_enabled`` false), and the columns of
+            `AG_DETECTION_FLAGS` the detections carrying each of
+            ics_agccActor's bad-detection flags. ``right_half`` is 1 on the
             no-glass half.
         ``grid``
             One row per (``agc_exposure_id``, ``agc_camera_id``,
@@ -859,6 +950,13 @@ def readAgRun(
         ``designStars``
             ``n_stars`` and ``n_bright`` per (``pfs_design_id``,
             ``agc_camera_id``); a camera with no guide star has no row.
+        ``magnitudes``
+            One row per (``pfs_visit_id``, ``agc_camera_id``,
+            ``magnitude``), the lower edge of a bin `AG_MAGNITUDE_BIN` wide
+            of the design's guide-star magnitudes: ``n_expected``, the
+            design's guide stars in the bin on that camera times the
+            visit's AG exposures, and ``n_good``, the good matches with one
+            of them.
     """
     _checkOpdb(opdb)
     params = {"start": start, "end": end}
@@ -866,7 +964,8 @@ def readAgRun(
     for name, sql in _AG_RUN_SQL.items():
         bound = {
             "designStars": {**params, "magLimit": float(magLimit)},
-            "cameras": {**params, **AG_RUN_FLAGS, **MOMENT_SCALE_PARAMS},
+            "cameras": {**params, **AG_RUN_FLAGS, **MOMENT_SCALE_PARAMS, **_CAMERAS_PARAMS},
+            "magnitudes": {**params, "goodMatch": AG_RUN_FLAGS["goodMatch"], "magBin": AG_MAGNITUDE_BIN},
             "grid": {**params, **AG_GRID_CELL_PIX, **AG_RUN_FLAGS},
         }.get(name, params)
         tables[name] = opdb.query_dataframe(sql, params=bound).reset_index(drop=True)
