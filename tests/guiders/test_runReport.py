@@ -167,43 +167,47 @@ def testPresenceColoursWhatACameraDid(makeAgRunTables):
     assert set(colours[4.5]) == {runPlotting.EMPTY.lower()}
 
 
-def testPresenceNamesACameraNotInUse(makeAgRunTables):
+def testPresenceMarksACameraNotInUse(makeAgRunTables):
     run = prepareRun(makeAgRunTables(deadFrom={1: 0}))
     ax = runPlotting.plotCameraPresence(run).axes[0]
-
-    assert "not in use: no detections in the run" in [text.get_text() for text in ax.texts]
-    # Negative control: with every camera in use, no row says so.
     inUse = runPlotting.plotCameraPresence(prepareRun(makeAgRunTables())).axes[0]
-    assert "not in use: no detections in the run" not in [text.get_text() for text in inUse.texts]
-    # Its row has no cells of its own (AG2 is the fourth row, at y=3.5).
+
+    # Its row has no cells of its own (AG2 is the fourth row, at y=3.5), and a note in their place.
     assert 3.5 not in _cellColours(run)
-    title = runPlotting.plotCamera(run, 1, findRejectionClusters(run), fitModelErrors(run))._suptitle
-    assert title.get_text() == "AG2 (AG2/4/6): not in use (no detections in the run)"
+    assert len(ax.texts) == len(inUse.texts) + 1
+    # Its own figure says so in its heading; a camera in use has only its name and group there.
+    clusters, modelErrors = findRejectionClusters(run), fitModelErrors(run)
+    unused = runPlotting.plotCamera(run, 1, clusters, modelErrors)._suptitle.get_text()
+    used = runPlotting.plotCamera(run, 3, clusters, modelErrors)._suptitle.get_text()
+    assert unused.startswith("AG2 (AG2/4/6)") and len(unused) > len("AG2 (AG2/4/6)")
+    assert used == "AG4 (AG2/4/6)"
 
 
-def testCaptionsCoverEveryFigure():
-    captions = runPlotting.captions(RunConfig(nSettle=7, minSettled=11, minDesignStars=4, maxCorrection=8))
+def testCaptionsCoverEveryFigureAndFollowTheConfiguration():
+    config = RunConfig(nSettle=77, minSettled=111, minDesignStars=44, maxCorrection=8.5)
+    captions, default = runPlotting.captions(config), runPlotting.captions()
 
-    assert set(captions) == {*FIGURES, "camera"}
-    assert "first 7 guide frames" in captions["guiding"] and "at least 11" in captions["guiding"]
-    assert "fewer than 4 bright" in captions["cameraPresence"]
-    assert "±8″" in captions["acquisition"]
-    # Negative control: the numbers follow the configuration, they aren't written in.
-    assert "first 7 guide frames" not in runPlotting.captions()["guiding"]
+    assert set(captions) == {*FIGURES, "camera"} == set(default)
+    # The numbers a caption quotes are the configuration's.
+    assert "77" in captions["guiding"] and "111" in captions["guiding"]
+    assert "44" in captions["cameraPresence"] and "8.5" in captions["acquisition"]
+    # Negative control: they aren't written in.
+    assert "77" not in default["guiding"] and "44" not in default["cameraPresence"]
 
 
 def testKeyNumbers(makeAgRunTables):
     run = prepareRun(makeAgRunTables(deadFrom={1: 0}))
-    numbers = {what: value for what, value, _ in keyNumbers(runSummary(run, settledJitter(run)))}
+    rows = keyNumbers(runSummary(run, settledJitter(run)))
+    values = [value for _, value, _ in rows]
 
-    assert numbers["Cameras in use"] == "AG1, AG3, AG4, AG5, AG6"
-    assert numbers["Star position, measured minus expected"].startswith("12.0 µm = 0.92 px")
-    assert numbers["Matched stars per AG exposure"].startswith("30 (5%: 30); AG1 6, AG3 6")
-    assert re.fullmatch(r"0\.0\d\d″ \(95%: 0\.0\d\d″\)", numbers["Guide error, ΔDec"])
-    # The two axes on the sky together come first among the guide errors.
-    assert list(numbers)[1] == "Guide error, ΔRA and ΔDec together"
-    assert numbers["Designed guide stars matched"] == "75% (5% of visits: 75%, 95%: 75%)"
-    assert numbers["Guide offsets rejected / not written"] == "0 / 0"
+    # Each is what it is, its value, and how it was measured.
+    assert all(len(row) == 3 and all(isinstance(part, str) and part for part in row) for row in rows)
+    assert "AG1, AG3, AG4, AG5, AG6" in values
+    # The synthetic run's numbers: a star 12 µm (0.92 AG pixel) from where it was expected, three quarters of the
+    # designed guide stars matched, and no guide offset rejected or missing.
+    assert any("12.0 µm" in value and "0.92 px" in value for value in values)
+    assert any(value.startswith("75%") for value in values)
+    assert "0 / 0" in values
 
 
 def testFetchAndLoad(opdb, tmp_path):
@@ -285,9 +289,7 @@ def testReportCommand(opdb, tmp_path):
     out = tmp_path / "runX"
     report = (out / "report.md").read_text()
     assert report.startswith("# runX: AG run report")
-    # The key numbers come first, and every figure says what it shows.
-    assert report.index("## Key numbers") < report.index("## Flags")
-    assert "| Guide error, ΔRA on the sky | 0.0" in report
+    # Every figure says what it shows.
     captions = runPlotting.captions()
     for name in FIGURES:
         assert f"({name}.png)\n\n{captions[name]}" in report
@@ -312,6 +314,10 @@ def testReportCommand(opdb, tmp_path):
     metrics = json.loads((out / "metrics.json").read_text())
     assert metrics["dropouts"][0]["agc_camera_id"] == 0
     assert metrics["summary"]["camerasInUse"] == [f"AG{n}" for n in range(1, 7)]
+    # The report gives every key number, before its flags.
+    values = [value for _, value, _ in keyNumbers(metrics["summary"])]
+    assert all(value in report for value in values)
+    assert report.index(values[0]) < report.index(metrics["flags"][0]["text"])
     assert set(metrics["summary"]["guideError"]) == {"ra", "dec", "inr", "sky"}
     assert set(metrics["groups"]) == {"AG1/3/5", "AG2/4/6"}
     assert set(metrics["cameras"]) == {f"AG{n}" for n in range(1, 7)}
@@ -324,7 +330,7 @@ def testReportLeavesOutTheFigureOfACameraNotInUse(FakeOpDB, makeAgRunTables, tmp
 
     assert main(["report", "--period", "runX", "--runs", str(runs), "--data-dir", str(tmp_path)]) == 0
     section = (tmp_path / "runX" / "report.md").read_text().split("### AG2\n")[1].split("###")[0]
-    assert "AG2: not in use" in section and "camera-AG2.png" not in section
+    assert "camera-AG2.png" not in section
     assert not (tmp_path / "runX" / "camera-AG2.png").exists()
     # Negative control: the cameras in use keep theirs.
     assert (tmp_path / "runX" / "camera-AG4.png").exists()

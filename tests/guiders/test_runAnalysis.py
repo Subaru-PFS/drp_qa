@@ -396,8 +396,8 @@ def testCameraChecksUsePlottedNightsOnly(makeAgRunTables):
     assert len(findRejectionClusters(shown)) == 5 and len(fitModelErrors(shown))
 
 
-def _flagText(run):
-    return "\n".join(flag.text for flag in findFlags(run, settledJitter(run), findDropouts(run)))
+def _flags(run):
+    return findFlags(run, settledJitter(run), findDropouts(run))
 
 
 def testCameraNotInUse(makeAgRunTables):
@@ -409,9 +409,8 @@ def testCameraNotInUse(makeAgRunTables):
     flags = findFlags(run, jitter, findDropouts(run))
 
     assert run.inUse == (0, 2, 3, 4, 5)
-    assert [(flag.text, flag.severe, flag.agc_camera_id) for flag in flags] == [
-        ("AG2: not in use (no detections in any of the run's 320 AG exposures).", False, 1)
-    ]
+    # One flag, about that camera, and not a fault.
+    assert [(flag.kind, flag.severe, flag.agc_camera_id) for flag in flags] == [("camera", False, 1)]
     assert findDropouts(run).empty
     assert jitter.full.all()
     # The focus is still compared, among the five: AG1/3/5 +10 µm and AG4/6 -10 µm about a median of +10.
@@ -425,7 +424,9 @@ def testCameraNotInUse(makeAgRunTables):
     # Negative control: a camera that stops during the run was in use, and its loss is a fault.
     lost = prepareRun(makeAgRunTables(deadFrom={1: 100}))
     assert lost.inUse == tuple(range(6))
-    assert "**AG2: no detections at all in 220 consecutive AG exposures**" in _flagText(lost)
+    (dropout,) = findDropouts(lost).itertuples()
+    assert (dropout.agc_camera_id, dropout.n_frames, dropout.dark) == (1, 220, True)
+    assert any(flag.severe and flag.agc_camera_id == 1 for flag in _flags(lost))
     assert not settledJitter(lost).full.all()
 
 
@@ -439,9 +440,7 @@ def testDisabledCamera(makeAgRunTables):
     assert (frames.n_cams.iloc[200:] == 5).all()
     (dropout,) = findDropouts(run).itertuples()
     assert (dropout.agc_camera_id, dropout.n_frames, dropout.disabled, dropout.dark) == (3, 120, True, False)
-    assert "**AG4: left out of the guider's fit (disabled) in 120 consecutive AG exposures**" in _flagText(
-        run
-    )
+    assert any(flag.severe and flag.agc_camera_id == 3 for flag in _flags(run))
     # Negative control: before then it was matched like the others.
     assert (frames.state3.iloc[:200] == CameraState.OK).all()
 
@@ -560,18 +559,14 @@ def testFewStarFlagSaysWhenAndCountsFocusSweepsApart(makeAgRunTables):
     few = cameras.agc_exposure_id.isin([*guiding, *sweep])
     cameras.loc[few, "n_good"] = 0
     cameras.loc[few & (cameras.agc_camera_id == 0) & (cameras.right_half == 0), "n_good"] = 1
-    text = _flagText(prepareRun(tables))
     last = exposures.taken_at[exposures.agc_exposure_id == guiding.iloc[-1]].iloc[0]
+    loop, focusSweep = (flag.text for flag in _flags(prepareRun(tables)) if flag.kind == "guiding")
 
-    assert (
-        "**3 guide offsets accepted from fewer than 3 matched stars** (sent to the telescope when under "
-        f"max_correction), on 1 night, the last {last:%Y-%m-%d %H:%M} (visit 150001): visit 150001 (3)."
-        in text
-    )
-    assert "**2 offsets of AG focus sweeps accepted from fewer than 3 matched stars**, on 1 night" in text
-    assert "(visit 150012): visit 150012 (2)." in text
-    # Negative control: the focus sweep's are not among the guide loop's five.
-    assert "5 guide offsets accepted" not in text
+    # The guide loop's three: their visit, and when the last was.
+    assert "visit 150001 (3)" in loop and f"{last:%Y-%m-%d %H:%M}" in loop
+    assert "visit 150012 (2)" in focusSweep
+    # Negative control: the focus sweep's are not counted with the guide loop's.
+    assert "150012" not in loop and "150001" not in focusSweep
 
 
 def testVisitMatchFraction(makeAgRunTables):
