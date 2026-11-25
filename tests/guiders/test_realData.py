@@ -242,6 +242,49 @@ def testRealDataRasterBoresight(realAgcData):
     assert residual("nominal0") > 50
 
 
+def testRealDataBoresightMixesPointings(realAgcData):
+    """One boresight shift per visit can't follow a visit with two pointings.
+
+    Once a visit's shutters close the telescope moves to the next hexagon
+    point, ~92 µm away, within the same ``pfs_visit_id``, so each scan visit
+    holds two pointings and ``agc_nominal_[xy]_mm`` jumps mid-visit.
+    `addReferencePositions` takes one boresight shift per visit, so across both
+    pointings the shift lands between them and the nominal-to-boresight
+    residual is large (50 µm rms here); limiting the rows to one pointing with
+    ``shutter_open == 1`` recovers it (3.8 µm).
+    """
+    agcData = realAgcData("raster")
+    valid = selectValidMatches(agcData)
+
+    def boresightResidual_um(data):
+        data = addReferencePositions(data, "boresight")
+        return rms(
+            1e3
+            * np.hypot(
+                data.agc_nominal_x_mm - data.agc_boresight_x_mm,
+                data.agc_nominal_y_mm - data.agc_boresight_y_mm,
+            )
+        )
+
+    onePointing = boresightResidual_um(agcData[(agcData.shutter_open == 1).to_numpy() & valid])
+    bothPointings = boresightResidual_um(agcData[valid])
+
+    assert onePointing < 6
+    # Negative control: without the one-pointing filter the single per-visit shift mixes the two
+    # pointings, so the boresight no longer tracks the nominal positions.
+    assert bothPointings > 30
+
+    # The mid-visit jump is the move to the next hexagon point: two nominal positions ~92 µm apart.
+    for _, rows in agcData[valid & agcData.pfs_visit_id.isin(RASTER_HEXAGON_VISITS).to_numpy()].groupby(
+        ["pfs_visit_id", "guide_star_id"]
+    ):
+        span_um = 1e3 * np.hypot(
+            rows.agc_nominal_x_mm.max() - rows.agc_nominal_x_mm.min(),
+            rows.agc_nominal_y_mm.max() - rows.agc_nominal_y_mm.min(),
+        )
+        assert span_um > 80
+
+
 def testRealDataShutterOpen(realAgcData):
     """AG exposures taken with the shutters closed have the larger guide errors.
 

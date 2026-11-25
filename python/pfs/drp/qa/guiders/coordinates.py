@@ -331,6 +331,13 @@ def addReferencePositions(agcData: pd.DataFrame, reference: str, stat: str = "me
         minus ``nominal0``, which follows the boresight from visit to visit.
         Only the stars seen most often in the visit, normally those in every
         exposure, give the shift, so stars that come and go don't bias it.
+
+        This is one shift per ``pfs_visit_id``, so it assumes a single pointing
+        per visit. Where the telescope moves mid-visit the single shift lands
+        between the pointings: in a raster or dither the telescope moves to the
+        next point once the shutters close, within the same visit, so
+        ``agc_nominal_[xy]_mm`` jumps (by ~90 µm in Run 30's raster). Limit the
+        rows to one pointing first, e.g. ``shutter_open == 1``.
     ``model``
         ``agc_model_[xy]_mm``, where a fit in `pfs.drp.qa.guiders.analysis`
         predicts the star; it comes with the data, so nothing is added.
