@@ -167,6 +167,10 @@ def _table(frame: pd.DataFrame, fmt: str = "{:.2f}") -> list[str]:
     return lines
 
 
+#: The guide error's axes, as the key numbers name them: the two on the sky in quadrature first.
+AXES = (("sky", "ΔRA and ΔDec together"), ("ra", "ΔRA on the sky"), ("dec", "ΔDec"), ("inr", "ΔInR"))
+
+
 def keyNumbers(summary: dict, config: RunConfig | None = None) -> list[tuple[str, str, str]]:
     """Return the run's key numbers as text, for the top of a report.
 
@@ -184,6 +188,7 @@ def keyNumbers(summary: dict, config: RunConfig | None = None) -> list[tuple[str
     """
     config = config or RunConfig()
     error, stars, loop = summary["guideError"], summary["matchedStars"], summary["guideLoop"]
+    fraction = summary["matchedFraction"]
 
     def pair(axis: str, key: str) -> str:
         return f"{error[axis][key]:.3f}″ (95%: {error[axis][key + '95']:.3f}″)"
@@ -193,17 +198,23 @@ def keyNumbers(summary: dict, config: RunConfig | None = None) -> list[tuple[str
         ("Cameras in use", ", ".join(summary["camerasInUse"]), "cameras with any detection in the run"),
         *[
             (f"Guide error, {name}", pair(axis, "size"), f"RMS of a visit's settled guide offsets; {settled}")
-            for axis, name in (("ra", "ΔRA on the sky"), ("dec", "ΔDec"), ("inr", "ΔInR"))
+            for axis, name in AXES
         ],
         *[
             (f"Guide jitter, {name}", pair(axis, "jitter"), f"frame-to-frame; {settled}")
-            for axis, name in (("ra", "ΔRA on the sky"), ("dec", "ΔDec"), ("inr", "ΔInR"))
+            for axis, name in AXES
         ],
         (
             "Star position, measured minus expected",
             f"{summary['residualUm']['median']:.1f} µm = {summary['residualUm']['median'] / AG_PIXEL_UM:.2f} px "
             f"(95%: {summary['residualUm']['p95']:.1f} µm)",
             "distance of a good match from where the guider expected it; median over science AG exposures",
+        ),
+        (
+            "Designed guide stars matched",
+            f"{100 * fraction['median']:.0f}% (5% of visits: {100 * fraction['p5']:.0f}%, "
+            f"95%: {100 * fraction['p95']:.0f}%)",
+            f"of the design's guide stars on the cameras in use; median over {fraction['visits']} science visits",
         ),
         (
             "Matched stars per AG exposure",

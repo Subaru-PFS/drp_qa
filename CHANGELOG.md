@@ -15,7 +15,9 @@ made, and earlier sections to the weekly tag alone.
 - **AG run report: key numbers, captions, and more per camera** (INSTRM-3073) — `drpQa.py agReport` now opens
   with the run's key numbers (`runAnalysis.runSummary`, also `summary` in `metrics.json`): the size (RMS of a
   visit's settled offsets) and the frame-to-frame jitter of the guide error in ΔRA, ΔDec and ΔInR, the distance
-  of the good matches from where the guider expected them, and the stars matched per AG exposure and per camera.
+  of the good matches from where the guider expected them, the share of the designed guide stars matched per
+  science visit (`runAnalysis.visitMatchFraction`), and the stars matched per AG exposure and per camera. The
+  guide error is given on the sky (ΔRA and ΔDec in quadrature) as well as per axis.
   Every figure has a caption (`runPlotting.captions`, and `GROUPS_NOTE` on why the cameras are in two groups).
   The guiding figure shows the size of the error beside its jitter. Each camera's figure gains the share of its
   designed guide stars matched, by magnitude (`runAnalysis.magnitudeSummary`, from the new `magnitudes` table of
@@ -32,6 +34,9 @@ made, and earlier sections to the weekly tag alone.
   group and camera comparisons, the "matched on every camera" marks and the focus medians, which are now taken
   over the cameras in use (they were NaN whenever a camera had no focus value, as AG2 in Run 31). A dropout's
   flag says when the camera was disabled.
+- **AG run report: offsets from too few stars** (INSTRM-3073) — the flag for guide offsets accepted from fewer
+  than 3 matched stars says on how many nights and when the last was, and counts the offsets of AG focus
+  sweeps apart from the guide loop's.
 - **AG run report: good matches** (INSTRM-3073) — the `cameras` table of `queries.readAgRun` counts a good match
   as `GOOD_MATCH` on a clean detection (`agc_data.flags` NONE or RIGHT) of a camera the guider had not left out,
   for the count, the FWHM and the new `residual_um`. No change where the guider already matched only clean

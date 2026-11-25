@@ -50,6 +50,7 @@ __all__ = [
     "settledJitter",
     "stateShares",
     "summariseModelErrors",
+    "visitMatchFraction",
 ]
 
 #: The two groups of AG cameras, by ``agc_camera_id``.
@@ -790,14 +791,24 @@ def findFlags(
             )
         )
     fewStars = frames[mask.eq(int(GuideOffsetFlag.OK)) & (frames.n_good < config.minFitStars)]
-    if len(fewStars):
-        counts = fewStars.pfs_visit_id.value_counts()
+    # A focus sweep's offsets are not guiding: counted apart, so the guide loop's own are plain.
+    sweep = fewStars.population.eq("focus sweep")
+    for chosen, what, sent in (
+        (fewStars[~sweep], "guide offsets", " (sent to the telescope when under max_correction)"),
+        (fewStars[sweep], "offsets of AG focus sweeps", ""),
+    ):
+        if chosen.empty:
+            continue
+        counts = chosen.pfs_visit_id.value_counts()
+        nights = chosen.night.nunique()
+        last = chosen.sort_values("taken_at").iloc[-1]
         flags.append(
             Flag(
                 "guiding",
                 True,
-                f"**{len(fewStars)} guide offsets accepted from fewer than {config.minFitStars} matched stars** "
-                "(sent to the telescope when under max_correction): "
+                f"**{len(chosen)} {what} accepted from fewer than {config.minFitStars} matched stars**{sent}, "
+                f"on {nights} night{'' if nights == 1 else 's'}, the last {_hst(last.taken_at)} "
+                f"(visit {int(last.pfs_visit_id)}): "
                 + ", ".join(f"visit {v} ({n})" for v, n in counts.head(8).items())
                 + (" …" if len(counts) > 8 else "")
                 + ".",
@@ -1240,6 +1251,38 @@ def magnitudeSummary(run: AgRun) -> pd.DataFrame:
     return summary.assign(fraction=summary.n_good / summary.n_expected)[columns]
 
 
+def visitMatchFraction(run: AgRun) -> pd.DataFrame:
+    """Return the share of each science visit's designed guide stars that were matched.
+
+    Parameters
+    ----------
+    run : `AgRun`
+        The run.
+
+    Returns
+    -------
+    fractions : `pandas.DataFrame`
+        One row per science visit of the plotted nights: ``pfs_visit_id``,
+        ``night``, ``n_expected`` (the design's guide stars on the cameras
+        in use, times the visit's AG exposures), ``n_good`` (good matches
+        with them) and ``fraction``. A guide star on a camera not in use
+        was not available, and is not counted. Empty if the
+        ``magnitudes`` table wasn't read.
+    """
+    columns = ["pfs_visit_id", "night", "n_expected", "n_good", "fraction"]
+    magnitudes = run.magnitudes
+    if magnitudes.empty:
+        return pd.DataFrame(columns=columns)
+    chosen = magnitudes[
+        magnitudes.population.eq("science")
+        & magnitudes.night.isin(run.plottedNights)
+        & magnitudes.agc_camera_id.isin(run.inUse)
+    ]
+    visits = chosen.groupby(["pfs_visit_id", "night"])[["n_expected", "n_good"]].sum().reset_index()
+    visits = visits[visits.n_expected > 0]
+    return visits.assign(fraction=visits.n_good / visits.n_expected)[columns]
+
+
 def detectionFlagShares(run: AgRun) -> pd.DataFrame:
     """Return the share of each camera's detections carrying each bad-detection flag, night by night.
 
@@ -1280,9 +1323,13 @@ def runSummary(run: AgRun, jitter: pd.DataFrame) -> dict:
     summary : `dict`
         ``nights``, ``exposures``, ``scienceVisits`` and ``settledVisits``;
         ``camerasInUse`` (their names); ``guideError``, per axis (``ra`` on
-        the sky, ``dec``, ``inr``; arcsec) the median and 95th percentile
-        over the settled science visits of the offsets' RMS (``size``,
-        ``size95``) and of their jitter (``jitter``, ``jitter95``);
+        the sky, ``dec``, ``inr``, and ``sky``, a visit's ΔRA and ΔDec in
+        quadrature; arcsec) the median and 95th percentile over the settled
+        science visits of the offsets' RMS (``size``, ``size95``) and of
+        their jitter (``jitter``, ``jitter95``); ``matchedFraction``, the
+        median and the 5th and 95th percentiles over the science visits of
+        the share of the designed guide stars on the cameras in use that
+        were matched (`visitMatchFraction`), and how many ``visits``;
         ``residualUm``, the median and 95th percentile over the science AG
         exposures of the good matches' distance from where the guider
         expected them; ``matchedStars``, the median and 5th percentile of
@@ -1308,6 +1355,15 @@ def runSummary(run: AgRun, jitter: pd.DataFrame) -> dict:
             "jitter": percentile(jitter[axis], 50),
             "jitter95": percentile(jitter[axis], 95),
         }
+    # On the sky: a visit's ΔRA and ΔDec together, in quadrature.
+    skySize, skyJitter = np.hypot(jitter.ra_size, jitter.dec_size), np.hypot(jitter.ra, jitter.dec)
+    guideError["sky"] = {
+        "size": percentile(skySize, 50),
+        "size95": percentile(skySize, 95),
+        "jitter": percentile(skyJitter, 50),
+        "jitter95": percentile(skyJitter, 95),
+    }
+    matched = visitMatchFraction(run).fraction
     cameras = run.cameras[run.cameras.night.isin(run.plottedNights)]
     return {
         "nights": len(run.plottedNights),
@@ -1327,6 +1383,12 @@ def runSummary(run: AgRun, jitter: pd.DataFrame) -> dict:
             "underMinimumPct": 100 * float((science.n_good < run.config.minFitStars).mean())
             if len(science)
             else float("nan"),
+        },
+        "matchedFraction": {
+            "visits": len(matched),
+            "median": percentile(matched, 50),
+            "p5": percentile(matched, 5),
+            "p95": percentile(matched, 95),
         },
         "fwhm": percentile(cameras.fwhm, 50),
         "guideLoop": {

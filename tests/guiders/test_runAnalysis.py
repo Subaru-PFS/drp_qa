@@ -28,6 +28,7 @@ from pfs.drp.qa.guiders.runAnalysis import (
     settledJitter,
     stateShares,
     summariseModelErrors,
+    visitMatchFraction,
 )
 from pfs.utils.datamodel.ag import GuideOffsetFlag
 
@@ -523,7 +524,8 @@ def testRunSummary(makeAgRunTables):
     assert summary["matchedStars"]["underMinimumPct"] == 0.0
     assert summary["residualUm"] == {"median": 12.0, "p95": 12.0}
     assert summary["guideLoop"] == {"rejected": 1, "noOffset": 1}
-    for axis, expected in (("ra", 0.05), ("dec", 0.05), ("inr", 1.0)):
+    # On the sky the two axes go together, in quadrature: a visit's 0.05″ in each is 0.07″.
+    for axis, expected in (("ra", 0.05), ("dec", 0.05), ("inr", 1.0), ("sky", 0.05 * np.sqrt(2))):
         error = summary["guideError"][axis]
         assert error["size"] == pytest.approx(expected, rel=0.3)
         assert error["jitter"] == pytest.approx(expected, rel=0.3)
@@ -545,3 +547,53 @@ def testPrepareRunFromAnOlderRead(makeAgRunTables):
     # Negative control: with them, the same run has both.
     full = prepareRun(makeAgRunTables())
     assert not magnitudeSummary(full).empty and not detectionFlagShares(full).empty
+
+
+def testFewStarFlagSaysWhenAndCountsFocusSweepsApart(makeAgRunTables):
+    """Offsets accepted from too few stars are dated, and a focus sweep's are not the guide loop's."""
+    tables = makeAgRunTables()
+    exposures, cameras, visits = tables["exposures"], tables["cameras"], tables["visits"]
+    visits.loc[visits.pfs_visit_id == 150012, "sequence_type"] = "agFocusSweep"
+    # One star in three exposures of a science visit on the first night, and in two of the focus sweep.
+    guiding = exposures.agc_exposure_id[exposures.pfs_visit_id == 150001].iloc[10:13]
+    sweep = exposures.agc_exposure_id[exposures.pfs_visit_id == 150012].iloc[5:7]
+    few = cameras.agc_exposure_id.isin([*guiding, *sweep])
+    cameras.loc[few, "n_good"] = 0
+    cameras.loc[few & (cameras.agc_camera_id == 0) & (cameras.right_half == 0), "n_good"] = 1
+    text = _flagText(prepareRun(tables))
+    last = exposures.taken_at[exposures.agc_exposure_id == guiding.iloc[-1]].iloc[0]
+
+    assert (
+        "**3 guide offsets accepted from fewer than 3 matched stars** (sent to the telescope when under "
+        f"max_correction), on 1 night, the last {last:%Y-%m-%d %H:%M} (visit 150001): visit 150001 (3)."
+        in text
+    )
+    assert "**2 offsets of AG focus sweeps accepted from fewer than 3 matched stars**, on 1 night" in text
+    assert "(visit 150012): visit 150012 (2)." in text
+    # Negative control: the focus sweep's are not among the guide loop's five.
+    assert "5 guide offsets accepted" not in text
+
+
+def testVisitMatchFraction(makeAgRunTables):
+    """The share of a visit's designed guide stars that were matched, on the cameras in use."""
+    # AG3 stops half-way through the run; AG2 never detects anything, so its guide stars were not available.
+    run = prepareRun(makeAgRunTables(deadFrom={1: 0, 2: 160}))
+    fractions = visitMatchFraction(run).set_index("pfs_visit_id")
+
+    assert len(fractions) == 8 and run.inUse == (0, 2, 3, 4, 5)
+    # Each camera matches its two bright stars and one of its two faint ones: three in four.
+    assert fractions.fraction[150000] == pytest.approx(0.75)
+    # With one of the five cameras gone, four fifths of that.
+    assert fractions.fraction[150013] == pytest.approx(0.75 * 4 / 5)
+    summary = runSummary(run, settledJitter(run))["matchedFraction"]
+    assert summary["visits"] == 8 and summary["median"] == pytest.approx((0.75 + 0.6) / 2)
+    assert summary["p5"] < summary["median"] < summary["p95"]
+    # Negative control: counting AG2's stars as available would lower every visit's share.
+    everyCamera = run.magnitudes.groupby("pfs_visit_id")[["n_expected", "n_good"]].sum()
+    assert not np.isclose(everyCamera.n_good[150000] / everyCamera.n_expected[150000], 0.75)
+    # A read without the magnitudes has none to give.
+    tables = makeAgRunTables()
+    del tables["magnitudes"]
+    older = prepareRun(tables)
+    assert visitMatchFraction(older).empty
+    assert np.isnan(runSummary(older, settledJitter(older))["matchedFraction"]["median"])

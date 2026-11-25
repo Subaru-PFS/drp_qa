@@ -667,8 +667,8 @@ python bin.src/drpQa.py agReport report --period run30 --title "Run 30" [--notes
 designed guide stars matched by magnitude among them) into `~/.cache/drp_qa/agRun/opdb/`; `report` writes
 `<period>/report.md`, its figures and `metrics.json` from them, without the database. The report opens with its
 key numbers (`runAnalysis.runSummary`: the size and the frame-to-frame jitter of the settled guide error in ΔRA,
-ΔDec and ΔInR, the distance of the matched stars from where the guider expected them, and the stars matched per
-AG exposure and per camera) and its flags, then a map of the camera states, AG1/3/5 against AG2/4/6, the settled
+ΔDec and ΔInR and on the sky, the distance of the matched stars from where the guider expected them, the share
+of the designed guide stars matched per science visit, and the stars matched per AG exposure and per camera) and its flags, then a map of the camera states, AG1/3/5 against AG2/4/6, the settled
 guiding of each science visit, focus and acquisition, and a section per camera: its flags, and its matched stars,
 FWHM per detector half, focus against the others, designed guide stars matched by magnitude, the share of AG
 exposures in which it matched a star, clusters of rejected matches, position-model error and the share of its

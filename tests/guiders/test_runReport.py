@@ -200,6 +200,9 @@ def testKeyNumbers(makeAgRunTables):
     assert numbers["Star position, measured minus expected"].startswith("12.0 µm = 0.92 px")
     assert numbers["Matched stars per AG exposure"].startswith("30 (5%: 30); AG1 6, AG3 6")
     assert re.fullmatch(r"0\.0\d\d″ \(95%: 0\.0\d\d″\)", numbers["Guide error, ΔDec"])
+    # The two axes on the sky together come first among the guide errors.
+    assert list(numbers)[1] == "Guide error, ΔRA and ΔDec together"
+    assert numbers["Designed guide stars matched"] == "75% (5% of visits: 75%, 95%: 75%)"
     assert numbers["Guide offsets rejected / not written"] == "0 / 0"
 
 
@@ -309,7 +312,7 @@ def testReportCommand(opdb, tmp_path):
     metrics = json.loads((out / "metrics.json").read_text())
     assert metrics["dropouts"][0]["agc_camera_id"] == 0
     assert metrics["summary"]["camerasInUse"] == [f"AG{n}" for n in range(1, 7)]
-    assert set(metrics["summary"]["guideError"]) == {"ra", "dec", "inr"}
+    assert set(metrics["summary"]["guideError"]) == {"ra", "dec", "inr", "sky"}
     assert set(metrics["groups"]) == {"AG1/3/5", "AG2/4/6"}
     assert set(metrics["cameras"]) == {f"AG{n}" for n in range(1, 7)}
 
