@@ -41,7 +41,7 @@ from pfs.drp.qa.guiders.runAnalysis import (
     settledJitter,
     summariseModelErrors,
 )
-from pfs.drp.qa.guiders.runPlotting import CAMERA_ORDER, GROUPS_NOTE, captions
+from pfs.drp.qa.guiders.runPlotting import AG_PIXEL_UM, CAMERA_ORDER, GROUPS_NOTE, captions
 from pfs.utils import agMetrics
 
 __all__ = ["fetchRun", "keyNumbers", "loadRun", "main", "writeReport"]
@@ -184,7 +184,6 @@ def keyNumbers(summary: dict, config: RunConfig | None = None) -> list[tuple[str
     """
     config = config or RunConfig()
     error, stars, loop = summary["guideError"], summary["matchedStars"], summary["guideLoop"]
-    pixelUm = 13.0
 
     def pair(axis: str, key: str) -> str:
         return f"{error[axis][key]:.3f}″ (95%: {error[axis][key + '95']:.3f}″)"
@@ -202,7 +201,7 @@ def keyNumbers(summary: dict, config: RunConfig | None = None) -> list[tuple[str
         ],
         (
             "Star position, measured minus expected",
-            f"{summary['residualUm']['median']:.1f} µm = {summary['residualUm']['median'] / pixelUm:.2f} px "
+            f"{summary['residualUm']['median']:.1f} µm = {summary['residualUm']['median'] / AG_PIXEL_UM:.2f} px "
             f"(95%: {summary['residualUm']['p95']:.1f} µm)",
             "distance of a good match from where the guider expected it; median over science AG exposures",
         ),

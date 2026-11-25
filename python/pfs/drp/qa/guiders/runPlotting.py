@@ -39,6 +39,7 @@ from pfs.drp.qa.guiders.runAnalysis import (
 )
 
 __all__ = [
+    "AG_PIXEL_UM",
     "CAMERA_ORDER",
     "GROUPS_NOTE",
     "captions",
@@ -51,6 +52,9 @@ __all__ = [
 
 #: The cameras in the order of the per-camera panels: AG1/3/5, then AG2/4/6.
 CAMERA_ORDER = [*CAMERA_GROUPS["AG1/3/5"], *CAMERA_GROUPS["AG2/4/6"]]
+
+#: The size of an AG pixel (µm).
+AG_PIXEL_UM = 13.0
 
 BAD = "#c8102e"  # a fault
 WARN = "#eda100"  # worth a look
@@ -101,19 +105,19 @@ def captions(config: RunConfig | None = None) -> dict[str, str]:
             "One point per science visit, from its settled guide offsets: those the guider accepted after "
             f"the visit's first {config.nSettle} guide frames, for visits with at least {config.minSettled} "
             "of them. A guide offset is the pointing error the guider measured in one AG exposure (ΔRA on "
-            "the sky, ΔDec, and the rotator angle ΔInR). Left, how large the error was: the RMS of the "
-            "visit's offsets about zero. Right, how steady the measurement was: the frame-to-frame jitter, "
-            "the standard deviation of consecutive differences / √2, which a slow drift barely changes. "
-            "Dashed lines are the run's medians; a red cross is a visit in which stars were not matched on "
-            "every camera in use; a number at the top is a visit off the scale. Bottom: the AG exposures "
+            "the sky, ΔDec, and the rotator angle ΔInR). Size is how large the error was: the RMS of the "
+            "visit's offsets about zero. Jitter is how steady the measurement was: frame to frame, the "
+            "standard deviation of consecutive differences / √2, which a slow drift barely changes. "
+            "Dashed lines are the run's medians; red marks a visit in which stars were not matched on "
+            "every camera in use; a number at the top is a visit off the scale. Last: the AG exposures "
             "each night whose offset the guider rejected (INVALID_OFFSET: not sent to the telescope) or "
             "never wrote."
         ),
         "focus": (
-            "Top: the guider's focus error dZ, the median over the cameras of the focus each measures from "
-            "the difference between its detector's two halves, as the median of each science visit. Bottom: "
-            "the telescope's focus offset (tel_status.m2_off3); the spikes at the start of a night are AG "
-            "focus sweeps."
+            "First, the guider's focus error dZ, the median over the cameras of the focus each measures "
+            "from the difference between its detector's two halves, as the median of each science visit; "
+            "red marks a visit in which stars were not matched on every camera in use. Then the telescope's "
+            "focus offset (tel_status.m2_off3); the spikes at the start of a night are AG focus sweeps."
         ),
         "acquisition": (
             "The first guide offset of each convergence visit (the move to a new design): the pointing error "
@@ -444,6 +448,9 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
     radius = run.config.modelErrorRadiusPix
     ax.set_title(f"Model error {radius:g} px from centre (µm)", loc="left", fontsize=8.5)
     _legend(ax, loc="upper left")
+    pixels = ax.secondary_yaxis("right", functions=(lambda um: um / AG_PIXEL_UM, lambda px: px * AG_PIXEL_UM))
+    pixels.set_ylabel("AG pixels", fontsize=7)
+    pixels.tick_params(labelsize=7)
 
     ax = axes[1, 3]
     flagged = detectionFlagShares(run)
