@@ -1,7 +1,7 @@
 """Plots of a whole run's AG data, for the end-of-run report.
 
 Each function takes an `pfs.drp.qa.guiders.runAnalysis.AgRun` (and, for the
-guiding plot, its settled jitter) and returns a new
+guiding plot, its visits' guide errors) and returns a new
 `matplotlib.figure.Figure`, made without pyplot so that it is never shown or
 left open. Nothing here touches a database.
 
@@ -102,9 +102,9 @@ def captions(config: RunConfig | None = None) -> dict[str, str]:
             "run is marked not in use."
         ),
         "guiding": (
-            "One point per science visit, from its settled guide offsets: those the guider accepted after "
-            f"the visit's first {config.nSettle} guide frames, for visits with at least {config.minSettled} "
-            "of them. A guide offset is the pointing error the guider measured in one AG exposure (ΔRA on "
+            "One point per science visit, from the guide offsets the guider accepted in AG exposures taken "
+            "while the spectrograph shutters were open, for visits with at least "
+            f"{config.minOpenFrames} of them. A guide offset is the pointing error the guider measured in one AG exposure (ΔRA on "
             "the sky, ΔDec, and the rotator angle ΔInR). Size is how large the error was: the RMS of the "
             "visit's offsets about zero. Jitter is how steady the measurement was: frame to frame, the "
             "standard deviation of consecutive differences / √2, which a slow drift barely changes. "
@@ -488,20 +488,20 @@ def _scatterByCameras(ax: Axes, x, y, full) -> None:
 
 
 def plotGuiding(run: AgRun, jitter: pd.DataFrame) -> Figure:
-    """Plot each science visit's settled guide error, its size and its jitter, and each night's guide-loop problems.
+    """Plot each science visit's guide error, its size and its jitter, and each night's guide-loop problems.
 
     Parameters
     ----------
     run : `AgRun`
         The run.
     jitter : `pandas.DataFrame`
-        From `runAnalysis.settledJitter`.
+        From `runAnalysis.visitGuideErrors`.
 
     Returns
     -------
     fig : `matplotlib.figure.Figure`
         For ΔRA (on the sky), ΔDec and ΔInR, the RMS of each visit's
-        settled offsets (left) and their frame-to-frame jitter (right), a
+        guide offsets (left) and their frame-to-frame jitter (right), a
         visit with stars matched on fewer cameras than are in use marked;
         and per night the AG exposures whose offset was rejected or not
         written.

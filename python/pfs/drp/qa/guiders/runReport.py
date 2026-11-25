@@ -38,8 +38,8 @@ from pfs.drp.qa.guiders.runAnalysis import (
     groupSummary,
     prepareRun,
     runSummary,
-    settledJitter,
     summariseModelErrors,
+    visitGuideErrors,
 )
 from pfs.drp.qa.guiders.runPlotting import AG_PIXEL_UM, CAMERA_ORDER, GROUPS_NOTE, captions
 from pfs.utils import agMetrics
@@ -193,11 +193,14 @@ def keyNumbers(summary: dict, config: RunConfig | None = None) -> list[tuple[str
     def pair(axis: str, key: str) -> str:
         return f"{error[axis][key]:.3f}″ (95%: {error[axis][key + '95']:.3f}″)"
 
-    settled = f"median over {summary['settledVisits']} settled science visits"
+    settled = (
+        f"median over {summary['measuredVisits']} of {summary['scienceVisits']} science visits, from the AG "
+        "exposures taken with the shutters open"
+    )
     return [
         ("Cameras in use", ", ".join(summary["camerasInUse"]), "cameras with any detection in the run"),
         *[
-            (f"Guide error, {name}", pair(axis, "size"), f"RMS of a visit's settled guide offsets; {settled}")
+            (f"Guide error, {name}", pair(axis, "size"), f"RMS of a visit's guide offsets; {settled}")
             for axis, name in AXES
         ],
         *[
@@ -208,7 +211,8 @@ def keyNumbers(summary: dict, config: RunConfig | None = None) -> list[tuple[str
             "Star position, measured minus expected",
             f"{summary['residualUm']['median']:.1f} µm = {summary['residualUm']['median'] / AG_PIXEL_UM:.2f} px "
             f"(95%: {summary['residualUm']['p95']:.1f} µm)",
-            "distance of a good match from where the guider expected it; median over science AG exposures",
+            "distance of a good match from where the guider expected it; median over the science AG exposures "
+            "taken with the shutters open",
         ),
         (
             "Designed guide stars matched",
@@ -256,7 +260,7 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
         The report.
     """
     outDir.mkdir(parents=True, exist_ok=True)
-    jitter = settledJitter(run)
+    jitter = visitGuideErrors(run)
     dropouts = findDropouts(run)
     clusters = findRejectionClusters(run)
     modelErrors = fitModelErrors(run)
@@ -300,6 +304,12 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
         md += [f"## {heading}", "", f"![{heading}]({name}.png)", "", caption[name], ""]
         if name == "cameraPresence":
             md += ["### AG1/3/5 against AG2/4/6", "", GROUPS_NOTE, "", *_table(groups), ""]
+        if name == "guiding" and not run.frames.shutter.any():
+            md += [
+                "**No shutter times were read** (a fetch older than this check): run `fetch` again for each "
+                "visit's guide error, which is measured with the shutters open.",
+                "",
+            ]
     md += [
         "## Cameras",
         "",

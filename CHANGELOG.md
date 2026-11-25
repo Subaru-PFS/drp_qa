@@ -37,6 +37,17 @@ made, and earlier sections to the weekly tag alone.
 - **AG run report: offsets from too few stars** (INSTRM-3073) — the flag for guide offsets accepted from fewer
   than 3 matched stars says on how many nights and when the last was, and counts the offsets of AG focus
   sweeps apart from the guide loop's.
+- **AG run report: the guide error is of the frames with the shutters open** (INSTRM-3073) — a science visit's
+  guide error and jitter (`runAnalysis.visitGuideErrors`, which replaces `settledJitter`) are measured from the
+  accepted guide offsets of the AG exposures taken while the spectrograph shutters were open, for visits with at
+  least 5 (`RunConfig.minOpenFrames`; `nSettle` and `minSettled` are gone). The old rule skipped a visit's first
+  5 guide frames and needed 10 more, so it measured none of Run 31's 60 s windowed visits properly: their six
+  AG exposures with the shutters open were skipped, and the ones after the close, when the offsets jump to about
+  1″, were what it measured. Now 1476 of Run 31's 1477 science visits are measured (889 before); the long
+  visits' values are unchanged (ratio 1.00, 0.97 to 1.03). The jitter is the sample standard deviation (n − 1),
+  so the median six-frame visit reads as a long one. `queries.readAgRun`'s `visits` gains `shutter_open` and
+  `shutter_close`; a fetch without them reports no guide error: run `fetch` again. The run's star-position and
+  matched-star numbers are of the science AG exposures with the shutters open too.
 - **AG run report: good matches** (INSTRM-3073) — the `cameras` table of `queries.readAgRun` counts a good match
   as `GOOD_MATCH` on a clean detection (`agc_data.flags` NONE or RIGHT) of a camera the guider had not left out,
   for the count, the FWHM and the new `residual_um`. No change where the guider already matched only clean

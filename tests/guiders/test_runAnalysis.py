@@ -25,9 +25,9 @@ from pfs.drp.qa.guiders.runAnalysis import (
     onSkyRa,
     prepareRun,
     runSummary,
-    settledJitter,
     stateShares,
     summariseModelErrors,
+    visitGuideErrors,
     visitMatchFraction,
 )
 from pfs.utils.datamodel.ag import GuideOffsetFlag
@@ -101,14 +101,14 @@ def testFindDropoutsMinimumLength(makeAgRunTables):
     assert not dropouts.to_end.iloc[0]
 
 
-def testSettledJitterOnTheSky(makeAgRunTables):
+def testJitterIsOnTheSky(makeAgRunTables):
     """RA jitter is on the sky: guide_delta_ra is a coordinate offset, ΔRA, larger by 1/cos(Dec)."""
     dec = 60.0
     run = prepareRun(makeAgRunTables(dec=dec))
-    jitter = settledJitter(run)
+    jitter = visitGuideErrors(run)
 
     assert len(jitter) == 8
-    assert (jitter.n_frames == 40 - RunConfig().nSettle).all()
+    assert (jitter.n_frames == 40).all()
     # The synthetic noise is 0.05" on the sky in both axes, so both jitters are about 0.05".
     assert np.allclose(jitter.ra.median(), 0.05, rtol=0.2)
     assert np.allclose(jitter.dec.median(), 0.05, rtol=0.2)
@@ -121,14 +121,56 @@ def testSettledJitterOnTheSky(makeAgRunTables):
     assert np.allclose(onSkyRa(frames), frames.guide_delta_ra * 0.5)
 
 
-def testSettledJitterSkipsUnsettledAndRejected(makeAgRunTables):
-    tables = makeAgRunTables(nNights=1, nVisits=1)
-    tables["exposures"].loc[:4, "guide_delta_dec"] = 100.0  # acquisition: left out as unsettled
-    tables["exposures"].loc[20, ["mask", "guide_delta_dec"]] = (1, -100.0)  # rejected: left out
-    jitter = settledJitter(prepareRun(tables))
+def testGuideErrorIsOfTheFramesWithTheShuttersOpen(makeAgRunTables):
+    """A visit's guide error is measured from the accepted offsets of the AG exposures taken with the shutters open."""
+    # Each visit's shutters close after its 6th AG exposure; the pointing is then 1″ off, as after a move.
+    tables = makeAgRunTables(nNights=1, nVisits=2, nExp=12, openFrames=6)
+    exposures = tables["exposures"]
+    afterClose = exposures.groupby("pfs_visit_id").cumcount() >= 6
+    exposures.loc[afterClose, "guide_delta_dec"] = 1.0
+    exposures.loc[2, ["mask", "guide_delta_dec"]] = (1, -100.0)  # rejected, with the shutters open: left out
+    run = prepareRun(tables)
+    errors = visitGuideErrors(run).set_index("pfs_visit_id")
 
-    assert jitter.n_frames.iloc[0] == 40 - 5 - 1
-    assert jitter.dec.iloc[0] < 0.1
+    assert run.frames.shutter.sum() == 2 * 6
+    assert errors.n_frames.to_dict() == {150000: 5, 150001: 6}
+    assert (errors.dec_size < 0.15).all() and (errors.dec < 0.15).all()
+    # Negative control: measured over every frame, the 1″ after the shutters closed would be the visit's error.
+    every = prepareRun(makeAgRunTables(nNights=1, nVisits=2, nExp=12))
+    assert visitGuideErrors(every).n_frames.eq(12).all()
+    assert exposures[exposures.pfs_visit_id == 150001].guide_delta_dec.pow(2).mean() ** 0.5 > 0.5
+
+
+def testAVisitNeedsEnoughFramesWithTheShuttersOpen(makeAgRunTables):
+    tables = makeAgRunTables(nNights=1, nVisits=2, nExp=12, openFrames=4)
+
+    assert visitGuideErrors(prepareRun(tables)).empty
+    assert len(visitGuideErrors(prepareRun(tables, RunConfig(minOpenFrames=4)))) == 2
+    # A read with no shutter times cannot say which frames those were: no visit is measured.
+    older = makeAgRunTables()
+    older["visits"] = older["visits"].drop(columns=["shutter_open", "shutter_close"])
+    run = prepareRun(older)
+    assert not run.frames.shutter.any() and visitGuideErrors(run).empty
+    assert runSummary(run, visitGuideErrors(run))["measuredVisits"] == 0
+    # Negative control: with them, every visit of the same run is.
+    assert len(visitGuideErrors(prepareRun(makeAgRunTables()))) == 8
+
+
+def testJitterOfAShortVisitReadsAsALongOnes(makeAgRunTables):
+    """The median visit's jitter is the noise put in, for visits of six frames as for long ones.
+
+    The jitter is the sample standard deviation (n - 1) of a visit's consecutive differences. With n, the
+    median visit of six frames reads 0.88 of the same noise over a long visit, in a simulation of pure
+    noise and in 6-frame pieces of Run 31's long visits alike (0.87); with n - 1, 0.98 and 0.97.
+    """
+    short = visitGuideErrors(prepareRun(makeAgRunTables(nNights=1, nVisits=400, nExp=6)))
+    long = visitGuideErrors(prepareRun(makeAgRunTables(nNights=1, nVisits=8, nExp=300)))
+
+    assert len(short) == 400 and len(long) == 8
+    assert long.dec.median() == pytest.approx(0.05, rel=0.06)
+    assert short.dec.median() == pytest.approx(0.05, rel=0.06)
+    # Negative control: dividing by n would put the six-frame visits' median well under the noise.
+    assert short.dec.median() * np.sqrt(4 / 5) != pytest.approx(0.05, rel=0.06)
 
 
 def testGroupSummaryFocus(makeAgRunTables):
@@ -164,7 +206,7 @@ def testFindFlags(makeAgRunTables):
     oneHalf = (cameras.agc_camera_id == 0) & (cameras.right_half == 0)
     cameras.loc[cameras.agc_exposure_id.isin(lone) & oneHalf, "n_good"] = 1
     run = prepareRun(tables)
-    jitter = settledJitter(run)
+    jitter = visitGuideErrors(run)
     flags = findFlags(run, jitter, findDropouts(run))
     text = "\n".join(flag.text for flag in flags)
 
@@ -175,7 +217,7 @@ def testFindFlags(makeAgRunTables):
     assert all(flag.kind in ("camera", "guiding", "image") for flag in flags)
     # Negative control: a clean run raises no flag.
     clean = prepareRun(makeAgRunTables())
-    assert findFlags(clean, settledJitter(clean), findDropouts(clean)) == []
+    assert findFlags(clean, visitGuideErrors(clean), findDropouts(clean)) == []
 
 
 def testIsRejectedOffset():
@@ -193,7 +235,7 @@ def testFindFlagsCountsTooFewStars(makeAgRunTables):
     exposures.loc[50:52, "mask"] = int(GuideOffsetFlag.INVALID_OFFSET | GuideOffsetFlag.TOO_FEW_STARS)
     exposures.loc[53, "mask"] = int(GuideOffsetFlag.INVALID_OFFSET)
     run = prepareRun(tables)
-    text = "\n".join(flag.text for flag in findFlags(run, settledJitter(run), findDropouts(run)))
+    text = "\n".join(flag.text for flag in findFlags(run, visitGuideErrors(run), findDropouts(run)))
     assert (
         "4 guide frames rejected** (INVALID_OFFSET: not sent to the telescope, 3 of them TOO_FEW_STARS)"
         in text
@@ -201,7 +243,7 @@ def testFindFlagsCountsTooFewStars(makeAgRunTables):
     # Negative control: out of range alone names no TOO_FEW_STARS.
     exposures.loc[50:52, "mask"] = int(GuideOffsetFlag.INVALID_OFFSET)
     run = prepareRun(tables)
-    text = "\n".join(flag.text for flag in findFlags(run, settledJitter(run), findDropouts(run)))
+    text = "\n".join(flag.text for flag in findFlags(run, visitGuideErrors(run), findDropouts(run)))
     assert "4 guide frames rejected** (INVALID_OFFSET: not sent to the telescope)" in text
 
 
@@ -211,9 +253,9 @@ def testFindFlagsJitterAndFwhm(makeAgRunTables):
     exposures.loc[exposures.pfs_visit_id == 150002, "guide_delta_dec"] *= 10
     tables["cameras"].loc[tables["cameras"].agc_camera_id == 5, "sigma_pix"] *= 1.5
     run = prepareRun(tables)
-    text = "\n".join(flag.text for flag in findFlags(run, settledJitter(run), findDropouts(run)))
+    text = "\n".join(flag.text for flag in findFlags(run, visitGuideErrors(run), findDropouts(run)))
 
-    assert "1 of 8 science visits have settled jitter over 3× the median" in text and "150002" in text
+    assert "1 of 8 science visits" in text and "150002" in text
     assert "AG6: FWHM +" in text
     assert "AG5: FWHM" not in text
 
@@ -289,7 +331,7 @@ def testClusterFlags(makeAgRunTables):
         _reject(tables, exposures.iloc[100:112], cid, CORNER)
     run = prepareRun(tables)
     flags = findFlags(
-        run, settledJitter(run), findDropouts(run), findRejectionClusters(run), fitModelErrors(run)
+        run, visitGuideErrors(run), findDropouts(run), findRejectionClusters(run), fitModelErrors(run)
     )
     clustered = [flag for flag in flags if "cluster" in flag.text]
 
@@ -311,7 +353,7 @@ def testFitModelErrors(makeAgRunTables):
     assert np.isclose(errors.error_um[3], 5.0, atol=0.3) and np.isclose(errors.angle_deg[3], 45, atol=3)
     # Negative control: the 20 µm pointing error moves every camera's stars together, and is no model error.
     assert (errors.drop([2, 3]).error_um < 0.6).all()
-    flags = findFlags(run, settledJitter(run), findDropouts(run), None, fitModelErrors(run))
+    flags = findFlags(run, visitGuideErrors(run), findDropouts(run), None, fitModelErrors(run))
     assert [flag.agc_camera_id for flag in flags if "position model" in flag.text] == [2, 3]
 
 
@@ -364,7 +406,7 @@ def testModelErrorWithoutADirection(makeAgRunTables):
     assert summary.ratio[2] > 0.9 and np.isnan(summary.angle_deg[2])
     # Negative control: a scale along one axis has a direction.
     assert summary.ratio[3] < 0.2 and summary.angle_deg[3] == pytest.approx(90, abs=2)
-    flags = findFlags(run, settledJitter(run), findDropouts(run), None, errors)
+    flags = findFlags(run, visitGuideErrors(run), findDropouts(run), None, errors)
     assert "AG3: its position model is off by 5.0 µm" in "\n".join(f.text for f in flags)
     assert any("no one direction" in f.text for f in flags if f.agc_camera_id == 2)
 
@@ -397,7 +439,7 @@ def testCameraChecksUsePlottedNightsOnly(makeAgRunTables):
 
 
 def _flags(run):
-    return findFlags(run, settledJitter(run), findDropouts(run))
+    return findFlags(run, visitGuideErrors(run), findDropouts(run))
 
 
 def testCameraNotInUse(makeAgRunTables):
@@ -405,7 +447,7 @@ def testCameraNotInUse(makeAgRunTables):
     tables = makeAgRunTables(deadFrom={1: 0})
     tables["exposures"]["guide_delta_z2"] = np.nan  # as the guider writes for a camera with no stars
     run = prepareRun(tables)
-    jitter = settledJitter(run)
+    jitter = visitGuideErrors(run)
     flags = findFlags(run, jitter, findDropouts(run))
 
     assert run.inUse == (0, 2, 3, 4, 5)
@@ -427,7 +469,7 @@ def testCameraNotInUse(makeAgRunTables):
     (dropout,) = findDropouts(lost).itertuples()
     assert (dropout.agc_camera_id, dropout.n_frames, dropout.dark) == (1, 220, True)
     assert any(flag.severe and flag.agc_camera_id == 1 for flag in _flags(lost))
-    assert not settledJitter(lost).full.all()
+    assert not visitGuideErrors(lost).full.all()
 
 
 def testDisabledCamera(makeAgRunTables):
@@ -445,13 +487,13 @@ def testDisabledCamera(makeAgRunTables):
     assert (frames.state3.iloc[:200] == CameraState.OK).all()
 
 
-def testSettledSizeAndJitter(makeAgRunTables):
-    """A steady pointing error shows in the size of the settled offsets, not in their jitter."""
+def testSizeAndJitter(makeAgRunTables):
+    """A steady pointing error shows in the size of a visit's guide offsets, not in their jitter."""
     tables = makeAgRunTables()
     exposures = tables["exposures"]
     biased = exposures.pfs_visit_id == 150002
     exposures.loc[biased, "guide_delta_dec"] += 0.3
-    jitter = settledJitter(prepareRun(tables)).set_index("pfs_visit_id")
+    jitter = visitGuideErrors(prepareRun(tables)).set_index("pfs_visit_id")
 
     assert jitter.dec_size[150002] == pytest.approx(np.hypot(0.3, 0.05), rel=0.1)
     assert jitter.dec[150002] == pytest.approx(0.05, rel=0.35)
@@ -515,7 +557,7 @@ def testRunSummary(makeAgRunTables):
     exposures.loc[50, "mask"] = 1
     exposures.loc[60, "mask"] = np.nan
     run = prepareRun(tables)
-    summary = runSummary(run, settledJitter(run))
+    summary = runSummary(run, visitGuideErrors(run))
 
     assert (summary["nights"], summary["exposures"], summary["scienceVisits"]) == (2, N_EXPOSURES, 8)
     assert summary["camerasInUse"] == [f"AG{n}" for n in range(1, 7)]
@@ -580,7 +622,7 @@ def testVisitMatchFraction(makeAgRunTables):
     assert fractions.fraction[150000] == pytest.approx(0.75)
     # With one of the five cameras gone, four fifths of that.
     assert fractions.fraction[150013] == pytest.approx(0.75 * 4 / 5)
-    summary = runSummary(run, settledJitter(run))["matchedFraction"]
+    summary = runSummary(run, visitGuideErrors(run))["matchedFraction"]
     assert summary["visits"] == 8 and summary["median"] == pytest.approx((0.75 + 0.6) / 2)
     assert summary["p5"] < summary["median"] < summary["p95"]
     # Negative control: counting AG2's stars as available would lower every visit's share.
@@ -591,4 +633,4 @@ def testVisitMatchFraction(makeAgRunTables):
     del tables["magnitudes"]
     older = prepareRun(tables)
     assert visitMatchFraction(older).empty
-    assert np.isnan(runSummary(older, settledJitter(older))["matchedFraction"]["median"])
+    assert np.isnan(runSummary(older, visitGuideErrors(older))["matchedFraction"]["median"])

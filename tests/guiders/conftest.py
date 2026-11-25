@@ -374,11 +374,13 @@ def makeAgRunTables(
     dec: float = 0.0,
     modelError: dict[int, list[list[float]]] | None = None,
     disabledFrom: dict[int, int] | None = None,
+    openFrames: int | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Make the tables of `readAgRun` for a synthetic run.
 
     Each night has ``nVisits`` science visits of ``nExp`` AG exposures 10 s
-    apart, starting at 19:00 HST. In ``cameras`` every camera detects 8
+    apart, starting at 19:00 HST, all taken with the visit's spectrograph
+    shutters open unless ``openFrames`` says how many. In ``cameras`` every camera detects 8
     spots, 4 on each half, 3 of them good matches (sigma 2 pixels on the
     glass half, 2.2 on the other) 12 µm from where they were expected, and
     1 of the 4 flagged EDGE. In ``magnitudes`` each camera has 2 designed
@@ -409,6 +411,10 @@ def makeAgRunTables(
     modelError : `dict` [`int`, 2x2 `list`], optional
         For a camera, a matrix A (µm per pixel): its residuals are moved by
         A (position - detector centre).
+    openFrames : `int`, optional
+        AG exposures of each visit taken while its spectrograph shutters
+        are open, from its first (default: all of them); the rest are taken
+        after they close.
     disabledFrom : `dict` [`int`, `int`], optional
         For a camera, the index of the run's AG exposure from which the
         guider leaves it out of its fit: its matches are no longer good
@@ -436,7 +442,19 @@ def makeAgRunTables(
         t = RUN_START + pd.Timedelta(days=night)
         for v in range(nVisits):
             visit = 150000 + 10 * night + v
-            visits.append((visit, RUN_DESIGN, dec, 9000 + visit, "scienceObject"))
+            # The shutters open just before the visit's first AG exposure, and close after its last open one.
+            nOpen = nExp if openFrames is None else openFrames
+            visits.append(
+                (
+                    visit,
+                    RUN_DESIGN,
+                    dec,
+                    9000 + visit,
+                    "scienceObject",
+                    t + pd.Timedelta(seconds=9),
+                    t + pd.Timedelta(seconds=10 * nOpen + 5),
+                )
+            )
             live = dict.fromkeys(range(6), 0)
             for _ in range(nExp):
                 aid += 1
@@ -530,6 +548,8 @@ def makeAgRunTables(
                 "dec_center_designed",
                 "iic_sequence_id",
                 "sequence_type",
+                "shutter_open",
+                "shutter_close",
             ],
         ),
         "focus": pd.DataFrame(

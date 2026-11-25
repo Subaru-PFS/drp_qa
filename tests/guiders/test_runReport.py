@@ -20,7 +20,7 @@ from pfs.drp.qa.guiders.runAnalysis import (
     fitModelErrors,
     prepareRun,
     runSummary,
-    settledJitter,
+    visitGuideErrors,
 )
 from pfs.drp.qa.guiders.runReport import FIGURES, fetchRun, keyNumbers, loadRun, main
 from pfs.utils.datamodel.ag import SourceDetectionFlags, SourceMatchingFlags
@@ -110,7 +110,7 @@ def testReadAgRunNeedsOpdb():
 
 def testPlots(makeAgRunTables):
     run = prepareRun(makeAgRunTables(deadFrom={0: 200}, modelError={2: [[0.0, 0.0], [0.0, 0.013]]}))
-    jitter = settledJitter(run)
+    jitter = visitGuideErrors(run)
     clusters, modelErrors = findRejectionClusters(run), fitModelErrors(run)
     figures = {
         "presence": runPlotting.plotCameraPresence(run),
@@ -134,7 +134,7 @@ def testGuidingPlotWithAnAxisAllNaN(makeAgRunTables):
     tables = makeAgRunTables()
     tables["exposures"]["guide_delta_insrot"] = float("nan")
     run = prepareRun(tables)
-    fig = runPlotting.plotGuiding(run, settledJitter(run))
+    fig = runPlotting.plotGuiding(run, visitGuideErrors(run))
 
     assert fig.axes[4].get_ylim() == (0.0, 1.0) and fig.axes[5].get_ylim() == (0.0, 1.0)
 
@@ -184,12 +184,12 @@ def testPresenceMarksACameraNotInUse(makeAgRunTables):
 
 
 def testCaptionsCoverEveryFigureAndFollowTheConfiguration():
-    config = RunConfig(nSettle=77, minSettled=111, minDesignStars=44, maxCorrection=8.5)
+    config = RunConfig(minOpenFrames=77, minDesignStars=44, maxCorrection=8.5)
     captions, default = runPlotting.captions(config), runPlotting.captions()
 
     assert set(captions) == {*FIGURES, "camera"} == set(default)
     # The numbers a caption quotes are the configuration's.
-    assert "77" in captions["guiding"] and "111" in captions["guiding"]
+    assert "77" in captions["guiding"]
     assert "44" in captions["cameraPresence"] and "8.5" in captions["acquisition"]
     # Negative control: they aren't written in.
     assert "77" not in default["guiding"] and "44" not in default["cameraPresence"]
@@ -197,7 +197,7 @@ def testCaptionsCoverEveryFigureAndFollowTheConfiguration():
 
 def testKeyNumbers(makeAgRunTables):
     run = prepareRun(makeAgRunTables(deadFrom={1: 0}))
-    rows = keyNumbers(runSummary(run, settledJitter(run)))
+    rows = keyNumbers(runSummary(run, visitGuideErrors(run)))
     values = [value for _, value, _ in rows]
 
     # Each is what it is, its value, and how it was measured.

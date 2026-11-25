@@ -801,15 +801,26 @@ _AG_RUN_SQL = {
     WHERE agc_exposure.taken_at >= :start AND agc_exposure.taken_at < :end
     ORDER BY agc_exposure.taken_at
     """,
-    # Each visit with AG exposures: its design and centre, and its latest IIC sequence.
+    # Each visit with AG exposures: its design and centre, its latest IIC sequence, and when the spectrograph
+    # shutters were open (the first camera's opening to the last one's closing; NULL with no SpS exposure).
     "visits": """
+    WITH shutter AS (
+        SELECT pfs_visit_id, min(time_exp_start) AS shutter_open, max(time_exp_end) AS shutter_close
+        FROM sps_exposure
+        WHERE pfs_visit_id IN (
+            SELECT pfs_visit_id FROM agc_exposure WHERE taken_at >= :start AND taken_at < :end
+        )
+        GROUP BY pfs_visit_id
+    )
     SELECT DISTINCT ON (pfs_visit.pfs_visit_id)
         pfs_visit.pfs_visit_id, pfs_visit.pfs_design_id, pfs_design.dec_center_designed,
-        iic_sequence.iic_sequence_id, iic_sequence.sequence_type
+        iic_sequence.iic_sequence_id, iic_sequence.sequence_type,
+        shutter.shutter_open, shutter.shutter_close
     FROM pfs_visit
     LEFT JOIN pfs_design ON pfs_design.pfs_design_id = pfs_visit.pfs_design_id
     LEFT JOIN visit_set ON visit_set.pfs_visit_id = pfs_visit.pfs_visit_id
     LEFT JOIN iic_sequence ON iic_sequence.iic_sequence_id = visit_set.iic_sequence_id
+    LEFT JOIN shutter ON shutter.pfs_visit_id = pfs_visit.pfs_visit_id
     WHERE pfs_visit.pfs_visit_id IN (
         SELECT pfs_visit_id FROM agc_exposure WHERE taken_at >= :start AND taken_at < :end
     )
@@ -943,8 +954,10 @@ def readAgRun(
             ``agc_guide_offset`` columns (NaN where there's none):
             ``guide_delta_ra`` is a coordinate offset, ΔRA.
         ``visits``
-            One row per visit: ``pfs_design_id``, ``dec_center_designed`` and
-            its latest ``iic_sequence_id`` and ``sequence_type``.
+            One row per visit: ``pfs_design_id``, ``dec_center_designed``,
+            its latest ``iic_sequence_id`` and ``sequence_type``, and
+            ``shutter_open`` and ``shutter_close``, when the spectrograph
+            shutters opened and closed (HST; NaT with no SpS exposure).
         ``focus``
             ``tel_status.m2_off3`` by ``created_at``, from every caller.
         ``designStars``

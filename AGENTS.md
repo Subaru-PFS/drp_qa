@@ -93,7 +93,7 @@ the pipeline/config glue to run them.
   (needs the opdb; committed without outputs): keep it in step with renamed arguments.
   The end-of-run report adds `queries.readAgRun` (aggregates over a period's AG
   exposures), `runAnalysis` (stack-free: per-exposure camera states, the cameras in use, dropouts, the size and
-  jitter of the settled guide error, clusters of rejected matches, position-model errors, matches by magnitude,
+  jitter of each visit's guide error with the shutters open, clusters of rejected matches, position-model errors, matches by magnitude,
   detection flags, flags and the key numbers), `runPlotting` (figures from an `AgRun`, and their captions) and
   `runReport` (fetch to parquet, then the Markdown report), driven by `drpQa.py agReport` with the same observing
   runs `redo` uses; tested in `tests/guiders/test_runAnalysis.py` and `test_runReport.py` on a synthetic run

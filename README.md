@@ -666,14 +666,21 @@ python bin.src/drpQa.py agReport report --period run30 --title "Run 30" [--notes
 `fetch` reads seven aggregated tables (`queries.readAgRun`, the matches on a 4×4 grid over each detector and the
 designed guide stars matched by magnitude among them) into `~/.cache/drp_qa/agRun/opdb/`; `report` writes
 `<period>/report.md`, its figures and `metrics.json` from them, without the database. The report opens with its
-key numbers (`runAnalysis.runSummary`: the size and the frame-to-frame jitter of the settled guide error in ΔRA,
+key numbers (`runAnalysis.runSummary`: the size and the frame-to-frame jitter of each science visit's guide error in ΔRA,
 ΔDec and ΔInR and on the sky, the distance of the matched stars from where the guider expected them, the share
-of the designed guide stars matched per science visit, and the stars matched per AG exposure and per camera) and its flags, then a map of the camera states, AG1/3/5 against AG2/4/6, the settled
+of the designed guide stars matched per science visit, and the stars matched per AG exposure and per camera) and its flags, then a map of the camera states, AG1/3/5 against AG2/4/6, the
 guiding of each science visit, focus and acquisition, and a section per camera: its flags, and its matched stars,
 FWHM per detector half, focus against the others, designed guide stars matched by magnitude, the share of AG
 exposures in which it matched a star, clusters of rejected matches, position-model error and the share of its
 detections ics_agccActor flagged (EDGE, SATURATED, BAD_SHAPE, BAD_ELLIP, BAD_SIZE), night by night. Every figure
 has a caption saying what it shows (`runPlotting.captions`), which `pfs_qa_dashboard`'s AG page shows too.
+
+A visit's guide error is measured from the guide offsets the guider accepted in AG exposures taken while the
+spectrograph shutters were open (`runAnalysis.visitGuideErrors`, from `sps_exposure`'s times, at least 5 of them):
+what the spectrograph saw. AG exposures go on after the shutters close, and the pointing may then be moved: in Run
+31's 60 s windowed visits, six AG exposures are taken with the shutters open (median offset 0.11″) and the first
+after they close reads about 1″. Nothing settles within a science visit (its first AG exposure reads as its
+twelfth), so no frames are skipped at its start.
 
 A good match is `agc_match.flags = GOOD_MATCH` on a clean detection (`agc_data.flags` NONE or RIGHT) of a camera
 the guider had not left out of its fit. A camera's state in an AG exposure is one of matched, detections but no
@@ -701,7 +708,7 @@ What it flags (`runAnalysis.RunConfig` holds the numbers):
   expected position, less the camera's mean in each AG exposure, so the pointing drops out) against their position
   on the detector; quoted as the error 500 px from the centre and the direction it grows in. The residual is the guide fit's own: the detection through pfs_utils' `coordinates.det2dp` against the guide star through `Subaru_POPT2_PFS`, not the `CoordTransp` (`sky_pfi_ag`, `ag_pfimm_to_pixel`) chain that places guide stars in pfsDesign and pfsConfig. Flagged over 4 µm and
   1.5× the cameras' median (Runs 29 and 30: AG3 8 µm toward ~113°, the others 3–6 µm).
-- Science visits whose settled jitter (frame-to-frame, after the first 5 frames) is over 3× the run's median, and
+- Science visits whose guide jitter (frame-to-frame, with the shutters open) is over 3× the run's median, and
   cameras whose FWHM is 15% from the others'. The two detector halves focus differently by design, so their FWHM
   difference is plotted, not flagged.
 

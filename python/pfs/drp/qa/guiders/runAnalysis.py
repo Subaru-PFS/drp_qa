@@ -47,9 +47,9 @@ __all__ = [
     "onSkyRa",
     "prepareRun",
     "runSummary",
-    "settledJitter",
     "stateShares",
     "summariseModelErrors",
+    "visitGuideErrors",
     "visitMatchFraction",
 ]
 
@@ -103,15 +103,14 @@ class RunConfig:
     longDropout : `int`
         A dropout at least this long (or one with no detections at all) is
         flagged on its own; shorter ones are summarised.
-    nSettle : `int`
-        Guide frames at the start of a visit left out of its settled jitter.
-    minSettled : `int`
-        Settled frames a visit needs for its jitter.
+    minOpenFrames : `int`
+        Accepted guide offsets, from AG exposures taken while the
+        spectrograph shutters were open, a visit needs for its guide error.
     minFitStars : `int`
         A guide offset from fewer good matches than this is flagged when the
         guider accepted it.
     jitterFactor : `float`
-        A visit's settled jitter is flagged above this many times the
+        A visit's guide jitter is flagged above this many times the
         run's median.
     fwhmTolerance : `float`
         A camera's median FWHM is flagged this fraction from the cameras'
@@ -154,8 +153,7 @@ class RunConfig:
     minDesignStars: int = 3
     minDropout: int = 30
     longDropout: int = 300
-    nSettle: int = 5
-    minSettled: int = 10
+    minOpenFrames: int = 5
     minFitStars: int = 3
     jitterFactor: float = 3.0
     fwhmTolerance: float = 0.15
@@ -184,7 +182,10 @@ class AgRun:
     frames : `pandas.DataFrame`
         One row per AG exposure, time-ordered: the ``exposures`` table plus
         ``night``, ``population`` (science, convergence, focus sweep or
-        other), ``pfs_design_id``, ``dec_center_designed``, ``n_good`` (good
+        other), ``pfs_design_id``, ``dec_center_designed``, ``shutter``
+        (the whole AG exposure was taken while the visit's spectrograph
+        shutters were open; False where the read has no shutter times),
+        ``n_good`` (good
         matches over the cameras), ``n_cams`` (cameras with one),
         ``residual_um`` (the good matches' distance from where the guider
         expected them: the cameras' medians, weighted by their matches)
@@ -266,6 +267,9 @@ GRID_COLUMNS = [
 
 MAGNITUDE_COLUMNS = ["pfs_visit_id", "agc_camera_id", "magnitude", "n_expected", "n_good"]
 
+#: The columns of ``visits`` giving when a visit's spectrograph shutters opened and closed.
+SHUTTER_COLUMNS = ("shutter_open", "shutter_close")
+
 #: The columns of ``cameras`` counting detections with one of ics_agccActor's bad-detection flags, with the
 #: flag's name (`pfs.drp.qa.guiders.queries.AG_DETECTION_FLAGS`).
 DETECTION_FLAG_COLUMNS = {
@@ -313,13 +317,19 @@ def prepareRun(tables: dict[str, pd.DataFrame], config: RunConfig | None = None)
     config = config or RunConfig()
     frames = tables["exposures"].sort_values("taken_at", ignore_index=True)
     visits = tables["visits"].drop_duplicates("pfs_visit_id")
+    # A read older than the shutter times has none: no AG exposure is then known to be with the shutters open.
+    visits = visits.assign(**{name: pd.NaT for name in SHUTTER_COLUMNS if name not in visits})
     frames = frames.merge(
-        visits[["pfs_visit_id", "pfs_design_id", "dec_center_designed", "sequence_type"]],
+        visits[["pfs_visit_id", "pfs_design_id", "dec_center_designed", "sequence_type", *SHUTTER_COLUMNS]],
         how="left",
         on="pfs_visit_id",
     )
     frames["night"] = nightOf(frames.taken_at)
     frames["population"] = _population(frames.sequence_type)
+    taken = pd.to_datetime(frames.taken_at)
+    frames["shutter"] = (taken >= pd.to_datetime(frames.shutter_open)) & (
+        taken + pd.to_timedelta(frames.agc_exptime, unit="s") <= pd.to_datetime(frames.shutter_close)
+    )
 
     cameras = tables["cameras"]
     # A read older than these columns lacks them: no camera was recorded as disabled, and the rest are unknown.
@@ -427,17 +437,21 @@ def isRejectedOffset(mask: pd.Series, flag: GuideOffsetFlag = GuideOffsetFlag.IN
     return (mask.fillna(int(GuideOffsetFlag.OK)).astype(int) & int(flag)) != 0
 
 
-def settledJitter(run: AgRun) -> pd.DataFrame:
-    """Return the size and the frame-to-frame jitter of each science visit's settled guide offsets.
+def visitGuideErrors(run: AgRun) -> pd.DataFrame:
+    """Return the size and the frame-to-frame jitter of each science visit's guide offsets.
 
-    A visit's settled frames are its accepted guide offsets after its first
-    ``nSettle`` guide frames, rejected ones counted among those (the loop is
-    still converging, whatever it did with them); visits with fewer than
-    ``minSettled`` settled frames are left out. A guide offset is the
-    pointing error the guider measured in that AG exposure, so their RMS
-    about zero is how large the error was, and the jitter, the standard
-    deviation of consecutive differences over √2, which a slow drift barely
-    changes, is how steady the measurement was.
+    A visit is measured from the guide offsets the guider accepted in AG
+    exposures taken while the spectrograph shutters were open: what the
+    spectrograph saw. AG exposures go on after the shutters close, and the
+    pointing may then be moved (in Run 31's windowed visits the offsets
+    jump to about 1″ in the first AG exposure after the close), so those
+    are no part of the visit's guiding. Visits with fewer than
+    ``minOpenFrames`` such offsets are left out, and so is every visit of a
+    read with no shutter times. A guide offset is the pointing error the
+    guider measured in that AG exposure, so their RMS about zero is how
+    large the error was, and the jitter, the standard deviation of
+    consecutive differences over √2, which a slow drift barely changes, is
+    how steady the measurement was.
 
     Parameters
     ----------
@@ -446,9 +460,9 @@ def settledJitter(run: AgRun) -> pd.DataFrame:
 
     Returns
     -------
-    jitter : `pandas.DataFrame`
+    errors : `pandas.DataFrame`
         One row per visit: ``pfs_visit_id``, ``night``, ``taken_at`` (its
-        first settled frame), ``n_frames``, ``n_good`` and ``n_cams`` (median
+        first such frame), ``n_frames``, ``n_good`` and ``n_cams`` (median
         over its frames), ``full`` (stars were matched on every camera in
         use), the jitter ``ra`` (on the sky), ``dec`` and ``inr`` (arcsec),
         the size ``ra_size``, ``dec_size`` and ``inr_size`` (arcsec), and
@@ -456,15 +470,19 @@ def settledJitter(run: AgRun) -> pd.DataFrame:
         the guider expected them).
     """
     config = run.config
-    frames = run.frames[run.frames.population.eq("science") & run.frames["mask"].notna()].copy()
-    frames["n"] = frames.groupby("pfs_visit_id").cumcount() + 1
-    frames = frames[(frames.n > config.nSettle) & frames["mask"].eq(int(GuideOffsetFlag.OK))]
+    frames = run.frames[
+        run.frames.population.eq("science")
+        & run.frames.shutter
+        & run.frames["mask"].eq(int(GuideOffsetFlag.OK))
+    ].copy()
     frames["ra"] = onSkyRa(frames)
 
     def jitter(values: pd.Series) -> float:
         differences = np.diff(values.to_numpy(float))
         differences = differences[np.isfinite(differences)]
-        return float(np.std(differences) / np.sqrt(2)) if len(differences) else np.nan
+        # The sample standard deviation (n - 1): a visit may have six frames, and with n the median such visit
+        # reads 0.88 of what a long one does (0.87 in 6-frame pieces of Run 31's long visits; 0.97 with n - 1).
+        return float(np.std(differences, ddof=1) / np.sqrt(2)) if len(differences) > 1 else np.nan
 
     def size(values: pd.Series) -> float:
         values = values.to_numpy(float)
@@ -489,7 +507,7 @@ def settledJitter(run: AgRun) -> pd.DataFrame:
     ]
     rows = []
     for visit, group in frames.groupby("pfs_visit_id"):
-        if len(group) < config.minSettled:
+        if len(group) < config.minOpenFrames:
             continue
         nCams = int(group.n_cams.median())
         rows.append(
@@ -673,7 +691,7 @@ def findFlags(
     run : `AgRun`
         The run.
     jitter : `pandas.DataFrame`
-        From `settledJitter`.
+        From `visitGuideErrors`.
     dropouts : `pandas.DataFrame`
         From `findDropouts`.
     clusters : `pandas.DataFrame`, optional
@@ -686,7 +704,7 @@ def findFlags(
     flags : `list` [`Flag`]
         Cameras not in use; camera dropouts; cameras whose matches are often rejected in a
         cluster on one side of the detector, or whose position model is off; guide frames rejected,
-        missing, or accepted from too few stars; visits with unusual settled
+        missing, or accepted from too few stars; visits with unusual guide
         jitter; cameras with unusual image sizes. The FWHM of a camera's two
         halves is not flagged: they focus differently by design.
     """
@@ -831,7 +849,7 @@ def findFlags(
                 Flag(
                     "guiding",
                     False,
-                    f"{len(high)} of {len(jitter)} science visits have settled jitter over "
+                    f"{len(high)} of {len(jitter)} science visits have guide jitter over "
                     f"{config.jitterFactor:g}× the median on some axis; worst: "
                     + ", ".join(f"{int(r.pfs_visit_id)} ({r.ratio:.0f}×)" for _, r in high.head(8).iterrows())
                     + ".",
@@ -1316,15 +1334,16 @@ def runSummary(run: AgRun, jitter: pd.DataFrame) -> dict:
     run : `AgRun`
         The run.
     jitter : `pandas.DataFrame`
-        From `settledJitter`.
+        From `visitGuideErrors`.
 
     Returns
     -------
     summary : `dict`
-        ``nights``, ``exposures``, ``scienceVisits`` and ``settledVisits``;
+        ``nights``, ``exposures``, ``scienceVisits`` and ``measuredVisits``
+        (those `visitGuideErrors` could measure);
         ``camerasInUse`` (their names); ``guideError``, per axis (``ra`` on
         the sky, ``dec``, ``inr``, and ``sky``, a visit's ΔRA and ΔDec in
-        quadrature; arcsec) the median and 95th percentile over the settled
+        quadrature; arcsec) the median and 95th percentile over the measured
         science visits of the offsets' RMS (``size``, ``size95``) and of
         their jitter (``jitter``, ``jitter95``); ``matchedFraction``, the
         median and the 5th and 95th percentiles over the science visits of
@@ -1337,10 +1356,17 @@ def runSummary(run: AgRun, jitter: pd.DataFrame) -> dict:
         use, and the percentage of exposures with fewer than
         ``minFitStars``; ``fwhm`` (arcsec, median of the good matches); and
         ``guideLoop``, the AG exposures whose offset was rejected, or not
-        written. NaN where there is nothing to measure.
+        written. The per-exposure numbers (``residualUm``, ``matchedStars``)
+        are of the science AG exposures taken with the shutters open, where
+        the read has the shutter times. NaN where there is nothing to
+        measure.
     """
     plotted = run.frames[run.frames.night.isin(run.plottedNights)]
     science = plotted[plotted.population.eq("science")]
+    scienceVisits = int(science.pfs_visit_id.nunique())
+    # What the spectrograph saw: the science AG exposures with the shutters open, where the read says which.
+    if science.shutter.any():
+        science = science[science.shutter]
 
     def percentile(values: pd.Series, q: float) -> float:
         values = np.asarray(values, dtype=float)
@@ -1368,8 +1394,8 @@ def runSummary(run: AgRun, jitter: pd.DataFrame) -> dict:
     return {
         "nights": len(run.plottedNights),
         "exposures": len(plotted),
-        "scienceVisits": int(science.pfs_visit_id.nunique()),
-        "settledVisits": len(jitter),
+        "scienceVisits": scienceVisits,
+        "measuredVisits": len(jitter),
         "camerasInUse": [f"AG{cid + 1}" for cid in run.inUse],
         "guideError": guideError,
         "residualUm": {
