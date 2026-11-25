@@ -362,7 +362,7 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
     )
     ax.set_ylim(0, max(1.0, np.nanpercentile(cameras.fwhm, 99)) if cameras.fwhm.notna().any() else 1.0)
     ax.set_title("FWHM of matched stars, nightly median (″)", loc="left", fontsize=8.5)
-    _legend(ax, loc="lower left", ncol=3)
+    _legend(ax, loc="lower left")
 
     ax = axes[0, 2]
     z = cameraFocus(run, frames)
@@ -392,7 +392,7 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
         _legend(ax, loc="lower left")
     ax.set_ylim(0, 105)
     ax.set_xlabel("guide-star magnitude", fontsize=8)
-    ax.set_title("Designed guide stars matched (%), science visits", loc="left", fontsize=8.5)
+    ax.set_title("Designed guide stars matched (%)", loc="left", fontsize=8.5)
 
     ax = axes[1, 0]
     shares = stateShares(run)
@@ -466,11 +466,11 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
                 color=color,
                 label=name,
             )
-    ax.set_ylim(0, max(5, 1.5 * ax.get_ylim()[1]))
+    ax.set_ylim(0, max(5, 1.7 * ax.get_ylim()[1]))
     ax.set_ylabel("%")
     ax.set_title("Detections flagged by ics_agccActor (%)", loc="left", fontsize=8.5)
     if len(flagged):
-        _legend(ax, loc="upper left", ncol=3)
+        _legend(ax, loc="upper left", ncol=2)
 
     for row in range(2):
         for col in range(4):
