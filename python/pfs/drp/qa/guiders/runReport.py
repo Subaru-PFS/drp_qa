@@ -256,7 +256,8 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
     caption = captions(run.config)
     for name, (_, plot) in FIGURES.items():
         plot(run, jitter).savefig(outDir / f"{name}.png", dpi=150)
-    for cid in CAMERA_ORDER:
+    # A camera not in use has nothing to draw: its section says so.
+    for cid in run.inUse:
         runPlotting.plotCamera(run, cid, clusters, modelErrors).savefig(
             outDir / f"camera-AG{cid + 1}.png", dpi=150
         )
@@ -315,7 +316,8 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
     for cid in CAMERA_ORDER:
         own = [flag for flag in flags if flag.agc_camera_id == cid]
         md += [f"### AG{cid + 1}", "", *([f"- {flag.text}" for flag in own] or ["- No flags."]), ""]
-        md += [f"![AG{cid + 1}](camera-AG{cid + 1}.png)", ""]
+        if cid in run.inUse:
+            md += [f"![AG{cid + 1}](camera-AG{cid + 1}.png)", ""]
     md += ["## AG exposures", "", *_table(populations.rename_axis(None), "{:.0f}"), ""]
     if len(skipped):
         md += [

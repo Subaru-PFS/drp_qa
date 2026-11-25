@@ -314,6 +314,19 @@ def testReportCommand(opdb, tmp_path):
     assert set(metrics["cameras"]) == {f"AG{n}" for n in range(1, 7)}
 
 
+def testReportLeavesOutTheFigureOfACameraNotInUse(FakeOpDB, makeAgRunTables, tmp_path):
+    runs = tmp_path / "runs.yaml"
+    runs.write_text('runs:\n  - name: runX\n    nights: ["2026-09-01", "2026-09-02"]\n')
+    fetchRun(FakeOpDB(makeAgRunTables(deadFrom={1: 0}), RUN_QUERIES), PERIOD, tmp_path)
+
+    assert main(["report", "--period", "runX", "--runs", str(runs), "--data-dir", str(tmp_path)]) == 0
+    section = (tmp_path / "runX" / "report.md").read_text().split("### AG2\n")[1].split("###")[0]
+    assert "AG2: not in use" in section and "camera-AG2.png" not in section
+    assert not (tmp_path / "runX" / "camera-AG2.png").exists()
+    # Negative control: the cameras in use keep theirs.
+    assert (tmp_path / "runX" / "camera-AG4.png").exists()
+
+
 def testUnknownPeriod(tmp_path):
     with pytest.raises(SystemExit, match="Unknown period"):
         main(["report", "--period", "run99", "--data-dir", str(tmp_path)])

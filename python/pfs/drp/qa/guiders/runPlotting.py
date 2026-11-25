@@ -109,7 +109,7 @@ def captions(config: RunConfig | None = None) -> dict[str, str]:
             "visit's offsets about zero. Jitter is how steady the measurement was: frame to frame, the "
             "standard deviation of consecutive differences / √2, which a slow drift barely changes. "
             "Dashed lines are the run's medians; red marks a visit in which stars were not matched on "
-            "every camera in use; a number at the top is a visit off the scale. Last: the AG exposures "
+            "every camera in use; a visit beyond a panel's scale is marked at its edge. Last: the AG exposures "
             "each night whose offset the guider rejected (INVALID_OFFSET: not sent to the telescope) or "
             "never wrote."
         ),
