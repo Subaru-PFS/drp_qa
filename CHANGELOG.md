@@ -10,6 +10,15 @@ made, and earlier sections to the weekly tag alone.
 
 ## [Unreleased]
 
+### Changed
+
+- **Guider boresight reference** (PIPE2D-1910) — `coordinates.addReferencePositions(..., "boresight")` now
+  documents that it takes one shift per `pfs_visit_id`, so it assumes a single pointing per visit. In a raster
+  or dither the telescope moves to the next point once the shutters close, within the same visit, so
+  `agc_nominal_[xy]_mm` jumps (~90 µm in Run 30's raster) and the one shift lands between the pointings; limit
+  the rows to one pointing first (e.g. `shutter_open == 1`). A `test_realData.py` negative control pins it: a
+  3.8 µm nominal-to-boresight residual on one pointing, 50 µm across both. No behaviour change.
+
 ## [0.18.0] - 2026-11-23
 
 ### Added
