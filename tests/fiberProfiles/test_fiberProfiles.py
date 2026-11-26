@@ -372,6 +372,15 @@ class TestReplacedProfiles:
         # Negative control: a search for four donors alone does name the twin.
         assert findReplaced(datamodelForm(fibers), nDonors=4)[15] == (13, 14, 16, 17)
 
+    def testThreeCopiesOfTheSameDonorsNameTheDonors(self):
+        """Each of three identical copies equals the mean of the other two; the donors are what is named."""
+        fibers = variedFibers()
+        for fiberId in (14, 15, 16):
+            replaceWithMean(fibers, fiberId, (10, 11, 12))
+        assert findReplaced(datamodelForm(fibers)) == dict.fromkeys((14, 15, 16), (10, 11, 12))
+        # Negative control: with the donors out of reach, the copies are still found, by each other.
+        assert findReplaced(datamodelForm(fibers), reach=2) == {14: (15, 16), 15: (14, 16), 16: (14, 15)}
+
     def testDonorsAreLookedForWithinReach(self):
         fibers = replaceWithMean(variedFibers(), 16, (4, 15, 17))
         assert findReplaced(datamodelForm(fibers)) == {}

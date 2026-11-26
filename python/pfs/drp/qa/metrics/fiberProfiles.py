@@ -491,6 +491,13 @@ def neighbourResidual(fibers: pd.DataFrame, column: str, halfWindow: int = 5) ->
     return pd.Series(residual, index=fibers.index, name=f"{column}Residual")
 
 
+def _sameProfile(first: np.ndarray, second: np.ndarray, tolerance: float) -> bool:
+    """Whether two profiles are equal to ``tolerance`` on the samples both have (at least `MIN_SAMPLES`)."""
+    difference = np.abs(first - second)
+    difference = difference[np.isfinite(difference)]
+    return difference.size >= MIN_SAMPLES and bool(difference.max() <= tolerance)
+
+
 def findReplaced(
     fiberProfiles: Any,
     nDonors: int | Collection[int] = REPLACE_DONORS,
@@ -521,8 +528,9 @@ def findReplaced(
     `dict` [`int`, `tuple` [`int`]]
         The donors of each replaced fiber, by ``fiberId``. A profile with too
         few finite samples, or with too few neighbours of its shape, is not
-        in it. Identical neighbouring profiles, such as a run of
-        placeholders, each equal the mean of the others and are in it.
+        in it. Copies of the same donors are identical: each is given those
+        donors when they are within reach, and otherwise the identical
+        profiles it also equals the mean of, as a run of placeholders is.
     """
     entries = sorted(
         (
@@ -537,41 +545,49 @@ def findReplaced(
         finite = np.isfinite(values)
         if finite.sum() < MIN_SAMPLES:
             continue
-        near = [
+        peak = np.nanmax(np.abs(values))
+        nearby = [
             jj
             for jj in range(max(0, ii - reach), min(len(entries), ii + reach + 1))
             if jj != ii and entries[jj][1].shape == values.shape
         ]
-        stack = np.array([entries[jj][1] for jj in near])
-        samples = tuple(range(1, values.ndim + 1))
-        # Samples every candidate has, thinned, to rank the sets of donors on.
-        flat = stack.reshape(len(near), -1) if near else np.empty((0, values.size))
-        shared = np.flatnonzero(finite.ravel() & np.isfinite(flat).all(axis=0))
-        ranked = shared[np.linspace(0, shared.size - 1, min(shared.size, REPLACE_RANK_SAMPLES)).astype(int)]
-        closest = tolerance * np.nanmax(np.abs(values))
-        for count in counts:
-            if len(near) < count:
-                continue
-            combos = np.array(list(combinations(range(len(near)), count)))
-            if len(combos) > REPLACE_SHORTLIST and ranked.size >= MIN_SAMPLES:
-                rough = np.abs(flat[:, ranked][combos].mean(axis=1) - values.ravel()[ranked]).max(axis=1)
-                combos = combos[np.sort(np.argsort(rough, kind="stable")[:REPLACE_SHORTLIST])]
-            with np.errstate(invalid="ignore"):
-                difference = np.abs(stack[combos].mean(axis=1) - values)
-            compared = np.isfinite(difference).sum(axis=samples)
-            difference = np.where(np.isfinite(difference), difference, -np.inf).max(axis=samples)
-            difference = np.where(compared >= MIN_SAMPLES, difference, np.inf)
-            best = int(np.argmin(difference))
-            # The fewest donors that match keep the fiber: two copies of the same donors are identical, so
-            # each also equals the mean of those donors and its twin, to rounding. A larger count has to be
-            # closer by a clear factor to take it.
+        # Copies of the same donors are identical, so each also equals the mean of the others: look among
+        # the fibers that differ first, and among all of them only if that names no donors.
+        distinct = [jj for jj in nearby if not _sameProfile(entries[jj][1], values, tolerance * peak)]
+        for near in (distinct, nearby) if len(distinct) < len(nearby) else (nearby,):
             if fiberId in replaced:
-                matches = difference[best] < REPLACE_CLOSER * closest
-            else:
-                matches = difference[best] <= closest
-            if matches:
-                closest = difference[best]
-                replaced[fiberId] = tuple(entries[near[jj]][0] for jj in combos[best])
+                break
+            stack = np.array([entries[jj][1] for jj in near])
+            samples = tuple(range(1, values.ndim + 1))
+            # Samples every candidate has, thinned, to rank the sets of donors on.
+            flat = stack.reshape(len(near), -1) if near else np.empty((0, values.size))
+            shared = np.flatnonzero(finite.ravel() & np.isfinite(flat).all(axis=0))
+            ranked = shared[
+                np.linspace(0, shared.size - 1, min(shared.size, REPLACE_RANK_SAMPLES)).astype(int)
+            ]
+            closest = tolerance * peak
+            for count in counts:
+                if len(near) < count:
+                    continue
+                combos = np.array(list(combinations(range(len(near)), count)))
+                if len(combos) > REPLACE_SHORTLIST and ranked.size >= MIN_SAMPLES:
+                    rough = np.abs(flat[:, ranked][combos].mean(axis=1) - values.ravel()[ranked]).max(axis=1)
+                    combos = combos[np.sort(np.argsort(rough, kind="stable")[:REPLACE_SHORTLIST])]
+                with np.errstate(invalid="ignore"):
+                    difference = np.abs(stack[combos].mean(axis=1) - values)
+                compared = np.isfinite(difference).sum(axis=samples)
+                difference = np.where(np.isfinite(difference), difference, -np.inf).max(axis=samples)
+                difference = np.where(compared >= MIN_SAMPLES, difference, np.inf)
+                best = int(np.argmin(difference))
+                # The fewest donors that match keep the fiber. A larger count has to be closer by a clear
+                # factor to take it.
+                if fiberId in replaced:
+                    matches = difference[best] < REPLACE_CLOSER * closest
+                else:
+                    matches = difference[best] <= closest
+                if matches:
+                    closest = difference[best]
+                    replaced[fiberId] = tuple(entries[near[jj]][0] for jj in combos[best])
     return replaced
 
 
