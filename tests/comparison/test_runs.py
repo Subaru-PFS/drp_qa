@@ -19,28 +19,46 @@ def testPackagedTableLoads():
     assert list(periods) == sorted(periods, key=lambda name: periods[name].firstNight)
 
 
-def testNightRunsNoonToNoon():
-    when = pd.Series(
-        pd.to_datetime(["2026-07-23 11:59", "2026-07-23 12:00", "2026-07-24 03:00", "2026-07-24 12:00"])
+def testNightRollsOverAtMidnightUtc():
+    """A night begins at 14:00 HST, 00:00 UTC, when the raw files' date changes: its exposures share one UTC date."""
+    hst = pd.Series(
+        pd.to_datetime(
+            [
+                "2026-07-23 13:59",
+                "2026-07-23 14:00",
+                "2026-07-24 03:00",
+                "2026-07-24 13:00",
+                "2026-07-24 14:00",
+            ]
+        )
     )
-    assert list(nightOf(when)) == [
+    nights = list(nightOf(hst))
+
+    assert nights == [
         datetime.date(2026, 7, 22),
+        datetime.date(2026, 7, 23),
         datetime.date(2026, 7, 23),
         datetime.date(2026, 7, 23),
         datetime.date(2026, 7, 24),
     ]
+    # Every time of a night has the same UTC date, the day after the night's own.
+    utc = (hst + pd.Timedelta(hours=10)).dt.date
+    assert all(date == night + datetime.timedelta(days=1) for date, night in zip(utc, nights, strict=True))
+    # Negative control: with a noon start, an exposure at 13:00 took the next night, and the UTC date of the one before.
+    noon = (hst - pd.Timedelta(hours=12)).dt.date
+    assert noon[3] == datetime.date(2026, 7, 24) and utc[3] != noon[3] + datetime.timedelta(days=1)
 
 
 def testPeriodBoundaries(periods):
     run1 = periods["run1"]
-    assert run1.start == datetime.datetime(2026, 1, 2, 12)
-    assert run1.end == datetime.datetime(2026, 1, 6, 12)  # the morning after the last night
+    assert run1.start == datetime.datetime(2026, 1, 2, 14)
+    assert run1.end == datetime.datetime(2026, 1, 6, 14)  # the afternoon after the last night
     when = pd.to_datetime(
         [
-            "2026-01-02 11:59",  # the morning before the first night
-            "2026-01-02 12:00",
-            "2026-01-06 05:00",  # the last night's morning
-            "2026-01-06 12:00",
+            "2026-01-02 13:59",  # the afternoon before the first night
+            "2026-01-02 14:00",
+            "2026-01-06 13:00",  # the last night's darks, the afternoon after
+            "2026-01-06 14:00",
             "2026-02-02 20:00",
             "2026-02-11 20:00",
         ]

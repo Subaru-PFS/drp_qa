@@ -27,6 +27,15 @@ made, and earlier sections to the weekly tag alone.
 
 ### Changed
 
+- **A night begins at 14:00 HST, not noon** (INSTRM-3073) — `comparison.runs.NIGHT_START` is 14: 00:00 UTC,
+  when the date in the raw files' names changes, so a night's exposures all carry one UTC date (the day after
+  the night's own, which is still its HST evening's date). It moves the frames taken between 12:00 and 14:00 HST
+  to the night before: since 2026-08-10, 158 calibration visits (119 darks and master darks, the rest
+  early-afternoon flats, binned tests and bootstrap arcs). `redo`'s periods, `classifyVisits` and the AG
+  report's nights all follow the one constant. No visit changes category. The IIS bootstrap arcs and traces
+  (34 visits) change cadence from `daily` to `single`: at noon, the bootstraps taken either side of it on
+  2026-10-24 counted as two nights, which alone made them recur on four. Two test darks at 13:42 and 13:55 on
+  2026-08-17, the first day of Run 30's pre-run, now fall before it.
 - **AG run report: camera states** (INSTRM-3073) — "camera presence" is now a map of camera states, coloured by
   what a camera did when it matched no star: no detections (red), detections but no match (amber), or left out
   by the guider (`CameraState.DISABLED`, from `agc_match.camera_enabled`; blue). A camera with no detections in

@@ -4,8 +4,10 @@ A *period* is a run's nights, or the nights before it when its calibrations were
 (``run29-pre``). Comparison mode reads and measures one period at a time. The periods are listed
 in ``data/observingRuns.yaml``, package data.
 
-Times are HST, as the opdb stores them. A night runs from noon to noon and is named by its
-evening's date, so an exposure at 03:00 on 07-24 belongs to the night of 07-23.
+Times are HST, as the opdb stores them. A night runs from 14:00 to 14:00 (`NIGHT_START`) and is
+named by its evening's date, so an exposure at 03:00 on 07-24 belongs to the night of 07-23, and so
+does a dark at 13:00 on 07-24. 14:00 HST is 00:00 UTC, when the date in the raw files' names
+changes: a night's exposures all carry one UTC date, the day after the night's own.
 """
 
 import datetime
@@ -27,8 +29,10 @@ __all__ = [
     "periodOf",
 ]
 
-#: The hour (HST) at which a night begins.
-NIGHT_START = 12
+#: The hour (HST) at which a night begins: 00:00 UTC, when the date of the raw files' names changes. The
+#: night's darks, taken through the next morning and past noon, stay with it, and so does one
+#: afternoon's work (at noon, bootstrap arcs taken either side of it counted as two nights' calibrations).
+NIGHT_START = 14
 
 
 @dataclass(frozen=True)

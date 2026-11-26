@@ -1,6 +1,6 @@
 # Observing runs: the periods that comparison mode (PIPE2D-1929) gates.
 #
-# Times are HST. A night runs from noon to noon and is named by its evening's date; `nights` and
+# Times are HST. A night runs from 14:00 to 14:00 (00:00 UTC) and is named by its evening's date; `nights` and
 # `preRun` are inclusive ranges of nights. `preRun` holds calibrations taken for the run before
 # its first night.
 #

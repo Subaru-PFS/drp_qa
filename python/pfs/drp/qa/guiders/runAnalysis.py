@@ -10,8 +10,8 @@ Cameras are ``agc_camera_id``, 0-5 (AG1 is 0). They come in two groups,
 AG1/3/5 and AG2/4/6, wired and placed separately, which can fail together
 (Run 30 lost AG1/3/5), so the analysis reports them by group.
 
-Times are HST. A night runs from noon to noon and is named by its evening's
-date, as in `pfs.drp.qa.comparison.runs`.
+Times are HST. A night runs from 14:00 to 14:00 and is named by its evening's
+date, as in `pfs.drp.qa.comparison.runs` (`NIGHT_START`).
 """
 
 from dataclasses import dataclass, field
@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+from pfs.drp.qa.comparison.runs import NIGHT_START
 from pfs.utils import agMetrics
 from pfs.utils.datamodel.ag import GuideOffsetFlag
 
@@ -283,7 +284,7 @@ DETECTION_FLAG_COLUMNS = {
 
 def nightOf(times: pd.Series) -> pd.Series:
     """Return the night (midnight of its evening's date) of each time."""
-    return (pd.to_datetime(times) - pd.Timedelta(hours=12)).dt.normalize()
+    return (pd.to_datetime(times) - pd.Timedelta(hours=NIGHT_START)).dt.normalize()
 
 
 def _population(sequenceType: pd.Series) -> np.ndarray:

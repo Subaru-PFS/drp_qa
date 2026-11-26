@@ -724,7 +724,7 @@ opdb, the Butler and qadb are all reachable, and writes no parquet and no report
 
 - **The visits come from the opdb**, not from the hand-written run summaries: every SpS visit between the
   period's dates, with its sequence, `cmd_str`, cameras, design, obslog notes and telescope status. The periods
-  (each run's nights and its pre-run calibration nights, HST, a night running noon to noon) are in
+  (each run's nights and its pre-run calibration nights, HST, a night running from 14:00 to 14:00, which is 00:00 UTC, when the raw files' date changes) are in
   [`comparison/data/observingRuns.yaml`](python/pfs/drp/qa/comparison/data/observingRuns.yaml), derived from
   gaps in SpS activity.
 - **Calibration or science is what the exposure is**, not when it was taken: every sequence type but
