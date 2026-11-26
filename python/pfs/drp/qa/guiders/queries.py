@@ -25,6 +25,7 @@ from pfs.utils.datamodel.ag import SourceDetectionFlags, SourceMatchingFlags
 __all__ = [
     "AGC_DATA_COLUMNS",
     "AG_GRID_CELL_PIX",
+    "AG_RIGHT_EDGE_PIX",
     "AG_RUN_TABLES",
     "find_W_M2OFF3",
     "readAGCStars",
@@ -710,6 +711,9 @@ _CAMERAS_PARAMS = {
     "goodDetection": int(SourceDetectionFlags.GOOD_DETECTION),
 }
 
+#: The detector column (pixels) at which the RIGHT half begins: the middle, as pfs_utils' ``det2dp`` has it.
+AG_RIGHT_EDGE_PIX = 511.5 + 24
+
 # A good match the guider could use: GOOD_MATCH, a clean detection, and a camera it had not left out of its fit.
 _GOOD_SQL = (
     "agc_match.flags = :goodMatch AND COALESCE(agc_data.flags, 0) <= :goodDetection"
@@ -801,7 +805,7 @@ _AG_RUN_SQL = {
     WHERE agc_exposure.taken_at >= :start AND agc_exposure.taken_at < :end
     ORDER BY agc_exposure.taken_at
     """,
-    # Each visit with AG exposures: its design and centre, its latest IIC sequence, and when the spectrograph
+    # Each visit with AG exposures: its design and center, its latest IIC sequence, and when the spectrograph
     # shutters were open (the first camera's opening to the last one's closing; NULL with no SpS exposure).
     "visits": """
     WITH shutter AS (

@@ -126,7 +126,8 @@ def testPlots(makeAgRunTables):
     assert len(figures["focus"].axes) == 2
     # Size and jitter for each of the three axes, and the guide-loop problems.
     assert len(figures["guiding"].axes) == 7
-    assert all(len(figures[f"AG{cid + 1}"].axes) == 8 for cid in range(6))
+    # Nine panels, and the scale of the detector map.
+    assert all(len(figures[f"AG{cid + 1}"].axes) == 10 for cid in range(6))
     assert figures["AG3"]._suptitle.get_text() == "AG3 (AG1/3/5)"
     presence = figures["presence"].axes[0]
     assert [t.get_text() for t in presence.get_yticklabels()] == ["AG1", "AG3", "AG5", "AG2", "AG4", "AG6"]

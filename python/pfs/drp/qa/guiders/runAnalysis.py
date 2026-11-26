@@ -21,6 +21,7 @@ import pandas as pd
 
 from pfs.drp.qa.comparison.runs import NIGHT_START
 from pfs.utils import agMetrics
+from pfs.utils.coordinates.coordinates import det2dp
 from pfs.utils.datamodel.ag import GuideOffsetFlag
 
 __all__ = [
@@ -36,6 +37,7 @@ __all__ = [
     "cameraSummary",
     "describePeriod",
     "detectionFlagShares",
+    "detectorCells",
     "findDropouts",
     "findFlags",
     "findRejectionClusters",
@@ -103,7 +105,7 @@ class RunConfig:
         for a dropout.
     longDropout : `int`
         A dropout at least this long (or one with no detections at all) is
-        flagged on its own; shorter ones are summarised.
+        flagged on its own; shorter ones are summarized.
     minOpenFrames : `int`
         Accepted guide offsets, from AG exposures taken while the
         spectrograph shutters were open, a visit needs for its guide error.
@@ -136,7 +138,7 @@ class RunConfig:
         least 1).
     modelErrorRadiusPix : `float`
         A camera's position-model error is quoted at this distance (pixels)
-        from its detector's centre.
+        from its detector's center.
     minModelMatches, minModelSpreadPix : `float`
         A night's position-model fit for a camera needs this many good
         matches, spread at least this far (pixels, the smaller axis of their
@@ -798,7 +800,7 @@ def findFlags(
                         "camera",
                         False,
                         f"AG{cid + 1}: its position model is off by {row.error_um:.1f} µm at "
-                        f"{config.modelErrorRadiusPix:g} px from its detector's centre, {direction} "
+                        f"{config.modelErrorRadiusPix:g} px from its detector's center, {direction} "
                         f"(nightly median; the cameras' median {typical:.1f} µm).",
                         int(cid),
                     )
@@ -926,7 +928,7 @@ def axialMean(degrees: pd.Series) -> float:
 
 
 def summariseModelErrors(run: AgRun, modelErrors: pd.DataFrame) -> pd.DataFrame:
-    """Summarise each camera's nightly position-model errors over the run.
+    """Summarize each camera's nightly position-model errors over the run.
 
     Parameters
     ----------
@@ -1027,6 +1029,86 @@ def findRejectionClusters(run: AgRun) -> pd.DataFrame:
     return found[columns].sort_values(["taken_at", "agc_camera_id"], ignore_index=True)
 
 
+def _withoutPointing(grid: pd.DataFrame) -> pd.DataFrame:
+    """Return the ``grid`` cells with good matches, less each camera's mean in each AG exposure.
+
+    The pointing moves a camera's stars together, so the mean residual of a
+    camera's good matches in an AG exposure is the pointing, not the camera:
+    it is subtracted from ``dx_um`` and ``dy_um``, and the matches' mean
+    position from ``x_good_pix`` and ``y_good_pix``.
+    """
+    grid = grid[grid.n_good > 0].dropna(subset=["x_good_pix", "y_good_pix", "dx_um", "dy_um"]).copy()
+    if grid.empty:
+        return grid
+    keys = [grid.agc_exposure_id, grid.agc_camera_id]
+    total = grid.n_good.groupby(keys).transform("sum")
+    for column in ("x_good_pix", "y_good_pix", "dx_um", "dy_um"):
+        grid[column] = grid[column] - (grid[column] * grid.n_good).groupby(keys).transform("sum") / total
+    return grid
+
+
+def _toDetectorAxes(cid: int) -> np.ndarray:
+    """Return the 2x2 matrix taking a focal-plane vector (the opdb's frame) to camera ``cid``'s detector axes.
+
+    The cameras sit around the field at 60° steps and their detectors are
+    mirrored, so a residual in focal-plane x and y points somewhere else on
+    each detector. The matrix is the inverse of how a detection reaches the
+    opdb's focal plane: pfs_utils' ``det2dp``, a rotation and a reflection,
+    with y then negated (the opdb stores ``agc_center_y_mm`` the other way
+    up from ``det2dp``, as `coordinates.opdbToHardware` undoes).
+    """
+    origin = np.array(det2dp(cid, 0.0, 0.0), dtype=float)
+    perPixel = np.column_stack(
+        [np.array(det2dp(cid, *step), dtype=float) - origin for step in ((1.0, 0.0), (0.0, 1.0))]
+    )
+    perPixel[1] *= -1
+    return np.linalg.inv(perPixel) * agMetrics.AG_PIXEL_SIZE_UM / 1000
+
+
+def detectorCells(run: AgRun) -> pd.DataFrame:
+    """Return where on each camera's detector matches were rejected, and how its residual varies across it.
+
+    Parameters
+    ----------
+    run : `AgRun`
+        The run.
+
+    Returns
+    -------
+    cells : `pandas.DataFrame`
+        One row per (``agc_camera_id``, ``row_cell``, ``column_cell``) of
+        the ``grid`` over the plotted nights: ``n_paired`` (detections
+        paired with a guide star), ``n_good`` (good matches), ``rejected``
+        (the percentage of the paired that were not good matches), and
+        ``dx_um`` and ``dy_um``, the good matches' mean residual (measured
+        minus expected, µm) along the detector's x and y, less each AG
+        exposure's mean over the camera (the pointing), as `fitModelErrors`
+        takes it. A camera whose position model is right leaves these at
+        the noise everywhere; one that is off has residuals growing away
+        from the detector's center. Empty if the ``grid`` wasn't read.
+    """
+    columns = ["agc_camera_id", "row_cell", "column_cell", "n_paired", "n_good", "rejected", "dx_um", "dy_um"]
+    keys = ["agc_camera_id", "row_cell", "column_cell"]
+    grid = run.grid[run.grid.night.isin(run.plottedNights)]
+    if grid.empty:
+        return pd.DataFrame(columns=columns)
+    cells = grid.groupby(keys)[["n_paired", "n_good"]].sum()
+    cells["rejected"] = 100 * (1 - cells.n_good / cells.n_paired)
+    good = _withoutPointing(grid)
+    sums = (
+        good.assign(dx=good.dx_um * good.n_good, dy=good.dy_um * good.n_good)
+        .groupby(keys)[["dx", "dy", "n_good"]]
+        .sum()
+    )
+    residual = sums[["dx", "dy"]].div(sums.n_good, axis=0).reindex(cells.index)
+    cells["dx_um"], cells["dy_um"] = np.nan, np.nan
+    for cid in cells.index.get_level_values("agc_camera_id").unique():
+        mine = cells.index.get_level_values("agc_camera_id") == cid
+        onDetector = residual[mine].to_numpy(float) @ _toDetectorAxes(int(cid)).T
+        cells.loc[mine, ["dx_um", "dy_um"]] = onDetector
+    return cells.reset_index()[columns]
+
+
 def fitModelErrors(run: AgRun) -> pd.DataFrame:
     """Fit how far off each camera's position model is, night by night.
 
@@ -1037,7 +1119,7 @@ def fitModelErrors(run: AgRun) -> pd.DataFrame:
     and camera a 2x2 matrix A is then fitted, residual = A (position - mean),
     weighted by the matches. A camera model whose position, rotation or scale
     is right leaves A at the noise; its largest singular value, times
-    ``modelErrorRadiusPix``, is the error at that distance from the centre,
+    ``modelErrorRadiusPix``, is the error at that distance from the center,
     in the direction of its right singular vector. Field rotation adds the
     same small rotation to every camera.
 
@@ -1079,15 +1161,9 @@ def fitModelErrors(run: AgRun) -> pd.DataFrame:
         "A21",
         "A22",
     ]
-    grid = run.grid[(run.grid.n_good > 0) & run.grid.night.isin(run.plottedNights)]
-    grid = grid.dropna(subset=["x_good_pix", "y_good_pix", "dx_um", "dy_um"])
+    grid = _withoutPointing(run.grid[run.grid.night.isin(run.plottedNights)])
     if grid.empty:
         return pd.DataFrame(columns=columns)
-    grid = grid.copy()
-    keys = [grid.agc_exposure_id, grid.agc_camera_id]
-    total = grid.n_good.groupby(keys).transform("sum")
-    for column in ("x_good_pix", "y_good_pix", "dx_um", "dy_um"):
-        grid[column] = grid[column] - (grid[column] * grid.n_good).groupby(keys).transform("sum") / total
     rows = []
     for (night, cid), cells in grid.groupby(["night", "agc_camera_id"]):
         weight = cells.n_good.to_numpy(float)
@@ -1120,7 +1196,7 @@ def fitModelErrors(run: AgRun) -> pd.DataFrame:
 
 
 def cameraSummary(run: AgRun, clusters: pd.DataFrame, modelErrors: pd.DataFrame) -> pd.DataFrame:
-    """Summarise each camera over the run.
+    """Summarize each camera over the run.
 
     Parameters
     ----------

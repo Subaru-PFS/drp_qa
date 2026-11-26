@@ -16,7 +16,9 @@ made, and earlier sections to the weekly tag alone.
   - Key numbers at the top (`runAnalysis.runSummary`, also `summary` in `metrics.json`).
   - A caption under every figure (`runPlotting.captions`).
   - The guide error's size beside its jitter.
-  - Per camera: designed guide stars matched by magnitude, and ics_agccActor's detection flags.
+  - Per camera: designed guide stars matched by magnitude, ics_agccActor's detection flags, and a map of the
+    detector with the matches rejected in each cell and the residual left there (`runAnalysis.detectorCells`).
+  - A legend on every panel.
   - `queries.readAgRun` gains a `magnitudes` table, shutter times in `visits`, and the residual, disabled and
     flag counts in `cameras`.
 

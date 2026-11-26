@@ -6,7 +6,7 @@ guiding plot, its visits' guide errors) and returns a new
 left open. Nothing here touches a database.
 
 The x axis is a strip of nights (`runAnalysis.nightPosition`): one slot per
-night with at least ``RunConfig.minFramesNight`` AG exposures, labelled by
+night with at least ``RunConfig.minFramesNight`` AG exposures, labeled by
 its evening's date and spanning 18:00 to 06:00 HST. Per-camera panels are in
 two rows, AG1/3/5 above AG2/4/6, the two groups being wired and placed
 separately. Problems are drawn in red, so that they stand out.
@@ -19,9 +19,10 @@ import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.figure import Figure
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Patch, Rectangle
 from matplotlib.ticker import MaxNLocator
 
+from pfs.drp.qa.guiders.queries import AG_GRID_CELL_PIX, AG_RIGHT_EDGE_PIX
 from pfs.drp.qa.guiders.runAnalysis import (
     CAMERA_GROUPS,
     DETECTION_FLAG_COLUMNS,
@@ -30,6 +31,7 @@ from pfs.drp.qa.guiders.runAnalysis import (
     _meanAngle,
     cameraFocus,
     detectionFlagShares,
+    detectorCells,
     isRejectedOffset,
     magnitudeSummary,
     nightPosition,
@@ -40,6 +42,7 @@ from pfs.drp.qa.guiders.runAnalysis import (
 
 __all__ = [
     "AG_PIXEL_UM",
+    "CAMERA_FIGURE_IN",
     "CAMERA_ORDER",
     "GROUPS_NOTE",
     "captions",
@@ -63,6 +66,15 @@ QUIET = "#b5b4ae"  # context: other populations, reference lines
 INK = "#52514e"  # the normal case
 EMPTY = "#ecebe8"  # an empty heatmap cell
 
+#: The size of `plotCamera`'s figure (inches).
+CAMERA_FIGURE_IN = (12.5, 9.6)
+
+#: On the detector map of `plotCamera`: the top of the color scale (% of paired detections rejected), the good
+#: matches a cell needs for its residual to be drawn, and the length of an arrow (pixels of the map per µm).
+REJECTED_MAX = 30
+MIN_CELL_MATCHES = 50
+ARROW_PIX_PER_UM = 25
+
 #: Why the report keeps the cameras in two groups.
 GROUPS_NOTE = (
     "The six cameras alternate around the field in two groups, AG1/3/5 and AG2/4/6, which are wired "
@@ -79,7 +91,7 @@ def captions(config: RunConfig | None = None) -> dict[str, str]:
     Parameters
     ----------
     config : `pfs.drp.qa.guiders.runAnalysis.RunConfig`, optional
-        The parameters the run was analysed with, for the numbers quoted.
+        The parameters the run was analyzed with, for the numbers quoted.
 
     Returns
     -------
@@ -91,8 +103,8 @@ def captions(config: RunConfig | None = None) -> dict[str, str]:
     return {
         "cameraPresence": (
             "What each camera gave, hour by hour, in the AG exposures in which at least one camera matched "
-            "a guide star (so the sky was usable). A cell is grey when the camera matched a star in every "
-            "exposure of that hour, and coloured by the share in which it did not: red when it mostly "
+            "a guide star (so the sky was usable). A cell is gray when the camera matched a star in every "
+            "exposure of that hour, and colored by the share in which it did not: red when it mostly "
             "detected nothing at all, amber when it detected spots but matched none of them to a guide "
             "star, blue when the guider had left it out of its fit (disabled). The opdb records a camera's "
             "detections, not whether it returned an image, so a dead camera and an image with nothing in it "
@@ -127,13 +139,22 @@ def captions(config: RunConfig | None = None) -> dict[str, str]:
         "camera": (
             "One camera over the run, night by night. Top row: the good matches per AG exposure, as the "
             "median of each visit; the FWHM of its matched stars on each half of its detector (the two "
-            "halves focus differently by design: one has glass in front of it); its focus against the "
-            "median of the cameras in use; and the share of its designed guide stars that were matched, by "
-            "their magnitude (science visits; the dotted line is all cameras). Bottom row: the share of AG "
-            "exposures in which it matched a star; the AG exposures in which its rejected matches clustered "
-            "on one side of its detector, which is what a position model that is off does; the size of that "
-            "position-model error at the edge of the detector; and the share of its detections that "
-            "ics_agccActor flagged as bad, by flag."
+            "halves focus differently by design: one has glass in front of it); and its focus against the "
+            "median of the cameras in use. Middle row: the share of AG exposures in which it matched a "
+            "star; the share of its detections that ics_agccActor flagged as bad, by flag; and the share of "
+            "its designed guide stars that were matched, by their magnitude (science visits; the dotted "
+            "line is all cameras). Bottom row, the camera's position model: where the guider expects each "
+            "guide star to land on this detector. Each matched star has a residual, measured minus "
+            "expected; a pointing error moves all of a camera's stars together, so each AG exposure's mean "
+            "is taken off, and what is left should be noise. If the model's rotation or scale is off, what "
+            "is left grows in proportion to the distance from the detector's center, and the stars "
+            "farthest out are rejected first. First panel: the AG exposures in which the rejected matches "
+            "clustered on one side of the detector. Second: the size of that growth each night, as the "
+            f"residual of a star {config.modelErrorRadiusPix:g} px from the center (the detector's edge), "
+            "against the cameras' median. Third: the detector over the whole run, in a 4 × 4 grid: each "
+            "cell's color and number are the share of its paired detections that were rejected, and its "
+            "arrow is the mean residual left there, along the detector's axes; the dashed line divides the "
+            "two halves."
         ),
     }
 
@@ -183,7 +204,7 @@ def plotCameraPresence(run: AgRun) -> Figure:
 
     Only exposures in which some camera matched a star count
     (`runAnalysis.stateShares`). A cell is shaded by the share of its
-    exposures in which the camera did not match, in the colour of what it
+    exposures in which the camera did not match, in the color of what it
     mostly did instead: nothing detected (red), detections but no match
     (amber) or left out by the guider (blue). It is hatched when the
     camera's design had fewer than ``RunConfig.minDesignStars`` bright
@@ -203,10 +224,8 @@ def plotCameraPresence(run: AgRun) -> Figure:
     nights = run.plottedNights
     shares = stateShares(run)
     index = {night: i for i, night in enumerate(nights)}
-    colours = {"dark": BAD, "unmatched": WARN, "disabled": OFF}
-    cmaps = {
-        name: LinearSegmentedColormap.from_list(name, [EMPTY, colour]) for name, colour in colours.items()
-    }
+    colors = {"dark": BAD, "unmatched": WARN, "disabled": OFF}
+    cmaps = {name: LinearSegmentedColormap.from_list(name, [EMPTY, color]) for name, color in colors.items()}
     fig = _figure(11, 3.3)
     ax = fig.add_subplot()
     rowY = {cid: row + (0.5 if row >= 3 else 0) for row, cid in enumerate(CAMERA_ORDER)}
@@ -234,7 +253,7 @@ def plotCameraPresence(run: AgRun) -> Figure:
                     Rectangle((x, y), 0.9 / 12, 0.9, facecolor="none", edgecolor=QUIET, hatch="////", lw=0)
                 )
                 continue
-            worst = max(colours, key=lambda name: cell[name])
+            worst = max(colors, key=lambda name: cell[name])
             ax.add_patch(
                 Rectangle((x, y), 0.9 / 12, 0.9, color=cmaps[worst](1 - cell.matched / judged), lw=0)
             )
@@ -284,7 +303,7 @@ def plotCameraPresence(run: AgRun) -> Figure:
     )
     ax.set_title(
         "Camera states per hour: the share of AG exposures (with a star matched on some camera) in which "
-        "this camera matched none, in the colour of what it mostly did instead",
+        "this camera matched none, in the color of what it mostly did instead",
         loc="left",
         fontsize=8.5,
     )
@@ -308,19 +327,22 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
     Returns
     -------
     fig : `matplotlib.figure.Figure`
-        Eight panels, all but one against the nights: matched stars per
-        visit; FWHM per detector half; focus minus the median of the
-        cameras in use; the share of its designed guide stars matched, by
-        magnitude; the share of judged AG exposures in which it matched a
-        star; AG exposures with its rejected matches clustered on one side
-        of the detector; its position-model error; and the share of its
-        detections carrying each bad-detection flag.
+        Nine panels (`CAMERA_FIGURE_IN`), seven against the nights: matched
+        stars per visit; FWHM per detector half; focus minus the median of
+        the cameras in use; the share of judged AG exposures in which it
+        matched a star; the share of its detections carrying each
+        bad-detection flag; the share of its designed guide stars matched,
+        by magnitude; then the three on its position model: AG exposures
+        with its rejected matches clustered on one side of the detector,
+        its position-model error, and a map of the detector
+        (`runAnalysis.detectorCells`) with the matches rejected in each cell
+        and the residual left there.
     """
     nights = run.plottedNights
     position = {night: i + 0.5 for i, night in enumerate(nights)}
     frames = run.frames[run.frames.night.isin(nights)].assign(x=lambda df: nightPosition(df.taken_at, nights))
-    fig = _figure(14.5, 6.2)
-    axes = fig.subplots(2, 4)
+    fig = _figure(*CAMERA_FIGURE_IN)
+    axes = fig.subplots(3, 3)
 
     ax = axes[0, 0]
     visits = frames.groupby(["pfs_visit_id", "population"]).agg(
@@ -368,12 +390,21 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
     z = cameraFocus(run, frames)
     if len(z) and cid in z:
         byNight = (z[cid] - z.median(axis=1)).groupby(frames.night.loc[z.index]).median()
-        ax.plot([position[n] for n in byNight.index], byNight.to_numpy(), "-o", ms=3.5, lw=1.5, color="C0")
-    ax.axhline(0, color=QUIET, lw=0.8)
+        ax.plot(
+            [position[n] for n in byNight.index],
+            byNight.to_numpy(),
+            "-o",
+            ms=3.5,
+            lw=1.5,
+            color="C0",
+            label="this camera",
+        )
+    ax.axhline(0, color=QUIET, lw=0.8, label="the cameras' median")
+    _legend(ax, loc="lower left")
     ax.set_ylim(-60, 60)
     ax.set_title("Focus minus the cameras' median (µm), nightly", loc="left", fontsize=8.5)
 
-    ax = axes[0, 3]
+    ax = axes[1, 2]
     magnitudes = magnitudeSummary(run)
     if len(magnitudes):
         everyCamera = magnitudes.groupby("magnitude")[["n_expected", "n_good"]].sum()
@@ -401,11 +432,18 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
     share = (100 * shares.matched / judged).where(judged > 0)
     x = np.array([position[n] for n in share.index])
     ax.bar(x, share.fillna(0), width=0.6, color=np.where(share < 90, BAD, INK))
-    ax.set_ylim(0, 105)
+    ax.set_ylim(0, 125)
+    ax.set_yticks(range(0, 101, 20))
     ax.set_ylabel("%")
-    ax.set_title("AG exposures in which it matched a star (red: under 90%)", loc="left", fontsize=8.5)
+    ax.set_title("AG exposures in which it matched a star (%)", loc="left", fontsize=8.5)
+    _legend(
+        ax,
+        loc="upper left",
+        ncol=2,
+        handles=[Patch(color=INK, label="90% or more"), Patch(color=BAD, label="under 90%")],
+    )
 
-    ax = axes[1, 1]
+    ax = axes[2, 0]
     mine = clusters[(clusters.agc_camera_id == cid) & clusters.night.isin(nights)]
     for dx, chosen, color, label in (
         (-0.15, mine.alone.astype(bool), BAD, "on it alone"),
@@ -420,7 +458,7 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
     ax.set_title(f"Rejected matches clustered{direction}", loc="left", fontsize=8.5)
     _legend(ax, loc="upper left")
 
-    ax = axes[1, 2]
+    ax = axes[2, 1]
     errors = modelErrors[(modelErrors.agc_camera_id == cid) & modelErrors.night.isin(nights)]
     ax.plot(
         [position[n] for n in errors.night],
@@ -446,13 +484,13 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
             fontsize=7,
         )
     radius = run.config.modelErrorRadiusPix
-    ax.set_title(f"Model error {radius:g} px from centre (µm)", loc="left", fontsize=8.5)
+    ax.set_title(f"Position error {radius:g} px from the detector's center (µm)", loc="left", fontsize=8.5)
     _legend(ax, loc="upper left")
     pixels = ax.secondary_yaxis("right", functions=(lambda um: um / AG_PIXEL_UM, lambda px: px * AG_PIXEL_UM))
     pixels.set_ylabel("AG pixels", fontsize=7)
     pixels.tick_params(labelsize=7)
 
-    ax = axes[1, 3]
+    ax = axes[1, 1]
     flagged = detectionFlagShares(run)
     flagged = flagged[flagged.agc_camera_id == cid]
     for name, color in zip(DETECTION_FLAG_COLUMNS.values(), ("C0", BAD, "C2", "C4", "C5"), strict=True):
@@ -472,14 +510,74 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
     if len(flagged):
         _legend(ax, loc="upper left", ncol=2)
 
-    for row in range(2):
-        for col in range(4):
-            if (row, col) != (0, 3):
-                _nightAxis(axes[row, col], nights, label=(row == 1), rotate=True)
+    _detectorMap(fig, axes[2, 2], detectorCells(run), cid)
+
+    # The nights are labeled under the lowest panel of a column drawn against them.
+    for row, col in ((0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (2, 0), (2, 1)):
+        _nightAxis(axes[row, col], nights, label=(row == 2 or (row, col) == (0, 2)), rotate=True)
     group = next(name for name, cids in CAMERA_GROUPS.items() if cid in cids)
     unused = "" if cid in run.inUse else ": not in use (no detections in the run)"
     fig.suptitle(f"AG{cid + 1} ({group}){unused}", x=0.01, ha="left", fontsize=10, fontweight="bold")
     return fig
+
+
+def _detectorMap(fig: Figure, ax: Axes, cells: pd.DataFrame, cid: int) -> None:
+    """Draw camera ``cid``'s detector: the matches rejected in each cell, and the residual left there."""
+    xEdges = AG_GRID_CELL_PIX["columnCell"] * np.arange(5)
+    yEdges = AG_GRID_CELL_PIX["rowCell"] * np.arange(5)
+    mine = cells[cells.agc_camera_id == cid]
+    rejected = np.full((4, 4), np.nan)
+    rejected[mine.row_cell.to_numpy(int), mine.column_cell.to_numpy(int)] = mine.rejected.to_numpy(float)
+    cmap = LinearSegmentedColormap.from_list("rejected", ["#ffffff", WARN, BAD]).with_extremes(bad=EMPTY)
+    mesh = ax.pcolormesh(xEdges, yEdges, np.ma.masked_invalid(rejected), cmap=cmap, vmin=0, vmax=REJECTED_MAX)
+    bar = fig.colorbar(mesh, ax=ax, fraction=0.046, pad=0.03, extend="max")
+    bar.set_label("paired detections rejected (%)", fontsize=7)
+    bar.ax.tick_params(labelsize=7)
+    for row in mine.itertuples():
+        ax.text(
+            xEdges[row.column_cell] + 12,
+            yEdges[row.row_cell] + 12,
+            f"{row.rejected:.0f}%",
+            fontsize=6.5,
+            color=INK,
+        )
+    enough = mine[(mine.n_good >= MIN_CELL_MATCHES) & mine.dx_um.notna()]
+    if len(enough):
+        arrows = ax.quiver(
+            (xEdges[:-1] + np.diff(xEdges) / 2)[enough.column_cell.to_numpy(int)],
+            (yEdges[:-1] + np.diff(yEdges) / 2)[enough.row_cell.to_numpy(int)],
+            enough.dx_um.to_numpy(float),
+            enough.dy_um.to_numpy(float),
+            angles="xy",
+            scale_units="xy",
+            scale=1 / ARROW_PIX_PER_UM,
+            width=0.012,
+            color="#1b1b1a",
+            zorder=3,
+        )
+        ax.quiverkey(
+            arrows,
+            0.8,
+            -0.17,
+            5,
+            "residual, 5 µm",
+            labelpos="W",
+            coordinates="axes",
+            fontproperties={"size": 7},
+        )
+    ax.axvline(AG_RIGHT_EDGE_PIX, color=INK, lw=1, ls="--")
+    for x, name in ((0.25, "without RIGHT"), (0.75, "RIGHT half")):
+        ax.text(x, 1.01, name, transform=ax.transAxes, ha="center", va="bottom", fontsize=7, color=INK)
+    ax.set_xlim(xEdges[0], xEdges[-1])
+    ax.set_ylim(yEdges[0], yEdges[-1])
+    ax.set_aspect("equal")
+    ax.set_xticks(xEdges)
+    ax.set_yticks(yEdges)
+    ax.tick_params(labelsize=7)
+    ax.grid(visible=False)
+    ax.set_xlabel("detector x (px)", fontsize=7, loc="left")
+    ax.set_ylabel("detector y (px)", fontsize=7)
+    ax.set_title("Across the detector: rejected (%) and residual", loc="left", fontsize=8.5, pad=14)
 
 
 def _scatterByCameras(ax: Axes, x, y, full) -> None:

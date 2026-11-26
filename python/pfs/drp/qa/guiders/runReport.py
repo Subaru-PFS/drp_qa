@@ -179,7 +179,7 @@ def keyNumbers(summary: dict, config: RunConfig | None = None) -> list[tuple[str
     summary : `dict`
         From `pfs.drp.qa.guiders.runAnalysis.runSummary`.
     config : `pfs.drp.qa.guiders.runAnalysis.RunConfig`, optional
-        The parameters the run was analysed with.
+        The parameters the run was analyzed with.
 
     Returns
     -------

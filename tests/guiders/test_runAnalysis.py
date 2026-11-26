@@ -9,11 +9,13 @@ from pfs.drp.qa.guiders.runAnalysis import (
     DETECTION_FLAG_COLUMNS,
     CameraState,
     RunConfig,
+    _toDetectorAxes,
     axialMean,
     cameraFocus,
     cameraSummary,
     describePeriod,
     detectionFlagShares,
+    detectorCells,
     findDropouts,
     findFlags,
     findRejectionClusters,
@@ -381,6 +383,51 @@ def testAxialMeanWraps():
     assert axialMean([40.0, 50.0]) == pytest.approx(45.0)
     # Negative control: a plain median of the same axes is perpendicular to them.
     assert np.median([1.0, 179.0]) == pytest.approx(90.0)
+
+
+def testDetectorCells(makeAgRunTables):
+    """A cell holds the share of its pairs rejected and the residual left there, along the detector's axes."""
+    rowScale = [[0.0, 0.0], [0.0, 0.013]]  # in the focal plane: 13 µm in y per 1000 rows
+    tables = makeAgRunTables(modelError={2: rowScale})
+    _reject(tables, tables["exposures"].agc_exposure_id.iloc[:80], 2, CORNER)
+    cells = detectorCells(prepareRun(tables)).set_index(["agc_camera_id", "row_cell", "column_cell"])
+    ag3 = cells.loc[2]
+
+    assert set(ag3[ag3.rejected > 20].index) == set(CORNER)
+    assert (ag3.drop(index=CORNER).rejected == 0).all()
+    top, bottom = (ag3.loc[row, ["dx_um", "dy_um"]].mean().to_numpy() for row in (3, 0))
+    onDetector = _toDetectorAxes(2) @ [0.0, 0.013 * 3 * 260]  # the rows are 780 px apart
+    assert np.allclose(top - bottom, onDetector, atol=0.5)
+    # Negative control: left in the focal plane's axes, the residual would point somewhere else on the detector.
+    assert not np.allclose(top - bottom, [0.0, 0.013 * 3 * 260], atol=2)
+    # Negative control: a camera with nothing wrong has no residual anywhere; the pointing is taken off.
+    assert (np.hypot(cells.loc[4].dx_um, cells.loc[4].dy_um) < 0.5).all()
+
+
+def testResidualsTurnToTheDetectorAxes(realAgcData):
+    """Between two spots of one camera, the opdb's focal-plane positions turn into their pixel separation."""
+    data = realAgcData("raster").dropna(subset=["centroid_x_pix", "agc_center_x_mm"])
+    checked = 0
+    for cid, spots in data.groupby("agc_camera_id"):
+        first = spots.iloc[0]
+        last = spots.iloc[
+            np.hypot(
+                spots.centroid_x_pix - first.centroid_x_pix, spots.centroid_y_pix - first.centroid_y_pix
+            ).argmax()
+        ]
+        pixels = np.array(
+            [last.centroid_x_pix - first.centroid_x_pix, last.centroid_y_pix - first.centroid_y_pix]
+        )
+        # The fixture is in hardware coordinates: the opdb's y is the other way up.
+        hardware = 1000 * np.array(
+            [last.agc_center_x_mm - first.agc_center_x_mm, last.agc_center_y_mm - first.agc_center_y_mm]
+        )
+        # To 40 µm in a few mm: the camera models have been refitted (by under a degree) since these were taken.
+        assert np.allclose(_toDetectorAxes(int(cid)) @ (hardware * [1, -1]), 13 * pixels, atol=40.0)
+        # Negative control: taken as they are in hardware coordinates, they don't.
+        assert not np.allclose(_toDetectorAxes(int(cid)) @ hardware, 13 * pixels, atol=200.0)
+        checked += 1
+    assert checked >= 3
 
 
 def testModelErrorDirectionAtTheWrap(makeAgRunTables):
