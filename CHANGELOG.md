@@ -12,56 +12,29 @@ made, and earlier sections to the weekly tag alone.
 
 ### Added
 
-- **AG run report: key numbers, captions, and more per camera** (INSTRM-3073) — `drpQa.py agReport` now opens
-  with the run's key numbers (`runAnalysis.runSummary`, also `summary` in `metrics.json`): the size (RMS of a
-  visit's settled offsets) and the frame-to-frame jitter of the guide error in ΔRA, ΔDec and ΔInR, the distance
-  of the good matches from where the guider expected them, the share of the designed guide stars matched per
-  science visit (`runAnalysis.visitMatchFraction`), and the stars matched per AG exposure and per camera. The
-  guide error is given on the sky (ΔRA and ΔDec in quadrature) as well as per axis.
-  Every figure has a caption (`runPlotting.captions`, and `GROUPS_NOTE` on why the cameras are in two groups).
-  The guiding figure shows the size of the error beside its jitter. Each camera's figure gains the share of its
-  designed guide stars matched, by magnitude (`runAnalysis.magnitudeSummary`, from the new `magnitudes` table of
-  `queries.readAgRun`), and the share of its detections carrying each of ics_agccActor's bad-detection flags
-  (`runAnalysis.detectionFlagShares`, from new counts in `cameras`). `runAnalysis.stateShares` gives the camera
-  states per hour, for the map and for `pfs_qa_dashboard`.
+- **AG run report** (INSTRM-3073; see *End-of-run report* in the README):
+  - Key numbers at the top (`runAnalysis.runSummary`, also `summary` in `metrics.json`).
+  - A caption under every figure (`runPlotting.captions`).
+  - The guide error's size beside its jitter.
+  - Per camera: designed guide stars matched by magnitude, and ics_agccActor's detection flags.
+  - `queries.readAgRun` gains a `magnitudes` table, shutter times in `visits`, and the residual, disabled and
+    flag counts in `cameras`.
 
 ### Changed
 
-- **A night begins at 14:00 HST, not noon** (INSTRM-3073) — `comparison.runs.NIGHT_START` is 14: 00:00 UTC,
-  when the date in the raw files' names changes, so a night's exposures all carry one UTC date (the day after
-  the night's own, which is still its HST evening's date). It moves the frames taken between 12:00 and 14:00 HST
-  to the night before: since 2026-08-10, 158 calibration visits (119 darks and master darks, the rest
-  early-afternoon flats, binned tests and bootstrap arcs). `redo`'s periods, `classifyVisits` and the AG
-  report's nights all follow the one constant. No visit changes category. The IIS bootstrap arcs and traces
-  (34 visits) change cadence from `daily` to `single`: at noon, the bootstraps taken either side of it on
-  2026-10-24 counted as two nights, which alone made them recur on four. Two test darks at 13:42 and 13:55 on
-  2026-08-17, the first day of Run 30's pre-run, now fall before it.
-- **AG run report: camera states** (INSTRM-3073) — "camera presence" is now a map of camera states, coloured by
-  what a camera did when it matched no star: no detections (red), detections but no match (amber), or left out
-  by the guider (`CameraState.DISABLED`, from `agc_match.camera_enabled`; blue). A camera with no detections in
-  the whole run is **not in use** (`AgRun.inUse`): it is named once, not flagged as a fault, and left out of the
-  group and camera comparisons, the "matched on every camera" marks and the focus medians, which are now taken
-  over the cameras in use (they were NaN whenever a camera had no focus value, as AG2 in Run 31). A dropout's
-  flag says when the camera was disabled.
-- **AG run report: offsets from too few stars** (INSTRM-3073) — the flag for guide offsets accepted from fewer
-  than 3 matched stars says on how many nights and when the last was, and counts the offsets of AG focus
-  sweeps apart from the guide loop's.
-- **AG run report: the guide error is of the frames with the shutters open** (INSTRM-3073) — a science visit's
-  guide error and jitter (`runAnalysis.visitGuideErrors`, which replaces `settledJitter`) are measured from the
-  accepted guide offsets of the AG exposures taken while the spectrograph shutters were open, for visits with at
-  least 5 (`RunConfig.minOpenFrames`; `nSettle` and `minSettled` are gone). The old rule skipped a visit's first
-  5 guide frames and needed 10 more, so it measured none of Run 31's 60 s windowed visits properly: their six
-  AG exposures with the shutters open were skipped, and the ones after the close, when the offsets jump to about
-  1″, were what it measured. Now 1476 of Run 31's 1477 science visits are measured (889 before); the long
-  visits' values are unchanged (ratio 1.00, 0.97 to 1.03). The jitter is the sample standard deviation (n − 1),
-  so the median six-frame visit reads as a long one. `queries.readAgRun`'s `visits` gains `shutter_open` and
-  `shutter_close`; a fetch without them reports no guide error: run `fetch` again. The run's star-position and
-  matched-star numbers are of the science AG exposures with the shutters open too.
-- **AG run report: good matches** (INSTRM-3073) — the `cameras` table of `queries.readAgRun` counts a good match
-  as `GOOD_MATCH` on a clean detection (`agc_data.flags` NONE or RIGHT) of a camera the guider had not left out,
-  for the count, the FWHM and the new `residual_um`. No change where the guider already matched only clean
-  detections (Run 31: every good match is one). A fetch made before this release still reports, without the
-  magnitudes, flag counts and residual: run `fetch` again for them.
+- **A night begins at 14:00 HST (00:00 UTC), not noon** (INSTRM-3073): `comparison.runs.NIGHT_START` is 14.
+  Frames taken between 12:00 and 14:00 HST move to the night before; `redo`'s periods and `classifyVisits`
+  follow.
+- **AG run report** (INSTRM-3073):
+  - A visit's guide error is measured from the AG exposures taken with the shutters open
+    (`runAnalysis.visitGuideErrors` replaces `settledJitter`; `RunConfig.minOpenFrames` replaces `nSettle` and
+    `minSettled`).
+  - "Camera presence" is a map of camera states; a camera with no detections all run is "not in use", not a
+    fault.
+  - A good match needs a clean detection on a camera the guider used.
+  - The flag for offsets accepted from too few stars gives its nights and last time, and counts focus sweeps
+    apart.
+  - Run `fetch` again: an older fetch lacks the new tables and columns.
 
 ## [0.18.1] - 2026-11-24
 
