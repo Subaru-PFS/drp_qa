@@ -141,8 +141,16 @@ COMPARE_COLUMNS = ("fwhm", "centroid", "wingFrac", "wingMax", "minimum", "variat
 #: can be configured.
 REPLACE_DONORS = (2, 3, 4)
 
-#: Fibers either side among which a replaced profile's donors are looked for.
-REPLACE_REACH = 5
+#: Fibers either side among which a replaced profile's donors are looked for. drp_stella takes no donor
+#: within ``fiberInfluence`` (3) fibers of a fiber that is lit in the darks, so beside a group of such fibers
+#: the donors are six or seven fibers away.
+REPLACE_REACH = 10
+
+#: Samples of a profile on which the candidate sets of donors are ranked, and how many of the closest sets are
+#: then compared sample by sample. A copy equals its donors' mean at every sample, so it is among the closest
+#: on any of them; ranking first keeps a wide reach affordable.
+REPLACE_RANK_SAMPLES = 64
+REPLACE_SHORTLIST = 16
 
 #: Largest difference, as a fraction of the profile's peak, at which a profile equals the mean of its donors.
 #: Stored copies differ by the rounding of 32-bit floats, 1e-7; measured profiles differ from any such mean by
@@ -501,7 +509,9 @@ def findReplaced(
         as close.
     reach : `int`
         Fibers either side, in order of ``fiberId``, among which the donors
-        are looked for.
+        are looked for. With many candidate sets, they are ranked on a thin
+        sample of the profile first and only the closest are compared in
+        full.
     tolerance : `float`
         Largest difference from the donors' mean, as a fraction of the
         profile's peak, at which the profile counts as that mean.
@@ -534,11 +544,18 @@ def findReplaced(
         ]
         stack = np.array([entries[jj][1] for jj in near])
         samples = tuple(range(1, values.ndim + 1))
+        # Samples every candidate has, thinned, to rank the sets of donors on.
+        flat = stack.reshape(len(near), -1) if near else np.empty((0, values.size))
+        shared = np.flatnonzero(finite.ravel() & np.isfinite(flat).all(axis=0))
+        ranked = shared[np.linspace(0, shared.size - 1, min(shared.size, REPLACE_RANK_SAMPLES)).astype(int)]
         closest = tolerance * np.nanmax(np.abs(values))
         for count in counts:
             if len(near) < count:
                 continue
             combos = np.array(list(combinations(range(len(near)), count)))
+            if len(combos) > REPLACE_SHORTLIST and ranked.size >= MIN_SAMPLES:
+                rough = np.abs(flat[:, ranked][combos].mean(axis=1) - values.ravel()[ranked]).max(axis=1)
+                combos = combos[np.sort(np.argsort(rough, kind="stable")[:REPLACE_SHORTLIST])]
             with np.errstate(invalid="ignore"):
                 difference = np.abs(stack[combos].mean(axis=1) - values)
             compared = np.isfinite(difference).sum(axis=samples)

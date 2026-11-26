@@ -373,9 +373,24 @@ class TestReplacedProfiles:
         assert findReplaced(datamodelForm(fibers), nDonors=4)[15] == (13, 14, 16, 17)
 
     def testDonorsAreLookedForWithinReach(self):
-        fibers = replaceWithMean(variedFibers(), 16, (8, 15, 17))
+        fibers = replaceWithMean(variedFibers(), 16, (4, 15, 17))
         assert findReplaced(datamodelForm(fibers)) == {}
-        assert findReplaced(datamodelForm(fibers), reach=8) == {16: (8, 15, 17)}
+        assert findReplaced(datamodelForm(fibers), reach=12) == {16: (4, 15, 17)}
+
+    def testFindsCopiesBesideAGroupOfFibersLitInTheDarks(self):
+        """drp_stella takes no donor within three fibers of a fiber lit in the darks.
+
+        With 14, 16 and 17 lit in the darks, no donor is nearer than 11-20, so the copies' donors are four to
+        seven fibers away.
+        """
+        fibers = variedFibers()
+        copies = {14: (8, 9, 10), 16: (10, 21, 22), 17: (21, 22, 23)}
+        for fiberId, donors in copies.items():
+            replaceWithMean(fibers, fiberId, donors)
+        for form in (datamodelForm, StellaForm):
+            assert findReplaced(form(fibers)) == copies
+        # Negative control: a search five fibers either side finds none of the three.
+        assert findReplaced(datamodelForm(fibers), reach=5) == {}
 
     def testReplacedProfilesAreLeftOutOfTheNeighbourReference(self):
         """Six copies of eleven neighbours inherit a donor's light: they must not become the reference."""
