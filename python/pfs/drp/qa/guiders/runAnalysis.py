@@ -635,8 +635,8 @@ def groupSummary(run: AgRun) -> pd.DataFrame:
             "good matches per camera": float(np.median(frames[[f"n_good{cid}" for cid in cids]].to_numpy()))
             if cids and len(frames)
             else np.nan,
-            "FWHM, glass half (″)": cameras[inGroup & cameras.right_half.eq(0)].fwhm.median(),
-            "FWHM, no-glass half (″)": cameras[inGroup & cameras.right_half.eq(1)].fwhm.median(),
+            "FWHM, without RIGHT (″)": cameras[inGroup & cameras.right_half.eq(0)].fwhm.median(),
+            "FWHM, RIGHT half (″)": cameras[inGroup & cameras.right_half.eq(1)].fwhm.median(),
             "focus minus the cameras' median (µm)": (
                 float(np.median(own.to_numpy() - zMedian.to_numpy()[:, None])) if cids and len(z) else np.nan
             ),
@@ -740,15 +740,24 @@ def findFlags(
                 int(d.agc_camera_id),
             )
         )
-    short = dropouts[~long]
-    if len(short):
+    disabled = (
+        dropouts.disabled.astype(bool) if "disabled" in dropouts else pd.Series(False, index=dropouts.index)
+    )
+    for short, what in (
+        (
+            dropouts[~long & ~disabled],
+            f"a camera with {config.minDesignStars}+ bright designed guide stars matched none",
+        ),
+        (dropouts[~long & disabled], "a camera was left out of the guider's fit (disabled)"),
+    ):
+        if not len(short):
+            continue
         counts = short.groupby("agc_camera_id").n_frames.agg(["size", "sum"])
         flags.append(
             Flag(
                 "camera",
                 False,
-                f"Shorter stretches ({config.minDropout}+ exposures) in which a camera with "
-                f"{config.minDesignStars}+ bright designed guide stars matched none: "
+                f"Shorter stretches ({config.minDropout}+ exposures) in which {what}: "
                 + ", ".join(f"AG{cid + 1} {n}× ({total} exposures)" for cid, (n, total) in counts.iterrows())
                 + ".",
             )
@@ -1157,8 +1166,8 @@ def cameraSummary(run: AgRun, clusters: pd.DataFrame, modelErrors: pd.DataFrame)
             "good matches per exposure": float(frames[f"n_good{cid}"].median())
             if used and len(frames)
             else np.nan,
-            "FWHM, glass half (″)": mine[mine.right_half.eq(0)].fwhm.median(),
-            "FWHM, no-glass half (″)": mine[mine.right_half.eq(1)].fwhm.median(),
+            "FWHM, without RIGHT (″)": mine[mine.right_half.eq(0)].fwhm.median(),
+            "FWHM, RIGHT half (″)": mine[mine.right_half.eq(1)].fwhm.median(),
             "good matches' distance from expected (µm)": mine.residual_um.median(),
             **{
                 f"detections flagged {flag} (%)": 100 * mine[column].sum() / nSpots

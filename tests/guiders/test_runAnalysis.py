@@ -183,7 +183,7 @@ def testGroupSummaryFocus(makeAgRunTables):
     # Negative control: the groups don't read the same.
     assert not np.isclose(focus["AG1/3/5"], focus["AG2/4/6"], atol=1.0)
     assert (summary.loc["matched (% of judged exposures)"] == 100).all()
-    assert summary.loc["FWHM, no-glass half (″)"].gt(summary.loc["FWHM, glass half (″)"]).all()
+    assert summary.loc["FWHM, RIGHT half (″)"].gt(summary.loc["FWHM, without RIGHT (″)"]).all()
 
 
 def testGroupSummaryDeadGroup(makeAgRunTables):
@@ -485,6 +485,20 @@ def testDisabledCamera(makeAgRunTables):
     assert any(flag.severe and flag.agc_camera_id == 3 for flag in _flags(run))
     # Negative control: before then it was matched like the others.
     assert (frames.state3.iloc[:200] == CameraState.OK).all()
+
+
+def testShortDisabledStretchesAreCountedApart(makeAgRunTables):
+    """A short stretch in which a camera was disabled is not counted with those in which one matched nothing."""
+    run = prepareRun(makeAgRunTables(disabledFrom={3: 200}))  # 120 exposures: under longDropout
+    dropouts = findDropouts(run)
+    unmatched = dropouts.assign(agc_camera_id=4, disabled=False)
+
+    def notes(found):
+        return [flag for flag in findFlags(run, visitGuideErrors(run), found) if not flag.severe]
+
+    assert len(notes(pd.concat([dropouts, unmatched]))) == len(notes(dropouts)) + 1
+    # Negative control: two cameras' stretches of one kind share a line.
+    assert len(notes(pd.concat([dropouts, dropouts.assign(agc_camera_id=4)]))) == len(notes(dropouts))
 
 
 def testSizeAndJitter(makeAgRunTables):

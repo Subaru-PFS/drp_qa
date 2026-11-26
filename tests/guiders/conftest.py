@@ -382,7 +382,7 @@ def makeAgRunTables(
     apart, starting at 19:00 HST, all taken with the visit's spectrograph
     shutters open unless ``openFrames`` says how many. In ``cameras`` every camera detects 8
     spots, 4 on each half, 3 of them good matches (sigma 2 pixels on the
-    glass half, 2.2 on the other) 12 µm from where they were expected, and
+    half without RIGHT, 2.2 on the RIGHT half) 12 µm from where they were expected, and
     1 of the 4 flagged EDGE. In ``magnitudes`` each camera has 2 designed
     guide stars of magnitude 14-14.5, matched in every AG exposure in which
     the camera detects anything, and 2 of 19-19.5, of which one is matched.

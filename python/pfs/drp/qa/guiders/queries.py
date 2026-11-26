@@ -726,7 +726,7 @@ _AG_RUN_SQL = {
     # One row per (AG exposure, camera, detector half) with at least one detection. A good match is
     # agc_match.flags = :goodMatch (GOOD_MATCH alone since ics_agActor 1.1.78; before that 1, the same value, for
     # any match) on a clean detection (agc_data.flags NONE or RIGHT) of a camera the guider had not left out
-    # (camera_enabled, NULL before it was written). The no-glass half is :right (RIGHT), inferred from the
+    # (camera_enabled, NULL before it was written). The RIGHT half is :right, inferred from the
     # centroid where flags is NULL, as in readAgcData. sigma_pix is the radius of the spots' variance, the stored
     # moments scaled as in readAgcData; it leaves out :badShape (BAD_SHAPE) detections, whose moments are
     # unweighted. residual_um is the good matches' median distance from where the guider expected the star.
@@ -848,8 +848,8 @@ _AG_RUN_SQL = {
     """,
     # How many of each visit's designed guide stars were matched, by camera and magnitude: n_expected is the
     # design's guide stars in the bin on that camera times the visit's AG exposures, n_good the good matches
-    # (GOOD_MATCH) with one of them. A star takes its camera from the design.
-    "magnitudes": """
+    # (as cameras.n_good counts them) with one of them. A star takes its camera from the design.
+    "magnitudes": f"""
     WITH exposures AS (
         SELECT agc_exposure.agc_exposure_id, agc_exposure.pfs_visit_id, pfs_visit.pfs_design_id
         FROM agc_exposure
@@ -875,9 +875,11 @@ _AG_RUN_SQL = {
             count(*) AS n_good
         FROM exposures
         JOIN agc_match ON agc_match.agc_exposure_id = exposures.agc_exposure_id
+        LEFT JOIN agc_data ON agc_data.agc_exposure_id = agc_match.agc_exposure_id
+            AND agc_data.agc_camera_id = agc_match.agc_camera_id AND agc_data.spot_id = agc_match.spot_id
         JOIN pfs_design_agc ON pfs_design_agc.pfs_design_id = exposures.pfs_design_id
             AND pfs_design_agc.guide_star_id = agc_match.guide_star_id
-        WHERE agc_match.flags = :goodMatch AND pfs_design_agc.guide_star_magnitude IS NOT NULL
+        WHERE {_GOOD_SQL} AND pfs_design_agc.guide_star_magnitude IS NOT NULL
         GROUP BY 1, 2, 3
     )
     SELECT
@@ -939,7 +941,7 @@ def readAgRun(
             (``agc_match.camera_enabled`` false), and the columns of
             `AG_DETECTION_FLAGS` the detections carrying each of
             ics_agccActor's bad-detection flags. ``right_half`` is 1 on the
-            no-glass half.
+            RIGHT half.
         ``grid``
             One row per (``agc_exposure_id``, ``agc_camera_id``,
             ``row_cell``, ``column_cell``), cells of `AG_GRID_CELL_PIX`
@@ -978,7 +980,12 @@ def readAgRun(
         bound = {
             "designStars": {**params, "magLimit": float(magLimit)},
             "cameras": {**params, **AG_RUN_FLAGS, **MOMENT_SCALE_PARAMS, **_CAMERAS_PARAMS},
-            "magnitudes": {**params, "goodMatch": AG_RUN_FLAGS["goodMatch"], "magBin": AG_MAGNITUDE_BIN},
+            "magnitudes": {
+                **params,
+                "goodMatch": AG_RUN_FLAGS["goodMatch"],
+                "goodDetection": _CAMERAS_PARAMS["goodDetection"],
+                "magBin": AG_MAGNITUDE_BIN,
+            },
             "grid": {**params, **AG_GRID_CELL_PIX, **AG_RUN_FLAGS},
         }.get(name, params)
         tables[name] = opdb.query_dataframe(sql, params=bound).reset_index(drop=True)

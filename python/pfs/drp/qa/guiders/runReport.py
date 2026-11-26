@@ -224,7 +224,7 @@ def keyNumbers(summary: dict, config: RunConfig | None = None) -> list[tuple[str
             "Matched stars per AG exposure",
             f"{stars['perExposure']:.0f} (5%: {stars['p5']:.0f}); "
             + ", ".join(f"{name} {n:.0f}" for name, n in stars["perCamera"].items()),
-            "good matches, all cameras then each; median over science AG exposures",
+            "good matches, all cameras then each; median over science AG exposures with the shutters open",
         ),
         (
             f"AG exposures with fewer than {config.minFitStars} matched stars",

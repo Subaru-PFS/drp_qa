@@ -336,7 +336,7 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
 
     ax = axes[0, 1]
     cameras = run.cameras[run.cameras.night.isin(nights)]
-    for half, color, name in ((0, "C0", "glass half"), (1, "C1", "no-glass half")):
+    for half, color, name in ((0, "C0", "without RIGHT"), (1, "C1", "RIGHT half")):
         values = (
             cameras[(cameras.agc_camera_id == cid) & (cameras.right_half == half)]
             .groupby("night")

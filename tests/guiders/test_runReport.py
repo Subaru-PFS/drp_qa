@@ -57,6 +57,9 @@ def testReadAgRun(opdb):
     assert isinstance(designStars.params["magLimit"], float)
     (magnitudes,) = [call for call in opdb.calls if "magBin" in call.params]
     assert magnitudes.params["magBin"] == AG_MAGNITUDE_BIN
+    # The matched share counts the good matches the per-camera count does.
+    assert magnitudes.params["goodDetection"] == int(SourceDetectionFlags.NONE | SourceDetectionFlags.RIGHT)
+    assert "camera_enabled IS NOT FALSE" in magnitudes.sql
 
 
 def testReadAgRunBindsFlagValues(opdb):
