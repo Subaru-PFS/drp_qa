@@ -663,12 +663,35 @@ python bin.src/drpQa.py agReport fetch --period run30   # the opdb, once: ~10 MB
 python bin.src/drpQa.py agReport report --period run30 --title "Run 30" [--notes notes.md]
 ```
 
-`fetch` reads six aggregated tables (`queries.readAgRun`, the matches on a 4×4 grid over each detector among them) into `~/.cache/drp_qa/agRun/opdb/`; `report` writes
+`fetch` reads seven aggregated tables (`queries.readAgRun`, the matches on a 4×4 grid over each detector and the
+designed guide stars matched by magnitude among them) into `~/.cache/drp_qa/agRun/opdb/`; `report` writes
 `<period>/report.md`, its figures and `metrics.json` from them, without the database. The report opens with its
-flags, then a camera-presence map, AG1/3/5 against AG2/4/6, the settled guiding of each science visit, focus and
-acquisition, and a section per camera: its flags, and its matched stars, FWHM per detector half, focus against the
-others, presence, clusters of rejected matches and position-model error, night by night. Cameras are shown and compared by group, AG1/3/5 and
-AG2/4/6: they are wired and placed separately, and can fail together (Run 30 lost AG1/3/5 after 2026-09-08).
+key numbers (`runAnalysis.runSummary`: the size and the frame-to-frame jitter of each science visit's guide error in ΔRA,
+ΔDec and ΔInR and on the sky, the distance of the matched stars from where the guider expected them, the share
+of the designed guide stars matched per science visit, and the stars matched per AG exposure and per camera) and its flags, then a map of the camera states, AG1/3/5 against AG2/4/6, the
+guiding of each science visit, focus and acquisition, the six detectors on the PFI (where on each matches are
+rejected and the residual left there, each camera's focus against the others, and its FWHM per detector half), and
+a section per camera: its flags, and its matched stars, designed guide stars matched by magnitude, the share of AG
+exposures in which it matched a star, clusters of rejected matches, the three parts of its position-model error
+(the slope of its residuals along detector x and along y, and the step between its detector's halves) and the share
+of its detections ics_agccActor flagged (EDGE, SATURATED, BAD_SHAPE, BAD_ELLIP, BAD_SIZE), night by night. Every figure
+has a caption saying what it shows (`runPlotting.captions`), which `pfs_qa_dashboard`'s AG page shows too.
+
+A visit's guide error is measured from the guide offsets the guider accepted in AG exposures taken while the
+spectrograph shutters were open (`runAnalysis.visitGuideErrors`, from `sps_exposure`'s times, at least 5 of them):
+what the spectrograph saw. AG exposures go on after the shutters close, and the pointing may then be moved: in Run
+31's 60 s windowed visits, six AG exposures are taken with the shutters open (median offset 0.11″) and the first
+after they close reads about 1″. Nothing settles within a science visit (its first AG exposure reads as its
+twelfth), so no frames are skipped at its start.
+
+A good match is `agc_match.flags = GOOD_MATCH` on a clean detection (`agc_data.flags` NONE or RIGHT) of a camera
+the guider had not left out of its fit. A camera's state in an AG exposure is one of matched, detections but no
+match, no detections, or disabled (`agc_match.camera_enabled` false). The opdb records a camera's detections, not
+whether it returned an image, so a dead camera and an empty image both read as no detections; a camera with none
+in the whole run is **not in use**, named once and left out of every comparison between cameras (AG2 in Run 31).
+
+Cameras are shown and compared by group, AG1/3/5 and AG2/4/6: they are wired and placed separately, and can fail
+together (Run 30 lost AG1/3/5 after 2026-09-08). The guider treats all six alike.
 
 What it flags (`runAnalysis.RunConfig` holds the numbers):
 
@@ -687,7 +710,7 @@ What it flags (`runAnalysis.RunConfig` holds the numbers):
   expected position, less the camera's mean in each AG exposure, so the pointing drops out) against their position
   on the detector; quoted as the error 500 px from the centre and the direction it grows in. The residual is the guide fit's own: the detection through pfs_utils' `coordinates.det2dp` against the guide star through `Subaru_POPT2_PFS`, not the `CoordTransp` (`sky_pfi_ag`, `ag_pfimm_to_pixel`) chain that places guide stars in pfsDesign and pfsConfig. Flagged over 4 µm and
   1.5× the cameras' median (Runs 29 and 30: AG3 8 µm toward ~113°, the others 3–6 µm).
-- Science visits whose settled jitter (frame-to-frame, after the first 5 frames) is over 3× the run's median, and
+- Science visits whose guide jitter (frame-to-frame, with the shutters open) is over 3× the run's median, and
   cameras whose FWHM is 15% from the others'. The two detector halves focus differently by design, so their FWHM
   difference is plotted, not flagged.
 
@@ -703,7 +726,7 @@ opdb, the Butler and qadb are all reachable, and writes no parquet and no report
 
 - **The visits come from the opdb**, not from the hand-written run summaries: every SpS visit between the
   period's dates, with its sequence, `cmd_str`, cameras, design, obslog notes and telescope status. The periods
-  (each run's nights and its pre-run calibration nights, HST, a night running noon to noon) are in
+  (each run's nights and its pre-run calibration nights, HST, a night running from 14:00 to 14:00, which is 00:00 UTC, when the raw files' date changes) are in
   [`comparison/data/observingRuns.yaml`](python/pfs/drp/qa/comparison/data/observingRuns.yaml), derived from
   gaps in SpS activity.
 - **Calibration or science is what the exposure is**, not when it was taken: every sequence type but

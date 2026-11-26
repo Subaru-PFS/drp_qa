@@ -7,23 +7,27 @@ import re
 import numpy as np
 import pandas as pd
 import pytest
+from matplotlib.colors import to_hex
 from matplotlib.figure import Figure
 
 from pfs.drp.qa.comparison.runs import Period
 from pfs.drp.qa.guiders import runPlotting
-from pfs.drp.qa.guiders.queries import AG_RUN_TABLES, readAgRun
+from pfs.drp.qa.guiders.queries import AG_DETECTION_FLAGS, AG_MAGNITUDE_BIN, AG_RUN_TABLES, readAgRun
 from pfs.drp.qa.guiders.runAnalysis import (
+    DETECTION_FLAG_COLUMNS,
+    RunConfig,
     findRejectionClusters,
     fitModelErrors,
-    nightPosition,
     prepareRun,
-    settledJitter,
+    runSummary,
+    visitGuideErrors,
 )
-from pfs.drp.qa.guiders.runReport import fetchRun, loadRun, main
+from pfs.drp.qa.guiders.runReport import FIGURES, fetchRun, keyNumbers, loadRun, main
 from pfs.utils.datamodel.ag import SourceDetectionFlags, SourceMatchingFlags
 
 # The table behind each readAgRun query, as FakeOpDB looks them up.
 RUN_QUERIES = {
+    "magnitudes": r"AS n_expected",  # before designStars: both read pfs_design_agc
     "grid": r"AS dx_um",  # before cameras: both join agc_data
     "cameras": r"JOIN agc_data ON",
     "exposures": r"LEFT JOIN agc_guide_offset",
@@ -48,22 +52,45 @@ def testReadAgRun(opdb):
     for call in opdb.calls:
         assert call.params["start"] == start and call.params["end"] == end
         assert not re.search(r"2026", call.sql)  # bound, not formatted
-    assert opdb.calls[-1].params["magLimit"] == 19.0
-    assert isinstance(opdb.calls[-1].params["magLimit"], float)
+    (designStars,) = [call for call in opdb.calls if "magLimit" in call.params]
+    assert designStars.params["magLimit"] == 19.0
+    assert isinstance(designStars.params["magLimit"], float)
+    (magnitudes,) = [call for call in opdb.calls if "magBin" in call.params]
+    assert magnitudes.params["magBin"] == AG_MAGNITUDE_BIN
+    # The matched share counts the good matches the per-camera count does.
+    assert magnitudes.params["goodDetection"] == int(SourceDetectionFlags.NONE | SourceDetectionFlags.RIGHT)
+    assert "camera_enabled IS NOT FALSE" in magnitudes.sql
 
 
 def testReadAgRunBindsFlagValues(opdb):
     readAgRun(opdb, datetime.datetime(2026, 9, 1, 12), datetime.datetime(2026, 9, 3, 12))
     literal = r"flags\s*(=|<>)\s*1\b|&\s*1\b"
     withFlags = [call for call in opdb.calls if "agc_match.flags" in call.sql]
-    assert len(withFlags) == 2  # cameras and grid
+    assert len(withFlags) == 3  # cameras, grid and magnitudes
     for call in withFlags:
         assert not re.search(literal, call.sql)
         assert call.params["goodMatch"] == int(SourceMatchingFlags.GOOD_MATCH)
+    for call in withFlags[:2]:
         assert call.params["right"] == int(SourceDetectionFlags.RIGHT)
     (cameras,) = [call for call in opdb.calls if "sigma_pix" in call.sql]
     assert cameras.params["badShape"] == int(SourceDetectionFlags.BAD_SHAPE)
-    assert re.search(r"agc_data\.flags, 0\) & :badShape = 0\) AS sigma_pix", cameras.sql)
+    # A good match is GOOD_MATCH on a clean detection (NONE or RIGHT) of a camera the guider had not left out:
+    # the count, the image size and the position residual all take the same ones.
+    good = (
+        r"FILTER \(WHERE agc_match\.flags = :goodMatch AND COALESCE\(agc_data\.flags, 0\) <= :goodDetection"
+        r" AND agc_match\.camera_enabled IS NOT FALSE\) AS "
+    )
+    assert cameras.params["goodDetection"] == int(SourceDetectionFlags.NONE | SourceDetectionFlags.RIGHT)
+    for column in ("n_good", "sigma_pix", "residual_um"):
+        assert re.search(good + column, cameras.sql)
+    # Negative control: a filter on the match alone isn't that definition.
+    assert not re.search(good + "n_good", "FILTER (WHERE agc_match.flags = :goodMatch) AS n_good")
+    # Each bad-detection flag is counted by its own bit, bound by name.
+    assert set(AG_DETECTION_FLAGS) == set(DETECTION_FLAG_COLUMNS)
+    for column, flag in AG_DETECTION_FLAGS.items():
+        assert cameras.params[column] == int(flag) and flag in SourceDetectionFlags.BAD_DETECTION
+        assert f"COALESCE(agc_data.flags, 0) & :{column} <> 0) AS {column}" in cameras.sql
+    assert "FILTER (WHERE agc_match.camera_enabled IS FALSE) AS n_disabled" in cameras.sql
     # sigma_pix is the radius storedRadiusToFwhm takes, sqrt((mxx + myy) / 2) of the variance: the stored
     # moments times 2 where the exposure's agcc stored half of it. Only sigma_pix leaves BAD_SHAPE out.
     assert cameras.params["halvedMoments"] == 2.0
@@ -73,8 +100,7 @@ def testReadAgRunBindsFlagValues(opdb):
         r"THEN :halvedMoments ELSE 1\s+END\s+\)",
         cameras.sql,
     )
-    assert re.search(r"FILTER \(WHERE agc_match\.flags = :goodMatch\) AS n_good", cameras.sql)
-    assert cameras.sql.count(":badShape") == 2 and cameras.sql.count(":halvedMoments") == 1
+    assert cameras.sql.count(":badShape") == 1 and cameras.sql.count(":halvedMoments") == 1
     # Negative control: the pattern finds the literals the SQL used to hold.
     assert re.search(literal, "FILTER (WHERE agc_match.flags = 1)")
     assert re.search(literal, "AS INTEGER)) & 1 AS right_half")
@@ -87,42 +113,107 @@ def testReadAgRunNeedsOpdb():
 
 def testPlots(makeAgRunTables):
     run = prepareRun(makeAgRunTables(deadFrom={0: 200}, modelError={2: [[0.0, 0.0], [0.0, 0.013]]}))
-    jitter = settledJitter(run)
+    jitter = visitGuideErrors(run)
     clusters, modelErrors = findRejectionClusters(run), fitModelErrors(run)
     figures = {
         "presence": runPlotting.plotCameraPresence(run),
         "guiding": runPlotting.plotGuiding(run, jitter),
         "focus": runPlotting.plotFocus(run),
         "acquisition": runPlotting.plotAcquisition(run),
+        "focalPlane": runPlotting.plotFocalPlane(run, modelErrors),
         **{f"AG{cid + 1}": runPlotting.plotCamera(run, cid, clusters, modelErrors) for cid in range(6)},
     }
     assert all(isinstance(fig, Figure) for fig in figures.values())
     assert len(figures["focus"].axes) == 2
+    # Size and jitter for each of the three axes, and the guide-loop problems.
+    assert len(figures["guiding"].axes) == 7
     assert all(len(figures[f"AG{cid + 1}"].axes) == 6 for cid in range(6))
+    # Three views of the PFI, each with its scale.
+    assert len(figures["focalPlane"].axes) == 6
     assert figures["AG3"]._suptitle.get_text() == "AG3 (AG1/3/5)"
     presence = figures["presence"].axes[0]
     assert [t.get_text() for t in presence.get_yticklabels()] == ["AG1", "AG3", "AG5", "AG2", "AG4", "AG6"]
 
 
 def testGuidingPlotWithAnAxisAllNaN(makeAgRunTables):
-    """A jitter axis with no values (here ΔInR) leaves an empty panel rather than failing."""
+    """An axis with no values (here ΔInR) leaves empty panels rather than failing."""
     tables = makeAgRunTables()
     tables["exposures"]["guide_delta_insrot"] = float("nan")
     run = prepareRun(tables)
-    fig = runPlotting.plotGuiding(run, settledJitter(run))
+    fig = runPlotting.plotGuiding(run, visitGuideErrors(run))
 
-    assert fig.axes[2].get_ylim() == (0.0, 1.0)
+    assert fig.axes[4].get_ylim() == (0.0, 1.0) and fig.axes[5].get_ylim() == (0.0, 1.0)
 
 
-def testPresenceCrossesDeadCameras(makeAgRunTables):
-    """A cell is crossed when most of a camera's misses detected nothing, even if most frames matched."""
-    run = prepareRun(makeAgRunTables(nNights=1, nVisits=4, nExp=90, deadFrom={0: 330}))
-    crosses = [line for line in runPlotting.plotCameraPresence(run).axes[0].lines if line.get_marker() == "x"]
-    # AG1 dies 55 min into the night: its first hour is 8% dead, and still crossed; the hours after are all dead.
-    hours = np.floor(nightPosition(run.frames.taken_at, run.plottedNights) * 12)
-    assert len(crosses) == len(np.unique(hours[330:]))
-    # Negative control: a camera that never died is never crossed.
-    assert all(line.get_ydata()[0] < 1 for line in crosses)
+def _cellColours(run):
+    """Return the face colours of the presence map's cells, by camera row (its y)."""
+    colours = {}
+    for patch in runPlotting.plotCameraPresence(run).axes[0].patches:
+        if patch.get_hatch() is None:
+            colours.setdefault(patch.get_y(), []).append(to_hex(patch.get_facecolor()))
+    return colours
+
+
+def testPresenceColoursWhatACameraDid(makeAgRunTables):
+    """A cell takes the colour of what the camera mostly did when it matched nothing."""
+    tables = makeAgRunTables(nNights=1, nVisits=4, nExp=90, deadFrom={0: 0}, disabledFrom={4: 0})
+    cameras = tables["cameras"]
+    cameras.loc[cameras.agc_camera_id == 2, "n_good"] = 0  # AG3 detects, and matches nothing
+    # AG1 would be not in use: let it see one spot, so that it is a camera that went dark.
+    first = tables["exposures"].agc_exposure_id.iloc[0]
+    cameras.loc[len(cameras)] = [first, 0, 0, 4, 3, 2.0, 100.0, 12.0, 0, 1, 0, 0, 0, 0]
+    run = prepareRun(tables)
+    colours = _cellColours(run)
+
+    # Rows: AG1 at y=0, AG3 at 1, AG5 at 2, then AG2/4/6 from 3.5. The first hour of AG1 holds its one match.
+    assert set(colours[0][1:]) == {runPlotting.BAD.lower()}
+    assert set(colours[1]) == {runPlotting.WARN.lower()}
+    assert set(colours[2]) == {runPlotting.OFF.lower()}
+    # Negative control: a camera that matched throughout has no coloured cell.
+    assert set(colours[4.5]) == {runPlotting.EMPTY.lower()}
+
+
+def testPresenceMarksACameraNotInUse(makeAgRunTables):
+    run = prepareRun(makeAgRunTables(deadFrom={1: 0}))
+    ax = runPlotting.plotCameraPresence(run).axes[0]
+    inUse = runPlotting.plotCameraPresence(prepareRun(makeAgRunTables())).axes[0]
+
+    # Its row has no cells of its own (AG2 is the fourth row, at y=3.5), and a note in their place.
+    assert 3.5 not in _cellColours(run)
+    assert len(ax.texts) == len(inUse.texts) + 1
+    # Its own figure says so in its heading; a camera in use has only its name and group there.
+    clusters, modelErrors = findRejectionClusters(run), fitModelErrors(run)
+    unused = runPlotting.plotCamera(run, 1, clusters, modelErrors)._suptitle.get_text()
+    used = runPlotting.plotCamera(run, 3, clusters, modelErrors)._suptitle.get_text()
+    assert unused.startswith("AG2 (AG2/4/6)") and len(unused) > len("AG2 (AG2/4/6)")
+    assert used == "AG4 (AG2/4/6)"
+
+
+def testCaptionsCoverEveryFigureAndFollowTheConfiguration():
+    config = RunConfig(minOpenFrames=77, minDesignStars=44, maxCorrection=8.5)
+    captions, default = runPlotting.captions(config), runPlotting.captions()
+
+    assert set(captions) == {*FIGURES, "focalPlane", "camera"} == set(default)
+    # The numbers a caption quotes are the configuration's.
+    assert "77" in captions["guiding"]
+    assert "44" in captions["cameraPresence"] and "8.5" in captions["acquisition"]
+    # Negative control: they aren't written in.
+    assert "77" not in default["guiding"] and "44" not in default["cameraPresence"]
+
+
+def testKeyNumbers(makeAgRunTables):
+    run = prepareRun(makeAgRunTables(deadFrom={1: 0}))
+    rows = keyNumbers(runSummary(run, visitGuideErrors(run)))
+    values = [value for _, value, _ in rows]
+
+    # Each is what it is, its value, and how it was measured.
+    assert all(len(row) == 3 and all(isinstance(part, str) and part for part in row) for row in rows)
+    assert "AG1, AG3, AG4, AG5, AG6" in values
+    # The synthetic run's numbers: a star 12 µm (0.92 AG pixel) from where it was expected, three quarters of the
+    # designed guide stars matched, and no guide offset rejected or missing.
+    assert any("12.0 µm" in value and "0.92 px" in value for value in values)
+    assert any(value.startswith("75%") for value in values)
+    assert "0 / 0" in values
 
 
 def testFetchAndLoad(opdb, tmp_path):
@@ -204,6 +295,11 @@ def testReportCommand(opdb, tmp_path):
     out = tmp_path / "runX"
     report = (out / "report.md").read_text()
     assert report.startswith("# runX: AG run report")
+    # Every figure says what it shows.
+    captions = runPlotting.captions()
+    for name in FIGURES:
+        assert f"({name}.png)\n\n{captions[name]}" in report
+    assert captions["camera"] in report and runPlotting.GROUPS_NOTE in report
     assert "**AG1: no detections at all in 120 consecutive AG exposures**" in report
     assert "### AG1/3/5 against AG2/4/6" in report
     # One section per camera, in their groups, each with its own flags and figure.
@@ -218,13 +314,33 @@ def testReportCommand(opdb, tmp_path):
         "guiding",
         "focus",
         "acquisition",
+        "focalPlane",
         *(f"camera-AG{n}" for n in range(1, 7)),
     ):
         assert (out / f"{name}.png").stat().st_size > 0
     metrics = json.loads((out / "metrics.json").read_text())
     assert metrics["dropouts"][0]["agc_camera_id"] == 0
+    assert metrics["summary"]["camerasInUse"] == [f"AG{n}" for n in range(1, 7)]
+    # The report gives every key number, before its flags.
+    values = [value for _, value, _ in keyNumbers(metrics["summary"])]
+    assert all(value in report for value in values)
+    assert report.index(values[0]) < report.index(metrics["flags"][0]["text"])
+    assert set(metrics["summary"]["guideError"]) == {"ra", "dec", "inr", "sky"}
     assert set(metrics["groups"]) == {"AG1/3/5", "AG2/4/6"}
     assert set(metrics["cameras"]) == {f"AG{n}" for n in range(1, 7)}
+
+
+def testReportLeavesOutTheFigureOfACameraNotInUse(FakeOpDB, makeAgRunTables, tmp_path):
+    runs = tmp_path / "runs.yaml"
+    runs.write_text('runs:\n  - name: runX\n    nights: ["2026-09-01", "2026-09-02"]\n')
+    fetchRun(FakeOpDB(makeAgRunTables(deadFrom={1: 0}), RUN_QUERIES), PERIOD, tmp_path)
+
+    assert main(["report", "--period", "runX", "--runs", str(runs), "--data-dir", str(tmp_path)]) == 0
+    section = (tmp_path / "runX" / "report.md").read_text().split("### AG2\n")[1].split("###")[0]
+    assert "camera-AG2.png" not in section
+    assert not (tmp_path / "runX" / "camera-AG2.png").exists()
+    # Negative control: the cameras in use keep theirs.
+    assert (tmp_path / "runX" / "camera-AG4.png").exists()
 
 
 def testUnknownPeriod(tmp_path):
@@ -233,14 +349,19 @@ def testUnknownPeriod(tmp_path):
 
 
 def testReportFromAnOlderFetch(opdb, tmp_path):
-    """A fetch made before the grid table existed still reports, and says what it left out."""
+    """A fetch made before the grid and magnitudes tables existed still reports, and says what it left out."""
     runs = tmp_path / "runs.yaml"
     runs.write_text('runs:\n  - name: runX\n    nights: ["2026-09-01", "2026-09-02"]\n')
     fetchRun(opdb, PERIOD, tmp_path, now=datetime.datetime(2026, 10, 1))
     (tmp_path / "opdb" / "agRun-runX-grid.parquet").unlink()
+    (tmp_path / "opdb" / "agRun-runX-magnitudes.parquet").unlink()
+    # Nor did its cameras hold the residual, the disabled matches or the flag counts.
+    camerasPath = tmp_path / "opdb" / "agRun-runX-cameras.parquet"
+    older = pd.read_parquet(camerasPath).drop(columns=["residual_um", "n_disabled", *DETECTION_FLAG_COLUMNS])
+    older.to_parquet(camerasPath)
     tables, stamp = loadRun(PERIOD, tmp_path)
 
-    assert "grid" not in tables and stamp["missing"] == ["grid"]
+    assert "grid" not in tables and stamp["missing"] == ["grid", "magnitudes"]
     assert main(["report", "--period", "runX", "--runs", str(runs), "--data-dir", str(tmp_path)]) == 0
     assert "**No `grid` table was read**" in (tmp_path / "runX" / "report.md").read_text()
     # Negative control: any other table is required.

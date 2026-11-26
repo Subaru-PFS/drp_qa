@@ -92,11 +92,14 @@ the pipeline/config glue to run them.
   `docs/guiders-migration.ipynb` runs each drp_stella guiders call beside its replacement
   (needs the opdb; committed without outputs): keep it in step with renamed arguments.
   The end-of-run report adds `queries.readAgRun` (aggregates over a period's AG
-  exposures), `runAnalysis` (stack-free: per-exposure camera states, dropouts, settled jitter,
-  clusters of rejected matches, position-model errors, flags), `runPlotting` (figures from an `AgRun`) and `runReport` (fetch to parquet, then the
-  Markdown report), driven by `drpQa.py agReport` with the same observing runs `redo` uses; tested in
-  `tests/guiders/test_runAnalysis.py` and `test_runReport.py` on a synthetic run (`makeAgRunTables`). Its plots are not in `docs/guider-plots.ipynb`: a run
-  holds science visits, which can't be committed, so each run's `report.md` is their description.
+  exposures), `runAnalysis` (stack-free: per-exposure camera states, the cameras in use, dropouts, the size and
+  jitter of each visit's guide error with the shutters open, clusters of rejected matches, position-model errors in three parts, each detector's rejections and residuals by cell, matches by magnitude,
+  detection flags, flags and the key numbers), `runPlotting` (figures from an `AgRun`, and their captions) and
+  `runReport` (fetch to parquet, then the Markdown report), driven by `drpQa.py agReport` with the same observing
+  runs `redo` uses; tested in `tests/guiders/test_runAnalysis.py` and `test_runReport.py` on a synthetic run
+  (`makeAgRunTables`). Its plots are not in `docs/guider-plots.ipynb`: a run holds science visits, which can't be
+  committed, so each run's `report.md` is their description. `pfs_qa_dashboard`'s AG page is drawn from the same
+  `runAnalysis` results and captions: change what a figure shows and its caption together.
 - **Plotting (`python/pfs/drp/qa/plotting/`)** — the QA plots: DataFrames in, figures
   out (`calibInputs`; `dmResiduals.plotDetectorResiduals` for one detector's line residuals
   — the former `dmResiduals` task's 1D and 2D views, drawn from `dmLineResidualData`; and
