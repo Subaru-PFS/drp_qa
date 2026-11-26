@@ -120,14 +120,16 @@ def testPlots(makeAgRunTables):
         "guiding": runPlotting.plotGuiding(run, jitter),
         "focus": runPlotting.plotFocus(run),
         "acquisition": runPlotting.plotAcquisition(run),
+        "focalPlane": runPlotting.plotFocalPlane(run, modelErrors),
         **{f"AG{cid + 1}": runPlotting.plotCamera(run, cid, clusters, modelErrors) for cid in range(6)},
     }
     assert all(isinstance(fig, Figure) for fig in figures.values())
     assert len(figures["focus"].axes) == 2
     # Size and jitter for each of the three axes, and the guide-loop problems.
     assert len(figures["guiding"].axes) == 7
-    # Nine panels, and the scale of the detector map.
-    assert all(len(figures[f"AG{cid + 1}"].axes) == 10 for cid in range(6))
+    assert all(len(figures[f"AG{cid + 1}"].axes) == 6 for cid in range(6))
+    # Three views of the PFI, each with its scale.
+    assert len(figures["focalPlane"].axes) == 6
     assert figures["AG3"]._suptitle.get_text() == "AG3 (AG1/3/5)"
     presence = figures["presence"].axes[0]
     assert [t.get_text() for t in presence.get_yticklabels()] == ["AG1", "AG3", "AG5", "AG2", "AG4", "AG6"]
@@ -191,7 +193,7 @@ def testCaptionsCoverEveryFigureAndFollowTheConfiguration():
     config = RunConfig(minOpenFrames=77, minDesignStars=44, maxCorrection=8.5)
     captions, default = runPlotting.captions(config), runPlotting.captions()
 
-    assert set(captions) == {*FIGURES, "camera"} == set(default)
+    assert set(captions) == {*FIGURES, "focalPlane", "camera"} == set(default)
     # The numbers a caption quotes are the configuration's.
     assert "77" in captions["guiding"]
     assert "44" in captions["cameraPresence"] and "8.5" in captions["acquisition"]
@@ -312,6 +314,7 @@ def testReportCommand(opdb, tmp_path):
         "guiding",
         "focus",
         "acquisition",
+        "focalPlane",
         *(f"camera-AG{n}" for n in range(1, 7)),
     ):
         assert (out / f"{name}.png").stat().st_size > 0

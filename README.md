@@ -669,10 +669,12 @@ designed guide stars matched by magnitude among them) into `~/.cache/drp_qa/agRu
 key numbers (`runAnalysis.runSummary`: the size and the frame-to-frame jitter of each science visit's guide error in ΔRA,
 ΔDec and ΔInR and on the sky, the distance of the matched stars from where the guider expected them, the share
 of the designed guide stars matched per science visit, and the stars matched per AG exposure and per camera) and its flags, then a map of the camera states, AG1/3/5 against AG2/4/6, the
-guiding of each science visit, focus and acquisition, and a section per camera: its flags, and its matched stars,
-FWHM per detector half, focus against the others, designed guide stars matched by magnitude, the share of AG
-exposures in which it matched a star, clusters of rejected matches, position-model error and the share of its
-detections ics_agccActor flagged (EDGE, SATURATED, BAD_SHAPE, BAD_ELLIP, BAD_SIZE), night by night. Every figure
+guiding of each science visit, focus and acquisition, the six detectors on the PFI (where on each matches are
+rejected and the residual left there, each camera's focus against the others, and its FWHM per detector half), and
+a section per camera: its flags, and its matched stars, designed guide stars matched by magnitude, the share of AG
+exposures in which it matched a star, clusters of rejected matches, the three parts of its position-model error
+(the slope of its residuals along detector x and along y, and the step between its detector's halves) and the share
+of its detections ics_agccActor flagged (EDGE, SATURATED, BAD_SHAPE, BAD_ELLIP, BAD_SIZE), night by night. Every figure
 has a caption saying what it shows (`runPlotting.captions`), which `pfs_qa_dashboard`'s AG page shows too.
 
 A visit's guide error is measured from the guide offsets the guider accepted in AG exposures taken while the

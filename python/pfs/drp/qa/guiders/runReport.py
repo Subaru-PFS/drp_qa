@@ -271,6 +271,7 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
     caption = captions(run.config)
     for name, (_, plot) in FIGURES.items():
         plot(run, jitter).savefig(outDir / f"{name}.png", dpi=150)
+    runPlotting.plotFocalPlane(run, modelErrors).savefig(outDir / "focalPlane.png", dpi=150)
     # A camera not in use has nothing to draw: its section says so.
     for cid in run.inUse:
         runPlotting.plotCamera(run, cid, clusters, modelErrors).savefig(
@@ -313,12 +314,14 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
     md += [
         "## Cameras",
         "",
-        "In their two groups, AG1/3/5 then AG2/4/6. A rejected match is a detection paired with a guide star "
-        "but not counted as a good match; when a camera's position model is off, those far from where it fits "
-        "best go first, so they cluster on one side of its detector, always the same side. The position-model "
-        "error is fitted from the good matches' residuals (measured minus expected position, less the camera's "
-        "mean in each AG exposure, which the pointing moves together) across the detector; directions are on "
-        "the detector, 0° = +x, 90° = +y.",
+        "![The six detectors on the PFI](focalPlane.png)",
+        "",
+        caption["focalPlane"],
+        "",
+        "Then each camera, in their two groups, AG1/3/5 then AG2/4/6. A rejected match is a detection paired "
+        "with a guide star but not counted as a good match; when a camera's position model is off, those far "
+        "from where it fits best go first, so they cluster on one side of its detector, always the same side. "
+        "Directions are on the detector, 0° = +x, 90° = +y.",
         "",
         caption["camera"],
         "",
@@ -369,7 +372,7 @@ def writeReport(run: AgRun, outDir: Path, title: str, notes: str | None = None) 
             .reset_index()
             .to_json(orient="records")
         ),
-        "modelErrors": json.loads(summariseModelErrors(run, modelErrors).to_json()),
+        "modelErrors": json.loads(summariseModelErrors(modelErrors).to_json()),
         "dropouts": json.loads(dropouts.to_json(orient="records", date_format="iso")),
     }
     (outDir / "metrics.json").write_text(json.dumps(metrics, indent=1) + "\n")

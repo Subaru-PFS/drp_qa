@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 
 from pfs.drp.qa.comparison.runs import NIGHT_START
+from pfs.drp.qa.guiders.queries import AG_RIGHT_EDGE_PIX
 from pfs.utils import agMetrics
 from pfs.utils.coordinates.coordinates import det2dp
 from pfs.utils.datamodel.ag import GuideOffsetFlag
@@ -28,6 +29,7 @@ __all__ = [
     "CAMERA_GROUPS",
     "DETECTION_FLAG_COLUMNS",
     "JUDGED_STATES",
+    "MODEL_PARTS",
     "SCIENCE_TYPES",
     "AgRun",
     "CameraState",
@@ -137,20 +139,19 @@ class RunConfig:
         and in over ``clusterFactor`` times the other cameras' median (at
         least 1).
     modelErrorRadiusPix : `float`
-        A camera's position-model error is quoted at this distance (pixels)
-        from its detector's center.
+        The slopes of a camera's position-model error are quoted at this
+        distance (pixels) from its detector's center.
     minModelMatches, minModelSpreadPix : `float`
         A night's position-model fit for a camera needs this many good
         matches, spread at least this far (pixels, the smaller axis of their
         spread about each exposure's mean) across the detector.
-    isotropicRatio : `float`
-        A model error whose two singular values are closer than this ratio
-        (a rotation or uniform scale) has no direction, and none is quoted.
     maxModelError, modelErrorFactor : `float`
-        A camera is flagged when its position-model error (µm, at
-        ``modelErrorRadiusPix``) is over ``maxModelError`` and over
-        ``modelErrorFactor`` times the cameras' median, in the run's nightly
-        median. The error measured is never zero: the matches are noisy.
+        A camera is flagged when a part of its position-model error (µm:
+        a slope at ``modelErrorRadiusPix``, or the step between its halves;
+        `MODEL_PARTS`) is over ``maxModelError`` and over
+        ``modelErrorFactor`` times the median size of that part over the
+        cameras, in the run's nightly median. A part measured is never
+        zero: the matches are noisy.
     """
 
     minDesignStars: int = 3
@@ -171,7 +172,6 @@ class RunConfig:
     modelErrorRadiusPix: float = 500.0
     minModelMatches: int = 100
     minModelSpreadPix: float = 50.0
-    isotropicRatio: float = 0.7
     maxModelError: float = 4.0
     modelErrorFactor: float = 1.5
 
@@ -786,22 +786,27 @@ def findFlags(
                 )
             )
     if modelErrors is not None and len(modelErrors):
-        summary = summariseModelErrors(run, modelErrors)
-        typical = summary.error_um.median()
-        for cid, row in summary.iterrows():
-            if row.error_um > max(config.maxModelError, config.modelErrorFactor * typical):
-                direction = (
-                    f"growing toward {row.angle_deg:.0f}°"
-                    if np.isfinite(row.angle_deg)
-                    else "in no one direction (a rotation or uniform scale)"
-                )
+        summary = summariseModelErrors(modelErrors)
+        radius = f"{config.modelErrorRadiusPix:g} px from its detector's center"
+        for column in MODEL_PARTS:
+            typical = summary[column].abs().median()
+            for cid, value in summary[column].dropna().items():
+                if abs(value) <= max(config.maxModelError, config.modelErrorFactor * typical):
+                    continue
+                spread = "farther apart" if value > 0 else "closer together"
+                what = {
+                    "tangential_um": f"its stars are spread {spread} along detector x (around the field) than its "
+                    f"position model expects, by {abs(value):.1f} µm at {radius}",
+                    "radial_um": f"its stars are spread {spread} along detector y (along the field's radius) than "
+                    f"its position model expects, by {abs(value):.1f} µm at {radius}",
+                    "step_um": f"the two halves of its detector are displaced from each other by {abs(value):.1f} µm "
+                    f"along x (the RIGHT half toward {'+' if value > 0 else '−'}x)",
+                }[column]
                 flags.append(
                     Flag(
                         "camera",
                         False,
-                        f"AG{cid + 1}: its position model is off by {row.error_um:.1f} µm at "
-                        f"{config.modelErrorRadiusPix:g} px from its detector's center, {direction} "
-                        f"(nightly median; the cameras' median {typical:.1f} µm).",
+                        f"AG{cid + 1}: {what} (nightly median; the cameras' median size {typical:.1f} µm).",
                         int(cid),
                     )
                 )
@@ -918,42 +923,35 @@ def _consistency(degrees: pd.Series) -> float:
     return float(np.hypot(np.sin(radians).mean(), np.cos(radians).mean())) if len(radians) else np.nan
 
 
-def axialMean(degrees: pd.Series) -> float:
-    """Return the mean of some axes (directions modulo 180°), in [0, 180).
+#: The parts of a camera's position-model error (`fitModelErrors`), and what each is in a few words. Detector x
+#: runs around the field and y along its radius, on every camera.
+MODEL_PARTS = {
+    "tangential_um": "slope along x (around the field)",
+    "radial_um": "slope along y (along the field's radius)",
+    "step_um": "step between the halves, along x",
+}
 
-    An axis at 1° and one at 179° average to 0°, not 90°: the angles are
-    doubled, averaged on the circle, and halved.
-    """
-    return _meanAngle(2 * np.asarray(degrees, dtype=float)) / 2 % 180 if len(degrees) else np.nan
 
-
-def summariseModelErrors(run: AgRun, modelErrors: pd.DataFrame) -> pd.DataFrame:
+def summariseModelErrors(modelErrors: pd.DataFrame) -> pd.DataFrame:
     """Summarize each camera's nightly position-model errors over the run.
 
     Parameters
     ----------
-    run : `AgRun`
-        The run.
     modelErrors : `pandas.DataFrame`
         From `fitModelErrors`.
 
     Returns
     -------
     summary : `pandas.DataFrame`
-        Indexed by ``agc_camera_id``: the median ``error_um`` and
-        ``ratio``, and ``angle_deg``, the axial mean of the nights'
-        directions, NaN when the median ratio is over
-        ``RunConfig.isotropicRatio`` (no direction).
+        Indexed by ``agc_camera_id``: the median over the nights of each of
+        `MODEL_PARTS`. A night's value moves with the guide stars it had (a
+        step by 1-2 µm, a slope by under 1 µm), so the run's median is the
+        number to read.
     """
-    rows = {}
-    for cid, errors in modelErrors.groupby("agc_camera_id"):
-        ratio = errors.ratio.median()
-        rows[cid] = {
-            "error_um": errors.error_um.median(),
-            "angle_deg": axialMean(errors.angle_deg) if ratio < run.config.isotropicRatio else np.nan,
-            "ratio": ratio,
-        }
-    return pd.DataFrame.from_dict(rows, orient="index", columns=["error_um", "angle_deg", "ratio"])
+    columns = list(MODEL_PARTS)
+    if modelErrors.empty:
+        return pd.DataFrame(columns=columns)
+    return modelErrors.groupby("agc_camera_id")[columns].median()
 
 
 def findRejectionClusters(run: AgRun) -> pd.DataFrame:
@@ -1035,14 +1033,16 @@ def _withoutPointing(grid: pd.DataFrame) -> pd.DataFrame:
     The pointing moves a camera's stars together, so the mean residual of a
     camera's good matches in an AG exposure is the pointing, not the camera:
     it is subtracted from ``dx_um`` and ``dy_um``, and the matches' mean
-    position from ``x_good_pix`` and ``y_good_pix``.
+    from ``x_good_pix``, ``y_good_pix`` and ``right`` (1 for a cell on the
+    RIGHT half, 0 on the other), which are what a residual is fitted on.
     """
     grid = grid[grid.n_good > 0].dropna(subset=["x_good_pix", "y_good_pix", "dx_um", "dy_um"]).copy()
     if grid.empty:
-        return grid
+        return grid.assign(right=np.nan)
+    grid["right"] = (grid.x_good_pix >= AG_RIGHT_EDGE_PIX).astype(float)
     keys = [grid.agc_exposure_id, grid.agc_camera_id]
     total = grid.n_good.groupby(keys).transform("sum")
-    for column in ("x_good_pix", "y_good_pix", "dx_um", "dy_um"):
+    for column in ("x_good_pix", "y_good_pix", "dx_um", "dy_um", "right"):
         grid[column] = grid[column] - (grid[column] * grid.n_good).groupby(keys).transform("sum") / total
     return grid
 
@@ -1110,18 +1110,31 @@ def detectorCells(run: AgRun) -> pd.DataFrame:
 
 
 def fitModelErrors(run: AgRun) -> pd.DataFrame:
-    """Fit how far off each camera's position model is, night by night.
+    """Fit how far off each camera's position model is, night by night, in three parts.
 
     From the ``grid``, each cell's good matches give a mean position
-    (pixels) and mean residual (measured minus expected, µm). In each AG
-    exposure each camera's mean residual and position are subtracted,
-    removing the pointing, which moves a camera's stars together; per night
-    and camera a 2x2 matrix A is then fitted, residual = A (position - mean),
-    weighted by the matches. A camera model whose position, rotation or scale
-    is right leaves A at the noise; its largest singular value, times
-    ``modelErrorRadiusPix``, is the error at that distance from the center,
-    in the direction of its right singular vector. Field rotation adds the
-    same small rotation to every camera.
+    (pixels) and mean residual (measured minus expected, µm, turned to the
+    detector's axes). In each AG exposure each camera's mean residual and
+    position are subtracted, removing the pointing, which moves a camera's
+    stars together. Per night and camera the residual is then fitted,
+    weighted by the matches, as a 2x2 matrix times the position plus a
+    step between the two halves of the detector. Three numbers of the fit
+    are kept (`MODEL_PARTS`):
+
+    - ``tangential_um``: the slope of the x residual along x, times
+      ``modelErrorRadiusPix``. Detector x runs around the field. Positive,
+      the stars are spread farther apart along x than the model expects;
+      negative, closer together.
+    - ``radial_um``: the same along y, which runs along the field's radius.
+    - ``step_um``: the x residual of the RIGHT half minus the other's, at
+      the boundary between them. The model takes the detector for one
+      surface, so a step is the two halves displaced from each other.
+
+    A camera whose position is wrong shows in none of them (the mean is
+    removed), and one whose angle is wrong moves x with y and y with x by
+    equal and opposite amounts (``A12``, ``A21``), not along its own axis:
+    the slopes are scales. A slope shared by all the cameras belongs to
+    what they share, not to a camera.
 
     The residual is the one the guider's own fit sees (agc_match): the
     detection taken to the focal plane by pfs_utils' ``coordinates.det2dp``
@@ -1140,30 +1153,29 @@ def fitModelErrors(run: AgRun) -> pd.DataFrame:
     Returns
     -------
     errors : `pandas.DataFrame`
-        One row per (``night``, ``agc_camera_id``): ``error_um``, the
-        model error (µm) at ``modelErrorRadiusPix``; ``angle_deg``, the
-        direction on the detector (0-180°; 0° = +x, 90° = +y) it grows
-        fastest in; ``ratio``, its smaller singular value over its larger
-        (near 1, a rotation or uniform scale, has no direction); ``n_good``;
-        and ``A11``-``A22`` (µm per pixel). On the plotted nights, with
-        enough matches spread across the detector (`RunConfig`).
+        One row per (``night``, ``agc_camera_id``): ``tangential_um``,
+        ``radial_um`` and ``step_um`` (NaN on a night with matches on one
+        half only); ``n_good``; the matrix ``A11``-``A22`` (µm per pixel,
+        on the detector's axes) and ``step_y_um``, the step's other
+        component. On the plotted nights, with enough matches spread across
+        the detector (`RunConfig`).
     """
     config = run.config
     columns = [
         "night",
         "agc_camera_id",
-        "error_um",
-        "angle_deg",
-        "ratio",
+        *MODEL_PARTS,
         "n_good",
         "A11",
         "A12",
         "A21",
         "A22",
+        "step_y_um",
     ]
     grid = _withoutPointing(run.grid[run.grid.night.isin(run.plottedNights)])
     if grid.empty:
         return pd.DataFrame(columns=columns)
+    radius = config.modelErrorRadiusPix
     rows = []
     for (night, cid), cells in grid.groupby(["night", "agc_camera_id"]):
         weight = cells.n_good.to_numpy(float)
@@ -1173,23 +1185,27 @@ def fitModelErrors(run: AgRun) -> pd.DataFrame:
         spread = np.sqrt(np.linalg.eigvalsh(positions.T @ (positions * weight[:, None]) / weight.sum()).min())
         if weight.sum() < config.minModelMatches or spread < config.minModelSpreadPix:
             continue
-        X = positions * np.sqrt(weight)[:, None]
-        A = np.vstack(
-            [
-                np.linalg.lstsq(X, cells[c].to_numpy() * np.sqrt(weight), rcond=None)[0]
-                for c in ("dx_um", "dy_um")
-            ]
+        right = cells.right.to_numpy(float)
+        # A step can only be told from a slope with matches on both halves.
+        bothHalves = np.average(right**2, weights=weight) > 0.01
+        terms = np.column_stack([positions, right] if bothHalves else [positions]) * np.sqrt(weight)[:, None]
+        residuals = cells[["dx_um", "dy_um"]].to_numpy() @ _toDetectorAxes(int(cid)).T
+        fitX, fitY = (
+            np.linalg.lstsq(terms, residuals[:, axis] * np.sqrt(weight), rcond=None)[0] for axis in (0, 1)
         )
-        _, singular, vt = np.linalg.svd(A)
         rows.append(
             [
                 night,
                 cid,
-                singular[0] * config.modelErrorRadiusPix,
-                np.degrees(np.arctan2(vt[0, 1], vt[0, 0])) % 180,
-                singular[1] / singular[0] if singular[0] > 0 else np.nan,
+                fitX[0] * radius,
+                fitY[1] * radius,
+                fitX[2] if bothHalves else np.nan,
                 int(weight.sum()),
-                *A.ravel(),
+                fitX[0],
+                fitX[1],
+                fitY[0],
+                fitY[1],
+                fitY[2] if bothHalves else np.nan,
             ]
         )
     return pd.DataFrame(rows, columns=columns)
@@ -1218,15 +1234,16 @@ def cameraSummary(run: AgRun, clusters: pd.DataFrame, modelErrors: pd.DataFrame)
         each of ics_agccActor's bad-detection flags, its focus minus the
         median of the cameras in use (µm), its AG exposures with a cluster
         of rejected matches on it alone, their mean direction and its
-        consistency, and its position-model error (µm, nightly median) and
-        the direction it grows in. A camera not in use is NaN throughout.
+        consistency, and the three parts of its position-model error (µm,
+        nightly median; `MODEL_PARTS`). A camera not in use is NaN
+        throughout.
     """
     frames = run.frames[run.frames.night.isin(run.plottedNights)]
     cameras = run.cameras[run.cameras.night.isin(run.plottedNights)]
     z = cameraFocus(run, frames)
     zMedian = z.median(axis=1)
     radius = run.config.modelErrorRadiusPix
-    models = summariseModelErrors(run, modelErrors)
+    models = summariseModelErrors(modelErrors)
     summary = {}
     for cid in range(6):
         used = cid in run.inUse
@@ -1257,9 +1274,9 @@ def cameraSummary(run: AgRun, clusters: pd.DataFrame, modelErrors: pd.DataFrame)
             "exposures with rejected matches clustered on it alone": len(own) if used else np.nan,
             "their direction (°)": _meanAngle(own.angle_deg) if len(own) else np.nan,
             "their direction's consistency (0-1)": _consistency(own.angle_deg),
-            f"position-model error at {radius:g} px (µm)": models.error_um.get(cid, np.nan),
-            "its direction (°, 0-180)": models.angle_deg.get(cid, np.nan),
-            "its anisotropy (s2/s1; near 1: no direction)": models.ratio.get(cid, np.nan),
+            f"position error along x at {radius:g} px (µm)": models.tangential_um.get(cid, np.nan),
+            f"position error along y at {radius:g} px (µm)": models.radial_um.get(cid, np.nan),
+            "step between the halves along x (µm)": models.step_um.get(cid, np.nan),
         }
     return pd.DataFrame(summary)
 

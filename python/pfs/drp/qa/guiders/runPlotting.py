@@ -14,18 +14,22 @@ separately. Problems are drawn in red, so that they stand out.
 `captions` says what each figure shows, for whatever page it is put on.
 """
 
+from collections.abc import Callable
+
 import numpy as np
 import pandas as pd
 from matplotlib.axes import Axes
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import LinearSegmentedColormap, Normalize
 from matplotlib.figure import Figure
-from matplotlib.patches import Patch, Rectangle
+from matplotlib.patches import Patch, Polygon, Rectangle
 from matplotlib.ticker import MaxNLocator
 
 from pfs.drp.qa.guiders.queries import AG_GRID_CELL_PIX, AG_RIGHT_EDGE_PIX
 from pfs.drp.qa.guiders.runAnalysis import (
     CAMERA_GROUPS,
     DETECTION_FLAG_COLUMNS,
+    MODEL_PARTS,
     AgRun,
     RunConfig,
     _meanAngle,
@@ -39,16 +43,19 @@ from pfs.drp.qa.guiders.runAnalysis import (
     stateShares,
     summariseModelErrors,
 )
+from pfs.utils.coordinates.coordinates import det2dp
 
 __all__ = [
     "AG_PIXEL_UM",
     "CAMERA_FIGURE_IN",
     "CAMERA_ORDER",
+    "FOCAL_PLANE_FIGURE_IN",
     "GROUPS_NOTE",
     "captions",
     "plotAcquisition",
     "plotCamera",
     "plotCameraPresence",
+    "plotFocalPlane",
     "plotFocus",
     "plotGuiding",
 ]
@@ -66,14 +73,23 @@ QUIET = "#b5b4ae"  # context: other populations, reference lines
 INK = "#52514e"  # the normal case
 EMPTY = "#ecebe8"  # an empty heatmap cell
 
-#: The size of `plotCamera`'s figure (inches).
-CAMERA_FIGURE_IN = (12.5, 9.6)
+#: The sizes of `plotCamera`'s and `plotFocalPlane`'s figures (inches).
+CAMERA_FIGURE_IN = (12.5, 6.4)
+FOCAL_PLANE_FIGURE_IN = (13.0, 8.6)
 
-#: On the detector map of `plotCamera`: the top of the color scale (% of paired detections rejected), the good
-#: matches a cell needs for its residual to be drawn, and the length of an arrow (pixels of the map per µm).
+#: On the detector map of `plotFocalPlane`: the top of the color scale (% of paired detections rejected), the good
+#: matches a cell needs for its residual to be drawn, and the length of an arrow (detector pixels per µm).
 REJECTED_MAX = 30
 MIN_CELL_MATCHES = 50
-ARROW_PIX_PER_UM = 25
+ARROW_PIX_PER_UM = 50
+
+#: The scale of `plotFocalPlane`'s focus panel (µm either side of the cameras' median), and its color maps.
+FOCUS_MAX = 40
+FOCUS_CMAP = LinearSegmentedColormap.from_list("focus", ["#3d6fb4", "#ffffff", "#c8102e"])
+FWHM_CMAP = LinearSegmentedColormap.from_list("fwhm", ["#e3ecf7", "#2f5a9a"])
+
+#: An AG detector (pixels, x then y), as `readAgRun`'s ``grid`` divides it.
+_DETECTOR_PIX = (4 * AG_GRID_CELL_PIX["columnCell"], 4 * AG_GRID_CELL_PIX["rowCell"])
 
 #: Why the report keeps the cameras in two groups.
 GROUPS_NOTE = (
@@ -136,25 +152,31 @@ def captions(config: RunConfig | None = None) -> dict[str, str]:
             f"the guider found on arriving at a field. Dashed: the guider's max_correction, ±{config.maxCorrection:g}″; "
             "an offset beyond it is rejected."
         ),
+        "focalPlane": (
+            "The six detectors where they sit on the PFI, each enlarged, over the whole run. Left, the "
+            "cameras' position models: where the guider expects each guide star to land on a detector. "
+            "Each matched star has a residual, measured minus expected; a pointing error moves all of a "
+            "camera's stars together, so each AG exposure's mean is taken off, and what is left should be "
+            "noise. A cell's color is the share of its paired detections that were rejected, and its arrow "
+            "the mean residual left there. Beside each camera are the three parts fitted to its residuals: "
+            f"x and y, how far a star {config.modelErrorRadiusPix:g} px from the detector's center along "
+            "that axis lands from where it is expected (positive: the stars are spread farther apart than "
+            "the model has them; negative: closer together), and the step between the detector's two "
+            "halves along x. Detector x runs around the field and y along its radius, so a part that all "
+            "the cameras share belongs to what they share, not to a camera. Top right: each camera's focus "
+            "against the median of the cameras in use, where a tilt of the focal plane shows as a gradient "
+            "across the field. Bottom right: the FWHM of its matched stars on each half of its detector "
+            "(the two halves focus differently by design: one has glass in front of it)."
+        ),
         "camera": (
             "One camera over the run, night by night. Top row: the good matches per AG exposure, as the "
-            "median of each visit; the FWHM of its matched stars on each half of its detector (the two "
-            "halves focus differently by design: one has glass in front of it); and its focus against the "
-            "median of the cameras in use. Middle row: the share of AG exposures in which it matched a "
-            "star; the share of its detections that ics_agccActor flagged as bad, by flag; and the share of "
+            "median of each visit; the share of AG exposures in which it matched a star; and the share of "
             "its designed guide stars that were matched, by their magnitude (science visits; the dotted "
-            "line is all cameras). Bottom row, the camera's position model: where the guider expects each "
-            "guide star to land on this detector. Each matched star has a residual, measured minus "
-            "expected; a pointing error moves all of a camera's stars together, so each AG exposure's mean "
-            "is taken off, and what is left should be noise. If the model's rotation or scale is off, what "
-            "is left grows in proportion to the distance from the detector's center, and the stars "
-            "farthest out are rejected first. First panel: the AG exposures in which the rejected matches "
-            "clustered on one side of the detector. Second: the size of that growth each night, as the "
-            f"residual of a star {config.modelErrorRadiusPix:g} px from the center (the detector's edge), "
-            "against the cameras' median. Third: the detector over the whole run, in a 4 × 4 grid: each "
-            "cell's color and number are the share of its paired detections that were rejected, and its "
-            "arrow is the mean residual left there, along the detector's axes; the dashed line divides the "
-            "two halves."
+            "line is all cameras). Bottom row: the share of its detections that ics_agccActor flagged as "
+            "bad, by flag; the AG exposures in which its rejected matches clustered on one side of its "
+            "detector; and the three parts of its position-model error each night, with the cameras' "
+            "median of each dashed. A night's value moves with the guide stars it had, a step by 1-2 µm: "
+            "read the level, not a night."
         ),
     }
 
@@ -311,7 +333,10 @@ def plotCameraPresence(run: AgRun) -> Figure:
 
 
 def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.DataFrame) -> Figure:
-    """Plot one camera over the run: stars, image size, focus, presence, rejected matches and its position model.
+    """Plot one camera over the run, night by night: stars, matches, flags, rejected matches and its position model.
+
+    What is better seen for the six cameras together (where on a detector
+    matches are rejected, focus, image size) is in `plotFocalPlane`.
 
     Parameters
     ----------
@@ -327,22 +352,18 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
     Returns
     -------
     fig : `matplotlib.figure.Figure`
-        Nine panels (`CAMERA_FIGURE_IN`), seven against the nights: matched
-        stars per visit; FWHM per detector half; focus minus the median of
-        the cameras in use; the share of judged AG exposures in which it
-        matched a star; the share of its detections carrying each
-        bad-detection flag; the share of its designed guide stars matched,
-        by magnitude; then the three on its position model: AG exposures
-        with its rejected matches clustered on one side of the detector,
-        its position-model error, and a map of the detector
-        (`runAnalysis.detectorCells`) with the matches rejected in each cell
-        and the residual left there.
+        Six panels (`CAMERA_FIGURE_IN`), five against the nights: matched
+        stars per visit; the share of judged AG exposures in which it
+        matched a star; the share of its designed guide stars matched, by
+        magnitude; the share of its detections carrying each bad-detection
+        flag; AG exposures with its rejected matches clustered on one side
+        of the detector; and the parts of its position-model error.
     """
     nights = run.plottedNights
     position = {night: i + 0.5 for i, night in enumerate(nights)}
     frames = run.frames[run.frames.night.isin(nights)].assign(x=lambda df: nightPosition(df.taken_at, nights))
     fig = _figure(*CAMERA_FIGURE_IN)
-    axes = fig.subplots(3, 3)
+    axes = fig.subplots(2, 3)
 
     ax = axes[0, 0]
     visits = frames.groupby(["pfs_visit_id", "population"]).agg(
@@ -357,54 +378,24 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
     _legend(ax, loc="upper right", markerscale=2)
 
     ax = axes[0, 1]
-    cameras = run.cameras[run.cameras.night.isin(nights)]
-    for half, color, name in ((0, "C0", "without RIGHT"), (1, "C1", "RIGHT half")):
-        values = (
-            cameras[(cameras.agc_camera_id == cid) & (cameras.right_half == half)]
-            .groupby("night")
-            .fwhm.median()
-        )
-        ax.plot(
-            [position[n] for n in values.index],
-            values.to_numpy(),
-            "-o",
-            ms=3.5,
-            lw=1.5,
-            color=color,
-            label=name,
-        )
-    allCameras = cameras.groupby("night").fwhm.median()
-    ax.plot(
-        [position[n] for n in allCameras.index],
-        allCameras.to_numpy(),
-        ":",
-        color=INK,
-        lw=1,
-        label="all cameras",
+    shares = stateShares(run)
+    shares = shares[shares.agc_camera_id == cid].groupby("night")[["n", "matched", "few_stars"]].sum()
+    judged = shares.n - shares.few_stars
+    share = (100 * shares.matched / judged).where(judged > 0)
+    x = np.array([position[n] for n in share.index])
+    ax.bar(x, share.fillna(0), width=0.6, color=np.where(share < 90, BAD, INK))
+    ax.set_ylim(0, 125)
+    ax.set_yticks(range(0, 101, 20))
+    ax.set_ylabel("%")
+    ax.set_title("AG exposures in which it matched a star (%)", loc="left", fontsize=8.5)
+    _legend(
+        ax,
+        loc="upper left",
+        ncol=2,
+        handles=[Patch(color=INK, label="90% or more"), Patch(color=BAD, label="under 90%")],
     )
-    ax.set_ylim(0, max(1.0, np.nanpercentile(cameras.fwhm, 99)) if cameras.fwhm.notna().any() else 1.0)
-    ax.set_title("FWHM of matched stars, nightly median (″)", loc="left", fontsize=8.5)
-    _legend(ax, loc="lower left")
 
     ax = axes[0, 2]
-    z = cameraFocus(run, frames)
-    if len(z) and cid in z:
-        byNight = (z[cid] - z.median(axis=1)).groupby(frames.night.loc[z.index]).median()
-        ax.plot(
-            [position[n] for n in byNight.index],
-            byNight.to_numpy(),
-            "-o",
-            ms=3.5,
-            lw=1.5,
-            color="C0",
-            label="this camera",
-        )
-    ax.axhline(0, color=QUIET, lw=0.8, label="the cameras' median")
-    _legend(ax, loc="lower left")
-    ax.set_ylim(-60, 60)
-    ax.set_title("Focus minus the cameras' median (µm), nightly", loc="left", fontsize=8.5)
-
-    ax = axes[1, 2]
     magnitudes = magnitudeSummary(run)
     if len(magnitudes):
         everyCamera = magnitudes.groupby("magnitude")[["n_expected", "n_good"]].sum()
@@ -426,71 +417,6 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
     ax.set_title("Designed guide stars matched (%)", loc="left", fontsize=8.5)
 
     ax = axes[1, 0]
-    shares = stateShares(run)
-    shares = shares[shares.agc_camera_id == cid].groupby("night")[["n", "matched", "few_stars"]].sum()
-    judged = shares.n - shares.few_stars
-    share = (100 * shares.matched / judged).where(judged > 0)
-    x = np.array([position[n] for n in share.index])
-    ax.bar(x, share.fillna(0), width=0.6, color=np.where(share < 90, BAD, INK))
-    ax.set_ylim(0, 125)
-    ax.set_yticks(range(0, 101, 20))
-    ax.set_ylabel("%")
-    ax.set_title("AG exposures in which it matched a star (%)", loc="left", fontsize=8.5)
-    _legend(
-        ax,
-        loc="upper left",
-        ncol=2,
-        handles=[Patch(color=INK, label="90% or more"), Patch(color=BAD, label="under 90%")],
-    )
-
-    ax = axes[2, 0]
-    mine = clusters[(clusters.agc_camera_id == cid) & clusters.night.isin(nights)]
-    for dx, chosen, color, label in (
-        (-0.15, mine.alone.astype(bool), BAD, "on it alone"),
-        (0.15, ~mine.alone.astype(bool), WARN, "with other cameras"),
-    ):
-        counts = mine[chosen].groupby("night").size().reindex(nights, fill_value=0)
-        ax.bar(np.arange(len(nights)) + 0.5 + dx, counts.to_numpy(), width=0.28, color=color, label=label)
-    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-    ax.set_ylim(0, max(5, ax.get_ylim()[1]))
-    alone = mine[mine.alone.astype(bool)]
-    direction = f" (alone: toward {_meanAngle(alone.angle_deg):.0f}°)" if len(alone) else ""
-    ax.set_title(f"Rejected matches clustered{direction}", loc="left", fontsize=8.5)
-    _legend(ax, loc="upper left")
-
-    ax = axes[2, 1]
-    errors = modelErrors[(modelErrors.agc_camera_id == cid) & modelErrors.night.isin(nights)]
-    ax.plot(
-        [position[n] for n in errors.night],
-        errors.error_um,
-        "-o",
-        ms=3.5,
-        lw=1.5,
-        color="C0",
-        label="this camera",
-    )
-    if len(modelErrors):
-        typical = modelErrors.groupby("agc_camera_id").error_um.median().median()
-        ax.axhline(typical, color=QUIET, lw=0.8, ls="--", label="all cameras' median")
-    ax.set_ylim(0, max(12, np.nanmax(errors.error_um.to_numpy(float), initial=0) * 1.1))
-    if len(errors):
-        angle = summariseModelErrors(run, errors).angle_deg.iloc[0]
-        ax.text(
-            0.98,
-            0.04,
-            f"growing toward {angle:.0f}° (mod 180)" if np.isfinite(angle) else "no one direction",
-            transform=ax.transAxes,
-            ha="right",
-            fontsize=7,
-        )
-    radius = run.config.modelErrorRadiusPix
-    ax.set_title(f"Position error {radius:g} px from the detector's center (µm)", loc="left", fontsize=8.5)
-    _legend(ax, loc="upper left")
-    pixels = ax.secondary_yaxis("right", functions=(lambda um: um / AG_PIXEL_UM, lambda px: px * AG_PIXEL_UM))
-    pixels.set_ylabel("AG pixels", fontsize=7)
-    pixels.tick_params(labelsize=7)
-
-    ax = axes[1, 1]
     flagged = detectionFlagShares(run)
     flagged = flagged[flagged.agc_camera_id == cid]
     for name, color in zip(DETECTION_FLAG_COLUMNS.values(), ("C0", BAD, "C2", "C4", "C5"), strict=True):
@@ -510,74 +436,278 @@ def plotCamera(run: AgRun, cid: int, clusters: pd.DataFrame, modelErrors: pd.Dat
     if len(flagged):
         _legend(ax, loc="upper left", ncol=2)
 
-    _detectorMap(fig, axes[2, 2], detectorCells(run), cid)
+    ax = axes[1, 1]
+    mine = clusters[(clusters.agc_camera_id == cid) & clusters.night.isin(nights)]
+    for dx, chosen, color, label in (
+        (-0.15, mine.alone.astype(bool), BAD, "on it alone"),
+        (0.15, ~mine.alone.astype(bool), WARN, "with other cameras"),
+    ):
+        counts = mine[chosen].groupby("night").size().reindex(nights, fill_value=0)
+        ax.bar(np.arange(len(nights)) + 0.5 + dx, counts.to_numpy(), width=0.28, color=color, label=label)
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.set_ylim(0, max(5, ax.get_ylim()[1]))
+    alone = mine[mine.alone.astype(bool)]
+    direction = f" (alone: toward {_meanAngle(alone.angle_deg):.0f}°)" if len(alone) else ""
+    ax.set_title(f"Rejected matches clustered{direction}", loc="left", fontsize=8.5)
+    _legend(ax, loc="upper left")
 
-    # The nights are labeled under the lowest panel of a column drawn against them.
-    for row, col in ((0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (2, 0), (2, 1)):
-        _nightAxis(axes[row, col], nights, label=(row == 2 or (row, col) == (0, 2)), rotate=True)
+    ax = axes[1, 2]
+    errors = modelErrors[(modelErrors.agc_camera_id == cid) & modelErrors.night.isin(nights)]
+    typical = summariseModelErrors(modelErrors)
+    for (column, label), color in zip(MODEL_PARTS.items(), ("C0", "C1", "C2"), strict=True):
+        ax.plot(
+            [position[n] for n in errors.night],
+            errors[column],
+            "-o",
+            ms=3.5,
+            lw=1.5,
+            color=color,
+            label=label,
+        )
+        if len(typical):
+            ax.axhline(typical[column].median(), color=color, lw=0.8, ls="--")
+    ax.axhline(0, color=QUIET, lw=0.8)
+    limit = max(10, 1.15 * np.nanmax(np.abs(errors[list(MODEL_PARTS)].to_numpy(float)), initial=0))
+    ax.set_ylim(-limit, 1.35 * limit)
+    radius = run.config.modelErrorRadiusPix
+    ax.set_title(
+        f"Position error (µm; slopes at {radius:g} px; dashed: all cameras)", loc="left", fontsize=8.5
+    )
+    _legend(ax, loc="upper left", ncol=2)
+    pixels = ax.secondary_yaxis("right", functions=(lambda um: um / AG_PIXEL_UM, lambda px: px * AG_PIXEL_UM))
+    pixels.set_ylabel("AG pixels", fontsize=7)
+    pixels.tick_params(labelsize=7)
+
+    for row, col in ((0, 0), (0, 1), (1, 0), (1, 1), (1, 2)):
+        _nightAxis(axes[row, col], nights, label=(row == 1), rotate=True)
     group = next(name for name, cids in CAMERA_GROUPS.items() if cid in cids)
     unused = "" if cid in run.inUse else ": not in use (no detections in the run)"
     fig.suptitle(f"AG{cid + 1} ({group}){unused}", x=0.01, ha="left", fontsize=10, fontweight="bold")
     return fig
 
 
-def _detectorMap(fig: Figure, ax: Axes, cells: pd.DataFrame, cid: int) -> None:
-    """Draw camera ``cid``'s detector: the matches rejected in each cell, and the residual left there."""
-    xEdges = AG_GRID_CELL_PIX["columnCell"] * np.arange(5)
-    yEdges = AG_GRID_CELL_PIX["rowCell"] * np.arange(5)
-    mine = cells[cells.agc_camera_id == cid]
-    rejected = np.full((4, 4), np.nan)
-    rejected[mine.row_cell.to_numpy(int), mine.column_cell.to_numpy(int)] = mine.rejected.to_numpy(float)
-    cmap = LinearSegmentedColormap.from_list("rejected", ["#ffffff", WARN, BAD]).with_extremes(bad=EMPTY)
-    mesh = ax.pcolormesh(xEdges, yEdges, np.ma.masked_invalid(rejected), cmap=cmap, vmin=0, vmax=REJECTED_MAX)
-    bar = fig.colorbar(mesh, ax=ax, fraction=0.046, pad=0.03, extend="max")
-    bar.set_label("paired detections rejected (%)", fontsize=7)
-    bar.ax.tick_params(labelsize=7)
-    for row in mine.itertuples():
-        ax.text(
-            xEdges[row.column_cell] + 12,
-            yEdges[row.row_cell] + 12,
-            f"{row.rejected:.0f}%",
-            fontsize=6.5,
-            color=INK,
-        )
-    enough = mine[(mine.n_good >= MIN_CELL_MATCHES) & mine.dx_um.notna()]
-    if len(enough):
-        arrows = ax.quiver(
-            (xEdges[:-1] + np.diff(xEdges) / 2)[enough.column_cell.to_numpy(int)],
-            (yEdges[:-1] + np.diff(yEdges) / 2)[enough.row_cell.to_numpy(int)],
-            enough.dx_um.to_numpy(float),
-            enough.dy_um.to_numpy(float),
-            angles="xy",
-            scale_units="xy",
-            scale=1 / ARROW_PIX_PER_UM,
-            width=0.012,
-            color="#1b1b1a",
-            zorder=3,
-        )
-        ax.quiverkey(
-            arrows,
-            0.8,
-            -0.17,
-            5,
-            "residual, 5 µm",
-            labelpos="W",
-            coordinates="axes",
-            fontproperties={"size": 7},
-        )
-    ax.axvline(AG_RIGHT_EDGE_PIX, color=INK, lw=1, ls="--")
-    for x, name in ((0.25, "without RIGHT"), (0.75, "RIGHT half")):
-        ax.text(x, 1.01, name, transform=ax.transAxes, ha="center", va="bottom", fontsize=7, color=INK)
-    ax.set_xlim(xEdges[0], xEdges[-1])
-    ax.set_ylim(yEdges[0], yEdges[-1])
+def _onFocalPlane(cid: int, x, y, zoom: float) -> tuple[np.ndarray, np.ndarray]:
+    """Return where detector pixels of camera ``cid`` are drawn on the PFI (mm, hardware coordinates).
+
+    The detector is enlarged ``zoom`` times about its center, where it
+    stays: at its true size it would be a dot on the PFI.
+    """
+    centerX, centerY = det2dp(cid, AG_RIGHT_EDGE_PIX, _DETECTOR_PIX[1] / 2)
+    px, py = det2dp(cid, np.asarray(x, dtype=float), np.asarray(y, dtype=float))
+    return centerX + zoom * (px - centerX), centerY + zoom * (py - centerY)
+
+
+def _focalPlaneAxes(ax: Axes, title: str, extent: float) -> None:
+    ax.plot([0], [0], "+", color=INK, ms=10)
+    ax.set_xlim(-extent, extent)
+    ax.set_ylim(-extent, extent)
     ax.set_aspect("equal")
-    ax.set_xticks(xEdges)
-    ax.set_yticks(yEdges)
-    ax.tick_params(labelsize=7)
+    ax.set_xticks([])
+    ax.set_yticks([])
     ax.grid(visible=False)
-    ax.set_xlabel("detector x (px)", fontsize=7, loc="left")
-    ax.set_ylabel("detector y (px)", fontsize=7)
-    ax.set_title("Across the detector: rejected (%) and residual", loc="left", fontsize=8.5, pad=14)
+    ax.set_title(title, loc="left", fontsize=9)
+
+
+def _outline(ax: Axes, cid: int, x0: float, x1: float, y0: float, y1: float, zoom: float, **kwargs) -> None:
+    corners = np.column_stack(_onFocalPlane(cid, [x0, x1, x1, x0], [y0, y0, y1, y1], zoom))
+    ax.add_patch(Polygon(corners, closed=True, **kwargs))
+
+
+def plotFocalPlane(run: AgRun, modelErrors: pd.DataFrame) -> Figure:
+    """Draw the six detectors where they sit on the PFI, with what is better compared across them.
+
+    Parameters
+    ----------
+    run : `AgRun`
+        The run.
+    modelErrors : `pandas.DataFrame`
+        From `runAnalysis.fitModelErrors`.
+
+    Returns
+    -------
+    fig : `matplotlib.figure.Figure`
+        Three panels (`FOCAL_PLANE_FIGURE_IN`), each with every detector
+        enlarged at its place on the PFI (hardware coordinates, the field's
+        center marked), the boundary between its halves dashed and its
+        pixel (0, 0) dotted: the share of paired detections rejected in each
+        cell with the residual left there (`runAnalysis.detectorCells`) and
+        the three parts of the camera's position-model error; each
+        camera's focus minus the median of the cameras in use; and the FWHM
+        of its matched stars on each half. Run medians, over the plotted
+        nights.
+    """
+    nights = run.plottedNights
+    frames = run.frames[run.frames.night.isin(nights)]
+    cameras = run.cameras[run.cameras.night.isin(nights)]
+    fig = _figure(*FOCAL_PLANE_FIGURE_IN)
+    grid = fig.add_gridspec(2, 2, width_ratios=[2, 1])
+    xEdges = AG_GRID_CELL_PIX["columnCell"] * np.arange(5.0)
+    yEdges = AG_GRID_CELL_PIX["rowCell"] * np.arange(5.0)
+    width, height = _DETECTOR_PIX
+
+    def decorate(ax: Axes, zoom: float, label: Callable[[int], str], distance: float) -> None:
+        for cid in range(6):
+            ax.plot(
+                *_onFocalPlane(cid, [AG_RIGHT_EDGE_PIX] * 2, [0, height], zoom), color=INK, lw=0.9, ls="--"
+            )
+            ax.plot(*_onFocalPlane(cid, [0], [0], zoom), "o", ms=3, color=INK)
+            x, y = _onFocalPlane(cid, [AG_RIGHT_EDGE_PIX], [height / 2], 1)
+            ax.text(
+                distance * x[0],
+                distance * y[0],
+                label(cid),
+                ha="center",
+                va="center",
+                fontsize=8,
+                linespacing=1.3,
+            )
+
+    # Where matches are rejected, and the residual left there.
+    ax = fig.add_subplot(grid[:, 0])
+    zoom = 9.0
+    cells = detectorCells(run)
+    parts = summariseModelErrors(modelErrors)
+    rejectedMap = LinearSegmentedColormap.from_list("rejected", ["#ffffff", WARN, BAD])
+    norm = Normalize(0, REJECTED_MAX)
+    arrows = []
+    for cid in range(6):
+        mine = cells[cells.agc_camera_id == cid].set_index(["row_cell", "column_cell"])
+        for row in range(4):
+            for column in range(4):
+                share = mine.rejected.get((row, column), np.nan) if cid in run.inUse else np.nan
+                _outline(
+                    ax,
+                    cid,
+                    xEdges[column],
+                    xEdges[column + 1],
+                    yEdges[row],
+                    yEdges[row + 1],
+                    zoom,
+                    facecolor=rejectedMap(norm(share)) if np.isfinite(share) else EMPTY,
+                    edgecolor="white",
+                    lw=0.6,
+                )
+        enough = (
+            mine[(mine.n_good >= MIN_CELL_MATCHES) & mine.dx_um.notna()]
+            if cid in run.inUse
+            else mine.iloc[:0]
+        )
+        for (row, column), cell in enough.iterrows():
+            x, y = (xEdges[column] + xEdges[column + 1]) / 2, (yEdges[row] + yEdges[row + 1]) / 2
+            # Drawn on the detector, then placed with it: the arrow turns with the detector.
+            tail = _onFocalPlane(cid, [x], [y], zoom)
+            head = _onFocalPlane(
+                cid, [x + ARROW_PIX_PER_UM * cell.dx_um], [y + ARROW_PIX_PER_UM * cell.dy_um], zoom
+            )
+            arrows.append((tail[0][0], tail[1][0], head[0][0] - tail[0][0], head[1][0] - tail[1][0]))
+
+    def partsLabel(cid: int) -> str:
+        name = f"AG{cid + 1}"
+        if cid not in run.inUse:
+            return f"{name}\nnot in use"
+        if cid not in parts.index:
+            return name
+        row = parts.loc[cid]
+        return f"{name}\nx {row.tangential_um:+.1f}  y {row.radial_um:+.1f}\nstep {row.step_um:+.1f} µm"
+
+    key = zoom * AG_PIXEL_UM / 1000 * ARROW_PIX_PER_UM * 5  # the length of a 5 µm arrow (mm on the PFI)
+    for x, y, u, v in [*arrows, (-key / 2, -38, key, 0)]:
+        ax.annotate(
+            "",
+            (x + u, y + v),
+            (x, y),
+            arrowprops={
+                "arrowstyle": "-|>",
+                "color": "#1b1b1a",
+                "lw": 1.2,
+                "mutation_scale": 8,
+                "shrinkA": 0,
+                "shrinkB": 0,
+            },
+        )
+    ax.text(0, -62, "residual, 5 µm", ha="center", fontsize=8)
+    ax.text(0, 18, "field center", ha="center", fontsize=8, color=INK)
+    decorate(ax, zoom, partsLabel, 1.52)
+    _focalPlaneAxes(
+        ax,
+        "Paired detections rejected (%), and the residual left: x and y slopes at "
+        f"{run.config.modelErrorRadiusPix:g} px, step between the halves",
+        420,
+    )
+    bar = fig.colorbar(ScalarMappable(norm, rejectedMap), ax=ax, fraction=0.03, pad=0.01, extend="max")
+    bar.set_label("paired detections rejected (%)", fontsize=8)
+    bar.ax.tick_params(labelsize=7)
+
+    # Focus: each camera against the median of the cameras in use.
+    ax = fig.add_subplot(grid[0, 1])
+    zoom = 12.0
+    z = cameraFocus(run, frames)
+    focus = (z.sub(z.median(axis=1), axis=0)).median() if len(z) else pd.Series(dtype=float)
+    focusNorm = Normalize(-FOCUS_MAX, FOCUS_MAX)
+    for cid in range(6):
+        value = focus.get(cid, np.nan) if cid in run.inUse else np.nan
+        _outline(
+            ax,
+            cid,
+            0,
+            width,
+            0,
+            height,
+            zoom,
+            facecolor=FOCUS_CMAP(focusNorm(value)) if np.isfinite(value) else EMPTY,
+            edgecolor=INK,
+            lw=0.6,
+        )
+    decorate(
+        ax,
+        zoom,
+        lambda cid: f"AG{cid + 1}\n"
+        + (f"{focus[cid]:+.0f}" if cid in run.inUse and cid in focus else "not in use"),
+        1.7,
+    )
+    _focalPlaneAxes(ax, "Focus minus the cameras' median (µm)", 500)
+    bar = fig.colorbar(ScalarMappable(focusNorm, FOCUS_CMAP), ax=ax, fraction=0.04, pad=0.02, extend="both")
+    bar.ax.tick_params(labelsize=7)
+
+    # Image size on each half.
+    ax = fig.add_subplot(grid[1, 1])
+    fwhm = cameras.groupby(["agc_camera_id", "right_half"]).fwhm.median()
+    finite = fwhm[np.isfinite(fwhm)]
+    fwhmNorm = Normalize(*((finite.min() - 0.02, finite.max() + 0.02) if len(finite) else (0, 1)))
+    for cid in range(6):
+        for half, (x0, x1) in enumerate(((0, AG_RIGHT_EDGE_PIX), (AG_RIGHT_EDGE_PIX, width))):
+            value = fwhm.get((cid, half), np.nan) if cid in run.inUse else np.nan
+            _outline(
+                ax,
+                cid,
+                x0,
+                x1,
+                0,
+                height,
+                zoom,
+                facecolor=FWHM_CMAP(fwhmNorm(value)) if np.isfinite(value) else EMPTY,
+                edgecolor=INK,
+                lw=0.6,
+            )
+
+    def fwhmLabel(cid: int) -> str:
+        if cid not in run.inUse:
+            return f"AG{cid + 1}\nnot in use"
+        return f"AG{cid + 1}\n{fwhm.get((cid, 0), np.nan):.2f} | {fwhm.get((cid, 1), np.nan):.2f}"
+
+    decorate(ax, zoom, fwhmLabel, 1.82)
+    _focalPlaneAxes(ax, "FWHM of matched stars (″): without RIGHT | RIGHT half", 530)
+    bar = fig.colorbar(ScalarMappable(fwhmNorm, FWHM_CMAP), ax=ax, fraction=0.04, pad=0.02)
+    bar.ax.tick_params(labelsize=7)
+
+    fig.suptitle(
+        "The six detectors on the PFI, enlarged where they sit (dashed: the boundary between a detector's halves; "
+        "dot: its pixel (0, 0))",
+        x=0.01,
+        ha="left",
+        fontsize=9.5,
+    )
+    return fig
 
 
 def _scatterByCameras(ax: Axes, x, y, full) -> None:

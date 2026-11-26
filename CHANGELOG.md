@@ -16,8 +16,9 @@ made, and earlier sections to the weekly tag alone.
   - Key numbers at the top (`runAnalysis.runSummary`, also `summary` in `metrics.json`).
   - A caption under every figure (`runPlotting.captions`).
   - The guide error's size beside its jitter.
-  - Per camera: designed guide stars matched by magnitude, ics_agccActor's detection flags, and a map of the
-    detector with the matches rejected in each cell and the residual left there (`runAnalysis.detectorCells`).
+  - The six detectors on the PFI (`runPlotting.plotFocalPlane`): the matches rejected in each cell of a detector
+    and the residual left there (`runAnalysis.detectorCells`), each camera's focus, and its FWHM on each half.
+  - Per camera: designed guide stars matched by magnitude, and ics_agccActor's detection flags.
   - A legend on every panel.
   - `queries.readAgRun` gains a `magnitudes` table, shutter times in `visits`, and the residual, disabled and
     flag counts in `cameras`.
@@ -36,6 +37,11 @@ made, and earlier sections to the weekly tag alone.
   - A good match needs a clean detection on a camera the guider used.
   - The flag for offsets accepted from too few stars gives its nights and last time, and counts focus sweeps
     apart.
+  - A camera's position-model error is three numbers (`runAnalysis.MODEL_PARTS`): the slope of its residuals
+    along detector x and along y, and the step between its detector's halves. Each is flagged on its own;
+    `fitModelErrors` no longer returns `error_um`, `angle_deg` and `ratio`, and `RunConfig.isotropicRatio` is
+    gone.
+  - The per-camera figure has six panels; FWHM and focus moved to the PFI figure.
   - Run `fetch` again: an older fetch lacks the new tables and columns.
 
 ## [0.18.1] - 2026-11-24

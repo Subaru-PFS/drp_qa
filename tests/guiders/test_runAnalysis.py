@@ -7,10 +7,10 @@ import pytest
 from pfs.drp.qa.guiders.runAnalysis import (
     CAMERA_GROUPS,
     DETECTION_FLAG_COLUMNS,
+    MODEL_PARTS,
     CameraState,
     RunConfig,
     _toDetectorAxes,
-    axialMean,
     cameraFocus,
     cameraSummary,
     describePeriod,
@@ -344,23 +344,64 @@ def testClusterFlags(makeAgRunTables):
     assert not any(flag.agc_camera_id != 2 for flag in clustered)
 
 
-def testFitModelErrors(makeAgRunTables):
-    """A camera's model error is found at its size and direction; the pointing, common to all, isn't one."""
-    rowScale = [[0.0, 0.0], [0.0, 0.013]]  # 13 µm per 1000 rows: 6.5 µm at 500 px, along y
-    diagonal = (0.01 * np.outer([1, 0], [np.cos(np.radians(45)), np.sin(np.radians(45))])).tolist()
-    run = prepareRun(makeAgRunTables(modelError={2: rowScale, 3: diagonal}))
-    errors = fitModelErrors(run).groupby("agc_camera_id")[["error_um", "angle_deg"]].median()
+def _inTheFocalPlane(cid, onDetector):
+    """Turn a model error or a step given on a detector's axes into the focal plane's, as the opdb holds it."""
+    return (np.linalg.inv(_toDetectorAxes(cid)) @ np.asarray(onDetector, dtype=float)).tolist()
 
-    assert np.isclose(errors.error_um[2], 6.5, atol=0.3) and np.isclose(errors.angle_deg[2], 90, atol=2)
-    assert np.isclose(errors.error_um[3], 5.0, atol=0.3) and np.isclose(errors.angle_deg[3], 45, atol=3)
+
+def testFitModelErrors(makeAgRunTables):
+    """A scale along a detector axis and a step between its halves are each found, at their size, as themselves."""
+    alongY = [[0.0, 0.0], [0.0, 0.013]]  # 13 µm per 1000 rows: 6.5 µm at 500 px
+    alongX = [[-0.010, 0.0], [0.0, 0.0]]  # stars 5 µm closer together at 500 px
+    rotation = [[0.0, -0.01], [0.01, 0.0]]
+    tables = makeAgRunTables(
+        modelError={
+            2: _inTheFocalPlane(2, alongY),
+            3: _inTheFocalPlane(3, alongX),
+            5: _inTheFocalPlane(5, rotation),
+        },
+        halfStep={4: _inTheFocalPlane(4, [5.0, 0.0])},
+    )
+    run = prepareRun(tables)
+    errors = fitModelErrors(run)
+    parts = summariseModelErrors(errors)
+
+    assert list(parts.columns) == list(MODEL_PARTS)
+    assert np.allclose(parts.loc[2], [0.0, 6.5, 0.0], atol=0.3)
+    assert np.isclose(parts.tangential_um[3], -5.0, atol=0.3) and np.isclose(parts.step_um[4], 5.0, atol=0.3)
+    # Negative control: a slope along x is not read as a step, nor a step as a slope along x.
+    assert abs(parts.step_um[3]) < 0.3 and abs(parts.tangential_um[4]) < 0.3
+    assert not np.isclose(parts.step_um[3], 5.0, atol=2) and not np.isclose(
+        parts.tangential_um[4], -5.0, atol=2
+    )
+    # Negative control: a camera turned on its axis moves x with y and y with x; it has no scale and no step.
+    assert np.allclose(parts.loc[5], 0.0, atol=0.3)
     # Negative control: the 20 µm pointing error moves every camera's stars together, and is no model error.
-    assert (errors.drop([2, 3]).error_um < 0.6).all()
-    flags = findFlags(run, visitGuideErrors(run), findDropouts(run), None, fitModelErrors(run))
-    assert [flag.agc_camera_id for flag in flags if "position model" in flag.text] == [2, 3]
+    assert np.allclose(parts.loc[[0, 1]], 0.0, atol=0.3)
+    flagged = {
+        flag.agc_camera_id
+        for flag in findFlags(run, visitGuideErrors(run), findDropouts(run), None, errors)
+        if flag.kind == "camera" and not flag.severe
+    }
+    assert {2, 3, 4} <= flagged and not {0, 1, 5} & flagged
+
+
+def testModelErrorOnOneHalfHasNoStep(makeAgRunTables):
+    """With matches on one half only, a night's slopes are still fitted and its step is left out."""
+    tables = makeAgRunTables(modelError={2: _inTheFocalPlane(2, [[0.0, 0.0], [0.0, 0.013]])})
+    grid = tables["grid"]
+    tables["grid"] = grid[(grid.agc_camera_id != 2) | (grid.column_cell >= 2)]
+    parts = summariseModelErrors(fitModelErrors(prepareRun(tables)))
+
+    assert np.isnan(parts.step_um[2]) and np.isclose(parts.radial_um[2], 6.5, atol=0.3)
+    # Negative control: a camera with matches on both halves has a step, here none to speak of.
+    assert abs(parts.step_um[3]) < 0.3
 
 
 def testCameraSummary(makeAgRunTables):
-    tables = makeAgRunTables(deadFrom={4: 160}, modelError={2: [[0.0, 0.0], [0.0, 0.013]]})
+    tables = makeAgRunTables(
+        deadFrom={4: 160}, modelError={2: _inTheFocalPlane(2, [[0.0, 0.0], [0.0, 0.013]])}
+    )
     _reject(tables, tables["exposures"].agc_exposure_id.iloc[:7], 2, TOP_HALF)
     run = prepareRun(tables)
     summary = cameraSummary(run, findRejectionClusters(run), fitModelErrors(run))
@@ -371,18 +412,9 @@ def testCameraSummary(makeAgRunTables):
     assert summary.loc["good matches per exposure", "AG1"] == 6
     assert summary.loc["exposures with rejected matches clustered on it alone", "AG3"] == 7
     assert summary.loc["their direction (°)", "AG3"] == pytest.approx(90, abs=1)
-    assert np.isclose(summary.loc["position-model error at 500 px (µm)", "AG3"], 6.5, atol=0.3)
+    assert np.isclose(summary.loc["position error along y at 500 px (µm)", "AG3"], 6.5, atol=0.3)
+    assert abs(summary.loc["position error along x at 500 px (µm)", "AG3"]) < 0.3
     assert summary.loc["focus minus the cameras' median (µm)", "AG1"] == pytest.approx(10.0, abs=1.0)
-
-
-def testAxialMeanWraps():
-    """Axes at 1° and 179° are nearly the same axis, so their mean is 0°, not 90°."""
-    assert axialMean([1.0, 179.0]) == pytest.approx(0.0, abs=1e-9) or axialMean(
-        [1.0, 179.0]
-    ) == pytest.approx(180.0)
-    assert axialMean([40.0, 50.0]) == pytest.approx(45.0)
-    # Negative control: a plain median of the same axes is perpendicular to them.
-    assert np.median([1.0, 179.0]) == pytest.approx(90.0)
 
 
 def testDetectorCells(makeAgRunTables):
@@ -428,34 +460,6 @@ def testResidualsTurnToTheDetectorAxes(realAgcData):
         assert not np.allclose(_toDetectorAxes(int(cid)) @ hardware, 13 * pixels, atol=200.0)
         checked += 1
     assert checked >= 3
-
-
-def testModelErrorDirectionAtTheWrap(makeAgRunTables):
-    """An error growing along x (0°) is reported at ~0°, though its nights straddle 0° and 180°."""
-    alongX = (0.01 * np.outer([1, 0], [1, 0])).tolist()
-    run = prepareRun(makeAgRunTables(nNights=6, modelError={3: alongX}))
-    errors = fitModelErrors(run)
-    nightly = errors[errors.agc_camera_id == 3].angle_deg
-    angle = summariseModelErrors(run, errors).angle_deg[3]
-
-    assert min(angle, 180 - angle) < 3
-    assert (nightly > 90).any() and (nightly < 90).any()  # the nights do straddle the wrap
-
-
-def testModelErrorWithoutADirection(makeAgRunTables):
-    """A rotation or uniform scale moves stars equally in every direction: no direction is quoted."""
-    rotation = [[0.0, -0.01], [0.01, 0.0]]
-    rowScale = [[0.0, 0.0], [0.0, 0.013]]
-    run = prepareRun(makeAgRunTables(modelError={2: rotation, 3: rowScale}))
-    errors = fitModelErrors(run)
-    summary = summariseModelErrors(run, errors)
-
-    assert summary.ratio[2] > 0.9 and np.isnan(summary.angle_deg[2])
-    # Negative control: a scale along one axis has a direction.
-    assert summary.ratio[3] < 0.2 and summary.angle_deg[3] == pytest.approx(90, abs=2)
-    flags = findFlags(run, visitGuideErrors(run), findDropouts(run), None, errors)
-    assert "AG3: its position model is off by 5.0 µm" in "\n".join(f.text for f in flags)
-    assert any("no one direction" in f.text for f in flags if f.agc_camera_id == 2)
 
 
 def testModelErrorsNeedMatchesSpreadAcrossTheDetector(makeAgRunTables):

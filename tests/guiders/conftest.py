@@ -373,6 +373,7 @@ def makeAgRunTables(
     designStars: dict[int, int] | None = None,
     dec: float = 0.0,
     modelError: dict[int, list[list[float]]] | None = None,
+    halfStep: dict[int, list[float]] | None = None,
     disabledFrom: dict[int, int] | None = None,
     openFrames: int | None = None,
 ) -> dict[str, pd.DataFrame]:
@@ -390,7 +391,7 @@ def makeAgRunTables(
     agree: each of a camera's 16 cells has 2 detections paired with guide
     stars (32 per camera), both good, at the cell's centre, whose mean
     residual is the exposure's pointing error (~20 µm, the same for every
-    camera) plus 1 µm noise, plus the camera's ``modelError``; and the
+    camera) plus 1 µm noise, plus the camera's ``modelError`` and ``halfStep``; and the
     guide offsets are small Gaussian noise (0.05″ in RA and Dec, 1″ in InR)
     at Dec ``dec``. Each camera's focus is offset from the others' by a
     fixed amount: AG1/3/5 by +10 µm, AG2/4/6 by -10 µm.
@@ -411,6 +412,9 @@ def makeAgRunTables(
     modelError : `dict` [`int`, 2x2 `list`], optional
         For a camera, a matrix A (µm per pixel): its residuals are moved by
         A (position - detector centre).
+    halfStep : `dict` [`int`, 2 `list`], optional
+        For a camera, a residual (µm, x and y in the focal plane) added to
+        its cells on the RIGHT half.
     openFrames : `int`, optional
         AG exposures of each visit taken while its spectrograph shutters
         are open, from its first (default: all of them); the rest are taken
@@ -429,6 +433,7 @@ def makeAgRunTables(
     deadFrom = deadFrom or {}
     disabledFrom = disabledFrom or {}
     modelError = {cid: np.asarray(m, dtype=float) for cid, m in (modelError or {}).items()}
+    halfStep = {cid: np.asarray(step, dtype=float) for cid, step in (halfStep or {}).items()}
     centre = np.array([511.5 + 24, 511.5 + 9])
     stars = dict.fromkeys(range(6), 10) | (designStars or {})
     exposures, cameras, visits, grid, magnitudes = [], [], [], [], []
@@ -496,6 +501,8 @@ def makeAgRunTables(
                             dxy = pointing + rng.normal(0, 1, 2)
                             if cid in modelError:
                                 dxy = dxy + modelError[cid] @ (xy - centre)
+                            if cid in halfStep and column >= 2:
+                                dxy = dxy + halfStep[cid]
                             grid.append((aid, cid, row, column, 2, 2, *xy, np.nan, np.nan, *dxy))
                 index += 1
             for cid in range(6):
