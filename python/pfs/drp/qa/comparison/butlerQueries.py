@@ -18,6 +18,7 @@ __all__ = [
     "earlierReductions",
     "earlierRuns",
     "freshPipelines",
+    "readProfileQa",
     "readSlitOffsets",
 ]
 
@@ -422,3 +423,50 @@ def readSlitOffsets(butler, collection: "str | Sequence[str]", instrument: str =
     if not frames:
         return pd.DataFrame(columns=columns)
     return pd.concat(frames, ignore_index=True)[columns]
+
+
+def readProfileQa(
+    butler,
+    collection: "str | Sequence[str]",
+    visit: "int | Sequence[int] | None" = None,
+    instrument: str = "PFS",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return what ``fiberProfilesQa`` stored in a collection: the per-fiber rows and the detector metrics.
+
+    Parameters
+    ----------
+    butler : `lsst.daf.butler.Butler`
+        The Butler.
+    collection : `str` or sequence of `str`
+        A collection, or collections searched in order, the task wrote into.
+    visit : `int` or sequence of `int`, optional
+        Only the tables stored for these visits; every visit when `None`.
+    instrument : `str`, optional
+        Instrument name. Default is ``PFS``.
+
+    Returns
+    -------
+    fibers, metrics : `pandas.DataFrame`
+        ``fiberProfilesQaFibers`` and ``fiberProfilesQaMetrics`` of every detector found, each
+        concatenated; an empty frame where none is found.
+    """
+    collections = [collection] if isinstance(collection, str) else list(collection)
+    where = {}
+    if visit is not None:
+        visits = [visit] if isinstance(visit, int) else list(visit)
+        chosen = ", ".join(str(int(each)) for each in visits)
+        where = {"where": f"instrument = '{instrument}' AND visit IN ({chosen})"}
+    tables = []
+    for name in ("fiberProfilesQaFibers", "fiberProfilesQaMetrics"):
+        refs = butler.registry.queryDatasets(name, collections=collections, findFirst=True, **where)
+        refs = sorted(
+            refs,
+            key=lambda ref: (
+                int(ref.dataId["visit"]),
+                str(ref.dataId["arm"]),
+                int(ref.dataId["spectrograph"]),
+            ),
+        )
+        frames = [butler.get(ref) for ref in refs]
+        tables.append(pd.concat(frames, ignore_index=True) if frames else pd.DataFrame())
+    return tables[0], tables[1]

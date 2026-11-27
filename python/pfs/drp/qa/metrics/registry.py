@@ -913,6 +913,11 @@ EXCLUSIONS = (
         "Stored for cross-visit comparison; no limit has been set.",
     ),
     (
+        "The statistics of the fiberProfiles calibration (fiberProfilesQa)",
+        "Measured before a calibration is certified and listed for the person certifying it (drpQa.py calib "
+        "profiles, by metrics.fiberProfiles.WING_EXCESS_LIMIT): run-level, not stored per image or loaded into qadb.",
+    ),
+    (
         "Count of fibers whose slit offset changed (nSlitOffsetChanged)",
         "Stored beside the slitOffsetInvariance check for context -- one fiber or all -- not judged itself; "
         "the per-fiber outlier count and the cross-arm confirmed set are run-level, from calibValidate.",

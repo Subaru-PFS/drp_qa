@@ -1,0 +1,4 @@
+description: Measure a fiberProfiles calibration (drpQa.py calib profiles)
+tasks:
+  fiberProfilesQa:
+    class: pfs.drp.qa.fiberProfilesQa.FiberProfilesQaTask
