@@ -75,6 +75,7 @@ __all__ = [
     "METRICS",
     "METRIC_COLUMNS",
     "PLACEHOLDER_FWHM",
+    "PROFILE_MINIMUM_LIMIT",
     "REPLACE_DONORS",
     "SWATH_COLUMNS",
     "WING_EXCESS_LIMIT",
@@ -167,6 +168,12 @@ NEIGHBOUR_HALF_WINDOW = 5
 #: the Run24 to Run31 calibrations, b4 left out: it lists 19 to 31 fibers in an ordinary run, 62 in Run31 and 195
 #: in Run24. A run-level listing, as the slit-offset outliers are; it is not a verdict on an image.
 WING_EXCESS_LIMIT = 0.01
+
+#: The lowest value of a profile, as a fraction of its peak, below which the calibration report lists it. A
+#: profile is a share of a fiber's light, so it is not negative beyond its noise: measured profiles of the Run24
+#: to Run31 calibrations stay above -0.03, and the ones below -0.1 were fitted where the detector is masked, and
+#: are no shape at all (n2's left edge, fibers 1296 and 1297 in Run31). A run-level listing, as `WING_EXCESS_LIMIT`.
+PROFILE_MINIMUM_LIMIT = -0.1
 
 #: Columns of the per-fiber table the task stores, after the identifying ones.
 FIBER_TABLE_COLUMNS = (*FIBER_COLUMNS, "wingExcess", "fwhmExcess", "replaced", "donors")

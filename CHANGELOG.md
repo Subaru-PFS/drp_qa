@@ -18,8 +18,9 @@ made, and earlier sections to the weekly tag alone.
   says what to do: the measured fibers whose wing fraction is more than 0.01
   (`metrics.fiberProfiles.WING_EXCESS_LIMIT`) above their measured slit neighbours, which stand against
   certifying the calibration as built, apart from those the calibration in force already has; the copies over
-  the limit; a detector whose calibration was not the candidate's own; and a whole detector whose median wing
-  fraction moved. Then the fibers over the limit, a row per fiber and an arm per column, and each detector's
+  the limit; a detector whose calibration was not the candidate's own; a whole detector whose median wing
+  fraction moved; and the profiles that go below -0.1 of their peak (`PROFILE_MINIMUM_LIMIT`), fitted where the
+  detector gave nothing usable. Then the fibers over the limit, a row per fiber and an arm per column, and each detector's
   numbers with the change from the calibration in force. Replayed on Run31's build against Run30's, it names
   31 measured fibers on spectrographs 3 and 4 and the rise of b4's wing light.
 - **`fiberProfilesQa`: a task that measures a `fiberProfiles` calibration** (PIPE2D-1247) — with a pipeline of

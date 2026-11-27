@@ -878,9 +878,12 @@ light along the slits (`plotting.fiberProfiles.plotWingExcess`). For each candid
 - **What to do**: the measured fibers over the limit, which stand against certifying the calibration as built;
   those that the calibration in force already has; the copies over the limit, which clear when the fibers they
   are the mean of do; a detector whose calibration was not the candidate's own (its collection holds none, so
-  the inputs after it were measured instead); a whole detector whose median wing fraction moved; and fibers
-  with no profile or none that could be measured.
+  the inputs after it were measured instead); a whole detector whose median wing fraction moved; fibers
+  with no profile or none that could be measured; and the profiles that go far below zero.
 - **Fibers over the limit**: one row per fiber, in order along the slit, an arm per column.
+- **Profiles far below zero**, when there are any: the profiles whose lowest value is below -0.1 of their peak
+  (`metrics.fiberProfiles.PROFILE_MINIMUM_LIMIT`). A profile is a share of light; one that negative was fitted
+  where the build had nothing usable, such as a masked region of the detector, and is not a shape there.
 - **Detectors**: each detector's numbers, with the change from the calibration in force.
 
 A candidate is `LABEL=COLLECTION`. The label is a name of your choosing: it names the candidate in the report

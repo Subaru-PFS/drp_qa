@@ -14,10 +14,11 @@ from pfs.drp.qa.comparison.calibProfiles import (
     calibrationSources,
     detectorTable,
     fibersOverLimit,
+    negativeProfiles,
     overLimit,
     whatToDo,
 )
-from pfs.drp.qa.metrics.fiberProfiles import METRICS, WING_EXCESS_LIMIT
+from pfs.drp.qa.metrics.fiberProfiles import METRICS, PROFILE_MINIMUM_LIMIT, WING_EXCESS_LIMIT
 
 
 def calibration(
@@ -187,6 +188,35 @@ def testWhatToDoStopsAtMissingAndUnmeasuredProfiles():
     items = whatToDo(fibersOverLimit(fibers), detectorTable(fibers, metrics), [])
     assert items[0] == "**Do not certify: 2 expected fibers have no profile** (r4)."
     assert items[1].startswith("**Do not certify: 1 profile could not be measured** (r4)")
+
+
+def withMinimum(tables, lowest):
+    """Return a detector's tables with the stored ``minimum`` column, ``lowest`` giving chosen fibers' values."""
+    fibers, metrics = tables
+    fibers = fibers.assign(
+        minimum=[lowest.get(int(ff), -0.002) for ff in fibers["fiberId"]], placeholder=False
+    )
+    return fibers, metrics
+
+
+def testProfilesFarBelowZeroAreListed():
+    """A profile fitted where the detector is masked holds values far below zero; it is named with its detector."""
+    fibers, metrics = withMinimum(calibration("n", 2, replaced={7: "5 6 8"}), {5: -1.49, 7: -0.5, 11: -0.05})
+    negative = negativeProfiles(fibers)
+    assert list(negative["fiberId"]) == [5, 7] and list(negative["detector"]) == ["n2", "n2"]
+    assert list(negative["copy"]) == [False, True] and negative["minimum"].iloc[0] == pytest.approx(-1.49)
+    # Negative control: a profile at -0.05, within what noise gives, is not listed, and nor is one at the limit.
+    assert 11 not in set(negative["fiberId"])
+    assert negativeProfiles(fibers.assign(minimum=PROFILE_MINIMUM_LIMIT)).empty
+    # A table without the column (an older one) lists nothing.
+    assert negativeProfiles(fibers.drop(columns="minimum")).empty
+    report = buildProfileReport({"new": (fibers, metrics)}, {"new": "`x`"}, "t")
+    sections = [line for line in report.splitlines() if line.startswith("## ")]
+    assert "## new: profiles far below zero" in sections
+    assert "| n2 | 5 | -1.49 |  |" in report and "| n2 | 7 | -0.50 | 5 6 8 |" in report
+    # Negative control: the same detector without them has no such section, and nothing stands against it.
+    clean = buildProfileReport({"new": withMinimum(calibration("n", 2), {})}, {"new": "`x`"}, "t")
+    assert "profiles far below zero" not in clean
 
 
 def testReportLeadsWithWhatToDo():

@@ -134,7 +134,7 @@ the pipeline/config glue to run them.
     another calibration (`compareFibers`), and the profiles drp_stella replaced with the mean of two to four
     neighbours' (`findReplaced`), which are left out of that reference. Tested in `tests/fiberProfiles/`, on
     synthetic profiles and on the Run30 and Run31 calibrations of r4 (`data/makeProfileFixtures.py`).
-    `WING_EXCESS_LIMIT` is the run-level listing limit of `drpQa.py calib profiles`
+    `WING_EXCESS_LIMIT` and `PROFILE_MINIMUM_LIMIT` are the run-level listing limits of `drpQa.py calib profiles`
     (`comparison/calibProfiles.py`, `calibProfilesCli.py`), which measures candidate calibrations before one
     is certified and reports what to do, the fibers over the limit (a row per fiber, an arm per column) and
     the detectors, against the calibration in force, with `plotting/fiberProfiles.py`'s figure.

@@ -9,14 +9,16 @@ calibration in force. Stack-free: DataFrames in, text out.
 A profile is **over the limit** when its wing fraction is more than
 `pfs.drp.qa.metrics.fiberProfiles.WING_EXCESS_LIMIT` above the measured fibers beside it on the
 slit. A profile is either **measured** or a **copy** (the build filled it in with the mean of nearby
-fibers' profiles): the two are reported apart.
+fibers' profiles): the two are reported apart. A profile that goes below
+`pfs.drp.qa.metrics.fiberProfiles.PROFILE_MINIMUM_LIMIT` of its peak in any swath is listed too
+(`negativeProfiles`): the build had nothing to fit there, and what is stored is not a shape.
 """
 
 from collections.abc import Mapping
 
 import pandas as pd
 
-from pfs.drp.qa.metrics.fiberProfiles import WING_EXCESS_LIMIT
+from pfs.drp.qa.metrics.fiberProfiles import PROFILE_MINIMUM_LIMIT, WING_EXCESS_LIMIT
 
 __all__ = [
     "DETECTOR_COLUMNS",
@@ -24,6 +26,7 @@ __all__ = [
     "calibrationSources",
     "detectorTable",
     "fibersOverLimit",
+    "negativeProfiles",
     "overLimit",
     "whatToDo",
 ]
@@ -124,6 +127,34 @@ def fibersOverLimit(
         ]
         wide["new"] = over.assign(isNew=isNew).groupby(keys)["isNew"].any()
     return wide.reset_index().sort_values("fiberId").reset_index(drop=True)[columns]
+
+
+def negativeProfiles(fibers: pd.DataFrame, limit: float = PROFILE_MINIMUM_LIMIT) -> pd.DataFrame:
+    """Return the profiles whose lowest value is below ``limit`` of their peak, one row per fiber and arm.
+
+    Parameters
+    ----------
+    fibers : `pandas.DataFrame`
+        ``fiberProfilesQaFibers`` of a calibration.
+    limit : `float`
+        Lowest value, as a fraction of the profile's peak, below which a profile is listed.
+
+    Returns
+    -------
+    `pandas.DataFrame`
+        ``detector``, ``spectrograph``, ``fiberId``, ``minimum``, ``copy`` and ``donors``, in order
+        along the slit and then by arm. Empty for a table that holds no ``minimum``. Placeholders
+        are left out.
+    """
+    columns = ["detector", "spectrograph", "fiberId", "minimum", "copy", "donors"]
+    if "minimum" not in fibers:
+        return pd.DataFrame(columns=columns)
+    table = _withDetector(fibers)
+    if "placeholder" in table:
+        table = table[~table["placeholder"].astype(bool)]
+    table = table[table["minimum"] < limit].assign(_order=lambda t: t["arm"].map(_ARMS.index))
+    table = table.sort_values(["fiberId", "_order"]).rename(columns={"replaced": "copy"})
+    return table[columns].reset_index(drop=True)
 
 
 def detectorTable(
@@ -236,6 +267,7 @@ def whatToDo(
     previous: str | None = None,
     limit: float = WING_EXCESS_LIMIT,
     uncompared: list[str] | None = None,
+    negative: pd.DataFrame | None = None,
 ) -> list[str]:
     """Return what the report asks of the person about to certify, one item per finding.
 
@@ -255,6 +287,8 @@ def whatToDo(
     uncompared : `list` [`str`], optional
         The detectors the calibration in force was not read for, so that the candidate has nothing
         to be set against there.
+    negative : `pandas.DataFrame`, optional
+        `negativeProfiles` of the candidate.
 
     Returns
     -------
@@ -311,6 +345,16 @@ def whatToDo(
             f"{_count(len(copies), 'copy is', 'copies are')} over the limit. Nothing to do for them directly: "
             "each is the mean of the fibers named in its row, and clears when they do."
         )
+    if negative is not None and len(negative):
+        named = ", ".join(
+            f"{row.detector} {int(row.fiberId)} ({row.minimum:.2f})" for row in negative.itertuples()
+        )
+        items.append(
+            f"**{_count(len(negative), 'profile goes', 'profiles go')} far below zero: {named}.** A profile is a "
+            "share of the fiber's light, so the build had nothing usable to fit in part of that trace, a masked "
+            "region of the detector for one, and what it stored there is not a shape. Look at the detector at "
+            "those fibers before certifying."
+        )
     for row in detectors[detectors["wingFracChange"].abs() > limit].itertuples():
         items.append(
             f"**{row.detector}: the whole detector's median wing fraction changed by {row.wingFracChange:+.3f}** "
@@ -320,7 +364,7 @@ def whatToDo(
     if not items:
         items.append(
             "Nothing here stands against certifying: no measured fiber is over the limit, none is missing or "
-            "unmeasured, and every detector's calibration is the candidate's."
+            "unmeasured, no profile goes far below zero, and every detector's calibration is the candidate's."
         )
     return items
 
@@ -383,6 +427,7 @@ def buildProfileReport(
     limit: float = WING_EXCESS_LIMIT,
     collections: Mapping[str, str] | None = None,
     figures: Mapping[str, str] | None = None,
+    minimumLimit: float = PROFILE_MINIMUM_LIMIT,
 ) -> str:
     """Return the Markdown report on candidate ``fiberProfiles`` calibrations.
 
@@ -406,12 +451,14 @@ def buildProfileReport(
         detectors whose calibration was not read from it.
     figures : mapping of `str` to `str`, optional
         A figure file for a candidate, by label (`pfs.drp.qa.plotting.fiberProfiles.plotWingExcess`).
+    minimumLimit : `float`
+        Lowest value, as a fraction of its peak, below which a profile is listed (`negativeProfiles`).
 
     Returns
     -------
     `str`
-        The report: for each candidate, what to do, the figure, the fibers over the limit and the
-        detectors.
+        The report: for each candidate, what to do, the figure, the fibers over the limit, the
+        profiles that go far below zero (when there are any) and the detectors.
     """
     out = [f"# {title}", ""]
     if note:
@@ -444,7 +491,8 @@ def buildProfileReport(
         detectors = detectorTable(fibers, metrics, before, limit)
         sources, elsewhere = calibrationSources(fibers, (collections or {}).get(label, ""))
         out += ["", f"## {label}: what to do", ""]
-        items = whatToDo(byFiber, detectors, elsewhere, against, limit, uncompared)
+        negative = negativeProfiles(fibers, minimumLimit)
+        items = whatToDo(byFiber, detectors, elsewhere, against, limit, uncompared, negative)
         out += [f"- {item}" for item in items]
         if figures and label in figures:
             out += ["", f"![Wing light above the neighbours, along the slits ({label})]({figures[label]})"]
@@ -458,6 +506,20 @@ def buildProfileReport(
             "Each cell is the excess in that arm; an empty cell is under the limit.",
         ]
         out += _fiberLines(byFiber, before is not None) if len(byFiber) else ["", "None."]
+        if len(negative):
+            out += [
+                "",
+                f"## {label}: profiles far below zero",
+                "",
+                f"Profiles whose lowest value is below {minimumLimit:g} of their peak in some part of the trace.",
+                "",
+                "| detector | fiber | lowest value | copy of |",
+                "|---|---|---|---|",
+            ]
+            out += [
+                f"| {row.detector} | {int(row.fiberId)} | {row.minimum:.2f} | {row.donors if row.copy else ''} |"
+                for row in negative.itertuples()
+            ]
         out += ["", f"## {label}: detectors", ""]
         out += _detectorLines(detectors, before is not None)
         if before is not None:
